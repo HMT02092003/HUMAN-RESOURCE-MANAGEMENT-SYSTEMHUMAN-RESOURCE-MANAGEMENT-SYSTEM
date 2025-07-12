@@ -1,0 +1,31 @@
+/* BrandManagement.css */
+.action-buttons {
+    display: flex;
+    justify-content: flex-end;
+    margin: 10px 40px;
+  }
+  
+  .create-button {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #73d13d;
+    width: 100px;
+    margin: 0 5px;
+  }
+  
+  .delete-button {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #ff4d4f;
+    width: 100px;
+    margin: 0 5px;
+  }
+  
+  .centered-edit-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  

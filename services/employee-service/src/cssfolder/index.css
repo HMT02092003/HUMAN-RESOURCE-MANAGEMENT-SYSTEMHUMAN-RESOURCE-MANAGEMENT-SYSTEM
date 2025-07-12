@@ -1,0 +1,127 @@
+/* Container chính */
+.technology-news-container {
+    display: flex;
+    flex-wrap: nowrap; /* Đảm bảo các phần tử không xuống dòng */
+    gap: 20px;
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  
+  /* Nội dung chính */
+  .main-content {
+    flex: 2;
+    min-width: 0; /* Ngăn nội dung chính làm vỡ layout */
+  }
+  
+  .section-title {
+    text-align: center;
+    margin-bottom: 20px;
+    margin-right: 480px;
+  }
+  
+  .loading-spinner {
+    text-align: center;
+    margin: 20px 0;
+  }
+  
+  .article-list {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .article-card {
+    border-radius: 8px;
+  }
+  
+  .article-content {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  
+  .article-image {
+    width: 300px;
+    height: 170px;
+    object-fit: cover;
+    border-radius: 8px;
+  }
+  
+  .article-details {
+    flex: 1;
+  }
+  
+  .article-tag {
+    margin-bottom: 8px;
+  }
+  
+  .article-title {
+    margin: 0 0 8px;
+    font-size: 1.1em;
+  }
+  
+  .article-description {
+    margin: 0;
+    color: #555;
+  }
+  
+  .load-more-button {
+    text-align: center;
+    margin-top: 20px;
+  }
+  
+  /* Sidebar */
+  .sidebar {
+    flex: 1;
+    max-width: 350px; /* Đặt chiều rộng tối đa cho sidebar */
+  }
+  
+  .sidebar-content {
+    position: sticky;
+    top: 20px;
+    max-height: 80vh;
+    overflow-y: auto; /* Thanh cuộn dọc */
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 10px;
+    background-color: #fff; /* Đảm bảo nền trắng cho sidebar */
+  }
+  
+  .sidebar-title {
+    margin-bottom: 20px;
+  }
+  
+  .product-card {
+    margin-bottom: 10px;
+    border-radius: 8px;
+  }
+  
+  .product-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  
+  .product-image {
+    width: 50px;
+    height: 50px;
+    border-radius: 8px;
+    object-fit: cover;
+  }
+  
+  .product-details {
+    flex: 1;
+  }
+  
+  .product-name {
+    margin: 0;
+    font-size: 0.9em;
+  }
+  
+  .product-price {
+    color: #555;
+    font-size: 0.9em;
+    margin: 4px 0;
+  }
+  

@@ -1,0 +1,21 @@
+.upload-button {
+    border: 0;
+    background: none;
+  }
+  
+  .upload-button-text {
+    margin-top: 8px;
+  }
+  
+  .upload-container {
+    width: 100%;
+  }
+  
+  .upload-image {
+    width: 100%;
+  }
+  
+  .full-width-button {
+    width: 100%;
+  }
+  

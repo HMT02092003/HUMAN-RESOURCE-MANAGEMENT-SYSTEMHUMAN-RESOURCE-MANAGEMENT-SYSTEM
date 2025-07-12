@@ -1,0 +1,27 @@
+/* Style for button container */
+.button-container {
+    display: flex;
+    justify-content: flex-end;
+    margin: 10px 40px;
+  }
+  
+  /* Style for the Create button */
+  .create-button {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #73d13d;
+    width: 100px;
+    margin: 0 5px;
+  }
+  
+  /* Style for the Delete button */
+  .delete-button {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #ff4d4f;
+    width: 100px;
+    margin: 0 5px;
+  }
+  

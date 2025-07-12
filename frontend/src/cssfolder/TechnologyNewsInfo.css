@@ -1,0 +1,50 @@
+.article-container {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+    background-color: #f9f9f9;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Thêm bóng cho khung */
+  }
+  
+  h1 {
+    font-size: 32px;
+    margin-bottom: 20px;
+  }
+  
+  p {
+    font-size: 18px;
+    color: #555;
+  }
+  
+  .content {
+    margin-top: 20px;
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+  }
+  
+  h2 {
+    font-size: 28px;
+    color: #333;
+  }
+  
+  h3 {
+    font-size: 24px;
+    color: #666;
+  }
+  
+  p {
+    font-size: 18px;
+    color: #444;
+  }
+  
+  .section-image {
+    width: 100%;               /* Ảnh sẽ kéo dài rộng bằng 100% của phần tử chứa */
+    height: 500px;             /* Điều chỉnh chiều cao theo ý muốn */
+    object-fit: cover;         /* Đảm bảo ảnh không bị biến dạng mà vẫn che hết khung */
+    margin: 10px 0;
+    border-radius: 8px;
+  }
+  

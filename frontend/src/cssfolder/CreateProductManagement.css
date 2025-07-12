@@ -1,0 +1,48 @@
+/* CreateProductManagement.css */
+
+.product-management-container {
+    padding: 24px;
+    background-color: #f0f2f5;
+    min-height: 100vh;
+  }
+  
+  .product-management-card {
+    border: none;
+  }
+  
+  .product-management-card .ant-btn-primary {
+    background-color: #52c41a;
+  }
+  
+  .product-info-row {
+    margin-bottom: 16px;
+  }
+  
+  .upload-section {
+    margin-top: 8px;
+  }
+  
+  .upload-section .ant-upload-picture-card-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .upload-section .ant-upload-list-item {
+    margin: 0;
+  }
+  
+  .card-header {
+    padding: 16px 24px;
+    font-size: 16px;
+    font-weight: bold;
+  }
+  
+  .card-content {
+    padding: 16px;
+  }
+  
+  .card-footer {
+    text-align: center;
+  }
+  

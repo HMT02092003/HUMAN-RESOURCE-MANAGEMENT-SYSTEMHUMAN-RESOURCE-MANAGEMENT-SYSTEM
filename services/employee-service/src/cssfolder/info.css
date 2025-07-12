@@ -1,0 +1,60 @@
+/* Các class CSS cho giao diện bài viết */
+.article-container {
+    background-color: #f0f2f5;
+    padding: 20px;
+    min-height: 100vh;
+  }
+  
+  .article-content {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+  
+  .article-title {
+    font-size: 2rem;
+    margin-bottom: 20px;
+  }
+  
+  .article-description {
+    font-size: 1.1rem;
+    color: #555;
+    margin-bottom: 20px;
+  }
+  
+  .section {
+    margin-bottom: 30px;
+  }
+  
+  .section-heading {
+    font-size: 1.5rem;
+    color: #333;
+    margin-bottom: 10px;
+  }
+  
+  .section-subheading {
+    font-size: 1.2rem;
+    color: #666;
+    margin-bottom: 10px;
+  }
+  
+  .section-text {
+    font-size: 1rem;
+    color: #333;
+  }
+  
+  .section-image {
+    width: 100%;
+    margin-top: 15px;
+    border-radius: 8px;
+  }
+  
+  /* CSS cho phần Spinner */
+  .loading-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+  

@@ -1,0 +1,18 @@
+.modal-title {
+    font-size: 20px;
+    font-weight: bold;
+  }
+  
+  .upload-button {
+    border: 0;
+    background: none;
+  }
+  
+  .upload-button div {
+    margin-top: 8px;
+  }
+  
+  .full-width-button {
+    width: 100%;
+  }
+  

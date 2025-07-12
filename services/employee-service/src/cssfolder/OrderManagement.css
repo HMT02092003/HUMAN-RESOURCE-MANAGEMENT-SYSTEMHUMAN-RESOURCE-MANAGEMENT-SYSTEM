@@ -1,0 +1,46 @@
+.container {
+    margin: 20px;
+  }
+  
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .title {
+    display: inline-flex;
+    align-items: center;
+    padding-left: 50px;
+  }
+  
+  .title img {
+    width: 35px;
+    margin-right: 10px;
+  }
+  
+  .button-group {
+    padding-right: 50px;
+  }
+  
+  .button-group .ant-btn {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100px;
+    margin: 0 5px;
+  }
+  
+  .button-create {
+    background: #73d13d;
+  }
+  
+  .button-delete {
+    background: #ff4d4f;
+  }
+  
+  .table-container {
+    box-shadow: 0px 0px 15px rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+  }
+  

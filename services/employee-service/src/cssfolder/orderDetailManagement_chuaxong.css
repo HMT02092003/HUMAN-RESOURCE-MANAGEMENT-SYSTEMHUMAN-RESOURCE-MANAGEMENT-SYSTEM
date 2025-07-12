@@ -1,0 +1,48 @@
+/* OrderDetailManagement.module.css */
+.container {
+    margin: 20px;
+  }
+  
+  .formHeader {
+    padding-left: 50px;
+    display: flex;
+    align-items: center;
+  }
+  
+  .formTitle {
+    display: inline-flex;
+    align-items: center;
+  }
+  
+  .formTitleIcon {
+    font-size: 35px;
+    margin-right: 10px;
+  }
+  
+  .formAction {
+    padding-right: 50px;
+  }
+  
+  .formActionButton {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: orange;
+    width: 100px;
+    margin: 0 5px;
+  }
+  
+  .cardContainer {
+    box-shadow: 0px 0px 15px rgba(0, 0, 0, 0.1);
+  }
+  
+  .tableContainer {
+    margin-top: 20px;
+    box-shadow: 0px 0px 15px rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+  }
+  
+  .cardTitle {
+    margin-top: 15px;
+  }
+  

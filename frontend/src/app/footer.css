@@ -1,0 +1,66 @@
+/* styles.css */
+
+/* Text and Title Styles */
+.textStyle {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  
+  .titleStyle {
+    font-size: 15px;
+    margin-bottom: 8px;
+  }
+  
+  .cardStyle {
+    background-color: #F6F9FC;
+  }
+  
+  /* Column Styling */
+  .colContainer {
+    background-color: #F6F9FC;
+    padding: 16px;
+    text-align: left;
+    border-radius: 10px;
+  }
+  
+  /* Utility styles */
+  .noPadding {
+    padding: 0;
+  }
+  
+  ul {
+    list-style: none;
+  }
+  
+  .socialIcon{
+    width: 10px;
+  }
+  
+  .primaryButton {
+    margin-top: 10px;
+  }
+
+  /* styles.css */
+
+/* Set uniform size for icons and align them vertically with text */
+.icon {
+    width: 16px; /* Adjust width to fit text */
+    height: 16px; /* Keep height proportional */
+    vertical-align: middle; /* Align icon with text */
+    margin-right: 8px; /* Add spacing between icon and text */
+  }
+  
+  .footer {
+    background-color: #f6f9fc; /* Màu nền đồng bộ */
+    text-align: center;
+    padding: 16px;
+    margin-top: 24px; /* Khoảng cách trên */
+    border-radius: 10px;
+  }
+  
+  .footerContent {
+    font-size: 13px; /* Kích thước chữ nhỏ hơn */
+    color: #333; /* Màu chữ dễ đọc */
+    line-height: 1.5;
+  }
+  

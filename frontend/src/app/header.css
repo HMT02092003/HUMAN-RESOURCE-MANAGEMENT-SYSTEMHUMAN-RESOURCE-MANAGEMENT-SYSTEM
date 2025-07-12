@@ -1,0 +1,56 @@
+.app-header {
+  background: #ffffff; /* Màu nền trắng */
+  padding: 0;
+  border-bottom: 1px solid #e0e0e0; /* Đường viền mỏng dưới header */
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  height: 60px; /* Đặt chiều cao cố định nếu cần */
+}
+
+.header-logo {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.logo-image {
+  height: 50px;
+  width: 50px;
+  margin-right: 8px;
+}
+
+.logo-text {
+  font-size: 20px;
+  font-weight: bold;
+  color: #800000; /* Màu chữ đỏ đậm */
+}
+
+.header-search {
+  flex: 1;
+  padding: 0 16px;
+}
+
+.header-filter-button,
+.header-account-button,
+.header-cart-button {
+  margin-left: 16px;
+}
+
+.header-menu {
+  justify-content: center;
+  font-size: 14px;
+}
+
+.header {
+  background-color: #ffffff;
+}
+
+.logo{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}

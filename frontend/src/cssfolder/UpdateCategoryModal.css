@@ -1,0 +1,14 @@
+/* UpdateCategoryModal.css */
+.upload-button {
+    border: 0;
+    background: none;
+  }
+  
+  .upload-button .anticon {
+    margin-bottom: 8px;
+  }
+  
+  .modal-footer-button {
+    width: 100%;
+  }
+  

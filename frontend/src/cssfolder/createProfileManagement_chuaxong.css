@@ -1,0 +1,36 @@
+.profile-container {
+    padding: 15px;
+    overflow-y: auto;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+    max-height: calc(100vh - 64px);
+  }
+  
+  .header-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  
+  .create-button {
+    background-color: #52c41a;
+    width: 120px;
+    margin-right: 5vh;
+  }
+  
+  .avatar-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .avatar-image {
+    width: 200%;
+    height: 200%;
+    object-fit: cover;
+  }
+  
+  .card-shadow {
+    box-shadow: 0px 0px 15px rgba(0, 0, 0, 0.1);
+  }

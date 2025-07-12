@@ -1,0 +1,45 @@
+.shipping-policy-container {
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+  background-color: rgba(0, 119, 250, .5)#f5f5f5;
+  min-height: 100vh;
+}
+
+.shipping-policy-content {
+  max-width: 2000px;
+  width: 100%;
+  background-color: #fff;
+  border-radius: 20px;
+  padding: 20px;
+}
+
+.shipping-policy-title {
+  font-size: 24px;
+  font-weight: bold;
+  margin-bottom: 16px;
+  color: #333;
+}
+
+.policy-list {
+  font-size: 16px;
+  margin-bottom: 16px;
+  color: #333;
+}
+
+.sub-policy-list {
+  font-size: 16px;
+  margin-bottom: 16px;
+  color: #333;
+}
+
+.shipping-policy-paragraph {
+  font-size: 16px;
+  line-height: 1.6;
+  color: #555;
+}
+
+.shipping-policy-note {
+  font-weight: bold;
+  color: #333;
+}

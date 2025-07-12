@@ -1,0 +1,14 @@
+.payment-success-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.payment-success-result {
+  width: 100%;
+}
+
+.payment-success-button {
+  margin: 0 10px;
+}

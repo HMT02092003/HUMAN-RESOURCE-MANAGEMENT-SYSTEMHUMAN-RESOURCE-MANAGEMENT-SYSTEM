@@ -1,0 +1,27 @@
+/* ProductManagement.module.css */
+.container {
+    display: flex;
+    justify-content: flex-end;
+    margin: 10px 40px;
+  }
+  
+  .button {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100px;
+    margin: 0 5px;
+  }
+  
+  .createButton {
+    background: #73d13d;
+  }
+  
+  .deleteButton {
+    background: #ff4d4f;
+  }
+  
+  .table {
+    width: 100%;
+  }
+  
