@@ -4,7 +4,9 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
-// import employeeRoutes from './routes/employee.js';
+import employeeRoutes from './routes/api';
+// Nếu đã build ra .js, dùng dòng sau (và comment lại dòng trên):
+// import employeeRoutes from './routes/api.js';
 // import { authMiddleware } from './middleware/auth.js';
 
 // Load environment variables
@@ -39,8 +41,11 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API Routes (all protected)
-// app.use('/api', authMiddleware, employeeRoutes);
+// Mount API routes
+app.use('/api', (req, res, next) => {
+  console.log('[Router /api] called:', req.method, req.url, '| body:', req.body);
+  next();
+}, employeeRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {

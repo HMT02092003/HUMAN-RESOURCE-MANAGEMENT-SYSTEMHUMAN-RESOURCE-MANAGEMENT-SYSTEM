@@ -286,6 +286,72 @@ export const createUser = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Get users by departmentId or departmentIds (for internal service use)
+ */
+export const getUsersByDepartment = async (req: Request, res: Response) => {
+  try {
+    let { departmentId, departmentIds } = req.query;
+    let query = UserModel.query().select('id', 'username', 'email', 'departmentId');
+
+    if (departmentId) {
+      // Ép kiểu về number (nếu là string)
+      const depId = Array.isArray(departmentId) ? Number(departmentId[0]) : Number(departmentId);
+      query = query.where('departmentId', depId);
+    } else if (departmentIds) {
+      // departmentIds có thể là chuỗi "1,2,3" hoặc mảng
+      let ids: number[] = [];
+      if (Array.isArray(departmentIds)) {
+        ids = departmentIds.map(id => Number(id));
+      } else {
+        ids = String(departmentIds).split(',').map(Number);
+      }
+      query = query.whereIn('departmentId', ids);
+    } else {
+      return res.status(400).json({ error: 'Missing departmentId or departmentIds' });
+    }
+
+    const users = await query;
+    return res.status(200).json(users);
+  } catch (error) {
+    console.error('Error fetching users by department:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
+/**
+ * Get users by chevronId or chevronIds (for internal service use)
+ */
+export const getUsersByChevron = async (req: Request, res: Response) => {
+  try {
+    let { chevronId, chevronIds } = req.query;
+    let query = UserModel.query().select('id', 'username', 'email', 'chevronId');
+
+    if (chevronId) {
+      // Ép kiểu về number (nếu là string)
+      const chvId = Array.isArray(chevronId) ? Number(chevronId[0]) : Number(chevronId);
+      query = query.where('chevronId', chvId);
+    } else if (chevronIds) {
+      // chevronIds có thể là chuỗi "1,2,3" hoặc mảng
+      let ids: number[] = [];
+      if (Array.isArray(chevronIds)) {
+        ids = chevronIds.map(id => Number(id));
+      } else {
+        ids = String(chevronIds).split(',').map(Number);
+      }
+      query = query.whereIn('chevronId', ids);
+    } else {
+      return res.status(400).json({ error: 'Missing chevronId or chevronIds' });
+    }
+
+    const users = await query;
+    return res.status(200).json(users);
+  } catch (error) {
+    console.error('Error fetching users by chevron:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+};
+
 // /**
 //  * Get user details by ID
 //  */

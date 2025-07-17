@@ -26,6 +26,7 @@ const formatDate = (date: Date | string | null): string => {
   return dayjs(date).format('DD/MM/YYYY');
 };
 
+const MyHighlighter = Highlighter as unknown as React.FC<any>;
 
 const Index: React.FC = () => {
   const tableRef = useRef<TableRefType>(null);
@@ -124,7 +125,7 @@ const Index: React.FC = () => {
     },
     render: (text: string) =>
       searchedColumn === text ? (
-        <Highlighter
+        <MyHighlighter
           highlightStyle={{ backgroundColor: '#ffc069', padding: 0 }}
           searchWords={[searchText]}
           autoEscape
@@ -161,7 +162,7 @@ const Index: React.FC = () => {
       render: (text: Date) => {
         const formattedDate = formatDate(text);
         return searchedColumn === 'created_at' ? (
-          <Highlighter
+          <MyHighlighter
             highlightStyle={{ backgroundColor: '#ffc069', padding: 0 }}
             searchWords={[searchText]}
             autoEscape

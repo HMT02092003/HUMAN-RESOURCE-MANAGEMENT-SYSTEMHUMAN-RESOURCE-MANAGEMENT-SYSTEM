@@ -198,7 +198,7 @@ export const updateContractType = async (req: Request, res: Response) => {
         const allowFields = {
             id: "number!",
             name: "string!",
-            description: "string!",
+            description: "string",
             contractTerm: 'number!',
             type: 'number!',
             insurance: 'number!',

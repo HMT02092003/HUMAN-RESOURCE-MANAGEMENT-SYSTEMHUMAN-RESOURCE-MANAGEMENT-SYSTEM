@@ -10,7 +10,6 @@ const DepartmentsForm = () => {
         rules={[
           { required: true, message: 'Vui lòng nhập tên phòng ban' },
           { whitespace: true, message: 'Vui lòng nhập tên phòng ban' },
-          { max: 20, message: 'Tên phòng ban không được vượt quá 20 ký tự' }
         ]}
       >
         <Input placeholder="Nhập tên phòng ban" />

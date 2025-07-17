@@ -21,6 +21,11 @@ import {
   updateRolePermissions,
   getPermissionsByRoleId,
 } from '@/src/controller/RolePermissionController';
+import {
+  getAllUsers,
+  getUsersByDepartment,
+  getUsersByChevron,
+} from '@/src/controller/UserController';
 
 const router = Router();
 
@@ -57,6 +62,14 @@ router.post('/refresh-token', (req, res) => {
 router.post('/change-password', authenticateToken, (req, res) => {
   changePassword(req, res);
 })
+
+// API kiểm tra xác thực token
+router.get('/check-auth', authenticateToken, (req, res) => {
+  res.status(200).json({
+    status: 'success',
+    user: (req as any).auth || null
+  });
+});
 
 router.post('/send-otp', (req, res) => {
   sendOTPController(req, res);
@@ -99,5 +112,20 @@ router.get('/rolePermission/:id', authenticateToken, (req, res) => {
   getPermissionsByRoleId(req, res);
 });
 // ===================================END ROLE PERMISSION===================================
+
+// Route đúng chuẩn RESTful cho lấy danh sách user
+router.get('/users', (req, res) => {
+  getAllUsers(req, res);
+});
+
+// API nội bộ: lấy user theo departmentId hoặc departmentIds
+router.get('/users/by-department', (req, res) => {
+  getUsersByDepartment(req, res);
+});
+
+// API nội bộ: lấy user theo chevronId hoặc chevronIds
+router.get('/users/by-chevron', (req, res) => {
+  getUsersByChevron(req, res);
+});
 
 export default router;

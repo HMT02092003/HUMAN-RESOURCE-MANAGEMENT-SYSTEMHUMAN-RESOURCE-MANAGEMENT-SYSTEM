@@ -8,6 +8,7 @@ import { contractTypeService } from '@/src/service/contractTypeService';
 import type { InputRef } from 'antd';
 import type { FilterDropdownProps } from 'antd/es/table/interface';
 import Highlighter from 'react-highlight-words';
+const MyHighlighter = Highlighter as unknown as React.FC<any>;
 
 interface ContractType {
   id: number;
@@ -127,7 +128,7 @@ const Index: React.FC = () => {
     },
     render: (text: string) =>
       searchedColumn === text ? (
-        <Highlighter
+        <MyHighlighter
           highlightStyle={{ backgroundColor: '#ffc069', padding: 0 }}
           searchWords={[searchText]}
           autoEscape
@@ -162,7 +163,7 @@ const Index: React.FC = () => {
       render: (value: number) => {
         const text = value ? `${value} tháng` : 'Vô thời hạn';
         return searchedColumn === 'contractTerm' ? (
-          <Highlighter
+          <MyHighlighter
             highlightStyle={{ backgroundColor: '#ffc069', padding: 0 }}
             searchWords={[searchText]}
             autoEscape
@@ -182,27 +183,7 @@ const Index: React.FC = () => {
       render: (value: number) => {
         const text = value === 1 ? "Hợp đồng thực tập" : value === 2 ? "Hợp đồng chính thức" : " ";
         return searchedColumn === 'type' ? (
-          <Highlighter
-            highlightStyle={{ backgroundColor: '#ffc069', padding: 0 }}
-            searchWords={[searchText]}
-            autoEscape
-            textToHighlight={text}
-          />
-        ) : (
-          text
-        );
-      },
-    },
-    {
-      title: "Mức bảo hiểm",
-      dataIndex: 'insurance',
-      key: 'contract_types.insurance',
-      sorter: (a: ContractType, b: ContractType) => a.insurance - b.insurance,
-      ...getColumnSearchProps('insurance'),
-      render: (value: number) => {
-        const text = value !== null ? `${value.toLocaleString()} VNĐ` : " ";
-        return searchedColumn === 'insurance' ? (
-          <Highlighter
+          <MyHighlighter
             highlightStyle={{ backgroundColor: '#ffc069', padding: 0 }}
             searchWords={[searchText]}
             autoEscape
@@ -222,7 +203,7 @@ const Index: React.FC = () => {
       render: (text: Date) => {
         const formattedDate = formatDate(text);
         return searchedColumn === 'created_at' ? (
-          <Highlighter
+          <MyHighlighter
             highlightStyle={{ backgroundColor: '#ffc069', padding: 0 }}
             searchWords={[searchText]}
             autoEscape

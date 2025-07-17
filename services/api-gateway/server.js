@@ -11,25 +11,7 @@ app.use(cors({
   credentials: true
 }));
 
-// Proxy tới Auth Service
-app.use('/api/', createProxyMiddleware({
-  target: 'http://localhost:4001',
-  changeOrigin: true,
-  pathRewrite: { '^/api/auth': '/api' },
-  onProxyReq: (proxyReq, req, res) => {
-    let bodyData = '';
-    req.on('data', chunk => { bodyData += chunk; });
-    req.on('end', () => {
-      if (bodyData) {
-        console.log(`[API Gateway] Forwarding to /api/auth -> /api | Body:`, bodyData);
-      } else {
-        console.log(`[API Gateway] Forwarding to /api/auth -> /api | No body`);
-      }
-    });
-  }
-}));
-
-// Proxy tới các service khác (ví dụ employee)
+// Proxy tới employee-service (ĐẶT TRƯỚC)
 app.use('/api/employee', createProxyMiddleware({
   target: 'http://localhost:4002',
   changeOrigin: true,
@@ -42,6 +24,24 @@ app.use('/api/employee', createProxyMiddleware({
         console.log(`[API Gateway] Forwarding to /api/employee -> /api | Body:`, bodyData);
       } else {
         console.log(`[API Gateway] Forwarding to /api/employee -> /api | No body`);
+      }
+    });
+  }
+}));
+
+// Proxy tới auth-service (SAU)
+app.use('/api/auth', createProxyMiddleware({
+  target: 'http://localhost:4001',
+  changeOrigin: true,
+  pathRewrite: { '^/api/auth': '/api' },
+  onProxyReq: (proxyReq, req, res) => {
+    let bodyData = '';
+    req.on('data', chunk => { bodyData += chunk; });
+    req.on('end', () => {
+      if (bodyData) {
+        console.log(`[API Gateway] Forwarding to /api/auth -> /api | Body:`, bodyData);
+      } else {
+        console.log(`[API Gateway] Forwarding to /api/auth -> /api | No body`);
       }
     });
   }

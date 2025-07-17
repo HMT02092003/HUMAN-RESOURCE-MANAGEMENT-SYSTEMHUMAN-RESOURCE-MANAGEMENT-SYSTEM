@@ -10,7 +10,6 @@ const ChevronsForm = () => {
         rules={[
           { required: true, message: 'Vui lòng nhập Tên chức vụ' },
           { whitespace: true, message: 'Vui lòng nhập Tên chức vụ' },
-          { max: 20, message: 'Tên chức vụ không được vượt quá 20 ký tự' }
         ]}
       >
         <Input placeholder="Nhập tên chức vụ" />

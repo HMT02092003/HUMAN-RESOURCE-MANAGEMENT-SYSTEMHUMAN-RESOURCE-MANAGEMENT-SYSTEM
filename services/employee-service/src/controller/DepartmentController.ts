@@ -2,7 +2,9 @@ import { Request, Response } from "express";
 import DepartmentModel from "@/src/Models/DepartmentModel";
 import UserModel from "@/src/Models/UserModel";
 import { validate, ValidationException } from "@/src/utils/validation-utility";
+import axios from 'axios';
 
+const authServiceUrl = process.env.AUTH_SERVICE_URL;
 /**
  * Get all departments from the database
  */
@@ -188,7 +190,7 @@ export const updateDepartment = async (req: Request, res: Response) => {
     const allowFields = {
       id: "number!",
       name: "string!",
-      description: "string!",
+      description: "string",
     };
 
     let params = validate(inputs, allowFields, { removeNotAllow: true });
@@ -256,9 +258,11 @@ export const deleteDepartment = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Department doesn't exist!" });
     }
 
-    // Check if department is being used by users
-    let checkDepartment = await UserModel.query().where('departmentId', params.id);
-    if (checkDepartment.length > 0) {
+    // Check if department is being used by users via auth-service
+    const { data: users } = await axios.get(`${authServiceUrl}/api/users/by-department`, {
+      params: { departmentId: params.id }
+    });
+    if (users && users.length > 0) {
       return res.status(400).json({ error: "Phòng ban đang được sử dụng, không thể xóa!" });
     }
 
@@ -307,9 +311,11 @@ export const deleteMultipleDepartments = async (req: Request, res: Response) => 
       return res.status(404).json({ error: "One or more departments don't exist!" });
     }
 
-    // Check if any department is being used by users
-    let checkDepartment = await UserModel.query().whereIn('departmentId', params.ids);
-    if (checkDepartment.length > 0) {
+    // Check if any department is being used by users via auth-service
+    const { data: users } = await axios.get(`${authServiceUrl}/api/users/by-department`, {
+      params: { departmentIds: params.ids.join(',') }
+    });
+    if (users && users.length > 0) {
       return res.status(400).json({ error: "Phòng ban đang được sử dụng, không thể xóa!" });
     }
 

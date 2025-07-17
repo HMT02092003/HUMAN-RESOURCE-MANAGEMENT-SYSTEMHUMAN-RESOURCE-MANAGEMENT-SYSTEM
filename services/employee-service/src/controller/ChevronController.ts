@@ -2,12 +2,16 @@ import { Request, Response } from "express";
 import ChevronModel from "@/src/Models/ChevronModel";
 import { validate, ValidationException } from "@/src/utils/validation-utility";
 import { console } from "inspector";
+import axios from 'axios';
+
+const authServiceUrl = process.env.AUTH_SERVICE_URL;
 
 /**
  * Get all chevrons from the database
  */
 export const getAllChevrons = async (req: Request, res: Response) => {
   try {
+    console.log("aaaaaaaaaaaaaaa")
     const result = await ChevronModel.query().select("chevrons.*");
     return res.status(200).json(result);
   } catch (error) {
@@ -183,6 +187,14 @@ export const deleteChevron = async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Chevron doesn't exist!" });
     }
 
+    // Check if chevron is being used by users via auth-service
+    const { data: users } = await axios.get(`${authServiceUrl}/api/users/by-chevron`, {
+      params: { chevronId: params.id }
+    });
+    if (users && users.length > 0) {
+      return res.status(400).json({ error: "Chức vụ đang được sử dụng, không thể xóa!" });
+    }
+
     // Delete the chevron
     await ChevronModel.query().deleteById(params.id);
 
@@ -226,6 +238,14 @@ export const deleteMultipleChevrons = async (req: Request, res: Response) => {
     let existingChevrons = await ChevronModel.query().whereIn("id", params.ids);
     if (!existingChevrons || existingChevrons.length !== params.ids.length) {
       return res.status(404).json({ error: "One or more chevrons don't exist!" });
+    }
+
+    // Check if any chevron is being used by users via auth-service
+    const { data: users } = await axios.get(`${authServiceUrl}/api/users/by-chevron`, {
+      params: { chevronIds: params.ids.join(',') }
+    });
+    if (users && users.length > 0) {
+      return res.status(400).json({ error: "Chức vụ đang được sử dụng, không thể xóa!" });
     }
 
     // Delete the chevrons
