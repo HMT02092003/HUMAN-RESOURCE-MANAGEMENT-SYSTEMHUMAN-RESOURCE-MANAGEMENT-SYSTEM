@@ -30,7 +30,7 @@ class RoleService {
   // Get all roles
   async getAllRoles() {
     try {
-      const response = await api.get(`${this.baseURL}/api/roles`);
+      const response = await api.get(`${this.baseURL}/api/auth/roles`);
       return response.data.data;
     } catch (error: any) {
       throw error;
@@ -40,7 +40,7 @@ class RoleService {
   // Get role detail by ID
   async getRoleDetail(id: string) {
     try {
-      const response = await api.get(`${this.baseURL}/api/roles/${id}`);
+      const response = await api.get(`${this.baseURL}/api/auth/roles/${id}`);
       return response.data;
     } catch (error: any) {
       throw error;
@@ -50,7 +50,7 @@ class RoleService {
   // Create new role
   async createRole(values: any) {
     try {
-      const response = await api.post(`${this.baseURL}/api/createRole`, values);
+      const response = await api.post(`${this.baseURL}/api/auth/createRole`, values);
       return response.data;
     } catch (error: any) {
       throw error;
@@ -60,7 +60,7 @@ class RoleService {
   // Update role
   async updateRole(id: string, values: any) {
     try {
-      const response = await api.put(`${this.baseURL}/api/roles`, { id, ...values });
+      const response = await api.put(`${this.baseURL}/api/auth/roles`, { id, ...values });
       return response.data;
     } catch (error: any) {
       throw error;
@@ -70,7 +70,7 @@ class RoleService {
   // Delete single role
   async deleteRole(id: string) {
     try {
-      const response = await api.delete(`${this.baseURL}/api/deleteRole`, { params: { id } });
+      const response = await api.delete(`${this.baseURL}/api/auth/deleteRole`, { params: { id } });
       return response.data;
     } catch (error: any) {
       throw error;
@@ -80,7 +80,7 @@ class RoleService {
   // Delete multiple roles
   async deleteMultipleRoles(ids: React.Key[]) {
     try {
-      const response = await api.delete(`${this.baseURL}/api/deleteMultipleRoles`, { data: { ids } });
+      const response = await api.delete(`${this.baseURL}/api/auth/deleteMultipleRoles`, { data: { ids } });
       return response.data;
     } catch (error: any) {
       throw error;
@@ -90,7 +90,7 @@ class RoleService {
   // Get role permissions
   async getRolePermissions(roleId: string) {
     try {
-      const response = await api.get(`${this.baseURL}/api/rolePermission/${roleId}`);
+      const response = await api.get(`${this.baseURL}/api/auth/rolePermission/${roleId}`);
       return response.data;
     } catch (error: any) {
       throw error;
@@ -100,7 +100,7 @@ class RoleService {
   // Update role permissions
   async updateRolePermissions(roleId: string, permissions: { [key: string]: number }, scopes: { [key: string]: number }) {
     try {
-      const response = await api.put(`${this.baseURL}/api/rolePermission`, {
+      const response = await api.put(`${this.baseURL}/api/auth/rolePermission`, {
         permissions,
         scopes,
         roleId,

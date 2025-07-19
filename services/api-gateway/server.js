@@ -33,39 +33,15 @@ app.use('/api/refresh-token', createProxyMiddleware({
 app.use('/api/employee', createProxyMiddleware({
   target: EMPLOYEE_SERVICE_URL,
   changeOrigin: true,
-  pathRewrite: { '^/api/employee': '/api' },
-  onProxyReq: (proxyReq, req, res) => {
-    let bodyData = '';
-    req.on('data', chunk => { bodyData += chunk; });
-    req.on('end', () => {
-      if (bodyData) {
-        console.log(`[API Gateway] Forwarding to /api/employee -> /api | Body:`, bodyData);
-      } else {
-        console.log(`[API Gateway] Forwarding to /api/employee -> /api | No body`);
-      }
-    });
-  }
+  pathRewrite: { '^/api/employee': '/api' }
 }));
 
-// Proxy tới auth-service
+// Proxy tất cả các route /api/auth/* sang auth-service
 app.use('/api/auth', createProxyMiddleware({
   target: AUTH_SERVICE_URL,
   changeOrigin: true,
-  pathRewrite: { '^/api/auth': '/api' },
-  onProxyReq: (proxyReq, req, res) => {
-    let bodyData = '';
-    req.on('data', chunk => { bodyData += chunk; });
-    req.on('end', () => {
-      if (bodyData) {
-        console.log(`[API Gateway] Forwarding to /api/auth -> /api | Body:`, bodyData);
-      } else {
-        console.log(`[API Gateway] Forwarding to /api/auth -> /api | No body`);
-      }
-    });
-  }
+  pathRewrite: { '^/api/auth': '/api' }
 }));
-
-// ... các proxy khác tương tự
 
 app.listen(PORT, () => {
   console.log(`🚀 API Gateway running on port ${PORT}`);

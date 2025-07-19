@@ -4,7 +4,7 @@ import api from './apiService';
 const UserService = {
   getAllUsers: async (params: { page: number; pageSize: number }) => {
     try {
-      const response = await api.get('/api/users', { 
+      const response = await api.get('/api/auth/users', { 
         params: {
           page: params.page,
           pageSize: params.pageSize
@@ -18,7 +18,7 @@ const UserService = {
 
   createUser: async (data: any) => {
     try {
-      const response = await api.post('/api/createUser', data);
+      const response = await api.post('/api/auth/createUser', data);
       return response.data;
     } catch (error) {
       throw error;
@@ -27,7 +27,7 @@ const UserService = {
 
   updateUser: async (id: number, data: any) => {
     try {
-      const response = await api.put(`/api/users/${id}`, data);
+      const response = await api.put(`/api/auth/users/${id}`, data);
       return response.data;
     } catch (error) {
       throw error;
@@ -36,7 +36,7 @@ const UserService = {
 
   deleteUser: async (id: number) => {
     try {
-      const response = await api.delete(`/api/users/${id}`);
+      const response = await api.delete(`/api/auth/users/${id}`);
       return response.data;
     } catch (error) {
       throw error;
@@ -45,7 +45,7 @@ const UserService = {
 
   deleteMultipleUsers: async (ids: number[]) => {
     try {
-      const response = await api.delete('/api/users/multiple', { data: { ids } });
+      const response = await api.delete('/api/auth/users/multiple', { data: { ids } });
       return response.data;
     } catch (error) {
       throw error;
@@ -54,7 +54,7 @@ const UserService = {
 
   getUserById: async (id: number) => {
     try {
-      const response = await api.get(`/api/users/${id}`);
+      const response = await api.get(`/api/auth/users/${id}`);
       return response.data;
     } catch (error) {
       throw error;
