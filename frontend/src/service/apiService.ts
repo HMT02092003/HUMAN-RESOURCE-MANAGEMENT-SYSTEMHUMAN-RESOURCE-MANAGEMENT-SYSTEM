@@ -4,7 +4,7 @@ import { message } from 'antd';
 import moment from 'moment-timezone';
 import { getDecodedToken } from '../utils/decode-token';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_GATEWAY_URL;
 
 // --- Hàm để xây dựng FormData (copy từ BaseService) ---
 function buildFormData(formData: FormData, data: any, parentKey?: string) {
@@ -82,7 +82,6 @@ const createApiInstance = () => {
 
       if (error.response?.status === 401 && !originalRequest._retry) {
         originalRequest._retry = true;
-
         try {
           const refreshToken = Cookies.get('refreshToken');
 
@@ -102,7 +101,6 @@ const createApiInstance = () => {
             const decodedToken = getDecodedToken(refreshResponse.data.token);
             if (decodedToken) {
               if (typeof window !== 'undefined') {
-                // Pass the whole decodedToken object
                 window.dispatchEvent(new CustomEvent('tokenRefreshed', {
                   detail: { decodedToken: decodedToken }
                 }));
@@ -110,7 +108,6 @@ const createApiInstance = () => {
               originalRequest.headers.Authorization = `Bearer ${refreshResponse.data.token}`;
               return instance(originalRequest);
             } else {
-              // Handle case where decodedToken is null or invalid after refresh
               Cookies.remove('token');
               Cookies.remove('refreshToken');
               message.error('Không thể giải mã token mới, vui lòng đăng nhập lại');

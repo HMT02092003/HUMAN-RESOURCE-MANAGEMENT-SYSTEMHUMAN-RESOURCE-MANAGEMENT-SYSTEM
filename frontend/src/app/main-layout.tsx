@@ -121,7 +121,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                         window.location.href = '/login';
                     });
             } else {
-                // No token and no refresh token - redirect to login
+                // Không có token và không có refreshToken - chuyển về login
                 window.location.href = '/login';
             }
         }
