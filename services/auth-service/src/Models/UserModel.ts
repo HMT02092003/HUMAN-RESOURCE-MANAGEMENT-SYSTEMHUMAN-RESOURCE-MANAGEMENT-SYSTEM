@@ -134,11 +134,12 @@ class UserModel extends Model {
   static async checkScope(permissionKey: string, req: any) { // Thêm `req: any` vào tham số
 
     const tokenFromCookie = req.cookies.token;
-    let decodedAuth: any = null; // Biến để lưu trữ thông tin user đã giải mã
+    let decodedAuth: any = null;
 
     if (tokenFromCookie) {
       try {
         decodedAuth = getDecodedToken(tokenFromCookie);
+        // console.log("decodedAuth", decodedAuth);
       } catch (decodeError) {
         console.error("Error decoding token in checkScope:", decodeError);
         // Nếu token không hợp lệ, không thể xác định scope, trả về mảng rỗng hoặc ném lỗi
@@ -157,7 +158,7 @@ class UserModel extends Model {
 
     // Lấy giá trị scope tương ứng với permissionKey từ token
     const actualScopeValue = decodedAuth.user.scope[permissionKey];
-    console.log(`Actual scope value for '${permissionKey}':`, actualScopeValue);
+    // console.log(`Actual scope value for '${permissionKey}':`, actualScopeValue);
 
 
     let ids: number[] = [];
@@ -172,7 +173,7 @@ class UserModel extends Model {
 
       ids = usersInDepartment.map(user => user.id);
     }
-    else if (actualScopeValue === permissionScope.global) {
+    else if (actualScopeValue === permissionScope.global || decodedAuth.user.roleId === 1 ) {
       const users = await this.query().select('id');
 
       ids = users.map(user => user.id);

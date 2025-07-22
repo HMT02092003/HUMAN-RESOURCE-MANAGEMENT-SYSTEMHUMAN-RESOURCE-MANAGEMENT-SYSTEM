@@ -412,7 +412,6 @@ export const resetPasswordController = async (req: Request, res: Response) => {
 };
 
 export const authenticateToken = (req: Request, res: Response, next: Function): void => {
-  console.log("Bắt đầu authenticateToken middleware");
   const token =
     req.cookies.token ||
     (req.headers.authorization && req.headers.authorization.split(' ')[1]);

@@ -67,7 +67,7 @@ class RoleService {
     }
   }
 
-  // Delete single role
+  // Delete single role 
   async deleteRole(id: string) {
     try {
       const response = await api.delete(`${this.baseURL}/api/auth/deleteRole`, { params: { id } });

@@ -25,6 +25,7 @@ import {
   getAllUsers,
   getUsersByDepartment,
   getUsersByChevron,
+  createUser,
 } from '@/src/controller/UserController';
 
 const router = Router();
@@ -108,23 +109,27 @@ router.put('/rolePermission', authenticateToken, (req, res) => {
   updateRolePermissions(req, res);
 });
 router.get('/rolePermission/:id', authenticateToken, (req, res) => {
-  console.log('Received data:', req.params);
   getPermissionsByRoleId(req, res);
 });
 // ===================================END ROLE PERMISSION===================================
 
 // Route đúng chuẩn RESTful cho lấy danh sách user
-router.get('/users', (req, res) => {
+router.get('/users', authenticateToken, (req, res) => {
   getAllUsers(req, res);
 });
 
+// Route chuẩn RESTful cho tạo user
+router.post('/users', authenticateToken, (req, res) => {
+  createUser(req, res);
+});
+
 // API nội bộ: lấy user theo departmentId hoặc departmentIds
-router.get('/users/by-department', (req, res) => {
+router.get('/users/by-department', authenticateToken, (req, res) => {
   getUsersByDepartment(req, res);
 });
 
 // API nội bộ: lấy user theo chevronId hoặc chevronIds
-router.get('/users/by-chevron', (req, res) => {
+router.get('/users/by-chevron', authenticateToken, (req, res) => {
   getUsersByChevron(req, res);
 });
 

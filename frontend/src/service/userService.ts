@@ -18,7 +18,7 @@ const UserService = {
 
   createUser: async (data: any) => {
     try {
-      const response = await api.post('/api/auth/createUser', data);
+      const response = await api.post('/api/auth/users', data);
       return response.data;
     } catch (error) {
       throw error;

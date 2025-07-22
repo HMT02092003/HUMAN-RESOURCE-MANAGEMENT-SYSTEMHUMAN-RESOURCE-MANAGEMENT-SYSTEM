@@ -13,6 +13,9 @@ import bcrypt from 'bcryptjs';
 import moment from "moment";
 import _ from "lodash";
 import { getDecodedToken } from '@/src/utils/decode-token';
+import axios from 'axios';
+
+const API_GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:4000';
 const { Gender, statusOptions, Relationship } = constantConfig;
 
 // const {
@@ -39,77 +42,60 @@ export const getAllUsers = async (req: any, res: Response) => {
 
     let userIds: number[] = await UserModel.checkScope(scope, req);
 
-    console.log("userIds", userIds);
+    // console.log("userIds", userIds);
 
     // Retrieve page and pageSize from query parameters, defaulting to 0 and 10
     // Ensure these are treated as numbers
     const page = parseInt(req.query.page as string) || 0;
     const pageSize = parseInt(req.query.pageSize as string) || 10;
 
+    // Fetch users WITHOUT joins
     let result: any = (await UserModel.query()
-      .withGraphJoined("[role, department, chevron, contract.[contractType]]")
       .select(project)
       .whereIn("users.id", userIds)
       .whereNot("users.id", auth.id)
-      .page(page, pageSize)) as any; // Use parsed page and pageSize
+      .page(page, pageSize)) as any;
 
-    result.results.forEach((user: any) => {
-      if (!user.contract || !user.contract.length) return;
-
-      let currentContract: any | null = null;
-      const contracts = user.contract;
-
-      contracts.sort(
-        (a: any, b: any) =>
-          new Date(a.activeDay).getTime() - new Date(b.activeDay).getTime()
-      );
-
-      contracts.forEach((contract: any) => {
-        const activeDay = new Date(contract.activeDay).getTime();
-        const endDate = contract.endDate
-          ? new Date(contract.endDate).getTime()
-          : Infinity;
-        const startDate = new Date(contract.startDate).getTime();
-
-        if (activeDay > currentDate.getTime()) {
-          contract.status = "upcoming";
-          return;
+    // Lấy chi tiết department và chevron cho từng user (nếu có id)
+    const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
+    const headers: any = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const usersWithDetails = await Promise.all(result.results.map(async (user: any) => {
+      let department = null;
+      let chevron = null;
+      // console.log("user", user);
+      try {
+        if (user.departmentId) {
+          // console.log("user.departmentId", user.departmentId);
+          const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${user.departmentId}`, { headers });
+          // console.log("depRes", depRes);
+          department = depRes.data || null;
         }
-
-        if (endDate < currentDate.getTime()) {
-          contract.status = "past";
-          return;
+      } catch (e) {
+        console.error('Error fetching department from gateway', e);
+      }
+      try {
+        if (user.chevronId) {
+          // console.log("user.chevronId", user.chevronId);
+          const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: user.chevronId }, { headers });
+          // console.log("chvRes", chvRes);
+          chevron = chvRes.data || null;
         }
+      } catch (e) {
+        console.error('Error fetching chevron from gateway', e);
+      }
+      return {
+        ...user,
+        department,
+        chevron,
+      };
+    }));
 
-        if (!currentContract) {
-          currentContract = contract;
-          currentContract.status = "current";
-          return;
-        }
+    result.results = usersWithDetails;
 
-        const currentActiveDay = new Date(currentContract.activeDay).getTime();
-        const currentStartDate = new Date(currentContract.startDate).getTime();
-
-        if (
-          activeDay > currentActiveDay ||
-          (activeDay === currentActiveDay && startDate > currentStartDate)
-        ) {
-          currentContract.status = "past";
-          currentContract = contract;
-          currentContract.status = "current";
-          return;
-        }
-        contract.status = "past";
-      });
-
-      const statusOrder: { [key: string]: number } = { current: 1, upcoming: 2, past: 3 };
-      user.contract.sort(
-        (a: any, b: any) => (statusOrder[a.status!] || 99) - (statusOrder[b.status!] || 99)
-      );
-    });
-
-    console.log("Total records:", result.total);
-    return res.status(200).json(result); // This correctly returns { results: [...], total: N }
+    return res.status(200).json(result); // { results: [...], total: N }
   } catch (error) {
     console.error("Error fetching users:", error);
     return res.status(500).json({

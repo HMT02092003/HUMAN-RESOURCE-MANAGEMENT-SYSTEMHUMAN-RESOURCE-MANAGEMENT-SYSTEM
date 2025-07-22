@@ -30,7 +30,7 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api', (req, res, next) => {
-  console.log('[Router /api] called:', req.method, req.url, '| body:', req.body);
+  console.log('[Router /api] called:', req.method, req.url);
   next();
 }, authRoutes);
 

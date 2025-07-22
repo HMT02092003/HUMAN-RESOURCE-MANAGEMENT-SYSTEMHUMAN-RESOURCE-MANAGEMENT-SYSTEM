@@ -25,6 +25,7 @@ const createApiInstance = () => {
     headers: {
       'Content-Type': 'application/json', // Mặc định là cái này còn sau có formData thì xóa sau
     },
+    withCredentials: true,
   });
 
   // --- Hàm xử lí request ---

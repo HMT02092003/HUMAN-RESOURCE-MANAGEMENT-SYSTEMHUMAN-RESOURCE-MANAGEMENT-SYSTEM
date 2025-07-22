@@ -11,7 +11,6 @@ const authServiceUrl = process.env.AUTH_SERVICE_URL;
  */
 export const getAllChevrons = async (req: Request, res: Response) => {
   try {
-    console.log("aaaaaaaaaaaaaaa")
     const result = await ChevronModel.query().select("chevrons.*");
     return res.status(200).json(result);
   } catch (error) {
