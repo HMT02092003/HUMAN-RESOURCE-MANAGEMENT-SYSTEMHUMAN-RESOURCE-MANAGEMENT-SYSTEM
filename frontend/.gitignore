@@ -19,6 +19,11 @@ node_modules/
 out/
 
 # =========================
+# Production build
+# =========================
+build/
+
+# =========================
 # Environment variables
 # =========================
 .env
@@ -31,7 +36,7 @@ out/
 next-env.d.ts
 
 # =========================
-# Logs
+# Logs & Debug
 # =========================
 npm-debug.log*
 yarn-debug.log*
@@ -44,6 +49,6 @@ yarn-error.log*
 *.pem
 
 # =========================
-# Vercel
+# Vercel deployment
 # =========================
 .vercel
