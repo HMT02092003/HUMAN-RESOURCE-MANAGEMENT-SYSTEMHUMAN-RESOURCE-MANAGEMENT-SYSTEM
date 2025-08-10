@@ -54,6 +54,7 @@ export const getAllUsers = async (req: any, res: Response) => {
       .select(project)
       .whereIn("users.id", userIds)
       .whereNot("users.id", auth.id)
+      .where("users.status", 1)
       .page(page, pageSize)) as any;
 
     // Lấy chi tiết department và chevron cho từng user (nếu có id)
@@ -110,7 +111,36 @@ export const getAllUsers = async (req: any, res: Response) => {
 export const createUser = async (req: Request, res: Response) => {
   try {
     const { auth } = req as any; // Consider extending Request interface for better type safety for 'auth'
-    const inputs = req.body;
+    // Clone and normalize inputs to be tolerant with different frontend payload shapes
+    const inputs: any = { ...req.body };
+
+    // Normalize family members: accept `fullName` from FE and map to `name`
+    if (Array.isArray(inputs.profileFamily)) {
+      inputs.profileFamily = inputs.profileFamily.map((member: any) => ({
+        name: member?.name ?? member?.fullName ?? "",
+        relationship: member?.relationship,
+        birthday: member?.birthday,
+        dependent: member?.dependent ?? false,
+      }));
+    }
+
+    // Normalize contract: accept top-level contract fields if `contract` wrapper is missing
+    const hasTopLevelContractFields =
+      inputs.contractTypeId !== undefined ||
+      inputs.startDate !== undefined ||
+      inputs.activeDay !== undefined ||
+      inputs.endDate !== undefined ||
+      inputs.insurance !== undefined;
+
+    if (!inputs.contract && hasTopLevelContractFields) {
+      inputs.contract = {
+        contractTypeId: inputs.contractTypeId,
+        startDate: inputs.startDate,
+        endDate: inputs.endDate,
+        activeDay: inputs.activeDay,
+        insurance: inputs.insurance,
+      };
+    }
     console.log("Inputs:", inputs);
 
     const allowFields = {
@@ -152,7 +182,22 @@ export const createUser = async (req: Request, res: Response) => {
 
     // Stringify profileFamily if it's meant to be stored as a JSON string in the database
     if (params.profileFamily) {
-      params.profileFamily = JSON.stringify(params.profileFamily);
+      // Ensure each member has the correct property name
+      const normalizedFamily = (params.profileFamily as any[]).map((m: any) => ({
+        name: m?.name ?? "",
+        relationship: m?.relationship,
+        birthday: m?.birthday,
+        dependent: m?.dependent ?? false,
+      }));
+      params.profileFamily = JSON.stringify(normalizedFamily);
+    }
+
+    // Convert Date objects to ISO strings for database storage
+    if (params.birthday && params.birthday instanceof Date) {
+      params.birthday = params.birthday.toISOString();
+    }
+    if (params.startDate && params.startDate instanceof Date) {
+      params.startDate = params.startDate.toISOString();
     }
 
     // Destructure contract out of params, the rest goes into userData
@@ -166,24 +211,41 @@ export const createUser = async (req: Request, res: Response) => {
 
     if (existingUser) {
       if (existingUser.username === params.username) {
-        return res.status(400).json({ error: "Username already exists!", code: 5005 });
+        return res.status(400).json({ message: "Tên đăng nhập đã tồn tại!", code: 5005 });
       }
       if (existingUser.email === params.email) {
-        return res.status(400).json({ error: "Email already exists!", code: 6021 });
+        return res.status(400).json({ message: "Email đã tồn tại!", code: 6021 });
       }
     }
 
-    // Fetch related entities concurrently using the custom `getById` or `findById` methods
-    const [role, chevron, department] = await Promise.all([
-      RoleModel.query().findById(params.roleId),
-      ChevronModel.query().findById(params.chevronId), 
-      DepartmentModel.query().findById(params.departmentId),
-    ]);
+    // Validate role
+    const role = await RoleModel.query().findById(params.roleId);
+    if (!role) return res.status(400).json({ message: "Vai trò người dùng không tồn tại!", code: 5006 });
 
-    // Validate if related entities exist
-    if (!role) return res.status(400).json({ error: "User role not exists!", code: 5006 });
-    if (!chevron) return res.status(400).json({ error: "Chevron not exists!", code: 5007 });
-    if (!department) return res.status(400).json({ error: "Department not exists!", code: 5008 });
+    // Validate department and chevron using employee-service
+    const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
+    const headers: any = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    try {
+      const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${params.departmentId}`, { headers });
+      if (!depRes.data) {
+        return res.status(400).json({ message: "Phòng ban không tồn tại!", code: 5008 });
+      }
+    } catch (e) {
+      return res.status(400).json({ message: "Phòng ban không tồn tại!", code: 5008 });
+    }
+
+    try {
+      const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: params.chevronId }, { headers });
+      if (!chvRes.data) {
+        return res.status(400).json({ message: "Chức vụ không tồn tại!", code: 5007 });
+      }
+    } catch (e) {
+      return res.status(400).json({ message: "Chức vụ không tồn tại!", code: 5007 });
+    }
     // Hash the user's password using bcrypt
     params.password = await bcrypt.hash(params.password, 10);
 
@@ -195,7 +257,7 @@ export const createUser = async (req: Request, res: Response) => {
 
     console.log("User data:", userData);
 
-    // Insert the new user into the database using the custom insertOne method
+    // Insert the new user into the database
     const newUser = await UserModel.query().insert(userData);
     // Remove password from the response object for security
     const { password: _, ...userWithoutPassword } = newUser;
@@ -214,41 +276,76 @@ export const createUser = async (req: Request, res: Response) => {
     //   variables: emailVariables,
     // });
 
-    // Handle contract creation if contract data is provided
-    if (params.contract) {
+    // Handle contract creation if contract data is provided (SAGA compensation for cross-service atomicity)
+    // Only create contract when there is a valid contractTypeId
+    if (params.contract && params.contract.contractTypeId) {
+      // Coerce primitive date strings to Date where needed for comparisons
+      if (params.contract.startDate && typeof params.contract.startDate === 'string') {
+        params.contract.startDate = new Date(params.contract.startDate);
+      }
+      if (params.contract.endDate && typeof params.contract.endDate === 'string') {
+        params.contract.endDate = new Date(params.contract.endDate);
+      }
+      if (params.contract.activeDay && typeof params.contract.activeDay === 'string') {
+        params.contract.activeDay = new Date(params.contract.activeDay);
+      }
       // Validate contract dates
       if (
         params.contract.endDate &&
         new Date(params.contract.endDate) <= new Date(params.contract.startDate)
       ) {
-        return res.status(400).json({ error: "End date must be after start date!", code: 5009 });
+        return res.status(400).json({ message: "Ngày kết thúc phải sau ngày ký!", code: 5009 });
       }
 
       if (
         new Date(params.contract.activeDay) < new Date(params.contract.startDate)
       ) {
         return res.status(400).json({
-          error: "Active day must be after or equal to start date!",
+          message: "Ngày bắt đầu phải sau hoặc bằng ngày ký!",
           code: 5010
         });
       }
 
-      // Check if contract type exists
-      const contractType = await ContractTypeModel.query().findById(
-        params.contract.contractTypeId
-      );
-      if (!contractType) {
-        return res.status(400).json({ error: "Contract Type not exists!", code: 5011 });
+      // Check if contract type exists using employee-service
+      try {
+        const contractTypeRes = await axios.get(`${API_GATEWAY_URL}/api/employee/contractTypes/${params.contract.contractTypeId}`, { headers });
+        console.log("contractTypeRes", contractTypeRes);
+        if (!contractTypeRes.data) {
+          return res.status(400).json({ message: "Loại hợp đồng không tồn tại!", code: 5011 });
+        }
+      } catch (e) {
+        return res.status(400).json({ message: "Loại hợp đồng không tồn tại!", code: 5011 });
       }
 
-      // Prepare contract parameters and insert
-      const contractParams = {
-        userId: newUser.id,
+      // Prepare contract parameters (userId will be taken from URL on employee-service)
+      const contractParams: any = {
         ...params.contract,
         created_at: new Date(),
       };
 
-      await ContractModel.query().insert(contractParams); // Assuming ContractModel has insertOne
+      // Convert Date objects to ISO strings for contract data
+      if (contractParams.startDate && contractParams.startDate instanceof Date) {
+        contractParams.startDate = contractParams.startDate.toISOString();
+      }
+      if (contractParams.endDate && contractParams.endDate instanceof Date) {
+        contractParams.endDate = contractParams.endDate.toISOString();
+      }
+      if (contractParams.activeDay && contractParams.activeDay instanceof Date) {
+        contractParams.activeDay = contractParams.activeDay.toISOString();
+      }
+
+      try {
+        await axios.post(`${API_GATEWAY_URL}/api/employee/users/${newUser.id}/contracts`, contractParams, { headers });
+      } catch (contractErr: any) {
+        // Compensation: rollback created user to keep consistency
+        try {
+          await UserModel.query().findById(newUser.id).delete();
+        } catch (rollbackErr) {
+          console.error('Rollback user failed after contract error:', rollbackErr);
+        }
+        const msg = contractErr?.response?.data?.message || contractErr?.response?.data?.error || contractErr?.message || 'Tạo hợp đồng thất bại';
+        return res.status(400).json({ message: msg, code: 7001, details: { stage: 'contract', rolledBackUserId: newUser.id } });
+      }
     }
 
     // Return the newly created user (without password)
@@ -266,7 +363,7 @@ export const createUser = async (req: Request, res: Response) => {
 
     // Handle other errors
     return res.status(500).json({
-      error: error instanceof Error ? error.message : "Internal Server Error",
+      message: error instanceof Error ? error.message : "Lỗi máy chủ nội bộ",
       code: 500
     });
   }
@@ -338,266 +435,595 @@ export const getUsersByChevron = async (req: Request, res: Response) => {
   }
 };
 
-// /**
-//  * Get user details by ID
-//  */
-// export const getUserDetail = async (req: Request, res: Response) => {
-//   try {
-//     const allowFields = {
-//       id: "number!",
-//     };
-//     const currentDate = new Date();
-//     let inputs = { ...req.query, ...req.body };
-//     let params = validate(inputs, allowFields, { removeNotAllow: true });
+/**
+ * Get user details by ID
+ */
+export const getUserDetail = async (req: Request, res: Response) => {
+  try {
+    const allowFields = {
+      id: "number!",
+    };
+    const currentDate = new Date();
+    // Lấy id từ params (RESTful URL), query, hoặc body
+    let inputs = { 
+      id: req.params.id || req.query.id || req.body.id,
+      ...req.query, 
+      ...req.body 
+    };
+    
+    // Debug logging để kiểm tra id
+    console.log("=== getUserDetail Debug ===");
+    console.log("req.params:", req.params);
+    console.log("req.query:", req.query);
+    console.log("req.body:", req.body);
+    console.log("inputs:", inputs);
+    
+    let params = validate(inputs, allowFields, { removeNotAllow: true });
+        
+    console.log("params after validation:", params);
 
-//     const project = [
-//       "users.id as id",
-//       "users.username",
-//       "users.firstName",
-//       "users.lastName",
-//       "users.email",
-//       "users.roleId",
-//       "users.createdAt",
-//       "users.status",
-//       "users.profileFamily",
-//       "contract.id as contract_id",
-//       "contract.startDate",
-//       "contract.endDate",
-//       "contract.activeDay",
-//       "users.departmentId",
-//       "users.chevronId",
-//       "users.phone",
-//       "users.birthday",
-//       "users.gender",
-//       "users.startDate",
-//     ];
+    // Fetch user basic info
+    let result = await UserModel.query()
+      .findById(params.id)
+      .select([
+        "users.id as id",
+        "users.username",
+        "users.firstName",
+        "users.lastName",
+        "users.email",
+        "users.roleId",
+        "users.createdAt",
+        "users.status",
+        "users.profileFamily",
+        "users.departmentId",
+        "users.chevronId",
+        "users.phone",
+        "users.birthday",
+        "users.gender",
+        "users.startDate",
+        "users.baseSalary",
+        "users.vacationDay",
+        "users.dayOff"
+      ]);
 
-//     let result = await UserModel.query()
-//       .findById(params.id)
-//       .withGraphJoined("[role, department, chevron, contract.[contractType]]")
-//       .select(project)
-//       .modifyGraph("contract", (builder) => {
-//         builder.orderBy("activeDay", "asc");
-//       });
+    if (!result) {
+      return res.status(404).json({ message: "Người dùng không tồn tại!", code: 5003 });
+    }
 
-//     if (!result) {
-//       return res.status(404).json({ error: "User doesn't exist!", code: 5003 });
-//     }
+    // Get role info
+    const role = await RoleModel.query().findById(result.roleId);
+    
+    // Get department and chevron from employee-service
+    const token = req.cookies.token || req.headers.authorization?.split(' ')[1];      
+    const headers: any = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`; 
+    }
 
-//     if (!result.contract || !result.contract.length) {
-//       return res.status(200).json(result);
-//     }
+    let department = null;
+    let chevron = null;
+    let contract = null;
+    let contractsList: any[] = [];
 
-//     let currentContract = null;
-//     const contracts = result.contract;
+    try {
+      if (result.departmentId) {
+        const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${result.departmentId}`, { headers });
+        department = depRes.data || null;
+      }
+    } catch (e) {
+      console.error('Error fetching department from gateway', e);
+    }
 
-//     for (let contract of contracts) {
-//       const activeDay = new Date(contract.activeDay).getTime();
-//       const endDate = contract.endDate
-//         ? new Date(contract.endDate).getTime()
-//         : Infinity;
-//       const startDate = new Date(contract.startDate).getTime();
+    try {
+      if (result.chevronId) {
+        const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: result.chevronId }, { headers });
+        chevron = chvRes.data || null;
+      }
+    } catch (e) {
+      console.error('Error fetching chevron from gateway', e);
+    }
 
-//       if (activeDay > currentDate.getTime()) {
-//         contract.status = "upcoming";
-//         continue;
-//       }
+    // Get contract info from employee-service
+    try {
+      const contractRes = await axios.get(`${API_GATEWAY_URL}/api/employee/contracts/user/${result.id}`, { headers });
+      if (contractRes.data && contractRes.data.length > 0) {
+        const contracts = contractRes.data;
 
-//       if (endDate < currentDate.getTime()) {
-//         contract.status = "past";
-//         continue;
-//       }
+        // Classify: upcoming if now < activeDay; effective if activeDay <= now <= endDate (or endDate null);
+        // past otherwise. Among effective ones, select the one with the latest activeDay <= now as current.
+        contracts.sort((a: any, b: any) => new Date(a.activeDay).getTime() - new Date(b.activeDay).getTime());
+        const nowMs = currentDate.getTime();
+        let currentIdx = -1;
+        let maxActiveMs = -Infinity;
+        contracts.forEach((c: any, idx: number) => {
+          const activeMs = new Date(c.activeDay).getTime();
+          const endMs = c.endDate ? new Date(c.endDate).getTime() : Infinity;
+          if (activeMs > nowMs) {
+            c.status = 'upcoming';
+          } else if (endMs < nowMs) {
+            c.status = 'past';
+          } else {
+            // effective window
+            c.status = 'past'; // temporary, will mark one as current below
+            if (activeMs <= nowMs && activeMs > maxActiveMs) {
+              maxActiveMs = activeMs;
+              currentIdx = idx;
+            }
+          }
+        });
 
-//       if (!currentContract) {
-//         currentContract = contract;
-//         currentContract.status = "current";
-//         continue;
-//       }
+        if (currentIdx >= 0) {
+          contracts[currentIdx].status = 'current';
+          contract = contracts[currentIdx];
+        }
 
-//       const currentActiveDay = new Date(currentContract.activeDay).getTime();
-//       const currentStartDate = new Date(currentContract.startDate).getTime();
+        // Sort for FE display: current -> upcoming -> past, then by activeDay asc
+        const statusRank: Record<string, number> = { current: 0, upcoming: 1, past: 2 } as const;
+        contracts.sort((a: any, b: any) => {
+          const rankDiff = (statusRank[a.status] ?? 3) - (statusRank[b.status] ?? 3);
+          if (rankDiff !== 0) return rankDiff;
+          return new Date(a.activeDay).getTime() - new Date(b.activeDay).getTime();
+        });
 
-//       if (
-//         activeDay > currentActiveDay ||
-//         (activeDay === currentActiveDay && startDate > currentStartDate)
-//       ) {
-//         currentContract.status = "past";
-//         currentContract = contract;
-//         currentContract.status = "current";
-//         continue;
-//       }
-//       contract.status = "past";
-//     }
+        contractsList = contracts;
+      }
+    } catch (e) {
+      console.error('Error fetching contract from gateway', e);
+    }
 
-//     const statusOrder = {
-//       current: 1,
-//       upcoming: 2,
-//       past: 3,
-//     };
+    // Combine all data
+    const userWithDetails = {
+      ...result,
+      role,
+      department,
+      chevron,
+      contract,
+      contracts: contractsList
+    };
 
-//     result.contract.sort(
-//       (a, b) => statusOrder[a.status] - statusOrder[b.status]
-//     );
+    return res.status(200).json(userWithDetails);
+  } catch (error) {
+    console.error("Error fetching user detail:", error);
 
-//     return res.status(200).json(result);
-//   } catch (error) {
-//     console.error("Error fetching user detail:", error);
+    if (error instanceof ValidationException) {
+      return res.status(error.status).json({
+        error: error.message,
+        code: error.code
+      });
+    }
 
-//     if (error instanceof ValidationException) {
-//       return res.status(error.status).json({
-//         error: error.message,
-//         code: error.code
-//       });
-//     }
+    return res.status(500).json({
+      message: error instanceof Error ? error.message : "Lỗi máy chủ nội bộ",
+      code: 500
+    });
+  }
+};
 
-//     return res.status(500).json({
-//       error: error instanceof Error ? error.message : "Internal Server Error",
-//       code: 500
-//     });
-//   }
-// };
+/**
+ * Update an existing user
+ */
+export const updateUser = async (req: Request, res: Response) => {
+  try {
+    const { auth } = req as any;
+    // Lấy id từ params (RESTful URL) hoặc body
+    const inputs = {
+      id: req.params.id || req.body.id,
+      ...req.body
+    };
 
-// /**
-//  * Update an existing user
-//  */
-// export const updateUser = async (req: Request, res: Response) => {
-//   try {
-//     const { auth } = req as any;
-//     const inputs = req.body;
+    // Debug logging để kiểm tra id
+    console.log("=== updateUser Debug ===");
+    console.log("req.params:", req.params);
+    console.log("req.body:", req.body);
+    console.log("inputs:", inputs);
 
-//     const allowFields = {
-//       id: "number!",
-//       firstName: "string!",
-//       lastName: "string!",
-//       username: "string!",
-//       email: "string!",
-//       roleId: "number",
-//       departmentId: "number!",
-//       chevronId: "number!",
-//       status: "number",
-//       gender: "number",
-//       phone: "string",
-//       birthday: "date",
-//       startDate: "date",
-//       profileFamily: [
-//         {
-//           name: "string",
-//           relationship: "number",
-//           birthday: "date",
-//           dependent: "boolean",
-//         },
-//       ],
-//     };
+    const allowFields = {
+      id: "number!",
+      firstName: "string!",
+      lastName: "string!",
+      username: "string!",
+      email: "string!",
+      roleId: "number",
+      departmentId: "number!",
+      chevronId: "number!",
+      status: "number",
+      gender: "number",
+      phone: "string",
+      birthday: "date",
+      startDate: "date",
+      baseSalary: "number",
+      vacationDay: "number",
+      dayOff: "number",
+      profileFamily: [
+        {
+          name: "string",
+          relationship: "number",
+          birthday: "date",
+          dependent: "boolean",
+        },
+      ],
+    };
 
-//     const params = validate(inputs, allowFields, {
-//       removeNotAllow: true,
-//     });
-//     console.log("Update user params:", params);
+    const params = validate(inputs, allowFields, {
+      removeNotAllow: true,
+    });
+    console.log("Update user params:", params);
 
-//     params.profileFamily = JSON.stringify(params.profileFamily);
-//     const { id, ...updateData } = params;
+    // Stringify profileFamily if it's meant to be stored as a JSON string in the database
+    if (params.profileFamily) {
+      params.profileFamily = JSON.stringify(params.profileFamily);
+    }
 
-//     const existingUser = await UserModel.getById(id);
-//     if (!existingUser) {
-//       return res.status(404).json({ error: "User doesn't exist!", code: 6006 });
-//     }
+    // Convert Date objects to ISO strings for database storage
+    if (params.birthday && params.birthday instanceof Date) {
+      params.birthday = params.birthday.toISOString();
+    }
+    if (params.startDate && params.startDate instanceof Date) {
+      params.startDate = params.startDate.toISOString();
+    }
 
-//     // Check for unique constraints only if values have changed
-//     const usernameChanged =
-//       params.username && params.username !== existingUser.username;
-//     const emailChanged =
-//       updateData.email && updateData.email !== existingUser.email;
+    const { id, ...updateData } = params;
 
-//     if (usernameChanged || emailChanged) {
-//       const query = UserModel.query().whereNot("id", id);
+    const existingUser = await UserModel.query().findById(id);
+    if (!existingUser) {
+      return res.status(404).json({ message: "Người dùng không tồn tại!", code: 6006 });
+    }
 
-//       if (usernameChanged) {
-//         query.where(function () {
-//           this.orWhere("username", params.username);
-//         });
-//       }
+    // Check for unique constraints only if values have changed
+    const usernameChanged =
+      params.username && params.username !== existingUser.username;
+    const emailChanged =
+      updateData.email && updateData.email !== existingUser.email;
 
-//       if (emailChanged) {
-//         query.where(function () {
-//           this.orWhere("email", updateData.email);
-//         });
-//       }
+    if (usernameChanged || emailChanged) {
+      const query = UserModel.query().whereNot("id", id);
 
-//       const duplicateUser = await query.first();
+      if (usernameChanged) {
+        query.where(function () {
+          this.orWhere("username", params.username);
+        });
+      }
 
-//       if (duplicateUser) {
-//         if (usernameChanged && duplicateUser.username === params.username) {
-//           return res.status(400).json({ error: "Username already exists!", code: 6007 });
-//         }
-//         if (emailChanged && duplicateUser.email === updateData.email) {
-//           return res.status(400).json({ error: "Email already exists!", code: 6021 });
-//         }
-//       }
-//     }
+      if (emailChanged) {
+        query.where(function () {
+          this.orWhere("email", updateData.email);
+        });
+      }
 
-//     // Validate related entities
-//     const [role, chevron, department] = await Promise.all([
-//       updateData.roleId
-//         ? RoleModel.getById(updateData.roleId)
-//         : Promise.resolve(true),
-//       updateData.chevronId
-//         ? ChevronModel.getById(updateData.chevronId)
-//         : Promise.resolve(true),
-//       updateData.departmentId
-//         ? DepartmentModel.getById(updateData.departmentId)
-//         : Promise.resolve(true),
-//     ]);
+      const duplicateUser = await query.first();
 
-//     if (!role) return res.status(400).json({ error: "User role not exists!", code: 5006 });
-//     if (!chevron) return res.status(400).json({ error: "Chevron not exists!", code: 5007 });
-//     if (!department) return res.status(400).json({ error: "Department not exists!", code: 5008 });
+      if (duplicateUser) {
+        if (usernameChanged && duplicateUser.username === params.username) {
+           return res.status(400).json({ message: "Tên đăng nhập đã tồn tại!", code: 6007 });
+        }
+        if (emailChanged && duplicateUser.email === updateData.email) {
+           return res.status(400).json({ message: "Email đã tồn tại!", code: 6021 });
+        }
+      }
+    }
 
-//     const paramsData = {
-//       ...updateData,
-//       updatedBy: auth.id,
-//       updatedAt: new Date(),
-//     };
+    // Validate related entities using employee-service
+    const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
+    const headers: any = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
-//     console.log("Update user data:", paramsData);
+    try {
+      if (updateData.departmentId) {
+        const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${updateData.departmentId}`, { headers });
+         if (!depRes.data) {
+           return res.status(400).json({ message: "Phòng ban không tồn tại!", code: 5008 });
+         }
+      }
+    } catch (e) {
+      return res.status(400).json({ message: "Phòng ban không tồn tại!", code: 5008 });
+    }
 
-//     const result = await UserModel.updateOne(id, paramsData);
-//     delete result.password;
+    try {
+      if (updateData.chevronId) {
+        const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: updateData.chevronId }, { headers });
+         if (!chvRes.data) {
+           return res.status(400).json({ message: "Chức vụ không tồn tại!", code: 5007 });
+         }
+      }
+    } catch (e) {
+      return res.status(400).json({ message: "Chức vụ không tồn tại!", code: 5007 });
+    }
 
-//     if (emailChanged) {
-//       await MailService.send({
-//         to: updateData.email,
-//         templateKey: "updateUserEmail",
-//         variables: {
-//           fullname: `${updateData.lastName} ${updateData.firstName}`.trim(),
-//           params: params.username,
-//         },
-//       });
-//     }
+    // Validate role
+    if (updateData.roleId) {
+      const role = await RoleModel.query().findById(updateData.roleId);
+      if (!role) {
+        return res.status(400).json({ message: "Vai trò người dùng không tồn tại!", code: 5006 });
+      }
+    }
 
-//     return res.status(200).json({
-//       updated: result,
-//       old: existingUser,
-//     });
-//   } catch (error) {
-//     console.error("Error updating user:", error);
+    const paramsData = {
+      ...updateData,
+      updatedBy: auth.id,
+      updatedAt: new Date(),
+    };
 
-//     if (error instanceof ValidationException) {
-//       return res.status(error.status).json({
-//         error: error.message,
-//         code: error.code
-//       });
-//     }
+    console.log("Update user data:", paramsData);
 
-//     return res.status(500).json({
-//       error: error instanceof Error ? error.message : "Internal Server Error",
-//       code: 500
-//     });
-//   }
-// };
+    const result = await UserModel.query().findById(id).patch(paramsData);
+    const updatedUser = await UserModel.query().findById(id);
+    if (updatedUser) {
+      const { password, ...userWithoutPassword } = updatedUser;
+      return res.status(200).json({
+        updated: userWithoutPassword,
+        old: existingUser,
+      });
+    }
 
-// /**
-//  * Import users from Excel
-//  */
+    return res.status(200).json({
+      updated: updatedUser,
+      old: existingUser,
+    });
+  } catch (error) {
+    console.error("Error updating user:", error);
+
+    if (error instanceof ValidationException) {
+      return res.status(error.status).json({
+        error: error.message,
+        code: error.code
+      });
+    }
+
+    return res.status(500).json({
+      message: error instanceof Error ? error.message : "Lỗi máy chủ nội bộ",
+      code: 500
+    });
+  }
+};
+
+/**
+ * Delete a single user
+ */
+export const deleteUser = async (req: Request, res: Response) => {
+  try {
+    const { auth } = req as any;
+    // Lấy id từ params (RESTful URL), query, hoặc body
+    let id = req.params.id || req.query.id || req.body.id;
+    
+    // Debug logging để kiểm tra id
+    console.log("=== deleteUser Debug ===");
+    console.log("req.params:", req.params);
+    console.log("req.query:", req.query);
+    console.log("req.body:", req.body);
+    console.log("id:", id);
+    
+    if (!id) {
+      return res.status(400).json({ message: "Thiếu ID!", code: 9996 });
+    }
+
+    let exist = await UserModel.query().findById(id);
+    if (!exist) {
+      return res.status(404).json({ message: "Người dùng không tồn tại!", code: 6006 });
+    }
+    
+    if ([id].includes(auth.id)) {
+      return res.status(400).json({ 
+        message: "Bạn không thể xóa tài khoản của chính mình.", 
+        code: 6022 
+      });
+    }
+
+    // Cập nhật status thành "3" thay vì xóa user
+    await UserModel.query().findById(id).patch({ status: "3" });
+
+    return res.status(200).json({
+      message: "Cập nhật trạng thái thành công",
+      old: exist,
+      newStatus: 3
+    });
+  } catch (error) {
+    console.error("Error updating user status:", error);
+    return res.status(500).json({
+      message: error instanceof Error ? error.message : "Lỗi máy chủ nội bộ",
+      code: 500
+    });
+  }
+};
+
+/**
+ * Delete multiple users
+ */
+export const deleteMultipleUsers = async (req: Request, res: Response) => {
+  try {
+    const { auth } = req as any;
+    const allowFields = {
+      ids: ["number!"],
+    };
+    const inputs = req.body;
+    let params = validate(inputs, allowFields);
+
+    let exist = await UserModel.query().whereIn("id", params.ids);
+    if (!exist || exist.length !== params.ids.length) {
+      return res.status(404).json({ message: "Người dùng không tồn tại!", code: 6006 });
+    }
+    
+    if (params.ids.includes(auth.id)) {
+      return res.status(400).json({ 
+        message: "Bạn không thể xóa tài khoản của chính mình.", 
+        code: 6022 
+      });
+    }
+
+    // Cập nhật status thành "3" thay vì xóa users
+    await UserModel.query().whereIn("id", params.ids).patch({ status: "3" });
+
+    return res.status(200).json({
+      message: "Cập nhật trạng thái thành công",
+      old: {
+        usernames: (exist || []).map((user) => user.username).join(", "),
+      },
+      newStatus: "3"
+    });
+  } catch (error) {
+    console.error("Error updating multiple users status:", error);
+
+    if (error instanceof ValidationException) {
+      return res.status(error.status).json({
+        error: error.message,
+        code: error.code
+      });
+    }
+
+    return res.status(500).json({
+      message: error instanceof Error ? error.message : "Lỗi máy chủ nội bộ",
+      code: 500
+    });
+  }
+};
+
+/**
+ * Get current user info
+ */
+export const getUserInfo = async (req: Request, res: Response) => {
+  try {
+    const { auth } = req as any;
+    let result = await UserModel.query().findById(auth.id);
+    if (result) {
+      const { password, ...userWithoutPassword } = result;
+      return res.status(200).json(userWithoutPassword);
+    }
+
+    if (!result) {
+      return res.status(404).json({ message: "Người dùng không tồn tại", code: 6006 });
+    }
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Error getting user info:", error);
+    return res.status(500).json({
+      message: error instanceof Error ? error.message : "Lỗi máy chủ nội bộ",
+      code: 500
+    });
+  }
+};
+
+/**
+ * Create a contract for user
+ */
+export const createContract = async (req: Request, res: Response) => {
+  try {
+    const { auth } = req as any;
+    // Lấy id từ params (RESTful URL) hoặc body
+    let inputs = {
+      id: req.params.id || req.body.id,
+      ...req.body
+    };
+    
+    // Debug logging để kiểm tra id
+    console.log("=== createContract Debug ===");
+    console.log("req.params:", req.params);
+    console.log("req.body:", req.body);
+    console.log("inputs:", inputs);
+    
+    const allowFields = {
+      id: "number!",
+      contractTypeId: "number!",
+      startDate: "date!",
+      endDate: "date",
+      activeDay: "date!",
+      insurance: "number",
+    };
+
+    let params = validate(inputs, allowFields, { removeNotAllow: true });
+    
+    console.log("params after validation:", params);
+
+    // Convert Date objects to ISO strings for database storage
+    if (params.startDate && params.startDate instanceof Date) {
+      params.startDate = params.startDate.toISOString();
+    }
+    if (params.endDate && params.endDate instanceof Date) {
+      params.endDate = params.endDate.toISOString();
+    }
+    if (params.activeDay && params.activeDay instanceof Date) {
+      params.activeDay = params.activeDay.toISOString();
+    }
+
+    // Check if user exists
+    const user = await UserModel.query().findById(params.id);
+    if (!user) {
+      return res.status(404).json({ message: "Người dùng không tồn tại!", code: 6006 });
+    }
+
+    // Validate contract type using employee-service
+    const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
+    const headers: any = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    try {
+      const contractTypeRes = await axios.get(`${API_GATEWAY_URL}/api/employee/contractTypes/${params.contractTypeId}`, { headers });
+      if (!contractTypeRes.data) {
+        return res.status(400).json({ message: "Loại hợp đồng không tồn tại!", code: 5011 });
+      }
+    } catch (e) {
+      return res.status(400).json({ message: "Loại hợp đồng không tồn tại!", code: 5011 });
+    }
+
+    // Validate dates
+    if (
+      params.endDate &&
+      new Date(params.endDate) <= new Date(params.startDate)
+    ) {
+      return res.status(400).json({ message: "Ngày kết thúc phải sau ngày ký!", code: 5009 });
+    }
+
+    if (new Date(params.activeDay) < new Date(params.startDate)) {
+      return res.status(400).json({
+        message: "Ngày bắt đầu phải sau hoặc bằng ngày ký!",
+        code: 5012
+      });
+    }
+
+    // Remove id to let DB auto-generate
+    delete params.id;
+
+    // Create contract in employee-service (userId passed via URL)
+    const contractData: any = {
+      ...params,
+      created_at: new Date(),
+    };
+
+    // Convert Date objects to ISO strings for contract data
+    if (contractData.startDate && contractData.startDate instanceof Date) {
+      contractData.startDate = contractData.startDate.toISOString();
+    }
+    if (contractData.endDate && contractData.endDate instanceof Date) {
+      contractData.endDate = contractData.endDate.toISOString();
+    }
+    if (contractData.activeDay && contractData.activeDay instanceof Date) {
+      contractData.activeDay = contractData.activeDay.toISOString();
+    }
+
+    console.log("Contract data:", contractData);
+
+    const result = await axios.post(`${API_GATEWAY_URL}/api/employee/users/${inputs.id}/contracts`, contractData, { headers });
+    return res.status(201).json(result.data);
+  } catch (error) {
+    console.error("Error creating contract:", error);
+
+    if (error instanceof ValidationException) {
+      return res.status(error.status).json({
+        error: error.message,
+        code: error.code
+      });
+    }
+
+    return res.status(500).json({
+      message: error instanceof Error ? error.message : "Lỗi máy chủ nội bộ",
+      code: 500
+    });
+  }
+};
+
 // export const importExcel = async (req: Request, res: Response) => {
 //   try {
 //     let inputs = req.body;

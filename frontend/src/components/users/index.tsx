@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Table, Button, Space, Tooltip, ConfigProvider, Modal } from 'antd';
+import { Table, Button, Space, Tooltip, ConfigProvider, Modal, message, Tag } from 'antd';
 import {
   PlusCircleOutlined,
   DeleteOutlined,
@@ -12,24 +12,15 @@ import {
 import dayjs from 'dayjs';
 import UserService from '@/src/service/userService'; // Ensure this path is correct
 import { useRouter } from "next/navigation";
+import constantConfig from "@/src/config/constant";
+
+const { statusOptions, Gender } = constantConfig;
+
 // Utility functions
 const formatDate = (date: string | Date | null): string => {
   if (!date) return '';
   return dayjs(date).format('DD/MM/YYYY');
 };
-
-// Constants
-const Gender = [
-  { key: 1, value: 'Nam' },
-  { key: 2, value: 'Nữ' },
-  { key: 3, value: 'Khác' }
-];
-
-const statusOptions = [
-  { value: 1, label: 'Hoạt động' },
-  { value: 2, label: 'Đã khóa' },
-  { value: 3, label: 'Chưa kích hoạt' }
-];
 
 // Main component
 const UserTable = () => {
@@ -74,9 +65,10 @@ const UserTable = () => {
         ...prev,
         total: response.total // Update total from the API response
       }));
-    } catch (error) {
-      console.error('Error fetching users:', error);
-      // Optionally show an error message to the user
+    } catch (error: any) {
+      const data = error?.response?.data;
+      message.destroy();
+      message.error(data?.message || data?.error || error.message || 'Có lỗi xảy ra khi tải người dùng!');
     } finally {
       setLoading(false);
     }
@@ -89,10 +81,11 @@ const UserTable = () => {
       setSelectedRowKeys([]); // Clear selection after deletion
       setIsDeleteModalVisible(false); // Close the modal
       loadData(); // Reload data to reflect changes
-      alert('Xóa người dùng thành công!');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting users:', error);
-      alert('Có lỗi xảy ra khi xóa người dùng!');
+      const data = error?.response?.data;
+      message.destroy();
+      message.error(data?.message || data?.error || error.message || 'Có lỗi xảy ra khi xóa người dùng!');
     } finally {
       setLoading(false);
     }
@@ -161,13 +154,7 @@ const UserTable = () => {
       key: "email",
       sorter: (a: any, b: any) => a.email?.localeCompare(b.email || '') || 0,
       width: 250,
-    },
-    {
-      title: "Vai trò",
-      dataIndex: ["role", "name"],
-      key: "role",
-      sorter: (a: any, b: any) => a.role?.name?.localeCompare(b.role?.name || '') || 0,
-      width: 150,
+      render: (text: string) => text || '-'
     },
     {
       title: "Số điện thoại",
@@ -175,6 +162,7 @@ const UserTable = () => {
       key: "phone",
       sorter: (a: any, b: any) => a.phone?.localeCompare(b.phone || '') || 0,
       width: 150,
+      render: (text: string) => text || '-'
     },
     {
       title: "Giới tính",
@@ -182,8 +170,22 @@ const UserTable = () => {
       key: "gender",
       sorter: (a: any, b: any) => (a.gender || 0) - (b.gender || 0),
       render: (gender: number) => {
-        const genderObj = Gender.find((g) => g.key === gender);
-        return genderObj ? genderObj.value : "";
+        return Gender.find((g) => g.key === gender)?.value || "-";
+      },
+      width: 150,
+    },
+    {
+      title: "Trạng thái",
+      dataIndex: "status",
+      key: "status",
+      sorter: (a: any, b: any) => (parseInt(a.status) || 0) - (parseInt(b.status) || 0),
+      render: (status: string | number) => {
+        const statusNum = typeof status === 'string' ? parseInt(status, 10) : status;
+        const label = statusOptions.find((s) => s.value === statusNum)?.label || "-";
+        let color = '#f5222d';
+        if (statusNum === 1) color = 'green';
+        else if (statusNum === 2) color = 'blue';
+        return <Tag color={color}>{label}</Tag>;
       },
       width: 150,
     },
@@ -193,6 +195,7 @@ const UserTable = () => {
       key: "department",
       sorter: (a: any, b: any) => a.department?.name?.localeCompare(b.department?.name || '') || 0,
       width: 200,
+      render: (text: string) => text || '-'
     },
     {
       title: "Chức vụ",
@@ -200,18 +203,7 @@ const UserTable = () => {
       key: "chevron",
       sorter: (a: any, b: any) => a.chevron?.name?.localeCompare(b.chevron?.name || '') || 0,
       width: 200,
-    },
-    {
-      title: "Trạng thái",
-      dataIndex: "status",
-      key: "status",
-      sorter: (a: any, b: any) => (parseInt(a.status) || 0) - (parseInt(b.status) || 0),
-      render: (status: string | number) => {
-        const statusVal = typeof status === 'string' ? parseInt(status) : status;
-        const statusObj = statusOptions.find((s) => s.value === statusVal);
-        return statusObj ? statusObj.label : "";
-      },
-      width: 150,
+      render: (text: string) => text || '-'
     },
     {
       title: "Ngày vào làm",

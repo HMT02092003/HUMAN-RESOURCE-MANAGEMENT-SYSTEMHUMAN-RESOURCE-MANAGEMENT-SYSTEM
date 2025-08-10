@@ -93,6 +93,11 @@ export const loginHandler = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Mật khẩu không chính xác' });
     }
 
+    const checkStatusAccount = await UserModel.query().findOne({ id: user.id, status: 1 });
+    if (!checkStatusAccount) {
+      return res.status(400).json({ error: 'Hiện tại không thể đăng nhập vào tài khoản này' });
+    }
+
     // Lấy thông tin quyền hạn
     const permissions = await PermissionModel.query()
       .join('role_permissions', 'permissions.id', 'role_permissions.permissionId')

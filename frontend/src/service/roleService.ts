@@ -25,7 +25,7 @@ interface PermissionCategory {
 }
 
 class RoleService {
-  private baseURL = process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:3000';
+  private baseURL = process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:4000';
 
   // Get all roles
   async getAllRoles() {

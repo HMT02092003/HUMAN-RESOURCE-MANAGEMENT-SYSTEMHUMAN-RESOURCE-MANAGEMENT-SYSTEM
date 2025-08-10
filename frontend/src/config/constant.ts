@@ -69,8 +69,8 @@ const Gender = [
 
 const statusOptions = [
     { value: 1, label: "Đang hoạt động" },
-    { value: 2, label: "Đã nghỉ việc" },
-    { value: 3, label: "Nghỉ thai sản" },
+    { value: 2, label: "Nghỉ thai sản" },
+    { value: 3, label: "Đã nghỉ việc" },
 ];
 
 const Relationship = [
@@ -117,6 +117,24 @@ const scopeValues = {
     3: "Cá nhân",
 };
 
+const roles = [
+  { value: 'admin', label: 'Quản trị viên' },
+  { value: 'user', label: 'Người dùng' },
+  { value: 'editor', label: 'Biên tập viên' },
+];
+
+const chevrons = [
+  { value: 'junior', label: 'Thực tập sinh' },
+  { value: 'mid', label: 'Nhân viên' },
+  { value: 'senior', label: 'Trưởng nhóm' },
+];
+
+const departments = [
+  { value: 'hr', label: 'Phòng Nhân sự' },
+  { value: 'it', label: 'Phòng IT' },
+  { value: 'marketing', label: 'Phòng Marketing' },
+];
+
 export default {
     roleKey,
     numberInMonth,
@@ -133,4 +151,7 @@ export default {
     settingKeyVal,
     typeToSettingKey,
     scopeValues,
+    roles,
+    chevrons,
+    departments,
 };

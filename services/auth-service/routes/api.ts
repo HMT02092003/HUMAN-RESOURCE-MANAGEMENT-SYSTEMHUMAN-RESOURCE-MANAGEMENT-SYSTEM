@@ -23,9 +23,12 @@ import {
 } from '@/src/controller/RolePermissionController';
 import {
   getAllUsers,
-  getUsersByDepartment,
-  getUsersByChevron,
   createUser,
+  getUserDetail,
+  updateUser,
+  deleteUser,
+  deleteMultipleUsers,
+  createContract,
 } from '@/src/controller/UserController';
 
 const router = Router();
@@ -113,6 +116,7 @@ router.get('/rolePermission/:id', authenticateToken, (req, res) => {
 });
 // ===================================END ROLE PERMISSION===================================
 
+// ===================================START USER===================================
 // Route đúng chuẩn RESTful cho lấy danh sách user
 router.get('/users', authenticateToken, (req, res) => {
   getAllUsers(req, res);
@@ -123,14 +127,35 @@ router.post('/users', authenticateToken, (req, res) => {
   createUser(req, res);
 });
 
-// API nội bộ: lấy user theo departmentId hoặc departmentIds
-router.get('/users/by-department', authenticateToken, (req, res) => {
-  getUsersByDepartment(req, res);
+// Route cho xóa nhiều user (phải đặt trước /users/:id)
+router.delete('/users/multiple', authenticateToken, (req, res) => {
+  deleteMultipleUsers(req, res);
 });
 
-// API nội bộ: lấy user theo chevronId hoặc chevronIds
-router.get('/users/by-chevron', authenticateToken, (req, res) => {
-  getUsersByChevron(req, res);
+// Route cho tạo hợp đồng cho user (phải đặt trước /users/:id)
+router.post('/users/:id/contract', authenticateToken, (req, res) => {
+  createContract(req, res);
 });
+
+// Route cho lấy chi tiết user với đầy đủ thông tin
+router.get('/users/detail/:id', authenticateToken, (req, res) => {
+  getUserDetail(req, res);
+});
+
+// Route chuẩn RESTful cho lấy chi tiết user
+router.get('/users/:id', authenticateToken, (req, res) => {
+  getUserDetail(req, res);
+});
+
+// Route chuẩn RESTful cho cập nhật user
+router.put('/users/:id', authenticateToken, (req, res) => {
+  updateUser(req, res);
+});
+
+// Route chuẩn RESTful cho xóa user
+router.delete('/users/:id', authenticateToken, (req, res) => {
+  deleteUser(req, res);
+});
+// ===================================END USER===================================
 
 export default router;

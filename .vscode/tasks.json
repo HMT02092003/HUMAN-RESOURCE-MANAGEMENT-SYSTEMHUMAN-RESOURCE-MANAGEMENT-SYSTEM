@@ -1,0 +1,64 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Frontend",
+      "type": "shell",
+      "command": "yarn dev",
+      "options": {
+        "cwd": "frontend"
+      },
+      "presentation": {
+        "panel": "new"
+      }
+    },
+    {
+      "label": "API Gateway",
+      "type": "shell",
+      "command": "yarn dev",
+      "options": {
+        "cwd": "services/api-gateway"
+      },
+      "presentation": {
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Auth Service",
+      "type": "shell",
+      "command": "yarn dev",
+      "options": {
+        "cwd": "services/auth-service"
+      },
+      "presentation": {
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Employee Service",
+      "type": "shell",
+      "command": "yarn dev",
+      "options": {
+        "cwd": "services/employee-service"
+      },
+      "presentation": {
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Start All",
+      "dependsOn": [
+        "Frontend",
+        "API Gateway",
+        "Auth Service",
+        "Employee Service"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
+}

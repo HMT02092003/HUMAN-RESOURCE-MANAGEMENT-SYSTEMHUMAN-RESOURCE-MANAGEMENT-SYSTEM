@@ -40,6 +40,17 @@ const ContractTypesForm = () => {
                 <Input.TextArea placeholder="Nhập mô tả" />
             </Form.Item>
             <Form.Item
+                label="Bảo hiểm (VND)"
+                name="insurance"
+                rules={[
+                    { required: true, message: 'Vui lòng nhập mức bảo hiểm' },
+                    { type: 'number', message: 'Bảo hiểm phải là số' },
+                    { validator: (_, value) => (value === undefined || value === null || value >= 0) ? Promise.resolve() : Promise.reject(new Error('Bảo hiểm không được âm')) }
+                ]}
+            >
+                <InputNumber style={{ width: '100%' }} min={0} formatter={(v) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')} />
+            </Form.Item>
+            <Form.Item
                 label="Thời hạn hợp đồng (tháng)"
                 name="contractTerm"
                 rules={[

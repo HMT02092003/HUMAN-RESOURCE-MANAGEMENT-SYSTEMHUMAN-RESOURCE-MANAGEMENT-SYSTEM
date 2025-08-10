@@ -4,16 +4,16 @@ import React from 'react';
 import CreateContract from '@/src/components/users/createContract';
 import MainLayout from "@/src/app/main-layout";
 import { HomeOutlined } from '@ant-design/icons';
-import { useSearchParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 
 const CreateContractPage = () => {
-    const searchParams = useSearchParams();
-    const id = searchParams.get('id');
+    const params = useParams();
+    const id = params.id;
 
     const breadcrumbItems = [
         { title: <HomeOutlined style={{ fontSize: "20px" }} />, href: '/home' },
         { title: 'Quản lí người dùng', href: '/user' },
-        { title: 'Tạo mới hợp đồng', href: `/user/create-contract?id=${id}` }
+        { title: 'Tạo mới hợp đồng', href: `/user/createContract/${id}` }
     ];
 
     const pageName = "Quản lí thông tin người dùng";

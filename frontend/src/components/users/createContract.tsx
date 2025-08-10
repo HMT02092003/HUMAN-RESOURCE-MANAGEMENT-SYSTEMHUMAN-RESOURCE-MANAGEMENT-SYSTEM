@@ -2,26 +2,26 @@
 
 import React, { useState, useEffect } from 'react';
 import { Col, Row, message } from 'antd';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import ContractForm from './Users/ContractForm';
 import UserService from '@/src/service/userService';
 
 const CreateContract = () => {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const params = useParams();
   const [loading, setLoading] = useState(false);
   const [userData, setUserData] = useState<any>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const id = searchParams.get('id');
+        const id = params.id;
         if (!id) {
           message.error('Không tìm thấy ID người dùng');
           return;
         }
 
-        const response = await UserService.getUserById(parseInt(id));
+        const response = await UserService.getUserById(parseInt(id as string));
         setUserData(response);
       } catch (error: any) {
         message.error(error.message || 'Có lỗi xảy ra khi tải dữ liệu');
@@ -29,16 +29,18 @@ const CreateContract = () => {
     };
 
     fetchData();
-  }, [searchParams]);
+  }, [params.id]);
 
   const handleFinish = async (values: any) => {
     try {
       setLoading(true);
-      // await UserService.createContract(userData.id, values);
+      await UserService.createContract(userData.id, values);
       message.success('Tạo hợp đồng thành công');
-      router.push('/users');
+      router.push('/user');
     } catch (error: any) {
-      message.error(error.message || 'Có lỗi xảy ra khi tạo hợp đồng');
+      const data = error?.response?.data;
+      message.destroy();
+      message.error(data?.message || data?.error || error.message || 'Có lỗi xảy ra khi tạo hợp đồng');
     } finally {
       setLoading(false);
     }
@@ -54,7 +56,7 @@ const CreateContract = () => {
         <Col md={{ span: 16, offset: 4 }}>
           <ContractForm
             onFinish={handleFinish}
-            onBack={() => router.push('/users')}
+            onBack={() => router.push('/user')}
             loading={loading}
           />
         </Col>

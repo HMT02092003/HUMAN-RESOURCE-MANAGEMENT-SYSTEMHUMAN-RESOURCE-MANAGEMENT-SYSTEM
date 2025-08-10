@@ -2,32 +2,17 @@ import React, { useEffect, useState } from "react";
 import { Form, Row, Col, Select, DatePicker, Input, InputNumber, Button } from "antd";
 import dayjs from "dayjs"; // Thư viện để xử lý ngày
 import { LeftCircleFilled, SaveFilled } from "@ant-design/icons";
+import { contractTypeService } from "@/src/service/contractTypeService";
 
 const { Option } = Select;
 
-const contractTypes = [
-  {
-    id: 1,
-    name: "Toàn thời gian",
-    description: "Hợp đồng lao động toàn thời gian",
-    contractTerm: 12,
-    insurance: 1000000
-  },
-  {
-    id: 2,
-    name: "Bán thời gian",
-    description: "Hợp đồng lao động bán thời gian",
-    contractTerm: 6,
-    insurance: 500000
-  },
-  {
-    id: 3,
-    name: "Thử việc",
-    description: "Hợp đồng thử việc",
-    contractTerm: 3,
-    insurance: 0
-  }
-];
+interface ContractType {
+  id: number;
+  name: string;
+  description?: string;
+  contractTerm: number;
+  insurance?: number;
+}
 
 interface ContractFormProps {
   initialValues?: any;
@@ -44,6 +29,8 @@ const ContractForm: React.FC<ContractFormProps> = ({
 }) => {
   const [form] = Form.useForm();
   const [contractDescription, setContractDescription] = useState("");
+  const [contractTypes, setContractTypes] = useState<ContractType[]>([]);
+  const [loadingTypes, setLoadingTypes] = useState(false);
 
   // Hàm để tính toán ngày kết thúc hợp đồng
   const calculateEndDate = (startDate: dayjs.Dayjs, contractTerm: number) => {
@@ -81,7 +68,7 @@ const ContractForm: React.FC<ContractFormProps> = ({
     if (selectedContract) {
       const { contractTerm, insurance, description } = selectedContract;
       form.setFieldsValue({ contractTerm, insurance }); // Cập nhật giá trị cho thời hạn và mức bảo hiểm
-      setContractDescription(description);
+      setContractDescription(description || "");
 
       const endDate = calculateEndDate(activeDay, contractTerm); // Tính toán ngày kết thúc
       form.setFieldsValue({ endDate }); // Cập nhật giá trị cho ngày kết thúc
@@ -92,11 +79,17 @@ const ContractForm: React.FC<ContractFormProps> = ({
   };
 
   const handleFinish = (values: any) => {
+    // Contract is optional: if no fields selected, return empty object to let BE create user only
+    const hasAnyValue = values && Object.values(values).some((v) => v !== undefined && v !== null && v !== "");
+    if (!hasAnyValue) {
+      onFinish({});
+      return;
+    }
     const formattedValues = {
       ...values,
       startDate: values.startDate?.toISOString(),
       activeDay: values.activeDay?.toISOString(),
-      endDate: values.endDate?.toISOString()
+      endDate: values.endDate?.toISOString(),
     };
     onFinish(formattedValues);
   };
@@ -112,6 +105,22 @@ const ContractForm: React.FC<ContractFormProps> = ({
     }
   }, [initialValues, form]);
 
+  // Load contract types from API
+  useEffect(() => {
+    const loadTypes = async () => {
+      try {
+        setLoadingTypes(true);
+        const types = await contractTypeService.getAllContractTypes();
+        setContractTypes(types || []);
+      } catch (_) {
+        setContractTypes([]);
+      } finally {
+        setLoadingTypes(false);
+      }
+    };
+    loadTypes();
+  }, []);
+
   return (
     <Form 
       form={form}
@@ -126,11 +135,12 @@ const ContractForm: React.FC<ContractFormProps> = ({
             label="Loại hợp đồng"
             name="contractTypeId"
           >
-            <Select
+              <Select
               placeholder="Chọn loại hợp đồng"
               allowClear
               showSearch
-              onChange={handleContractChange}
+                onChange={handleContractChange}
+                loading={loadingTypes}
             >
               {contractTypes.map((item) => (
                 <Option value={item.id} key={item.id} title={item.description}>

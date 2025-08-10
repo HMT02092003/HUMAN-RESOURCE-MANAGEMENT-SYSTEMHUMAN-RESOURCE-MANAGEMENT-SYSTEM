@@ -24,6 +24,7 @@ import {
   deleteMultipleContractTypes,
   deleteContractType,
 } from '@/src/controller/ContractTypeController';
+import { createContract, getContractsByUser, deleteContractsByUser } from '@/src/controller/ContractController';
 
 
 const router = Router();
@@ -109,5 +110,25 @@ router.delete('/deleteContractType', authenticateToken, (req, res) => {
   deleteContractType(req, res);
 });
 // ===================================END DEPARTMENTS===================================
+
+// ===================================CONTRACTS===================================
+// New RESTful style: userId in path
+router.post('/users/:userId/contracts', authenticateToken, (req, res) => {
+  createContract(req, res);
+});
+
+// Backward compatible endpoint (body contains userId)
+router.post('/contracts', authenticateToken, (req, res) => {
+  createContract(req, res);
+});
+
+router.get('/contracts/user/:userId', authenticateToken, (req, res) => {
+  getContractsByUser(req, res);
+});
+
+router.delete('/contracts/user/:userId', authenticateToken, (req, res) => {
+  deleteContractsByUser(req, res);
+});
+// ===================================END CONTRACTS===================================
 
 export default router;

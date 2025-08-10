@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Tabs, Form, Row, Col, message } from 'antd';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import ContractInfo from './Users/ContractInfo';
 import UserInfo from './userInfo';
 import UserService from '@/src/service/userService';
@@ -10,7 +10,7 @@ import UserService from '@/src/service/userService';
 const View = () => {
   const [activeTab, setActiveTab] = useState("1");
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const params = useParams();
   const [loading, setLoading] = useState(false);
   const [userData, setUserData] = useState<any>(null);
 
@@ -26,13 +26,13 @@ const View = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const id = searchParams.get('id');
+        const id = params.id;
         if (!id) {
           message.error('Không tìm thấy ID người dùng');
           return;
         }
         setLoading(true);
-        const response = await UserService.getUserById(parseInt(id));
+        const response = await UserService.getUserDetail(parseInt(id as string));
         const formattedData = {
           ...response,
           status: getStatusString(response.status)
@@ -46,7 +46,7 @@ const View = () => {
     };
 
     fetchData();
-  }, [searchParams]);
+  }, [params.id]);
 
   const items = [
     {

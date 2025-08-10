@@ -2,29 +2,20 @@
 
 import React, { useState } from 'react';
 import dayjs from 'dayjs';
-import { Button, Form, Col, Row, Descriptions, Spin, theme, Table } from 'antd';
+import { Button, Form, Col, Row, Descriptions, theme, Table } from 'antd';
 import { LeftOutlined, RightCircleFilled } from '@ant-design/icons';
 import type { DescriptionsProps } from 'antd';
 import { useRouter } from 'next/navigation';
+import constantConfig from '@/src/config/constant';
 
-const Gender = [
-  { key: 1, value: "Nam" },
-  { key: 2, value: "Nữ" },
-  { key: 3, value: "Khác" }
-];
-
-const Relationship = [
-  { key: 1, value: "Cha", label: "Cha" },
-  { key: 2, value: "Mẹ", label: "Mẹ" },
-  { key: 3, value: "Vợ/Chồng", label: "Vợ/Chồng" },
-  { key: 4, value: "Con", label: "Con" }
-];
+// Use shared constants to avoid mapping mismatches
+const { Gender, Relationship } = constantConfig;
 
 interface FamilyMember {
-  name: string;
-  birthday: string;
-  relationship: string;
-  dependent: boolean;
+  fullName?: string;
+  birthday?: string;
+  relationship?: number;
+  dependent?: boolean;
 }
 
 interface User {
@@ -53,82 +44,87 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
   const router = useRouter();
   const [form] = Form.useForm();
   const { token } = theme.useToken();
-  const getRelationshipLabel = (value: number): string => {
-    const relationship = Relationship.find((item) => item.key === value);
-    return relationship ? relationship.label : ' ';
+  const getRelationshipLabel = (value?: number): string => {
+    if (value === undefined || value === null) return '-';
+    const relationship = Relationship.find((item: any) => item.value === value);
+    return relationship ? relationship.label : '-';
   };
 
-  const getGenderLabel = (key: string): string => {
-    const gender = Gender.find((item) => item.key === parseInt(key));
-    return gender ? gender.value : ' ';
+  const getGenderLabel = (val?: string | number): string => {
+    if (val === undefined || val === null || val === '') return '-';
+    const numeric = typeof val === 'string' ? parseInt(val, 10) : val;
+    const gender = Gender.find((item: any) => item.key === numeric);
+    return gender ? itemLabel(gender) : '-';
   };
+
+  const itemLabel = (g: any) => g.value ?? g.label ?? '-';
 
   const userItems: DescriptionsProps['items'] = [
     {
       key: '1',
-      label: <h4>ID</h4>,
-      children: userData?.id || ' ',
+      label: 'ID',
+      children: userData?.id ?? '-',
     },
     {
       key: '2',
-      label: <h4>Họ và tên</h4>,
-      children: `${userData?.lastName || ''} ${userData?.firstName || ''}` || ' ',
+      label: 'Họ và tên',
+      children: `${userData?.lastName || ''} ${userData?.firstName || ''}`.trim() || '-',
     },
     {
       key: '3',
-      label: <h4>Ngày sinh</h4>,
-      children: userData?.birthday ? dayjs(userData.birthday).format('DD/MM/YYYY') : ' ',
+      label: 'Ngày sinh',
+      children: userData?.birthday ? dayjs(userData.birthday).format('DD/MM/YYYY') : '-',
     },
     {
       key: '4',
-      label: <h4>Số điện thoại</h4>,
-      children: userData?.phone || ' ',
+      label: 'Số điện thoại',
+      children: userData?.phone || '-',
     },
     {
       key: '5',
-      label: <h4>Giới tính</h4>,
-      children: getGenderLabel(userData?.gender || '0') || ' ',
+      label: 'Giới tính',
+      children: getGenderLabel(userData?.gender),
     },
   ];
   
   const jobItems: DescriptionsProps['items'] = [
     {
       key: '1',
-      label: <h4>Vai trò</h4>,
-      children: userData?.role?.name || ' ',
+      label: 'Vai trò',
+      children: userData?.role?.name || '-',
     },
     {
       key: '2',
-      label: <h4>Phòng ban</h4>,
-      children: userData?.department?.name || ' ',
+      label: 'Phòng ban',
+      children: userData?.department?.name || '-',
     },
     {
       key: '3',
-      label: <h4>Chức vụ</h4>,
-      children: userData?.chevron?.name || ' ',
+      label: 'Chức vụ',
+      children: userData?.chevron?.name || '-',
     },
     {
       key: '4',
-      label: <h4>Email</h4>,
-      children: userData?.email || ' ',
+      label: 'Email',
+      children: userData?.email || '-',
     },
     {
       key: '5',
-      label: <h4>Trạng thái</h4>,
-      children: userData?.status || ' ',
+      label: 'Trạng thái',
+      children: userData?.status || '-',
     },
     {
       key: '6',
-      label: <h4>Ngày bắt đầu</h4>,
-      children: userData?.startDate ? dayjs(userData.startDate).format('DD/MM/YYYY') : ' ',
+      label: 'Ngày bắt đầu',
+      children: userData?.startDate ? dayjs(userData.startDate).format('DD/MM/YYYY') : '-',
     },
   ];
 
   const columns = [
-    { title: 'Họ và tên', dataIndex: 'name', key: 'name' },
-    { title: 'Quan hệ', dataIndex: 'relationship', key: 'relationship', render: (value: number) => getRelationshipLabel(value) },
-    { title: 'Ngày sinh', dataIndex: 'birthday', key: 'birthday', render: (text: string) => dayjs(text).format('DD/MM/YYYY') },
-    { title: 'Phụ thuộc', dataIndex: 'dependent', key: 'dependent', render: (text: boolean) => (text ? 'Có' : 'Không') },
+    { title: 'Họ và tên', dataIndex: 'name', key: 'name', render: (text: string) => text || '-' },
+    { title: 'Quan hệ', dataIndex: 'relationship', key: 'relationship', render: (value?: number) => getRelationshipLabel(value) },
+    { title: 'Ngày sinh', dataIndex: 'birthday', key: 'birthday', render: (text?: string) => (text ? dayjs(text).format('DD/MM/YYYY') : '-') },
+    { title: 'Phụ thuộc', dataIndex: 'dependent', key: 'dependent', render: (text?: boolean) => (text ? 'Có' : 'Không') },
   ];
 
   return (
@@ -137,7 +133,7 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
         title="Thông tin cá nhân"
         items={userItems}
         column={3}
-        labelStyle={{ fontWeight: 700, color: '#000', width: '100px' }}
+        labelStyle={{ fontWeight: 700, color: '#000', minWidth: 120 }}
         contentStyle={{ backgroundColor: token.colorBgContainer }}
       />
 
@@ -145,18 +141,19 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
         title="Công việc"
         items={jobItems}
         column={3}
-        labelStyle={{ fontWeight: 700, color: '#000', width: '100px' }}
+        labelStyle={{ fontWeight: 700, color: '#000', minWidth: 120 }}
         contentStyle={{ backgroundColor: token.colorBgContainer }}
       />
       <Descriptions
         title="Thông tin gia đình"
       />
       <Table
-        dataSource={userData?.profileFamily?.map((member, index) => ({ key: index, ...member })) || []}
+        dataSource={userData?.profileFamily?.map((member: FamilyMember, index: number) => ({ key: index, ...member })) || []}
         columns={columns}
         pagination={false}
         bordered
         style={{ marginBottom: token.margin }}
+        locale={{ emptyText: 'Chưa có dữ liệu gia đình' }}
       />
 
       <Form form={form} layout="vertical" style={{ marginTop: token.margin }}>
@@ -164,7 +161,7 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
           <Col xs={24} md={{ span: 16, offset: 4 }}>
             <Form.Item style={{ textAlign: 'center' }}>
               <Button
-                onClick={() => router.push('/users')}
+                onClick={() => router.push('/user')}
                 style={{ marginRight: token.margin }}
                 icon={<LeftOutlined />}
               >

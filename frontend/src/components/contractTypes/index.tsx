@@ -155,6 +155,13 @@ const Index: React.FC = () => {
       ...getColumnSearchProps('description'),
     },
     {
+      title: "Mức bảo hiểm",
+      dataIndex: 'insurance',
+      key: 'contract_types.insurance',
+      sorter: (a: ContractType, b: ContractType) => a.insurance - b.insurance,
+      ...getColumnSearchProps('insurance'),
+    },
+    {
       title: "Thời hạn hợp đồng",
       dataIndex: 'contractTerm',
       key: 'contract_types.contractTerm',

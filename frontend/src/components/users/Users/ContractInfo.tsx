@@ -22,12 +22,14 @@ interface ContractData {
 
 interface ContractInfoProps {
   data: {
-    contract: ContractData;
+    contract: ContractData | null | undefined;
+    contracts?: ContractData[] | null;
   };
 }
 
 const ContractInfo: React.FC<ContractInfoProps> = ({ data }) => {
-  const contractData = data.contract;
+  const contractData = data?.contract ?? null;
+  const contracts = (data?.contracts ?? (contractData ? [contractData] : [])) as ContractData[];
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -101,10 +103,11 @@ const ContractInfo: React.FC<ContractInfoProps> = ({ data }) => {
       <h2 className="mb-4 text-lg font-semibold">Thông tin hợp đồng</h2>
       <Table
         columns={columns}
-        dataSource={[contractData]}
-        rowKey="id"
+        dataSource={contracts}
         pagination={false}
-        rowClassName={(record, index) => (index % 2 === 0 ? "row-even" : "row-odd")}
+        rowClassName={(_, index) => (index % 2 === 0 ? "row-even" : "row-odd")}
+        locale={{ emptyText: "Chưa có hợp đồng" }}
+        rowKey={(record) => `${record.contractType?.name}-${record.startDate}-${record.activeDay}`}
       />
       <div className="mt-4">
         <Space>

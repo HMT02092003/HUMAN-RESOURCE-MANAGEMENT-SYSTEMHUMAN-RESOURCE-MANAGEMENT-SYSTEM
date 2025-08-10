@@ -4,16 +4,16 @@ import React from 'react';
 import Edit from '@/src/components/users/edit';
 import MainLayout from "@/src/app/main-layout";
 import { HomeOutlined } from '@ant-design/icons';
-import { useSearchParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 
 const EditUserPage = () => {
-    const searchParams = useSearchParams();
-    const id = searchParams.get('id');
+    const params = useParams();
+    const id = params.id;
 
     const breadcrumbItems = [
         { title: <HomeOutlined style={{ fontSize: "20px" }} />, href: '/home' },
         { title: 'Quản lí người dùng', href: '/user' },
-        { title: 'Cập nhật người dùng', href: `/user/edit?id=${id}` }
+        { title: 'Cập nhật người dùng', href: `/user/edit/${id}` }
     ];
 
     const pageName = "Quản lí thông tin người dùng";

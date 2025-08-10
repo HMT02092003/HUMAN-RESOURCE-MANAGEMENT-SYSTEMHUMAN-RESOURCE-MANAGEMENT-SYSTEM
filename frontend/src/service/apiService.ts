@@ -132,7 +132,8 @@ const createApiInstance = () => {
         }
       }
 
-      const errorMessage = error.response?.data?.message || error.message || 'Có lỗi xảy ra';
+      const data = error.response?.data;
+      const errorMessage = data?.message || data?.error || error.message || 'Có lỗi xảy ra';
       message.error(errorMessage);
 
       return Promise.reject(error); 

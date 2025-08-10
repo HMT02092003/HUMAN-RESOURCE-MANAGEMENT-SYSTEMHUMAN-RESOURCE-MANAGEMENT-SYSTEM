@@ -51,17 +51,36 @@ class UserModel extends Model {
         firstName: { type: 'string' },
         lastName: { type: 'string' },
         email: { type: 'string' },
-        startDate: { type: 'string', format: 'date' },
+        startDate: { 
+          anyOf: [
+            { type: 'string', format: 'date' },
+            { type: 'string', format: 'date-time' },
+            { type: 'object' } // Allow Date objects
+          ]
+        },
         dayOff: { type: 'string' },
         profileFamily: { type: 'string' },
         chevronId: { type: 'integer' },
         departmentId: { type: 'integer' },
-        status: { type: 'string' },
+        status: { 
+          anyOf: [
+            { type: 'string' },
+            { type: 'integer' }
+          ]
+        },
         vacationDay: { type: 'number' },
         baseSalary: { type: 'number' },
         createdBy: { type: 'integer' },
         updatedBy: { type: 'integer' },
-        birthday: { type: 'string', format: 'date' },
+        birthday: { 
+          anyOf: [
+            { type: 'string', format: 'date' },
+            { type: 'string', format: 'date-time' },
+            { type: 'object' } // Allow Date objects
+          ]
+        },
+        gender: { type: 'integer' },
+        phone: { type: 'string' },
       },
     };
   }

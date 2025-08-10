@@ -11,8 +11,10 @@ import {
     KeyOutlined,
     LogoutOutlined,
     InfoCircleOutlined,
-    HomeOutlined
+    HomeOutlined,
+    CalendarOutlined
 } from '@ant-design/icons';
+
 import type { MenuProps } from 'antd';
 import { Breadcrumb, Layout, Menu, theme, Avatar, Dropdown, Badge, Modal, Button, Descriptions, message, notification, Popconfirm } from 'antd';
 import { useRouter, usePathname } from 'next/navigation';
@@ -21,6 +23,7 @@ import axios from 'axios';
 import TopBarProgress from 'react-topbar-progress-indicator';
 import { decodePermissions } from '@/src/utils/decode-permisison';
 import LoadingProgress from '@/src/components/LoadingProgress';
+import { authService } from '../service/authService';
 
 const { Header, Content, Footer, Sider } = Layout;
 
@@ -81,11 +84,12 @@ TopBarProgress.config({
 // Define menu items with their required permissions
 const menuItemsList: ExtendedMenuItem[] = [
     getItem('Dashboard', 'home', <PieChartOutlined />, undefined, 'home'),
-    getItem('Quản lí nhân sự', 'users', <UserOutlined />, undefined, 'users'),
+    getItem('Quản lí người dùng', 'users', <UserOutlined />, undefined, 'users'),
     getItem('Quản lí phòng ban', 'departments', <UserOutlined />, undefined, 'departments'),
     getItem('Quản lí chức vụ', 'chevrons', <ShoppingCartOutlined />, undefined, 'chevrons'),
     getItem('Quản lí hợp đồng', 'contractTypes', <AppstoreOutlined />, undefined, 'contractTypes'),
     getItem('Quản lí vai trò', 'roles', <TeamOutlined />, undefined, 'roles'),
+    getItem('Chấm công', 'attendance', <CalendarOutlined />, undefined, ''),
 ];
 
 const isDeepEqual = (obj1: any, obj2: any): boolean => {
@@ -211,6 +215,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
             case 'home':
                 router.push('/home');
                 break;
+            case 'attendance':
+                router.push('/attendance');
+                break;
             case 'departments':
                 router.push('/departments');
                 break;
@@ -230,7 +237,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
 
     const logoutHandler = async () => {
         try {
-            await axios.post('/api/logout');
+            await authService.logout();
             message.success('Đăng xuất thành công');
             router.push('/login');
         } catch (err) {

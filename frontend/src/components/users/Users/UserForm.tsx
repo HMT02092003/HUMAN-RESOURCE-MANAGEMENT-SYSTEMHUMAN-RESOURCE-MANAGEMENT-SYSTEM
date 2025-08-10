@@ -6,50 +6,17 @@ import { LeftCircleFilled, DeleteFilled, LockOutlined, PlusOutlined, SaveFilled,
 import dayjs from "dayjs";
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import { useRouter } from "next/navigation";
+import constantConfig from "@/src/config/constant";
+import { roleService } from "@/src/service/roleService";
+import { departmentService } from "@/src/service/departmentService";
+import { chevronService } from "@/src/service/chevronService";
 
 dayjs.extend(customParseFormat);
 
 const { Option } = Select;
 
-// Static data for form options (in a real app, these would come from an API)
-const Gender = [
-  { key: "male", value: "Nam" },
-  { key: "female", value: "Nữ" },
-  { key: "other", value: "Khác" }
-];
-
-const statusOptions = [
-  { key: 1, value: "Hoạt động" },
-  { key: 0, value: "Không hoạt động" }
-];
-
-const Relationship = [
-  { key: "father", value: "Cha" },
-  { key: "mother", value: "Mẹ" },
-  { key: "spouse", value: "Vợ/Chồng" },
-  { key: "child", value: "Con" }
-];
-
-// Placeholder for roles, chevrons, and departments
-// In a real application, you would fetch these dynamically.
-const roles = [
-  { value: 'admin', label: 'Quản trị viên' },
-  { value: 'user', label: 'Người dùng' },
-  { value: 'editor', label: 'Biên tập viên' },
-];
-
-const chevrons = [
-  { value: 'junior', label: 'Thực tập sinh' },
-  { value: 'mid', label: 'Nhân viên' },
-  { value: 'senior', label: 'Trưởng nhóm' },
-];
-
-const departments = [
-  { value: 'hr', label: 'Phòng Nhân sự' },
-  { value: 'it', label: 'Phòng IT' },
-  { value: 'marketing', label: 'Phòng Marketing' },
-];
-
+// Import constants from config
+const { Gender, statusOptions, Relationship } = constantConfig;
 
 interface UserFormProps {
   initialValues?: any;
@@ -59,6 +26,8 @@ interface UserFormProps {
   onDelete?: () => void;
   deletePer?: boolean; // Permission to delete
   loading?: boolean; // Loading state for submission
+  // When provided in create flow, clicking "Hoàn thành" will save user only (without contract)
+  onCreateOnly?: (values: any) => Promise<void> | void;
 }
 
 const UserForm: React.FC<UserFormProps> = ({
@@ -68,10 +37,44 @@ const UserForm: React.FC<UserFormProps> = ({
   onBack,
   onDelete,
   deletePer,
-  loading
+  loading,
+  onCreateOnly,
 }) => {
   const [form] = Form.useForm();
-  const router = useRouter(); // Though router isn't used directly here, it's kept as it was in your original code.
+  const router = useRouter();
+  
+  // State for API data
+  const [roles, setRoles] = useState<any[]>([]);
+  const [chevrons, setChevrons] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [apiLoading, setApiLoading] = useState(false);
+
+  // Fetch data from APIs
+  useEffect(() => {
+    const fetchData = async () => {
+      setApiLoading(true);
+      try {
+        // Fetch roles from auth-service
+        const rolesData = await roleService.getAllRoles();
+        setRoles(rolesData || []);
+
+        // Fetch departments from employee-service
+        const departmentsData = await departmentService.getAllDepartments();
+        setDepartments(departmentsData || []);
+
+        // Fetch chevrons from employee-service
+        const chevronsData = await chevronService.getAllChevrons();
+        setChevrons(chevronsData || []);
+      } catch (error: any) {
+        console.error('Error fetching form data:', error);
+        message.error('Có lỗi xảy ra khi tải dữ liệu form');
+      } finally {
+        setApiLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   const handleFinish = (values: any) => {
     const formattedValues = {
@@ -101,6 +104,7 @@ const UserForm: React.FC<UserFormProps> = ({
           birthday: member.birthday ? dayjs(member.birthday) : null
         }))
       });
+      console.log("Initial values:", initialValues);
     }
   }, [initialValues, form]);
 
@@ -141,8 +145,8 @@ const UserForm: React.FC<UserFormProps> = ({
                 rules={[
                   { required: true, message: "Vui lòng nhập mật khẩu" },
                   { whitespace: true, message: "Mật khẩu không được để trống" },
-                  { min: 8, message: "Mật khẩu phải có ít nhất 8 ký tự" },
-                  { pattern: /^(?=.*[A-Z])(?=.*[a-zA-Z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,}$/, message: "Mật khẩu phải chứa chữ hoa, chữ thường, số và ký tự đặc biệt" }
+                  // { min: 8, message: "Mật khẩu phải có ít nhất 8 ký tự" },
+                  // { pattern: /^(?=.*[A-Z])(?=.*[a-zA-Z])(?=.*[0-9])(?=.*[!@#$%^&*]).{8,}$/, message: "Mật khẩu phải chứa chữ hoa, chữ thường, số và ký tự đặc biệt" }
                 ]}
               >
                 <Input.Password
@@ -186,7 +190,7 @@ const UserForm: React.FC<UserFormProps> = ({
             rules={[
               { required: true, message: "Vui lòng nhập họ" },
               { whitespace: true, message: "Họ không được để trống" },
-              { max: 50, message: "Họ không được vượt quá 50 ký tự" }
+              { max: 50, message: "Họ không được vượt quá 50 ký tự" },
             ]}
           >
             <Input placeholder="Nhập họ" maxLength={50} />
@@ -200,7 +204,7 @@ const UserForm: React.FC<UserFormProps> = ({
             rules={[
               { required: true, message: "Vui lòng nhập tên" },
               { whitespace: true, message: "Tên không được để trống" },
-              { max: 50, message: "Tên không được vượt quá 50 ký tự" }
+              { max: 50, message: "Tên không được vượt quá 50 ký tự" },
             ]}
           >
             <Input placeholder="Nhập tên" maxLength={50} />
@@ -264,7 +268,7 @@ const UserForm: React.FC<UserFormProps> = ({
             name="phone"
             rules={[
               { required: true, message: "Vui lòng nhập số điện thoại" },
-              { pattern: /^\d{10}$/, message: "Số điện thoại phải có 10 chữ số" },
+              { pattern: /^0\d{9}$/, message: "Số điện thoại Việt Nam phải bắt đầu bằng 0 và có 10 chữ số" },
             ]}
           >
             <Input
@@ -283,8 +287,8 @@ const UserForm: React.FC<UserFormProps> = ({
           >
             <Select placeholder="Chọn trạng thái">
               {statusOptions.map((item) => (
-                <Option value={item.key} key={item.key}>
-                  {item.value}
+                <Option value={item.value} key={item.value}>
+                  {item.label}
                 </Option>
               ))}
             </Select>
@@ -303,10 +307,11 @@ const UserForm: React.FC<UserFormProps> = ({
               placeholder="Chọn vai trò"
               allowClear
               showSearch
+              loading={apiLoading}
             >
               {roles.map((item) => (
-                <Option value={item.value} key={item.value}>
-                  {item.label}
+                <Option value={item.id} key={item.id}>
+                  {item.name}
                 </Option>
               ))}
             </Select>
@@ -342,10 +347,11 @@ const UserForm: React.FC<UserFormProps> = ({
               placeholder="Chọn cấp bậc"
               allowClear
               showSearch
+              loading={apiLoading}
             >
               {chevrons.map((item) => (
-                <Option value={item.value} key={item.value}>
-                  {item.label}
+                <Option value={item.id} key={item.id}>
+                  {item.name}
                 </Option>
               ))}
             </Select>
@@ -364,10 +370,11 @@ const UserForm: React.FC<UserFormProps> = ({
               placeholder="Chọn phòng ban"
               allowClear
               showSearch
+              loading={apiLoading}
             >
               {departments.map((item) => (
-                <Option value={item.value} key={item.value}>
-                  {item.label}
+                <Option value={item.id} key={item.id}>
+                  {item.name}
                 </Option>
               ))}
             </Select>
@@ -413,8 +420,8 @@ const UserForm: React.FC<UserFormProps> = ({
                         >
                           <Select placeholder="Chọn quan hệ">
                             {Relationship.map((item) => (
-                              <Option value={item.key} key={item.key}>
-                                {item.value}
+                              <Option value={item.value} key={item.value}>
+                                {item.label}
                               </Option>
                             ))}
                           </Select>
@@ -423,7 +430,7 @@ const UserForm: React.FC<UserFormProps> = ({
                       <Col md={12}>
                         <Form.Item
                           {...restField}
-                          name={[name, "fullName"]}
+                          name={[name, "name"]}
                           label="Họ và tên"
                           rules={[{ required: true, message: "Vui lòng nhập họ và tên" }]}
                         >

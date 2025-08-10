@@ -15,16 +15,23 @@ const Create = () => {
   const [activeKey, setActiveKey] = React.useState('1');
   const [userData, setUserData] = useState<any>(null); // Để lưu trữ dữ liệu người dùng tạm thời
 
-  // Hàm xử lý khi submit UserForm
+  // Submit của nút "Tiếp tục" chỉ chuyển tab, không gọi API
   const handleUserFormFinish = async (values: any) => {
+    setUserData(values);
+    setActiveKey('2');
+  };
+
+  // Nút "Hoàn thành" ở Step 1: gọi API lưu user ngay (không hợp đồng)
+  const handleCreateUserOnly = async (values: any) => {
     try {
       setLoading(true);
-      // Lưu trữ dữ liệu người dùng
-      setUserData(values);
-      message.success("Thông tin người dùng đã được lưu tạm thời. Vui lòng điền thông tin hợp đồng.");
-      setActiveKey('2'); // Chuyển sang Tab 2
+      await UserService.createUser(values);
+      message.success("Tạo người dùng thành công!");
+      router.push("/user");
     } catch (error: any) {
-      message.error(error.message || "Có lỗi xảy ra khi xử lý thông tin người dùng.");
+      const data = error?.response?.data;
+      message.destroy();
+      message.error(data?.message || data?.error || error.message || "Có lỗi xảy ra");
     } finally {
       setLoading(false);
     }
@@ -46,11 +53,13 @@ const Create = () => {
       };
 
       console.log("Dữ liệu cuối cùng để gửi:", finalData);
-      await UserService.createUser(finalData); // Giả sử API tạo user cũng nhận dữ liệu hợp đồng
+      await UserService.createUser(finalData);
       message.success("Người dùng và hợp đồng đã được tạo thành công!");
-      router.push("/admin/users");
+      router.push("/user");
     } catch (error: any) {
-      message.error(error.message || "Failed to create user");
+      const data = error?.response?.data;
+      message.destroy();
+      message.error(data?.message || data?.error || error.message || "Có lỗi xảy ra");
     } finally {
       setLoading(false);
     }
@@ -63,11 +72,12 @@ const Create = () => {
           <Tabs defaultActiveKey="1" activeKey={activeKey} onChange={setActiveKey}>
             <TabPane tab="Thông tin người dùng" key="1">
               <UserForm
-                onFinish={handleUserFormFinish} // Sử dụng hàm mới cho UserForm
+                onFinish={handleUserFormFinish} // "Tiếp tục" chỉ chuyển tab
+                onCreateOnly={handleCreateUserOnly} // "Hoàn thành" lưu ngay user
                 isEdit={false}
-                onBack={() => router.push("/admin/users")}
+                onBack={() => router.push("/user")}
                 loading={loading}
-                initialValues={userData} // Truyền dữ liệu tạm thời để hiển thị nếu người dùng quay lại
+                initialValues={userData}
               />
             </TabPane>
             <TabPane tab="Thông tin hợp đồng" key="2">
