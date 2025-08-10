@@ -1,4 +1,4 @@
-import { apiService } from './apiService';
+import apiService from './apiService';
 
 export interface AttendanceData {
   id: number;
