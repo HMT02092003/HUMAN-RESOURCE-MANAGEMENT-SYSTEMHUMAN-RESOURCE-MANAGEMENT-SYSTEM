@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
 import authRoutes from './routes/api';
 
 // Load environment variables
@@ -19,12 +21,26 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
+app.use((req, res, next) => {
+  // Bỏ qua logging cho tất cả request
+  next();
+});
+
+// Serve static files (e.g., uploaded identification photos)
+const uploadsDir = path.resolve(process.cwd(), 'public', 'uploads', 'identificationPhoto');
+try {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+} catch {}
+app.use(express.static(path.resolve(process.cwd(), 'public')));
+
 // Health check
 app.get('/health', (req, res) => {
   res.status(200).json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    service: 'Auth Service'
+    service: 'Auth Service',
+    port: PORT,
+    dbHost: process.env.DB_HOST
   });
 });
 

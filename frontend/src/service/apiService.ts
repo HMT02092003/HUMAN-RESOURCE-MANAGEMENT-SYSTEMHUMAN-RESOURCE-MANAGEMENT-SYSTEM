@@ -4,7 +4,9 @@ import { message } from 'antd';
 import moment from 'moment-timezone';
 import { getDecodedToken } from '../utils/decode-token';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_GATEWAY_URL;
+const API_BASE_URL = typeof window !== 'undefined' 
+  ? `${window.location.protocol}//${window.location.hostname}:4000`
+  : 'http://localhost:4000';
 
 // --- Hàm để xây dựng FormData (copy từ BaseService) ---
 function buildFormData(formData: FormData, data: any, parentKey?: string) {

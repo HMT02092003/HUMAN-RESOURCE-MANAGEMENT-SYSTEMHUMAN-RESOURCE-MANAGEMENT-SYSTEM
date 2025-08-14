@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect } from 'react';
-import { Button, ConfigProvider, message, Space, Table, Tooltip, Modal, Popconfirm, Input, Select } from 'antd';
+import { Button, ConfigProvider, message, Space, Table, Tooltip, Modal, Popconfirm, Input, Select, Grid, Row, Col } from 'antd';
 import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, PlusOutlined, KeyOutlined, SearchOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import { roleService } from '@/src/service/roleService';
@@ -29,6 +29,7 @@ const formatDate = (date: Date | string | null): string => {
 
 const Roles: React.FC = () => {
   const tableRef = useRef<TableRefType>(null);
+  const screens = Grid.useBreakpoint();
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState<boolean>(false);
   const router = useRouter();
@@ -200,76 +201,87 @@ const Roles: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Select
-            style={{ width: 120 }}
-            value={searchColumn}
-            onChange={setSearchColumn}
-            options={[
-              { value: 'name', label: 'Tên vai trò' },
-              { value: 'description', label: 'Mô tả' },
-            ]}
-          />
-          <Input
-            placeholder="Tìm kiếm..."
-            value={searchText}
-            onChange={e => setSearchText(e.target.value)}
-            style={{ width: 200 }}
-            allowClear
-          />
-        </div>
+    <div style={{ padding: screens.lg ? 24 : 16 }}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        <Col xs={24}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Select
+                style={{ width: screens.lg ? 160 : 120 }}
+                value={searchColumn}
+                onChange={setSearchColumn}
+                options={[
+                  { value: 'name', label: 'Tên vai trò' },
+                  { value: 'description', label: 'Mô tả' },
+                ]}
+              />
+              <Input
+                placeholder="Tìm kiếm..."
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+                style={{ width: screens.lg ? 240 : 180 }}
+                allowClear
+              />
+            </div>
 
-        <div>
-          <Popconfirm
-            title="Bạn có chắc chắn muốn xóa các vai trò đã chọn?"
-            onConfirm={handleDelete}
-            okText="Có"
-            cancelText="Không"
-            disabled={selectedRowKeys.length === 0}
-          >
-            <Button
-              type="primary"
-              danger
-              icon={<DeleteOutlined />}
-              disabled={selectedRowKeys.length === 0}
-            >
-              Xóa đã chọn
-            </Button>
-          </Popconfirm>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Popconfirm
+                title="Bạn có chắc chắn muốn xóa các vai trò đã chọn?"
+                onConfirm={handleDelete}
+                okText="Có"
+                cancelText="Không"
+                disabled={selectedRowKeys.length === 0}
+              >
+                <Button
+                  type="primary"
+                  danger
+                  icon={<DeleteOutlined />}
+                  disabled={selectedRowKeys.length === 0}
+                >
+                  Xóa đã chọn
+                </Button>
+              </Popconfirm>
 
-          <Button
-            onClick={() => {
-              router.push('/roles/create');
-            }}
-            type="primary"
-            className='btn-top'
-            style={{ marginRight: 8 }}
-            hidden={!createPer}
-          >
-            <PlusCircleOutlined />
-            Tạo mới vai trò
-          </Button>
-        </div>
-      </div>
+              <Button
+                onClick={() => {
+                  router.push('/roles/create');
+                }}
+                type="primary"
+                className='btn-top'
+                hidden={!createPer}
+              >
+                <PlusCircleOutlined />
+                Tạo mới vai trò
+              </Button>
+            </div>
+          </div>
+        </Col>
+      </Row>
 
-      <Table
-        ref={tableRef as React.Ref<any>}
-        columns={columns}
-        dataSource={roles || []}
-        loading={loading}
-        rowKey="id"
-        rowSelection={rowSelection}
-        scroll={{ x: 'max-content' }}
-        pagination={{
-          pageSize: 12,
-          showSizeChanger: true,
-          pageSizeOptions: ['12', '24', '36', '48'],
-          showTotal: (total: number) => `Tổng số: ${total} bản ghi`
-        }}
-        rowClassName={(_, index) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
-      />
+      <Row>
+        <Col xs={24}>
+          <div style={{ overflowX: 'auto' }}>
+            <Table
+              ref={tableRef as React.Ref<any>}
+              columns={columns}
+              dataSource={roles || []}
+              loading={loading}
+              rowKey="id"
+              rowSelection={rowSelection}
+              scroll={{ x: 'max-content' }}
+              pagination={{
+                pageSize: 12,
+                showSizeChanger: true,
+                pageSizeOptions: ['12', '24', '36', '48'],
+                showTotal: (total: number) => `Tổng số: ${total} bản ghi`,
+                size: screens.lg ? 'default' : 'small'
+              }}
+              rowClassName={(_, index) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
+              size={screens.lg ? 'middle' : 'small'}
+            />
+          </div>
+        </Col>
+      </Row>
 
       <style jsx global>{`
         .row-even {
@@ -280,6 +292,13 @@ const Roles: React.FC = () => {
         }
         .btn-top {
           margin-right: 8px;
+        }
+        @media (max-width: 768px) {
+          .ant-table-thead > tr > th,
+          .ant-table-tbody > tr > td {
+            padding: 8px 4px;
+            font-size: 12px;
+          }
         }
       `}</style>
     </div>

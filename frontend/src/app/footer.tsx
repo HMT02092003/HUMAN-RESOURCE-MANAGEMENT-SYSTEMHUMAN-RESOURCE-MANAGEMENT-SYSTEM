@@ -20,7 +20,7 @@ const App: React.FC = () => {
         </Col>
         <Col span={24} style={{ marginBottom: "16px" }}>
           <Row gutter={[16, 16]}>
-            <Col span={8}>
+            <Col xs={24} md={8}>
               <Card className="cardStyle">
                 <Text className="textStyle">
                   <strong>Thành phố Hồ Chí Minh</strong>
@@ -33,7 +33,7 @@ const App: React.FC = () => {
                 </Text>
               </Card>
             </Col>
-            <Col span={8}>
+            <Col xs={24} md={8}>
               <Card className="cardStyle">
                 <Text className="textStyle">
                   <strong>Thành phố Hồ Chí Minh</strong>
@@ -46,7 +46,7 @@ const App: React.FC = () => {
                 </Text>
               </Card>
             </Col>
-            <Col span={8}>
+            <Col xs={24} md={8}>
               <Card className="cardStyle">
                 <Text className="textStyle">
                   <strong>Hà Nội</strong>
@@ -62,7 +62,7 @@ const App: React.FC = () => {
           </Row>
         </Col>
 
-        <Col span={6} className="colContainer" style={{ paddingLeft: "2%" }}>
+        <Col xs={24} md={6} className="colContainer" style={{ paddingLeft: "2%" }}>
           <Title level={5} className="titleStyle">
             Đa dạng thanh toán
           </Title>
@@ -87,7 +87,7 @@ const App: React.FC = () => {
             </div>
           </div>
         </Col>
-        <Col span={6} className="colContainer">
+        <Col xs={24} md={6} className="colContainer">
           <Title level={5} className="titleStyle">
             Thông tin hữu ích
           </Title>
@@ -119,7 +119,7 @@ const App: React.FC = () => {
           </div>
         </Col>
 
-        <Col span={6} className="colContainer">
+        <Col xs={24} md={6} className="colContainer">
           <Title level={5} className="titleStyle">
             Social networks
           </Title>
@@ -139,7 +139,7 @@ const App: React.FC = () => {
           </Space>
         </Col>
 
-        <Col span={6} className="colContainer" style={{ paddingRight: "2%" }}>
+        <Col xs={24} md={6} className="colContainer" style={{ paddingRight: "2%" }}>
           <Title level={5} className="titleStyle">
             Phản hồi, góp ý, khiếu nại
           </Title>

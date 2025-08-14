@@ -54,7 +54,7 @@ const View = () => {
       label: <div style={{ textAlign: "center" }}>Thông tin người dùng</div>,
       children: (
         <Row>
-          <Col md={{ span: 24 }}>
+          <Col xs={24} md={{ span: 24 }}>
             <UserInfo userData={userData} setActiveTab={setActiveTab} />
           </Col>
         </Row>
@@ -70,7 +70,7 @@ const View = () => {
   return (
     <div className="content">
       <Row>
-        <Col md={{ span: 24 }}>
+        <Col xs={24} md={{ span: 24 }}>
           <Tabs
             defaultActiveKey="1"
             activeKey={activeTab}

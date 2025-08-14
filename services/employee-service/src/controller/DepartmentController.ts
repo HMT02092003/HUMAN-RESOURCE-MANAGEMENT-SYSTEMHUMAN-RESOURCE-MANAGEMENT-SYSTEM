@@ -69,6 +69,14 @@ export const createDepartment = async (req: Request, res: Response) => {
     let params = validate(inputs, allowFields, { removeNotAllow: true });
     console.log("Validated params:", params);
 
+    // Validation độ dài tên department (tối đa 20 ký tự)
+    if (params.name && params.name.length > 20) {
+      return res.status(400).json({ 
+        error: "Tên phòng ban không được vượt quá 20 ký tự!",
+        code: 400 
+      });
+    }
+
     const existingDepartment = await DepartmentModel.query().findOne({
       name: params.name,
     });
@@ -92,7 +100,7 @@ export const createDepartment = async (req: Request, res: Response) => {
     if (error instanceof ValidationException) {
       return res.status(error.status).json({
         error: error.message,
-        code: error.code
+        code: error.status
       });
     }
 
@@ -133,7 +141,7 @@ export const getDepartmentDetail = async (req: Request, res: Response) => {
     if (error instanceof ValidationException) {
       return res.status(error.status).json({
         error: error.message,
-        code: error.code
+        code: error.status
       });
     }
 
@@ -196,6 +204,14 @@ export const updateDepartment = async (req: Request, res: Response) => {
     let params = validate(inputs, allowFields, { removeNotAllow: true });
     console.log("Received params:", params);
 
+    // Validation độ dài tên department (tối đa 20 ký tự)
+    if (params.name && params.name.length > 20) {
+      return res.status(400).json({ 
+        error: "Tên phòng ban không được vượt quá 20 ký tự!",
+        code: 400 
+      });
+    }
+
     const { id } = params;
     const updateData = {
       name: params.name,
@@ -229,7 +245,7 @@ export const updateDepartment = async (req: Request, res: Response) => {
     if (error instanceof ValidationException) {
       return res.status(error.status).json({
         error: error.message,
-        code: error.code
+        code: error.status
       });
     }
 
@@ -259,8 +275,16 @@ export const deleteDepartment = async (req: Request, res: Response) => {
     }
 
     // Check if department is being used by users via auth-service
+    // Forward authorization header from original request
+    const authHeader = req.headers.authorization;
+    const headers: any = {};
+    if (authHeader) {
+      headers.Authorization = authHeader;
+    }
+
     const { data: users } = await axios.get(`${authServiceUrl}/api/users/by-department`, {
-      params: { departmentId: params.id }
+      params: { departmentId: params.id },
+      headers: headers
     });
     if (users && users.length > 0) {
       return res.status(400).json({ error: "Phòng ban đang được sử dụng, không thể xóa!" });
@@ -312,8 +336,17 @@ export const deleteMultipleDepartments = async (req: Request, res: Response) => 
     }
 
     // Check if any department is being used by users via auth-service
+    // Forward authorization header from original request
+    const authHeader = req.headers.authorization;
+    const headers: any = {};
+    if (authHeader) {
+      headers.Authorization = authHeader;
+    }
+
+    // Gửi departmentIds dưới dạng array thay vì string
     const { data: users } = await axios.get(`${authServiceUrl}/api/users/by-department`, {
-      params: { departmentIds: params.ids.join(',') }
+      params: { departmentIds: params.ids }, // Không cần .join(',')
+      headers: headers
     });
     if (users && users.length > 0) {
       return res.status(400).json({ error: "Phòng ban đang được sử dụng, không thể xóa!" });
@@ -334,7 +367,7 @@ export const deleteMultipleDepartments = async (req: Request, res: Response) => 
     if (error instanceof ValidationException) {
       return res.status(error.status).json({
         error: error.message,
-        code: error.code
+        code: error.status
       });
     }
 

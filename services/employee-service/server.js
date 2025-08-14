@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import morgan from 'morgan';
+// import morgan from 'morgan'; // Comment out morgan để tắt logging
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import employeeRoutes from './routes/api';
@@ -24,8 +24,14 @@ app.use(cors({
   credentials: true
 }));
 
-// Request logging
-app.use(morgan('combined'));
+// Tắt logging mặc định của Express
+app.use((req, res, next) => {
+  // Bỏ qua logging cho tất cả request
+  next();
+});
+
+// Request logging - comment out để tắt
+// app.use(morgan('combined'));
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -41,9 +47,9 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Mount API routes
+// Mount API routes - comment out console.log để tắt logging
 app.use('/api', (req, res, next) => {
-  console.log('[Router /api] called:', req.method, req.url, '| body:', req.body);
+  // console.log('[Router /api] called:', req.method, req.url, '| body:', req.body); // Comment out để tắt logging
   next();
 }, employeeRoutes);
 

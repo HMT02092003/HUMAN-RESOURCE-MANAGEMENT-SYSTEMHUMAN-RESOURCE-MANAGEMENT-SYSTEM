@@ -16,7 +16,8 @@ import {
 } from '@ant-design/icons';
 
 import type { MenuProps } from 'antd';
-import { Breadcrumb, Layout, Menu, theme, Avatar, Dropdown, Badge, Modal, Button, Descriptions, message, notification, Popconfirm } from 'antd';
+import { Breadcrumb, Layout, Menu, theme, Avatar, Dropdown, Badge, Modal, Button, Descriptions, message, notification, Popconfirm, Grid } from 'antd';
+import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import axios from 'axios';
@@ -130,6 +131,8 @@ const isDeepEqual = (obj1: any, obj2: any): boolean => {
 
 const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, breadcrumbItems = [], pageTitle, pageDescription, userPermissions = {} }) => {
     const [collapsed, setCollapsed] = useState(false);
+    const screens = Grid.useBreakpoint();
+    const isMobile = !screens.lg;
     const [isUserModalVisible, setIsUserModalVisible] = useState(false);
     const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
     const [color, setColor] = useState(() => {
@@ -320,10 +323,21 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
         <Layout style={{ minHeight: '100vh' }}>
             <LoadingProgress>
                 <Sider
-                    style={{ backgroundColor: "white" }}
-                    collapsible collapsed={collapsed}
+                    style={{ 
+                        backgroundColor: "white",
+                        position: isMobile ? 'fixed' : 'relative',
+                        height: '100vh',
+                        zIndex: 1000,
+                        left: isMobile && collapsed ? -200 : 0,
+                        transition: 'left 0.2s'
+                    }}
+                    collapsible={!isMobile}
+                    collapsed={collapsed}
                     onCollapse={(value) => setCollapsed(value)}
                     theme="light"
+                    breakpoint="lg"
+                    collapsedWidth={0}
+                    trigger={null}
                 >
                     <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "50px" }}>
                         <img src="/logo/logo.png" alt="" style={{ width: "100px" }} />
@@ -340,33 +354,42 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
 
                 <Layout>
                     <Header style={{
-                        paddingLeft: "50px",
-                        paddingRight: "50px",
+                        paddingLeft: isMobile ? "16px" : "10px",
+                        paddingRight: isMobile ? "16px" : "50px",
                         background: colorBgContainer,
                         display: 'flex',
-                        justifyContent: 'flex-end',
-                        alignItems: 'center'
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 999
                     }}>
-                        <Dropdown menu={notificationMenu} placement="bottomRight" arrow trigger={['click']}>
-                            <Badge count={notifications.length} size="small">
-                                <Button
-                                    type="text"
-                                    icon={<BellOutlined style={{ fontSize: "20px" }} />}
-                                    style={{ marginRight: 0 }}
-                                />
-                            </Badge>
-                        </Dropdown>
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <Button
+                                type="text"
+                                icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                                onClick={() => setCollapsed(!collapsed)}
+                                aria-label="Toggle menu"
+                            />
+                        </div>
 
-                        <div style={{ marginRight: 30 }}></div>
-
-                        <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow>
-                            <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                <Avatar style={{ backgroundColor: color, verticalAlign: 'middle' }} size="default">
-                                    {getUserInitials(userData?.user?.username || 'User')}
-                                </Avatar>
-                                <span style={{ marginLeft: 8 }}>Hi, {userData?.user?.username || 'User'}</span>
-                            </div>
-                        </Dropdown>
+                        <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: isMobile ? '8px' : '16px',
+                            flexWrap: 'wrap'
+                        }}>
+                            <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow>
+                                <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                                    <Avatar style={{ backgroundColor: color, verticalAlign: 'middle' }} size="default">
+                                        {getUserInitials(userData?.user?.username || 'User')}
+                                    </Avatar>
+                                    <span style={{ marginLeft: 8, display: isMobile ? 'none' : 'inline' }}>
+                                        Hi, {userData?.user?.username || 'User'}
+                                    </span>
+                                </div>
+                            </Dropdown>
+                        </div>
                     </Header>
 
                     <Content style={{ flex: 1 }}>
@@ -374,43 +397,64 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                         <div
                             style={{
                                 background: "linear-gradient(to right, #e6f7ff, rgb(106, 218, 255))",
-                                padding: "10px 50px",
-                                height: "200px",
-                                marginBottom: "-100px",
+                                padding: isMobile ? "20px 16px" : "20px 50px",
+                                height: isMobile ? "140px" : "200px",
+                                marginBottom: isMobile ? "-20px" : "-60px",
                             }}
                         >
                             <div
                                 style={{
                                     display: "flex",
-                                    justifyContent: "space-between",
+                                    justifyContent: isMobile ? "flex-start" : "space-between",
                                     alignItems: "center",
+                                    gap: 12,
+                                    flexWrap: 'wrap'
                                 }}
                             >
                                 <div style={{ display: "flex", flexDirection: "column" }}>
-                                    <h1 style={{ color: "#91caff", margin: 0 }}>{pageTitle}</h1>
-                                    <p style={{ color: "#8c8c8c", margin: 0 }}>{pageDescription}</p>
+                                    <h1 style={{ 
+                                        color: "#91caff", 
+                                        margin: 0, 
+                                        fontSize: isMobile ? "24px" : "32px",
+                                        fontWeight: "bold",
+                                        lineHeight: isMobile ? "1.2" : "1.4"
+                                    }}>
+                                        {pageTitle}
+                                    </h1>
+                                    <p style={{ 
+                                        color: "#8c8c8c", 
+                                        margin: 0,
+                                        fontSize: isMobile ? "14px" : "16px",
+                                        marginTop: isMobile ? "8px" : "12px"
+                                    }}>
+                                        {pageDescription}
+                                    </p>
                                 </div>
 
-                                <Breadcrumb style={{ padding: "16px 28px", backgroundColor: "white", borderRadius: "25px", fontWeight: "bold", opacity: 0.6, color: "#595959" }}>
-                                    {breadcrumbItems.map((item, index) => (
-                                        <Breadcrumb.Item key={index.toString()}>
-                                            {item.href ? (
-                                                <Link href={item.href}>{item.title}</Link>
-                                            ) : (
-                                                item.title
-                                            )}
-                                        </Breadcrumb.Item>
-                                    ))}
-                                </Breadcrumb>
+                                {!isMobile && (
+                                    <Breadcrumb style={{ padding: "16px 28px", backgroundColor: "white", borderRadius: "25px", fontWeight: "bold", opacity: 0.6, color: "#595959" }}>
+                                        {breadcrumbItems.map((item, index) => (
+                                            <Breadcrumb.Item key={index.toString()}>
+                                                {item.href ? (
+                                                    <Link href={item.href}>{item.title}</Link>
+                                                ) : (
+                                                    item.title
+                                                )}
+                                            </Breadcrumb.Item>
+                                        ))}
+                                    </Breadcrumb>
+                                )}
                             </div>
                         </div>
 
                         <div
                             style={{
-                                padding: 24,
+                                padding: isMobile ? 16 : 24,
                                 background: colorBgContainer,
                                 borderRadius: borderRadiusLG,
-                                margin: "0 50px",
+                                margin: isMobile ? "0" : "0 24px",
+                                maxWidth: isMobile ? "100%" : "none",
+                                width: isMobile ? "100%" : "auto"
                             }}
                         >
                             {children}
@@ -421,6 +465,22 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                         QLNS ©{new Date().getFullYear()} Created by Hoàng Mạnh Toàn
                     </Footer>
                 </Layout>
+
+                {/* Overlay for mobile menu */}
+                {isMobile && !collapsed && (
+                    <div 
+                        style={{
+                            position: 'fixed',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                            zIndex: 999,
+                        }}
+                        onClick={() => setCollapsed(true)}
+                    />
+                )}
             </LoadingProgress>
 
             {/* Modal hiển thị thông tin người dùng */}

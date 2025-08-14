@@ -130,7 +130,7 @@ const ContractForm: React.FC<ContractFormProps> = ({
       scrollToFirstError
     >
       <Row gutter={[24, 0]}>
-        <Col md={12}>
+        <Col xs={24} md={12}>
           <Form.Item
             label="Loại hợp đồng"
             name="contractTypeId"
@@ -154,7 +154,7 @@ const ContractForm: React.FC<ContractFormProps> = ({
             </Select>
           </Form.Item>
         </Col>
-        <Col md={12}>
+        <Col xs={24} md={12}>
           <Form.Item
             label="Thời hạn hợp đồng"
             name="contractTerm"
@@ -165,7 +165,7 @@ const ContractForm: React.FC<ContractFormProps> = ({
             />
           </Form.Item>
         </Col>
-        <Col md={12}>
+        <Col xs={24} md={12}>
           <Form.Item
             label="Bảo hiểm"
             name="insurance"
@@ -177,7 +177,7 @@ const ContractForm: React.FC<ContractFormProps> = ({
             />
           </Form.Item>
         </Col>
-        <Col md={12}>
+        <Col xs={24} md={12}>
           <Form.Item
             label="Ngày ký"
             name="startDate"
@@ -198,7 +198,7 @@ const ContractForm: React.FC<ContractFormProps> = ({
             <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" />
           </Form.Item>
         </Col>
-        <Col md={12}>
+        <Col xs={24} md={12}>
           <Form.Item
             label="Ngày bắt đầu"
             name="activeDay"
@@ -219,7 +219,7 @@ const ContractForm: React.FC<ContractFormProps> = ({
             <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" onChange={handleStartDateChange} />
           </Form.Item>
         </Col>
-        <Col md={12}>
+        <Col xs={24} md={12}>
           <Form.Item
             label="Ngày kết thúc"
             name="endDate"

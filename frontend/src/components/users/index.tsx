@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Table, Button, Space, Tooltip, ConfigProvider, Modal, message, Tag } from 'antd';
+import { Table, Button, Space, Tooltip, ConfigProvider, Modal, message, Tag, Row, Col, Grid } from 'antd';
 import {
   PlusCircleOutlined,
   DeleteOutlined,
@@ -34,6 +34,7 @@ const UserTable = () => {
     total: 0
   });
   const router = useRouter();
+  const screens = Grid.useBreakpoint();
 
   console.log("userData", userData);
 
@@ -131,6 +132,16 @@ const UserTable = () => {
       key: "username",
       sorter: (a: any, b: any) => a.username?.localeCompare(b.username || '') || 0,
       width: 150,
+    },
+    {
+      title: "Ảnh",
+      dataIndex: "identificationPhoto",
+      key: "identificationPhoto",
+      width: 80,
+      render: (url: string) => url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img alt="avatar" src={`${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${url}`} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }} />
+      ) : '-',
     },
     {
       title: "Họ và tên",
@@ -277,76 +288,83 @@ const UserTable = () => {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        {selectedRowKeys.length > 0 && (
-          <Button
-            danger
-            className="btn-top"
-            hidden={!deletePer}
-            onClick={showDeleteConfirm}
-            style={{ marginRight: 8, marginBottom: 16 }}
-          >
-            <DeleteOutlined />
-            Xóa
-          </Button>
-        )}
+    <div style={{ padding: screens.lg ? 24 : 16 }}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        <Col xs={24}>
+          <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+            {selectedRowKeys.length > 0 && (
+              <Button
+                danger
+                className="btn-top"
+                hidden={!deletePer}
+                onClick={showDeleteConfirm}
+              >
+                <DeleteOutlined />
+                Xóa
+              </Button>
+            )}
 
-        <Button
-          hidden={!createPer}
-          onClick={() => router.push("/user/create")}
-          type="primary"
-          className="btn-top"
-          style={{ marginRight: 8, marginBottom: 16 }}
-        >
-          <PlusCircleOutlined />
-          Tạo mới
-        </Button>
+            <Button
+              hidden={!createPer}
+              onClick={() => router.push("/user/create")}
+              type="primary"
+              className="btn-top"
+            >
+              <PlusCircleOutlined />
+              Tạo mới
+            </Button>
 
-        <Button
-          hidden={!createPer}
-          onClick={() => alert("Chức năng upload excel")}
-          type="primary"
-          style={{
-            backgroundColor: '#fc5603',
-            border: 'none',
-            marginRight: 8,
-            marginBottom: 16
-          }}
-        >
-          <CloudUploadOutlined />
-          Tải lên Excel
-        </Button>
+            <Button
+              hidden={!createPer}
+              onClick={() => alert("Chức năng upload excel")}
+              type="primary"
+              style={{
+                backgroundColor: '#fc5603',
+                border: 'none'
+              }}
+            >
+              <CloudUploadOutlined />
+              Tải lên Excel
+            </Button>
 
-        <Button
-          onClick={() => alert("Đang xuất file Excel")}
-          type="primary"
-          style={{
-            backgroundColor: '#52c41a',
-            border: 'none',
-            marginBottom: 16
-          }}
-        >
-          <DownloadOutlined />
-          Xuất Excel
-        </Button>
-      </div>
+            <Button
+              onClick={() => alert("Đang xuất file Excel")}
+              type="primary"
+              style={{
+                backgroundColor: '#52c41a',
+                border: 'none'
+              }}
+            >
+              <DownloadOutlined />
+              Xuất Excel
+            </Button>
+          </div>
+        </Col>
+      </Row>
 
-      <Table
-        rowSelection={rowSelection}
-        columns={columns}
-        dataSource={userData}
-        loading={loading}
-        rowKey="id"
-        scroll={{ x: 'max-content' }}
-        pagination={{
-          ...pagination,
-          showSizeChanger: true,
-          showTotal: (total) => `Tổng số: ${total} bản ghi`
-        }}
-        onChange={handleTableChange} // Ant Design's Table handles sorting and filtering internally with this
-        rowClassName={(record, index) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
-      />
+      <Row>
+        <Col xs={24}>
+          <div style={{ overflowX: 'auto' }}>
+            <Table
+              rowSelection={rowSelection}
+              columns={columns}
+              dataSource={userData}
+              loading={loading}
+              rowKey="id"
+              scroll={{ x: 'max-content' }}
+              pagination={{
+                ...pagination,
+                showSizeChanger: true,
+                showTotal: (total) => `Tổng số: ${total} bản ghi`,
+                size: screens.lg ? 'default' : 'small'
+              }}
+              onChange={handleTableChange}
+              rowClassName={(record, index) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
+              size={screens.lg ? 'middle' : 'small'}
+            />
+          </div>
+        </Col>
+      </Row>
 
       <Modal
         title="Xác nhận xóa"
@@ -369,6 +387,13 @@ const UserTable = () => {
         }
         .btn-top {
           margin-right: 8px;
+        }
+        @media (max-width: 768px) {
+          .ant-table-thead > tr > th,
+          .ant-table-tbody > tr > td {
+            padding: 8px 4px;
+            font-size: 12px;
+          }
         }
       `}</style>
     </div>

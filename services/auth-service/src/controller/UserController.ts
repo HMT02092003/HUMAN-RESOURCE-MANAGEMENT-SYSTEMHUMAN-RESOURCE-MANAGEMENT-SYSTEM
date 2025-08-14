@@ -1,4 +1,6 @@
 import { Request, Response } from "express";
+import fs from 'fs';
+import path from 'path';
 import UserModel from "@/src/Models/UserModel";
 import RoleModel from "@/src/Models/RoleModel";
 import ChevronModel from "@/src/Models/ChevronModel";
@@ -15,7 +17,21 @@ import _ from "lodash";
 import { getDecodedToken } from '@/src/utils/decode-token';
 import axios from 'axios';
 
-const API_GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:4000';
+import os from 'os';
+
+function getLocalIpAddress(): string {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]!) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return '127.0.0.1';
+}
+
+const API_GATEWAY_URL = `http://${getLocalIpAddress()}:${process.env.PORT || 3000}`;
 const { Gender, statusOptions, Relationship } = constantConfig;
 
 // const {
@@ -157,6 +173,7 @@ export const createUser = async (req: Request, res: Response) => {
       phone: "string",
       birthday: "date",
       startDate: "date",
+      identificationPhoto: "string", // saved file relative path
       profileFamily: [
         {
           name: "string",
@@ -202,6 +219,11 @@ export const createUser = async (req: Request, res: Response) => {
 
     // Destructure contract out of params, the rest goes into userData
     let { contract, ...userData } = params;
+
+    // Validate required identificationPhoto presence on create
+    if (!userData.identificationPhoto) {
+      return res.status(400).json({ message: "Vui lòng tải ảnh đại diện (identificationPhoto)", code: 7002 });
+    }
 
     // Check for existing user by username or email
     const existingUser = await UserModel.query()
@@ -483,7 +505,8 @@ export const getUserDetail = async (req: Request, res: Response) => {
         "users.startDate",
         "users.baseSalary",
         "users.vacationDay",
-        "users.dayOff"
+        "users.dayOff",
+        "users.identificationPhoto"
       ]);
 
     if (!result) {
@@ -634,6 +657,7 @@ export const updateUser = async (req: Request, res: Response) => {
       baseSalary: "number",
       vacationDay: "number",
       dayOff: "number",
+      identificationPhoto: "string",
       profileFamily: [
         {
           name: "string",

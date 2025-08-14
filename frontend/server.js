@@ -7,7 +7,7 @@ import fileUpload from 'express-fileupload';
 import cookieParser from 'cookie-parser';
 
 const dev = process.env.NODE_ENV !== 'production';
-const hostname = 'localhost';
+const hostname = '0.0.0.0';
 const port = 5000;
 
 const app = next({ dev, hostname, port });
@@ -55,6 +55,6 @@ app.prepare().then(() => {
      process.exit(1);
    })
    .listen(port, () => {
-     console.log(`</> Ready on http://${hostname}:${port}`);
+     console.log(`</> Ready on http://0.0.0.0:${port}`);
    });
 });

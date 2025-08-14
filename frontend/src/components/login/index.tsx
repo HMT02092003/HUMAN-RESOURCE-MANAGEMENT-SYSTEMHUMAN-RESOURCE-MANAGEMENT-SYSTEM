@@ -29,22 +29,22 @@ const Login = () => {
   return (
     <div className="login-container">
       <Row style={{ height: "101vh" }} gutter={[16, 0]}>
-        <Col span={14} className="login-illustration">
+        <Col xs={0} sm={0} md={14} className="login-illustration">
           <img
             src="/logo/undraw_in_the_office_re_jtgc.svg"
             alt="Illustration"
             className="illustration-image"
-            style={{ width: 700 }}
+            style={{ width: "100%", maxWidth: 700 }}
           />
         </Col>
 
-        <Col span={10} className="login-form" style={{ backgroundColor: 'white', boxShadow: "0px 0px 15px rgba(0, 0, 0, 0.1)" }}>
+        <Col xs={24} sm={24} md={10} className="login-form" style={{ backgroundColor: 'white', boxShadow: "0px 0px 15px rgba(0, 0, 0, 0.1)" }}>
           <Form
             className="form-content"
             onFinish={onFinish}
           >
             <div style={{ display: "flex", width: "100%", justifyContent: "center", alignItems: "center", }}>
-              <img src="../../../logo/logo.png" alt="" style={{ width: "300px" }} />
+              <img src="../../../logo/logo.png" alt="" style={{ width: "min(300px, 80%)" }} />
             </div>
             <br />
             <div className="form-fields">

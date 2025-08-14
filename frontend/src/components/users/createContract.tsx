@@ -53,7 +53,7 @@ const CreateContract = () => {
   return (
     <div className="content">
       <Row>
-        <Col md={{ span: 16, offset: 4 }}>
+        <Col xs={24} md={{ span: 16, offset: 4 }}>
           <ContractForm
             onFinish={handleFinish}
             onBack={() => router.push('/user')}

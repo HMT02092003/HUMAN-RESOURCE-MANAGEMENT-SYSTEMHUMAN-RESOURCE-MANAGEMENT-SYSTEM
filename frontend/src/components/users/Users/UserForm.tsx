@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Form, Input, Row, Col, Select, Button, Card, DatePicker, message } from "antd";
+import { Form, Input, Row, Col, Select, Button, Card, DatePicker, message, Upload } from "antd";
+import type { UploadFile } from 'antd/es/upload/interface';
 import { LeftCircleFilled, DeleteFilled, LockOutlined, PlusOutlined, SaveFilled, MinusCircleOutlined } from "@ant-design/icons";
 import dayjs from "dayjs";
 import customParseFormat from 'dayjs/plugin/customParseFormat';
@@ -77,6 +78,15 @@ const UserForm: React.FC<UserFormProps> = ({
   }, []);
 
   const handleFinish = (values: any) => {
+    // Map Upload file list to backend field
+    const photoList: UploadFile[] = values.identificationPhoto || [];
+    let identificationPhoto: any = undefined;
+    if (Array.isArray(photoList) && photoList.length > 0) {
+      const f = photoList[0] as any;
+      if (f.originFileObj) identificationPhoto = f.originFileObj;
+      else if (initialValues?.identificationPhoto) identificationPhoto = initialValues.identificationPhoto;
+    }
+
     const formattedValues = {
       ...values,
       birthday: values.birthday ? values.birthday.toISOString() : null,
@@ -85,7 +95,8 @@ const UserForm: React.FC<UserFormProps> = ({
       profileFamily: values.profileFamily?.map((member: any) => ({
         ...member,
         birthday: member.birthday ? member.birthday.toISOString() : null // Check null before calling toISOString
-      }))
+      })),
+      identificationPhoto,
     };
     console.log("Formatted UserForm data:", formattedValues);
     onFinish(formattedValues);
@@ -102,11 +113,40 @@ const UserForm: React.FC<UserFormProps> = ({
         profileFamily: initialValues.profileFamily?.map((member: any) => ({
           ...member,
           birthday: member.birthday ? dayjs(member.birthday) : null
-        }))
+        })),
+        identificationPhoto: initialValues.identificationPhoto
+          ? [{
+              uid: '-1',
+              name: 'identificationPhoto',
+              status: 'done',
+              url: `${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${initialValues.identificationPhoto}`,
+            }]
+          : [],
       });
       console.log("Initial values:", initialValues);
     }
   }, [initialValues, form]);
+
+  const normFile = (e: any) => {
+    if (Array.isArray(e)) {
+      return e;
+    }
+    return e && e.fileList;
+  };
+
+  const beforeUpload = (file: File) => {
+    const isImage = file.type.startsWith('image/');
+    if (!isImage) {
+      message.error('Chỉ chấp nhận tệp hình ảnh');
+      return Upload.LIST_IGNORE;
+    }
+    const isLt5M = file.size / 1024 / 1024 < 5;
+    if (!isLt5M) {
+      message.error('Ảnh phải nhỏ hơn 5MB');
+      return Upload.LIST_IGNORE;
+    }
+    return false; // prevent auto upload
+  };
 
   return (
     <Form
@@ -118,7 +158,33 @@ const UserForm: React.FC<UserFormProps> = ({
       initialValues={{ status: 1 }} // Set default status to "Hoạt động" (Active)
     >
       <Row gutter={[24, 0]}>
-        <Col md={24}>
+        <Col xs={24} md={24}>
+          <Form.Item
+            label="Ảnh nhận diện"
+            name="identificationPhoto"
+            valuePropName="fileList"
+            getValueFromEvent={normFile}
+            rules={[
+              {
+                validator: (_, value) => {
+                  if (isEdit) return Promise.resolve();
+                  if (Array.isArray(value) && value.length > 0) return Promise.resolve();
+                  return Promise.reject(new Error('Vui lòng tải ảnh nhận diện'));
+                },
+              },
+            ]}
+          >
+            <Upload
+              listType="picture-card"
+              accept="image/*"
+              beforeUpload={beforeUpload}
+              maxCount={1}
+            >
+              <div>Chọn ảnh</div>
+            </Upload>
+          </Form.Item>
+        </Col>
+        <Col xs={24} md={24}>
           <Form.Item
             label="Tên đăng nhập"
             name="username"
@@ -138,7 +204,7 @@ const UserForm: React.FC<UserFormProps> = ({
 
         {!isEdit && ( // Password fields only for new user creation
           <>
-            <Col md={12}>
+            <Col xs={24} md={12}>
               <Form.Item
                 label="Mật khẩu"
                 name="password"
@@ -156,7 +222,7 @@ const UserForm: React.FC<UserFormProps> = ({
                 />
               </Form.Item>
             </Col>
-            <Col md={12}>
+            <Col xs={24} md={12}>
               <Form.Item
                 label="Xác nhận mật khẩu"
                 name="rePassword"
@@ -183,7 +249,7 @@ const UserForm: React.FC<UserFormProps> = ({
           </>
         )}
 
-        <Col md={12}>
+        <Col xs={24} md={12}>
           <Form.Item
             label="Họ"
             name="lastName"
@@ -197,7 +263,7 @@ const UserForm: React.FC<UserFormProps> = ({
           </Form.Item>
         </Col>
 
-        <Col md={12}>
+        <Col xs={24} md={12}>
           <Form.Item
             label="Tên"
             name="firstName"
@@ -211,7 +277,7 @@ const UserForm: React.FC<UserFormProps> = ({
           </Form.Item>
         </Col>
 
-        <Col md={24}>
+        <Col xs={24} md={24}>
           <Form.Item
             label="Email"
             name="email"
@@ -229,7 +295,7 @@ const UserForm: React.FC<UserFormProps> = ({
           </Form.Item>
         </Col>
 
-        <Col md={12}>
+        <Col xs={24} md={12}>
           <Form.Item
             label="Ngày sinh"
             name="birthday"
@@ -243,7 +309,7 @@ const UserForm: React.FC<UserFormProps> = ({
           </Form.Item>
         </Col>
 
-        <Col md={12}>
+        <Col xs={24} md={12}>
           <Form.Item
             label="Giới tính"
             name="gender"
@@ -262,7 +328,7 @@ const UserForm: React.FC<UserFormProps> = ({
           </Form.Item>
         </Col>
 
-        <Col md={12}>
+        <Col xs={24} md={12}>
           <Form.Item
             label="Số điện thoại"
             name="phone"
@@ -279,7 +345,7 @@ const UserForm: React.FC<UserFormProps> = ({
           </Form.Item>
         </Col>
 
-        <Col md={12}>
+        <Col xs={24} md={12}>
           <Form.Item
             label="Trạng thái"
             name="status"
@@ -295,7 +361,7 @@ const UserForm: React.FC<UserFormProps> = ({
           </Form.Item>
         </Col>
 
-        <Col md={12}>
+        <Col xs={24} md={12}>
           <Form.Item
             label="Vai trò"
             name="roleId"
@@ -318,7 +384,7 @@ const UserForm: React.FC<UserFormProps> = ({
           </Form.Item>
         </Col>
 
-        <Col md={12}>
+        <Col xs={24} md={12}>
           <Form.Item
             label="Ngày bắt đầu"
             name="startDate"
@@ -335,7 +401,7 @@ const UserForm: React.FC<UserFormProps> = ({
           </Form.Item>
         </Col>
 
-        <Col md={12}>
+        <Col xs={24} md={12}>
           <Form.Item
             label="Chức vụ"
             name="chevronId"
@@ -358,7 +424,7 @@ const UserForm: React.FC<UserFormProps> = ({
           </Form.Item>
         </Col>
 
-        <Col md={12}>
+        <Col xs={24} md={12}>
           <Form.Item
             label="Phòng ban"
             name="departmentId"
@@ -381,7 +447,7 @@ const UserForm: React.FC<UserFormProps> = ({
           </Form.Item>
         </Col>
 
-        <Col md={24}>
+        <Col xs={24} md={24}>
           <Form.List name="profileFamily">
             {(fields, { add, remove }) => (
               <Card
@@ -411,7 +477,7 @@ const UserForm: React.FC<UserFormProps> = ({
                     }
                   >
                     <Row gutter={[24, 0]}>
-                      <Col md={12}>
+                      <Col xs={24} md={12}>
                         <Form.Item
                           {...restField}
                           name={[name, "relationship"]}
@@ -427,7 +493,7 @@ const UserForm: React.FC<UserFormProps> = ({
                           </Select>
                         </Form.Item>
                       </Col>
-                      <Col md={12}>
+                      <Col xs={24} md={12}>
                         <Form.Item
                           {...restField}
                           name={[name, "name"]}
@@ -437,7 +503,7 @@ const UserForm: React.FC<UserFormProps> = ({
                           <Input placeholder="Nhập họ và tên" />
                         </Form.Item>
                       </Col>
-                      <Col md={12}>
+                      <Col xs={24} md={12}>
                         <Form.Item
                           {...restField}
                           name={[name, "birthday"]}

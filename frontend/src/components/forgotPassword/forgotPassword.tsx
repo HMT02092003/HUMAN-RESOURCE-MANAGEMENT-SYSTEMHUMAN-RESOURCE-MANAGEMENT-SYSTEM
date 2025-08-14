@@ -45,7 +45,7 @@ const ForgotPassword = () => {
     return (
         <div className="login-container">
             <Row style={{ height: "101vh" }} gutter={[16, 0]}>
-                <Col span={14} className="login-illustration">
+                <Col xs={0} sm={0} md={14} className="login-illustration">
                     <img
                         src="/logo/undraw_code_thinking_re_gka2.svg"
                         alt="Illustration"
@@ -53,13 +53,13 @@ const ForgotPassword = () => {
                     />
                 </Col>
 
-                <Col span={10} className="login-form">
+                <Col xs={24} sm={24} md={10} className="login-form">
                     <Form
                         className="form-content"
                         form={form}
                     >
                         <div className="form-header">
-                            <img src="../../../logo/logo.png" alt="" />
+                            <img src="../../../logo/logo.png" alt="" style={{ width: "min(300px, 80%)" }} />
                         </div>
                         <br />
                         <div className="form-fields">
@@ -77,7 +77,7 @@ const ForgotPassword = () => {
                         </div>
 
                         <Row>
-                            <Col md={12} style={{ padding: "0 5px" }}>
+                            <Col xs={24} md={12} style={{ padding: "0 5px" }}>
                                 <Form.Item>
                                     <Button 
                                         onClick={() => { router.push('/login') }}
@@ -88,7 +88,7 @@ const ForgotPassword = () => {
                                 </Form.Item>
                             </Col>
 
-                            <Col md={12} style={{ padding: "0 5px" }}>
+                            <Col xs={24} md={12} style={{ padding: "0 5px" }}>
                                 <Form.Item>
                                     <Button
                                         type="primary"

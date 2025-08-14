@@ -25,7 +25,7 @@ const ContractInfoWrapper: React.FC<ContractInfoProps> = ({ data, setActiveTab }
       scrollToFirstError
     >
       <Row>
-        <Col md={{ span: 24 }}>
+        <Col xs={24} md={{ span: 24 }}>
           <ContractInfo data={data} />
           <Form.Item wrapperCol={{ span: 24 }} className="text-center">
             <Button onClick={() => setActiveTab("1")} className="btn-margin-right">

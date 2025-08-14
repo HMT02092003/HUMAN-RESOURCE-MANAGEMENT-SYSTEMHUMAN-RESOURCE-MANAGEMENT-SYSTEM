@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import multer from 'multer';
+import path from 'path';
 import {
   loginHandler,
   logoutHandler,
@@ -29,9 +31,30 @@ import {
   deleteUser,
   deleteMultipleUsers,
   createContract,
+  getUsersByDepartment,
+  getUsersByChevron,
 } from '@/src/controller/UserController';
 
 const router = Router();
+
+// Multer setup for identification photo uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.resolve(process.cwd(), 'public', 'uploads', 'identificationPhoto'));
+  },
+  filename: (req: any, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `${uniqueSuffix}${ext}`);
+  }
+});
+
+const imageOnlyFilter = (req: any, file: any, cb: any) => {
+  if (/^image\//.test(file.mimetype)) return cb(null, true);
+  cb(new Error('Chỉ chấp nhận tệp hình ảnh'));
+};
+
+const upload = multer({ storage, fileFilter: imageOnlyFilter, limits: { fileSize: 5 * 1024 * 1024 } });
 
 
 // ===================================AUTHENTICATION===================================
@@ -122,8 +145,22 @@ router.get('/users', authenticateToken, (req, res) => {
   getAllUsers(req, res);
 });
 
+// Route cho lấy users theo department (internal service use)
+router.get('/users/by-department', authenticateToken, (req, res) => {
+  getUsersByDepartment(req, res);
+});
+
+// Route cho lấy users theo chevron (internal service use)
+router.get('/users/by-chevron', authenticateToken, (req, res) => {
+  getUsersByChevron(req, res);
+});
+
 // Route chuẩn RESTful cho tạo user
-router.post('/users', authenticateToken, (req, res) => {
+router.post('/users', authenticateToken, upload.single('identificationPhoto'), (req: any, res) => {
+  // Attach saved relative path to body for controller
+  if (req.file) {
+    req.body.identificationPhoto = `/uploads/identificationPhoto/${req.file.filename}`;
+  }
   createUser(req, res);
 });
 
@@ -148,7 +185,10 @@ router.get('/users/:id', authenticateToken, (req, res) => {
 });
 
 // Route chuẩn RESTful cho cập nhật user
-router.put('/users/:id', authenticateToken, (req, res) => {
+router.put('/users/:id', authenticateToken, upload.single('identificationPhoto'), (req: any, res) => {
+  if (req.file) {
+    req.body.identificationPhoto = `/uploads/identificationPhoto/${req.file.filename}`;
+  }
   updateUser(req, res);
 });
 

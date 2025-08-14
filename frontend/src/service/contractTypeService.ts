@@ -11,12 +11,12 @@ interface ContractType {
 }
 
 class ContractTypeService {
-  private baseURL = process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:4000';
+  private baseURL = '';
 
   // Get all contract types
   async getAllContractTypes() {
     try {
-      const response = await api.get(`${this.baseURL}/api/employee/contractTypes`);
+      const response = await api.get(`/api/employee/contractTypes`);
       return response.data.data;
     } catch (error: any) {
       throw error;
@@ -26,7 +26,7 @@ class ContractTypeService {
   // Get contract type detail by ID
   async getContractTypeDetail(id: string) {
     try {
-      const response = await api.get(`${this.baseURL}/api/employee/contractTypes/${id}`);
+      const response = await api.get(`/api/employee/contractTypes/${id}`);
       return response.data;
     } catch (error: any) {
       throw error;
@@ -36,7 +36,7 @@ class ContractTypeService {
   // Create new contract type
   async createContractType(values: any) {
     try {
-      const response = await api.post(`${this.baseURL}/api/employee/createContractType`, values);
+      const response = await api.post(`/api/employee/createContractType`, values);
       return response.data;
     } catch (error: any) {
       throw error;
@@ -46,7 +46,7 @@ class ContractTypeService {
   // Update contract type
   async updateContractType(id: string, values: any) {
     try {
-      const response = await api.put(`${this.baseURL}/api/employee/contractTypes`, { id, ...values });
+      const response = await api.put(`/api/employee/contractTypes`, { id, ...values });
       return response.data;
     } catch (error: any) {
       throw error;
@@ -56,7 +56,7 @@ class ContractTypeService {
   // Delete single contract type
   async deleteContractType(id: string) {
     try {
-      const response = await api.delete(`${this.baseURL}/api/employee/deleteContractType`, { params: { id } });
+      const response = await api.delete(`/api/employee/deleteContractType`, { params: { id } });
       return response.data;
     } catch (error: any) {
       throw error;
@@ -66,7 +66,7 @@ class ContractTypeService {
   // Delete multiple contract types
   async deleteMultipleContractTypes(ids: React.Key[]) {
     try {
-      const response = await api.delete(`${this.baseURL}/api/employee/deleteMultipleContractTypes`, { data: { ids } });
+      const response = await api.delete(`/api/employee/deleteMultipleContractTypes`, { data: { ids } });
       return response.data;
     } catch (error: any) {
       throw error;

@@ -68,7 +68,7 @@ const Edit = () => {
   return (
     <div className="content">
       <Row>
-        <Col md={{ span: 16, offset: 4 }}>
+        <Col xs={24} md={{ span: 16, offset: 4 }}>
           <UserForm
             isEdit={true}
             onFinish={handleFinish}

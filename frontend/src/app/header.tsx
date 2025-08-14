@@ -1,5 +1,5 @@
 import React, { use, useEffect, useRef, useState } from 'react';
-import { ConfigProvider, Input, Button, Row, Col, Carousel, Popover, Form, message, Dropdown } from 'antd';
+import { ConfigProvider, Input, Button, Row, Col, Carousel, Popover, Form, message, Dropdown, Grid } from 'antd';
 import { LeftOutlined, RightOutlined, ArrowRightOutlined, InfoCircleOutlined, LoginOutlined, LogoutOutlined, FormOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import { CarouselRef } from 'antd/es/carousel'; // Thêm import CarouselRef
@@ -13,6 +13,7 @@ const { Search } = Input;
 
 const HeaderPage = () => {
   const router = useRouter();
+  const screens = Grid.useBreakpoint();
   const carouselRef = useRef<CarouselRef>(null);  // Khai báo ref đúng kiểu
   const [selectedCategory, setSelectedCategory] = useState(0);
   const [category, setCategory] = useState<any>([])
@@ -401,8 +402,8 @@ const HeaderPage = () => {
     <>
       {/* Header chính */}
       <Row style={{ backgroundColor: 'white', justifyContent: 'center' }}>
-        <Row style={{ display: "flex", height: "80px", alignItems: "center" }}>
-          <Col span={2}>
+        <Row style={{ display: "flex", height: "80px", alignItems: "center", padding: screens.lg ? 0 : '0 12px' }}>
+          <Col xs={6} sm={4} md={2}>
             <img
               src="/logo/logo.png"
               alt="logo"
@@ -410,7 +411,7 @@ const HeaderPage = () => {
               onClick={() => router.push('/home')} // Thêm sự kiện onClick
             />
           </Col>
-          <Col span={7}>
+          <Col xs={0} sm={0} md={7}>
             <ConfigProvider
               theme={{
                 components: {
@@ -530,7 +531,7 @@ const HeaderPage = () => {
               </Form>
             </ConfigProvider>
           </Col>
-          <Col span={3}>
+          <Col xs={0} sm={0} md={3}>
             <ConfigProvider
               theme={{
                 components: {
@@ -548,7 +549,7 @@ const HeaderPage = () => {
               </Button>
             </ConfigProvider>
           </Col>
-          <Col span={3}>
+          <Col xs={0} sm={0} md={3}>
             <ConfigProvider
               theme={{
                 components: {
@@ -568,7 +569,7 @@ const HeaderPage = () => {
               </Popover>
             </ConfigProvider>
           </Col>
-          <Col span={4}>
+          <Col xs={0} sm={0} md={4}>
             <ConfigProvider
               theme={{
                 components: {
@@ -609,7 +610,7 @@ const HeaderPage = () => {
 
             </ConfigProvider>
           </Col>
-          <Col span={2} style={{ display: 'flex', flexDirection: 'row-reverse' }}>
+          <Col xs={0} sm={0} md={2} style={{ display: 'flex', flexDirection: 'row-reverse' }}>
             <Popover
               content={popoverContent}
               trigger="click" // Hiện popover khi click
@@ -626,7 +627,7 @@ const HeaderPage = () => {
               </Button>
             </Popover>
           </Col>
-          <Col span={1} style={{ display: 'flex', flexDirection: 'row-reverse' }}>
+          <Col xs={0} sm={0} md={1} style={{ display: 'flex', flexDirection: 'row-reverse' }}>
             <Button color='default' shape='circle' size='large' variant='filled' onClick={() => { router.push('/shoppingCart') }}>
               <img src="/icon/grocery-store.png" alt="" style={{ width: 17 }} />
             </Button>
@@ -634,11 +635,11 @@ const HeaderPage = () => {
         </Row>
       </Row>
 
-      <Row style={{ backgroundColor: 'white', justifyContent: 'center', marginTop: '2px' }}>
+      <Row style={{ backgroundColor: 'white', justifyContent: 'center', marginTop: '2px', padding: screens.lg ? 0 : '0 12px' }}>
         <Row
           style={{
-            paddingTop: '10px',
-            paddingBottom: '10px',
+            paddingTop: screens.lg ? '10px' : '8px',
+            paddingBottom: screens.lg ? '10px' : '8px',
             display: 'flex',
             height: '80px',
             alignItems: 'center',
@@ -647,7 +648,7 @@ const HeaderPage = () => {
           }}
         >
           {/* Nút "Danh Mục" */}
-          <Col span={2.5} style={{ display: 'flex', flexDirection: 'row-reverse' }}>
+          <Col xs={8} sm={6} md={2} style={{ display: 'flex', flexDirection: 'row-reverse' }}>
             <Popover content={danhmuccontent} arrow={false} placement='bottomLeft' trigger={'click'} overlayInnerStyle={{ marginTop: '10px' }} >
               <Button color='default' variant='text' style={{ height: '60px', fontWeight: 600, borderRadius: 8 }}>
                 <img src="/icon/options-lines.png" alt="" style={{ width: 17 }} />Danh Mục
@@ -656,12 +657,12 @@ const HeaderPage = () => {
           </Col>
 
           {/* Carousel cho danh sách danh mục */}
-          <Col span={19} style={{ position: 'relative' }}>
+          <Col xs={16} sm={18} md={20} style={{ position: 'relative' }}>
             <Carousel
               ref={carouselRef}  // Gán ref cho Carousel
               dots={false}
-              slidesToShow={6}
-              slidesToScroll={5}
+              slidesToShow={screens.lg ? 6 : screens.sm ? 4 : 2}
+              slidesToScroll={screens.lg ? 5 : screens.sm ? 3 : 2}
               infinite={false}
             >
               {category.map((category: any, index: any) => (
@@ -714,7 +715,7 @@ const HeaderPage = () => {
           </Col>
 
           {/* Nút mũi tên bên ngoài carousel, ở bên phải */}
-          <Col span={2} style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Col xs={0} sm={0} md={2} style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <Button
               type='text'
               shape="circle"

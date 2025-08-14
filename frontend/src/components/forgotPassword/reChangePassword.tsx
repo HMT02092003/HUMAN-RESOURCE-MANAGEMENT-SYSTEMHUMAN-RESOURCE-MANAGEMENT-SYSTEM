@@ -41,26 +41,26 @@ const ReChangePassword = () => {
     return (
         <div className="login-container">
             <Row style={{ height: "101vh" }} gutter={[16, 0]}>
-                <Col span={14} className="login-illustration">
+                <Col xs={0} sm={0} md={14} className="login-illustration">
                     <img
                         src="/logo/undraw_dev_focus_re_6iwt.svg"
                         alt="Illustration"
                         className="illustration-image"
-                        style={{ width: 700 }}
+                        style={{ width: "100%", maxWidth: 700 }}
                     />
                 </Col>
 
-                <Col span={10} className="login-form">
+                <Col xs={24} sm={24} md={10} className="login-form">
                     <Form
                         className="form-content"
                         form={form}
                     >
                         <div style={{ display: "flex", width: "100%", justifyContent: "center", alignItems: "center" }}>
-                            <img src="../../../logo/logo.png" alt="" style={{ width: "300px" }} />
+                            <img src="../../../logo/logo.png" alt="" style={{ width: "min(300px, 80%)" }} />
                         </div>
                         <br />
                         <div className="form-fields">
-                            <Col md={24}>
+                            <Col xs={24} md={24}>
                                 <Form.Item
                                     label="Mật khẩu mới:"
                                     name="newPassword"
@@ -71,7 +71,7 @@ const ReChangePassword = () => {
                                 </Form.Item>
                             </Col>
 
-                            <Col md={24}>
+                            <Col xs={24} md={24}>
                                 <Form.Item
                                     label="Nhập lại mật khẩu mới:"
                                     name="confirmNewPassword"
@@ -98,7 +98,7 @@ const ReChangePassword = () => {
                         </div>
 
                         <Row>
-                            <Col md={12} style={{ padding: "0 5px" }}>
+                            <Col xs={24} md={12} style={{ padding: "0 5px" }}>
                                 <Form.Item>
                                     <Button 
                                         onClick={() => { router.push('/login') }}
@@ -109,7 +109,7 @@ const ReChangePassword = () => {
                                 </Form.Item>
                             </Col>
 
-                            <Col md={12} style={{ padding: "0 5px" }}>
+                            <Col xs={24} md={12} style={{ padding: "0 5px" }}>
                                 <Form.Item>
                                     <Button
                                         type="primary"

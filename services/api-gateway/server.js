@@ -13,8 +13,9 @@ dotenv.config({ path: configEnvPath, override: false });
 
 const app = express();
 const PORT = process.env.PORT || 4000;
-const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://localhost:4001';
-const EMPLOYEE_SERVICE_URL = process.env.EMPLOYEE_SERVICE_URL || 'http://localhost:4002';
+const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL;
+const EMPLOYEE_SERVICE_URL = process.env.EMPLOYEE_SERVICE_URL;
+const ATTENDANCE_SERVICE_URL = process.env.ATTENDANCE_SERVICE_URL;
 
 // CORS: Cho phép mọi origin và credentials
 app.use(cors({
@@ -22,27 +23,106 @@ app.use(cors({
   credentials: true
 }));
 
+app.use((req, res, next) => {
+  // Bỏ qua logging cho tất cả request
+  next();
+});
+
+// Parse JSON/urlencoded để có thể log req.body và re-stream body sang dịch vụ đích
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Health check proxy
+app.use('/health', createProxyMiddleware({
+  target: AUTH_SERVICE_URL,
+  changeOrigin: true,
+}));
+
 // Proxy refresh-token trực tiếp sang auth-service
 app.use('/api/refresh-token', createProxyMiddleware({
   target: AUTH_SERVICE_URL,
   changeOrigin: true,
-  pathRewrite: { '^/api/refresh-token': '/api/refresh-token' }
+  pathRewrite: { '^/api/refresh-token': '/api/refresh-token' },
+  onProxyReq: (proxyReq, req, res) => {
+    if (req.body && Object.keys(req.body).length > 0) {
+      const bodyData = JSON.stringify(req.body);
+      proxyReq.setHeader('Content-Type', 'application/json');
+      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+      proxyReq.write(bodyData);
+    }
+  },
+  onError: (err, req, res) => {
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Bad gateway', details: err.message }));
+  }
 }));
 
 // Proxy tới employee-service
 app.use('/api/employee', createProxyMiddleware({
   target: EMPLOYEE_SERVICE_URL,
   changeOrigin: true,
-  pathRewrite: { '^/api/employee': '/api' }
+  pathRewrite: { '^/api/employee': '/api' },
+  onProxyReq: (proxyReq, req, res) => {
+    if (req.body && Object.keys(req.body).length > 0) {
+      const bodyData = JSON.stringify(req.body);
+      proxyReq.setHeader('Content-Type', 'application/json');
+      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+      proxyReq.write(bodyData);
+    }
+  },
+  onError: (err, req, res) => {
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Bad gateway', details: err.message }));
+  }
+}));
+
+// Proxy tới attendance-service
+app.use('/api/attendance', createProxyMiddleware({
+  target: ATTENDANCE_SERVICE_URL,
+  changeOrigin: true,
+  pathRewrite: { '^/api/attendance': '/api' },
+  onProxyReq: (proxyReq, req, res) => {
+    if (req.body && Object.keys(req.body).length > 0) {
+      const bodyData = JSON.stringify(req.body);
+      proxyReq.setHeader('Content-Type', 'application/json');
+      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+      proxyReq.write(bodyData);
+    }
+  },
+  onError: (err, req, res) => {
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Bad gateway', details: err.message }));
+  }
 }));
 
 // Proxy tất cả các route /api/auth/* sang auth-service
 app.use('/api/auth', createProxyMiddleware({
   target: AUTH_SERVICE_URL,
   changeOrigin: true,
-  pathRewrite: { '^/api/auth': '/api' }
+  pathRewrite: { '^/api/auth': '/api' },
+  onProxyReq: (proxyReq, req, res) => {
+    if (req.body && Object.keys(req.body).length > 0) {
+      const bodyData = JSON.stringify(req.body);
+      proxyReq.setHeader('Content-Type', 'application/json');
+      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+      proxyReq.write(bodyData);
+    }
+  },
+  onError: (err, req, res) => {
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Bad gateway', details: err.message }));
+  }
+}));
+
+// Serve uploaded files via gateway
+app.use('/uploads', createProxyMiddleware({
+  target: AUTH_SERVICE_URL,
+  changeOrigin: true,
 }));
 
 app.listen(PORT, () => {
   console.log(`🚀 API Gateway running on port ${PORT}`);
+  console.log(`📡 Auth Service URL: ${AUTH_SERVICE_URL}`);
+  console.log(`📡 Employee Service URL: ${EMPLOYEE_SERVICE_URL}`);
+  console.log(`📡 Attendance Service URL: ${ATTENDANCE_SERVICE_URL}`);
 }); 

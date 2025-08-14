@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef, useEffect } from 'react';
-import { Button, ConfigProvider, Space, Table, Tooltip, Modal, message, Input } from "antd";
+import { Button, ConfigProvider, Space, Table, Tooltip, Modal, message, Input, Grid, Row, Col } from "antd";
 import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, SearchOutlined } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import dayjs from 'dayjs';
@@ -31,6 +31,7 @@ const formatDate = (date: Date | string | null): string => {
 };
 
 const Index: React.FC = () => {
+  const screens = Grid.useBreakpoint();
   const tableRef = useRef<TableRefType>(null);
   const searchInput = useRef<InputRef>(null);
   const [hiddenDeleteBtn, setHiddenDeleteBtn] = useState<boolean>(true);
@@ -292,52 +293,62 @@ const Index: React.FC = () => {
   };
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-        <div>
-          {selectedIds.length > 0 && (
+    <div style={{ padding: screens.lg ? 24 : 16 }}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+        <Col xs={24}>
+          <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+            {selectedIds.length > 0 && (
+              <Button
+                danger
+                className='btn-top'
+                onClick={showDeleteConfirm}
+                hidden={hiddenDeleteBtn || !deletePer}
+              >
+                <DeleteOutlined />
+                Xóa
+              </Button>
+            )}
+
             <Button
-              danger
+              onClick={() => router.push("/contractTypes/create")}
+              type="primary"
               className='btn-top'
-              onClick={showDeleteConfirm}
-              hidden={hiddenDeleteBtn || !deletePer}
+              hidden={!createPer}
             >
-              <DeleteOutlined />
-              Xóa
+              <PlusCircleOutlined />
+              Tạo mới hợp đồng
             </Button>
-          )}
+          </div>
+        </Col>
+      </Row>
 
-          <Button
-            onClick={() => router.push("/contractTypes/create")}
-            type="primary"
-            className='btn-top'
-            hidden={!createPer}
-          >
-            <PlusCircleOutlined />
-            Tạo mới hợp đồng
-          </Button>
-        </div>
-      </div>
-
-      <Table
-        ref={tableRef as React.Ref<any>}
-        columns={columns}
-        dataSource={contractTypes}
-        loading={loading}
-        rowKey="id"
-        rowSelection={{
-          selectedRowKeys: selectedIds,
-          onChange: onChangeSelection
-        }}
-        scroll={{ x: 'max-content' }}
-        pagination={{
-          pageSize: 12,
-          showSizeChanger: true,
-          pageSizeOptions: ['12', '24', '36', '48'],
-          showTotal: (total: number) => `Tổng số: ${total} bản ghi`
-        }}
-        rowClassName={(_, index) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
-      />
+      <Row>
+        <Col xs={24}>
+          <div style={{ overflowX: 'auto' }}>
+            <Table
+              ref={tableRef as React.Ref<any>}
+              columns={columns}
+              dataSource={contractTypes}
+              loading={loading}
+              rowKey="id"
+              rowSelection={{
+                selectedRowKeys: selectedIds,
+                onChange: onChangeSelection
+              }}
+              scroll={{ x: 'max-content' }}
+              pagination={{
+                pageSize: 12,
+                showSizeChanger: true,
+                pageSizeOptions: ['12', '24', '36', '48'],
+                showTotal: (total: number) => `Tổng số: ${total} bản ghi`,
+                size: screens.lg ? 'default' : 'small'
+              }}
+              rowClassName={(_, index) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
+              size={screens.lg ? 'middle' : 'small'}
+            />
+          </div>
+        </Col>
+      </Row>
 
       <Modal
         title="Xác nhận xóa"
@@ -360,6 +371,13 @@ const Index: React.FC = () => {
         }
         .btn-top {
           margin-right: 8px;
+        }
+        @media (max-width: 768px) {
+          .ant-table-thead > tr > th,
+          .ant-table-tbody > tr > td {
+            padding: 8px 4px;
+            font-size: 12px;
+          }
         }
       `}</style>
     </div>

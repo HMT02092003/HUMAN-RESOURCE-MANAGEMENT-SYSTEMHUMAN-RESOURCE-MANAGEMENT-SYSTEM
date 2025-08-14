@@ -296,7 +296,7 @@ export const deleteContractType = async (req: Request, res: Response) => {
         if (error instanceof ValidationException) {
             return res.status(error.status).json({
                 error: error.message,
-                code: error.code
+                code: error.status
             });
         }
 
@@ -349,7 +349,7 @@ export const deleteMultipleContractTypes = async (req: Request, res: Response) =
         if (error instanceof ValidationException) {
             return res.status(error.status).json({
                 error: error.message,
-                code: error.code
+                code: error.status
             });
         }
 

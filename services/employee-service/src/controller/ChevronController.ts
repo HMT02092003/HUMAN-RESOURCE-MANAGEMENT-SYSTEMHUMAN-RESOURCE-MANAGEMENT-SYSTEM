@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
 import ChevronModel from "@/src/Models/ChevronModel";
 import { validate, ValidationException } from "@/src/utils/validation-utility";
-import { console } from "inspector";
 import axios from 'axios';
 
 const authServiceUrl = process.env.AUTH_SERVICE_URL;
@@ -25,7 +24,7 @@ export const getAllChevrons = async (req: Request, res: Response) => {
 export const createChevron = async (req: Request, res: Response) => {
   try {
     let inputs = req.body;
-    console.log("Received inputs:", inputs);
+    // console.log("Received inputs:", inputs);
 
     const allowFields = {
       name: "string!",
@@ -60,7 +59,7 @@ export const createChevron = async (req: Request, res: Response) => {
     if (error instanceof ValidationException) {
       return res.status(error.status).json({
         error: error.message,
-        code: error.code
+        code: error.status
       });
     }
 
@@ -95,7 +94,7 @@ export const getChevronDetail = async (req: Request, res: Response) => {
     if (error instanceof ValidationException) {
       return res.status(error.status).json({
         error: error.message,
-        code: error.code
+        code: error.status
       });
     }
 
@@ -157,7 +156,7 @@ export const updateChevron = async (req: Request, res: Response) => {
     if (error instanceof ValidationException) {
       return res.status(error.status).json({
         error: error.message,
-        code: error.code
+        code: error.status
       });
     }
 
@@ -187,11 +186,52 @@ export const deleteChevron = async (req: Request, res: Response) => {
     }
 
     // Check if chevron is being used by users via auth-service
-    const { data: users } = await axios.get(`${authServiceUrl}/api/users/by-chevron`, {
-      params: { chevronId: params.id }
+    // Forward authorization header from original request
+    const authHeader = req.headers.authorization;
+    const headers: any = {};
+    if (authHeader) {
+      headers.Authorization = authHeader;
+    }
+
+    console.log('🔍 Checking if chevron is used by users...');
+    console.log('📡 Calling auth-service with:', {
+      url: `${authServiceUrl}/api/users/by-chevron`,
+      params: { chevronId: params.id },
+      headers: headers
     });
-    if (users && users.length > 0) {
-      return res.status(400).json({ error: "Chức vụ đang được sử dụng, không thể xóa!" });
+
+    try {
+      const response = await axios.get(`${authServiceUrl}/api/users/by-chevron`, {
+        params: { chevronId: params.id },
+        headers: headers
+      });
+      
+      console.log('✅ Auth-service response:', response.data);
+      
+      if (response.data && response.data.length > 0) {
+        return res.status(400).json({ error: "Chức vụ đang được sử dụng, không thể xóa!" });
+      }
+    } catch (apiError: any) {
+      console.error('❌ Error calling auth-service:', {
+        status: apiError.response?.status,
+        statusText: apiError.response?.statusText,
+        data: apiError.response?.data,
+        message: apiError.message
+      });
+      
+      // Nếu lỗi 400, trả về thông tin chi tiết
+      if (apiError.response?.status === 400) {
+        return res.status(400).json({ 
+          error: "Lỗi khi kiểm tra users: " + (apiError.response?.data?.error || apiError.message),
+          details: apiError.response?.data
+        });
+      }
+      
+      // Nếu lỗi khác, trả về lỗi chung
+      return res.status(500).json({ 
+        error: "Lỗi khi kiểm tra users từ auth-service",
+        details: apiError.message
+      });
     }
 
     // Delete the chevron
@@ -207,7 +247,7 @@ export const deleteChevron = async (req: Request, res: Response) => {
     if (error instanceof ValidationException) {
       return res.status(error.status).json({
         error: error.message,
-        code: error.code
+        code: error.status
       });
     }
 
@@ -223,7 +263,7 @@ export const deleteChevron = async (req: Request, res: Response) => {
  */
 export const deleteMultipleChevrons = async (req: Request, res: Response) => {
   try {
-    console.log("Received request to delete multiple chevrons:", req);
+    console.log("Received request to delete multiple chevrons:", req.body);
     const allowFields = {
       ids: ["number!"],
     };
@@ -240,11 +280,52 @@ export const deleteMultipleChevrons = async (req: Request, res: Response) => {
     }
 
     // Check if any chevron is being used by users via auth-service
-    const { data: users } = await axios.get(`${authServiceUrl}/api/users/by-chevron`, {
-      params: { chevronIds: params.ids.join(',') }
+    // Forward authorization header from original request
+    const authHeader = req.headers.authorization;
+    const headers: any = {};
+    if (authHeader) {
+      headers.Authorization = authHeader;
+    }
+
+    console.log('🔍 Checking if chevrons are used by users...');
+    console.log('📡 Calling auth-service with:', {
+      url: `${authServiceUrl}/api/users/by-chevron`,
+      params: { chevronIds: params.ids },
+      headers: headers
     });
-    if (users && users.length > 0) {
-      return res.status(400).json({ error: "Chức vụ đang được sử dụng, không thể xóa!" });
+
+    try {
+      const response = await axios.get(`${authServiceUrl}/api/users/by-chevron`, {
+        params: { chevronIds: params.ids },
+        headers: headers
+      });
+      
+      console.log('✅ Auth-service response:', response.data);
+      
+      if (response.data && response.data.length > 0) {
+        return res.status(400).json({ error: "Chức vụ đang được sử dụng, không thể xóa!" });
+      }
+    } catch (apiError: any) {
+      console.error('❌ Error calling auth-service:', {
+        status: apiError.response?.status,
+        statusText: apiError.response?.statusText,
+        data: apiError.response?.data,
+        message: apiError.message
+      });
+      
+      // Nếu lỗi 400, trả về thông tin chi tiết
+      if (apiError.response?.status === 400) {
+        return res.status(400).json({ 
+          error: "Lỗi khi kiểm tra users: " + (apiError.response?.data?.error || apiError.message),
+          details: apiError.response?.data
+        });
+      }
+      
+      // Nếu lỗi khác, trả về lỗi chung
+      return res.status(500).json({ 
+        error: "Lỗi khi kiểm tra users từ auth-service",
+        details: apiError.message
+      });
     }
 
     // Delete the chevrons
@@ -262,7 +343,7 @@ export const deleteMultipleChevrons = async (req: Request, res: Response) => {
     if (error instanceof ValidationException) {
       return res.status(error.status).json({
         error: error.message,
-        code: error.code
+        code: error.status
       });
     }
 

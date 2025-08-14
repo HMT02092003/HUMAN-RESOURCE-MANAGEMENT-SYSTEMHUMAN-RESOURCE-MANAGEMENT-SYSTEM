@@ -13,12 +13,13 @@ interface ResetPasswordData {
 }
 
 class AuthService {
-  private baseURL = process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:4000';
+  // Rely on axios instance baseURL (apiService) which already resolves dynamic IP/port
+  private baseURL = '';
 
   // Login
   async login(credentials: LoginCredentials) {
     try {
-      const response = await api.post(`${this.baseURL}/api/auth/login`, credentials);
+      const response = await api.post(`/api/auth/login`, credentials);
       
       if (response.data.refreshToken) {
         Cookies.set('refreshToken', response.data.refreshToken);
@@ -45,7 +46,7 @@ class AuthService {
   // Request password reset
   async requestPasswordReset(email: string) {
     try {
-      const response = await api.post(`${this.baseURL}/api/forgot-password`, { email });
+      const response = await api.post(`/api/forgot-password`, { email });
       return response.data;
     } catch (error: any) {
       throw error;
@@ -55,7 +56,7 @@ class AuthService {
   // Reset password
   async resetPassword(data: ResetPasswordData) {
     try {
-      const response = await api.post(`${this.baseURL}/api/reset-password`, data);
+      const response = await api.post(`/api/reset-password`, data);
       return response.data;
     } catch (error: any) {
       throw error;
@@ -65,7 +66,7 @@ class AuthService {
   // Refresh token
   async refreshToken(refreshToken: string) {
     try {
-      const response = await api.post(`${this.baseURL}/api/refresh-token`, { refreshToken });
+      const response = await api.post(`/api/refresh-token`, { refreshToken });
       
       if (response.data.token) {
         Cookies.set('token', response.data.token);
@@ -85,7 +86,7 @@ class AuthService {
         throw new Error('No token found');
       }
 
-      const response = await api.get(`${this.baseURL}/api/verify-token`, {
+      const response = await api.get(`/api/verify-token`, {
         headers: {
           Authorization: `Bearer ${token}`
         }

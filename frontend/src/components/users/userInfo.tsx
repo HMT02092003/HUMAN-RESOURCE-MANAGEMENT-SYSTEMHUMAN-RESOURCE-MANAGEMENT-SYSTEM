@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import dayjs from 'dayjs';
-import { Button, Form, Col, Row, Descriptions, theme, Table } from 'antd';
+import { Button, Form, Col, Row, Descriptions, theme, Table, Grid } from 'antd';
 import { LeftOutlined, RightCircleFilled } from '@ant-design/icons';
 import type { DescriptionsProps } from 'antd';
 import { useRouter } from 'next/navigation';
@@ -33,6 +33,7 @@ interface User {
   role: { name: string };
   department: { name: string };
   chevron: { name: string };
+  identificationPhoto?: string;
 }
 
 interface UserInfoProps {
@@ -44,6 +45,7 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
   const router = useRouter();
   const [form] = Form.useForm();
   const { token } = theme.useToken();
+  const screens = Grid.useBreakpoint();
   const getRelationshipLabel = (value?: number): string => {
     if (value === undefined || value === null) return '-';
     const relationship = Relationship.find((item: any) => item.value === value);
@@ -64,6 +66,14 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
       key: '1',
       label: 'ID',
       children: userData?.id ?? '-',
+    },
+    {
+      key: 'avatar',
+      label: 'Ảnh nhận diện',
+      children: userData?.identificationPhoto ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img alt="avatar" src={`${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${userData.identificationPhoto}`} style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8 }} />
+      ) : '-',
     },
     {
       key: '2',
@@ -132,7 +142,7 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
       <Descriptions
         title="Thông tin cá nhân"
         items={userItems}
-        column={3}
+        column={screens.lg ? 3 : 1}
         labelStyle={{ fontWeight: 700, color: '#000', minWidth: 120 }}
         contentStyle={{ backgroundColor: token.colorBgContainer }}
       />
@@ -140,7 +150,7 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
       <Descriptions
         title="Công việc"
         items={jobItems}
-        column={3}
+        column={screens.lg ? 3 : 1}
         labelStyle={{ fontWeight: 700, color: '#000', minWidth: 120 }}
         contentStyle={{ backgroundColor: token.colorBgContainer }}
       />

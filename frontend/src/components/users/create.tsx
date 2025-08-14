@@ -68,7 +68,7 @@ const Create = () => {
   return (
     <div className="content">
       <Row>
-        <Col md={{ span: 16, offset: 4 }}>
+        <Col xs={24} md={{ span: 16, offset: 4 }}>
           <Tabs defaultActiveKey="1" activeKey={activeKey} onChange={setActiveKey}>
             <TabPane tab="Thông tin người dùng" key="1">
               <UserForm
