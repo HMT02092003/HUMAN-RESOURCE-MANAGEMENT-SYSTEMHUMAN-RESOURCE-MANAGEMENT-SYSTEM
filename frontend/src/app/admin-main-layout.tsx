@@ -326,7 +326,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                     style={{ 
                         backgroundColor: "white",
                         position: isMobile ? 'fixed' : 'relative',
-                        height: '100vh',
+                        height: isMobile ? '100vh' : 'auto',
                         zIndex: 1000,
                         left: isMobile && collapsed ? -200 : 0,
                         transition: 'left 0.2s'
