@@ -72,7 +72,13 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
       label: 'Ảnh nhận diện',
       children: userData?.identificationPhoto ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img alt="avatar" src={`${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${userData.identificationPhoto}`} style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8 }} />
+        <img
+          alt="avatar"
+          src={userData.identificationPhoto.startsWith('/')
+            ? userData.identificationPhoto
+            : `${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${userData.identificationPhoto}`}
+          style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8 }}
+        />
       ) : '-',
     },
     {

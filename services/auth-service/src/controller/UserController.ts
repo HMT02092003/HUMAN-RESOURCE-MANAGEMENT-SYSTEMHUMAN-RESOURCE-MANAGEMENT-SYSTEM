@@ -31,18 +31,84 @@ function getLocalIpAddress(): string {
   return '127.0.0.1';
 }
 
-const API_GATEWAY_URL = `http://${getLocalIpAddress()}:${process.env.PORT || 3000}`;
+const API_GATEWAY_URL = `http://${getLocalIpAddress()}:${process.env.API_GATEWAY_PORT || 3000}`;
 const { Gender, statusOptions, Relationship } = constantConfig;
 
-// const {
-//   validateUpload,
-//   validateDataExistInDBByColumn,
-//   isEmail,
-//   mapErrorsToGridTable,
-//   mapError,
-//   validateNotAllowDataExistInDBByColumn,
-// } = baseUpload;
+// Resolve absolute path for frontend public directory
+const getFrontendPublicPath = (...segments: string[]): string => {
+  // services/auth-service -> repo root -> frontend/public
+  return path.resolve(process.cwd(), "../../frontend/public", ...segments);
+};
 
+// Map stored URL path to absolute filesystem path
+const resolvePhotoAbsolutePath = (storedPath: string): string => {
+  if (!storedPath) return '';
+  const normalized = storedPath.replace(/\\/g, '/');
+  if (normalized.startsWith('/identificationPhoto/')) {
+    return getFrontendPublicPath(normalized.replace('/identificationPhoto/', 'identificationPhoto/'));
+  }
+  return path.join(process.cwd(), normalized);
+};
+
+// Helper function to handle file upload and save with username into frontend/public
+const handleIdentificationPhotoUpload = (file: any, username: string): string => {
+  try {
+    // Tạo thư mục identificationPhoto trong frontend/public nếu chưa tồn tại
+    const uploadDir = getFrontendPublicPath('identificationPhoto');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    // Lấy extension từ file gốc
+    const fileExtension = path.extname(file.originalname || file.name || '.jpg');
+    
+    // Tạo tên file mới với username
+    const fileName = `${username}${fileExtension}`;
+    const filePath = path.join(uploadDir, fileName);
+
+    // Nếu file đã tồn tại, xóa file cũ
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    // Lưu file mới
+    if (file.buffer) {
+      // Nếu file có buffer (từ multer memory storage)
+      fs.writeFileSync(filePath, file.buffer);
+    } else if (file.path) {
+      // Nếu file được lưu tạm thời (từ multer disk storage)
+      fs.copyFileSync(file.path, filePath);
+      fs.unlinkSync(file.path); // Xóa file tạm
+    }
+
+    // Trả về đường dẫn public phía FE
+    return ('/identificationPhoto/' + fileName).replace(/\\/g, '/');
+  } catch (error) {
+    console.error('Error handling identification photo upload:', error);
+    throw new Error('Lỗi khi lưu ảnh đại diện');
+  }
+};
+
+// Helper function to delete old identification photo (supports legacy path and new FE public path)
+const deleteOldIdentificationPhoto = (oldPhotoPath: string): void => {
+  try {
+    if (oldPhotoPath) {
+      const candidates: string[] = [];
+      // New location in FE public
+      candidates.push(resolvePhotoAbsolutePath(oldPhotoPath));
+      // Legacy location inside this service
+      candidates.push(path.join(process.cwd(), oldPhotoPath));
+
+      candidates.forEach((p) => {
+        try {
+          if (p && fs.existsSync(p)) fs.unlinkSync(p);
+        } catch {}
+      });
+    }
+  } catch (error) {
+    console.error('Error deleting old identification photo:', error);
+  }
+};
 
 /**
  * Get all users with pagination and filtering
@@ -126,7 +192,7 @@ export const getAllUsers = async (req: any, res: Response) => {
  */
 export const createUser = async (req: Request, res: Response) => {
   try {
-    const { auth } = req as any; // Consider extending Request interface for better type safety for 'auth'
+    const { auth } = req as any;
     // Clone and normalize inputs to be tolerant with different frontend payload shapes
     const inputs: any = { ...req.body };
 
@@ -196,6 +262,21 @@ export const createUser = async (req: Request, res: Response) => {
     });
 
     console.log("Create user params:", params);
+
+    // Xử lý upload ảnh đại diện nếu có
+    if (req.file || (req as any).files?.identificationPhoto) {
+      const photoFile = req.file || (req as any).files?.identificationPhoto;
+      if (photoFile) {
+        try {
+          params.identificationPhoto = handleIdentificationPhotoUpload(photoFile, params.username);
+        } catch (uploadError) {
+          return res.status(400).json({ 
+            message: uploadError instanceof Error ? uploadError.message : "Lỗi khi tải ảnh", 
+            code: 7003 
+          });
+        }
+      }
+    }
 
     // Stringify profileFamily if it's meant to be stored as a JSON string in the database
     if (params.profileFamily) {
@@ -673,24 +754,69 @@ export const updateUser = async (req: Request, res: Response) => {
     });
     console.log("Update user params:", params);
 
-    // Stringify profileFamily if it's meant to be stored as a JSON string in the database
-    if (params.profileFamily) {
-      params.profileFamily = JSON.stringify(params.profileFamily);
-    }
-
-    // Convert Date objects to ISO strings for database storage
-    if (params.birthday && params.birthday instanceof Date) {
-      params.birthday = params.birthday.toISOString();
-    }
-    if (params.startDate && params.startDate instanceof Date) {
-      params.startDate = params.startDate.toISOString();
-    }
-
     const { id, ...updateData } = params;
 
     const existingUser = await UserModel.query().findById(id);
     if (!existingUser) {
       return res.status(404).json({ message: "Người dùng không tồn tại!", code: 6006 });
+    }
+
+    // Xử lý upload ảnh đại diện mới nếu có
+    if (req.file || (req as any).files?.identificationPhoto) {
+      const photoFile = req.file || (req as any).files?.identificationPhoto;
+      if (photoFile) {
+        try {
+          // Xóa ảnh cũ nếu có
+          if (existingUser.identificationPhoto) {
+            deleteOldIdentificationPhoto(existingUser.identificationPhoto);
+          }
+          
+          // Lưu ảnh mới với username
+          updateData.identificationPhoto = handleIdentificationPhotoUpload(photoFile, updateData.username);
+        } catch (uploadError) {
+          return res.status(400).json({ 
+            message: uploadError instanceof Error ? uploadError.message : "Lỗi khi tải ảnh", 
+            code: 7003 
+          });
+        }
+      }
+    }
+
+    // Nếu username thay đổi và có ảnh đại diện, cần đổi tên file ảnh
+    if (updateData.username && updateData.username !== existingUser.username && existingUser.identificationPhoto) {
+      try {
+        const legacyOld = path.join(process.cwd(), existingUser.identificationPhoto);
+        const newOld = resolvePhotoAbsolutePath(existingUser.identificationPhoto);
+        const oldPhotoPath = fs.existsSync(newOld) ? newOld : legacyOld;
+        if (fs.existsSync(oldPhotoPath)) {
+          const fileExtension = path.extname(existingUser.identificationPhoto);
+          const newFileName = `${updateData.username}${fileExtension}`;
+          const newPhotoPath = getFrontendPublicPath('identificationPhoto', newFileName);
+
+          // Copy file với tên mới
+          fs.copyFileSync(oldPhotoPath, newPhotoPath);
+          // Xóa file cũ
+          fs.unlinkSync(oldPhotoPath);
+
+          // Cập nhật đường dẫn trong database (FE public URL)
+          updateData.identificationPhoto = ('/identificationPhoto/' + newFileName).replace(/\\/g, '/');
+        }
+      } catch (renameError) {
+        console.error('Error renaming identification photo:', renameError);
+      }
+    }
+
+    // Stringify profileFamily if it's meant to be stored as a JSON string in the database
+    if (updateData.profileFamily) {
+      updateData.profileFamily = JSON.stringify(updateData.profileFamily);
+    }
+
+    // Convert Date objects to ISO strings for database storage
+    if (updateData.birthday && updateData.birthday instanceof Date) {
+      updateData.birthday = updateData.birthday.toISOString();
+    }
+    if (updateData.startDate && updateData.startDate instanceof Date) {
+      updateData.startDate = updateData.startDate.toISOString();
     }
 
     // Check for unique constraints only if values have changed
@@ -1047,467 +1173,3 @@ export const createContract = async (req: Request, res: Response) => {
     });
   }
 };
-
-// export const importExcel = async (req: Request, res: Response) => {
-//   try {
-//     let inputs = req.body;
-//     const { auth } = req as any;
-//     let { warring, errors, data } = await _beforeUpload({
-//       inputs: inputs.users,
-//       auth,
-//     });
-//     warring = (warring || []).sort((a, b) => a.row - b.row);
-
-//     console.log("Data:", data);
-
-//     if (errors) {
-//       let errorsForGridTable = mapErrorsToGridTable(errors);
-//       return res.status(400).json({
-//         error: "Nhập excel xảy ra lỗi!",
-//         code: 4000,
-//         details: { error: errorsForGridTable }
-//       });
-//     }
-
-//     data.forEach(async (item) => {
-//       const hashPassword = await UserModel.hash(item.password);
-
-//       const statusMap = {
-//         "Đang làm việc": "Đang hoạt động",
-//         "Đã nghỉ việc": "Đã nghỉ việc",
-//         "Nghỉ thai sản": "Nghỉ thai sản",
-//       };
-
-//       const mappedStatus = statusMap[item.status] || item.status;
-//       const findStatusValue = statusOptions.find(
-//         (opt) => opt.label === mappedStatus
-//       );
-
-//       console.log(findStatusValue);
-
-//       const userValue = {
-//         firstName: item.firstName,
-//         lastName: item.lastName,
-//         username: item.username,
-//         password: hashPassword,
-//         roleId: item.roleId,
-//         email: item.email,
-//         departmentId: item.departmentId,
-//         chevronId: item.chevronId,
-//         status: findStatusValue.value,
-//         gender: item.gender,
-//         phone: item.phone,
-//         birthday: moment(item.birthday, "DD/MM/YYYY").add(1, "days").utc(),
-//         startDate: moment(item.startDateUser, "DD/MM/YYYY")
-//           .add(1, "days")
-//           .utc(),
-//       };
-
-//       console.log(userValue);
-
-//       const userData: any = await UserModel.insertMany(userValue);
-
-//       console.log("User data:", userData.id);
-
-//       const startDate = moment(item.startDate, "DD/MM/YYYY")
-//         .startOf("day")
-//         .utc();
-//       const activeDay = moment(item.activeDay, "DD/MM/YYYY")
-//         .startOf("day")
-//         .utc();
-
-//       const findContractTerm = await ContractTypeModel.query().findById(
-//         item.contractTypeId
-//       );
-
-//       const daysDiff = activeDay.diff(startDate, "days");
-
-//       let endDate: string | null = null;
-
-//       if (findContractTerm.contractTerm > 0) {
-//         const endDateCalculation = moment(startDate).add(
-//           findContractTerm.contractTerm,
-//           "months"
-//         );
-//         endDate = endDateCalculation.add(daysDiff, "days").toISOString();
-//       }
-
-//       const contract = {
-//         id: userData.id,
-//         contractTypeId: item.contractTypeId,
-//         startDate: startDate.toISOString(),
-//         endDate: endDate,
-//         activeDay: activeDay.toISOString(),
-//         insurance: item.insurance,
-//       };
-
-//       console.log("Contract:", contract);
-
-//       // Contract creation logic
-//       const allowFields = {
-//         id: "number!",
-//         contractTypeId: "number!",
-//         startDate: "date!",
-//         endDate: "date",
-//         activeDay: "date!",
-//         insurance: "number",
-//       };
-
-//       let params = validate(contract, allowFields, {
-//         removeNotAllow: true,
-//       });
-
-//       const userId = params.id;
-
-//       // Check if user exists
-//       const user = await UserModel.getById(params.id);
-//       if (!user) throw new Error("User doesn't exist!");
-
-//       // Validate contract type
-//       const contractType = await ContractTypeModel.query().findById(
-//         params.contractTypeId
-//       );
-//       if (!contractType) throw new Error("Contract Type not exists!");
-
-//       // Validate dates
-//       if (
-//         params.endDate &&
-//         new Date(params.endDate) <= new Date(params.startDate)
-//       ) {
-//         throw new Error("End date must be after start date!");
-//       }
-
-//       if (new Date(params.activeDay) < new Date(params.startDate)) {
-//         throw new Error("Active day must be after or equal to start date!");
-//       }
-
-//       // Remove id to let DB auto-generate
-//       delete params.id;
-
-//       // Create contract
-//       const contractData = {
-//         ...params,
-//         userId: userId,
-//         created_at: new Date(),
-//       };
-
-//       console.log("Contract data:", contractData);
-
-//       await ContractModel.insertOne(contractData);
-//     });
-
-//     return res.status(200).json({ warring });
-//   } catch (error) {
-//     console.error("Error importing Excel:", error);
-//     return res.status(500).json({
-//       error: error instanceof Error ? error.message : "Internal Server Error",
-//       code: 500
-//     });
-//   }
-// };
-
-// /**
-//  * Delete a single user
-//  */
-// export const deleteUser = async (req: Request, res: Response) => {
-//   try {
-//     const { auth } = req as any;
-//     let params = { ...req.query, ...req.body };
-
-//     let id = params.id;
-//     if (!id) {
-//       return res.status(400).json({ error: "ID is required!", code: 9996 });
-//     }
-
-//     let exist = await UserModel.getById(id);
-//     if (!exist) {
-//       return res.status(404).json({ error: "User doesn't exists!", code: 6006 });
-//     }
-    
-//     if ([id].includes(auth.id)) {
-//       return res.status(400).json({ 
-//         error: "You can not remove your account.", 
-//         code: 6022 
-//       });
-//     }
-
-//     await ContractModel.query().delete().where("userId", id);
-
-//     let user = await UserModel.query().where("id", params.id).first();
-//     await user.$query().delete();
-
-//     return res.status(200).json({
-//       message: "Delete successfully",
-//       old: user,
-//     });
-//   } catch (error) {
-//     console.error("Error deleting user:", error);
-//     return res.status(500).json({
-//       error: error instanceof Error ? error.message : "Internal Server Error",
-//       code: 500
-//     });
-//   }
-// };
-
-// /**
-//  * Delete multiple users
-//  */
-// export const deleteMultipleUsers = async (req: Request, res: Response) => {
-//   try {
-//     const { auth } = req as any;
-//     const allowFields = {
-//       ids: ["number!"],
-//     };
-//     const inputs = req.body;
-//     let params = validate(inputs, allowFields);
-
-//     let exist = await UserModel.query().whereIn("id", params.ids);
-//     if (!exist || exist.length !== params.ids.length) {
-//       return res.status(404).json({ error: "User doesn't exists!", code: 6006 });
-//     }
-    
-//     if (params.ids.includes(auth.id)) {
-//       return res.status(400).json({ 
-//         error: "You can not remove your account.", 
-//         code: 6022 
-//       });
-//     }
-
-//     let contract = await ContractModel.query()
-//       .delete()
-//       .whereIn("userId", params.ids);
-
-//     let users = await UserModel.query().whereIn("id", params.ids);
-//     for (let user of users) {
-//       await user.$query().delete();
-//     }
-
-//     return res.status(200).json({
-//       old: {
-//         usernames: (users || []).map((user) => user.username).join(", "),
-//       },
-//     });
-//   } catch (error) {
-//     console.error("Error deleting multiple users:", error);
-
-//     if (error instanceof ValidationException) {
-//       return res.status(error.status).json({
-//         error: error.message,
-//         code: error.code
-//       });
-//     }
-
-//     return res.status(500).json({
-//       error: error instanceof Error ? error.message : "Internal Server Error",
-//       code: 500
-//     });
-//   }
-// };
-
-// /**
-//  * Get current user info
-//  */
-// export const getUserInfo = async (req: Request, res: Response) => {
-//   try {
-//     const { auth } = req as any;
-//     let result = await UserModel.getById(auth.id);
-//     delete result["password"];
-
-//     if (!result) {
-//       return res.status(404).json({ error: "User doesn't exist", code: 6006 });
-//     }
-
-//     return res.status(200).json(result);
-//   } catch (error) {
-//     console.error("Error getting user info:", error);
-//     return res.status(500).json({
-//       error: error instanceof Error ? error.message : "Internal Server Error",
-//       code: 500
-//     });
-//   }
-// };
-
-// /**
-//  * Create a contract for user
-//  */
-// export const createContract = async (req: Request, res: Response) => {
-//   try {
-//     const { auth } = req as any;
-//     let inputs = req.body;
-//     const allowFields = {
-//       id: "number!",
-//       contractTypeId: "number!",
-//       startDate: "date!",
-//       endDate: "date",
-//       activeDay: "date!",
-//       insurance: "number",
-//     };
-
-//     let params = validate(inputs, allowFields, { removeNotAllow: true });
-
-//     // Check if user exists
-//     const user = await UserModel.getById(params.id);
-//     if (!user) {
-//       return res.status(404).json({ error: "User doesn't exist!", code: 6006 });
-//     }
-
-//     // Validate contract type
-//     const contractType = await ContractTypeModel.query().findById(
-//       params.contractTypeId
-//     );
-//     if (!contractType) {
-//       return res.status(400).json({ error: "Contract Type not exists!", code: 5011 });
-//     }
-
-//     // Validate dates
-//     if (
-//       params.endDate &&
-//       new Date(params.endDate) <= new Date(params.startDate)
-//     ) {
-//       return res.status(400).json({ error: "End date must be after start date!", code: 5009 });
-//     }
-
-//     if (new Date(params.activeDay) < new Date(params.startDate)) {
-//       return res.status(400).json({
-//         error: "Active day must be after or equal to start date!",
-//         code: 5012
-//       });
-//     }
-
-//     // Remove id to let DB auto-generate
-//     delete params.id;
-
-//     // Create contract
-//     const contractData = {
-//       ...params,
-//       userId: inputs.id,
-//       created_at: new Date(),
-//     };
-
-//     console.log("Contract data:", contractData);
-
-//     const result = await ContractModel.insertOne(contractData);
-//     return res.status(201).json(result);
-//   } catch (error) {
-//     console.error("Error creating contract:", error);
-
-//     if (error instanceof ValidationException) {
-//       return res.status(error.status).json({
-//         error: error.message,
-//         code: error.code
-//       });
-//     }
-
-//     return res.status(500).json({
-//       error: error instanceof Error ? error.message : "Internal Server Error",
-//       code: 500
-//     });
-//   }
-// };
-
-// /**
-//  * Helper function for upload validation
-//  */
-// const _beforeUpload = async ({ inputs, auth }) => {
-//   let errors = {};
-//   let warring = [];
-//   const validationNormal = validateUpload([...inputs], {
-//     allowFieldsOfRow: {
-//       firstName: "string!",
-//       lastName: "string!",
-//       username: "string!",
-//       password: "string!",
-//       roleName: "string!",
-//       email: "string!",
-//       department: "string!",
-//       chevron: "string!",
-//       status: "string",
-//       gender: "string",
-//       phone: "string",
-//       birthday: "string",
-//       startDateUser: "string",
-//       startDate: "string",
-//       contractType: "string",
-//       insurance: "number",
-//       activeDay: "string",
-//     },
-//     removeNotAllow: true,
-//     duplicate: true,
-//     unique: ["username", "email"],
-//     validationFields: {
-//       email: [isEmail],
-//     },
-//   });
-
-//   inputs = validationNormal.inputs;
-
-//   if (Object.keys(validationNormal.errors).length > 0) {
-//     return {
-//       warring,
-//       errors: validationNormal.errors,
-//       data: inputs,
-//     };
-//   }
-
-//   // Check username
-//   const errorExistUsername = await validateNotAllowDataExistInDBByColumn({
-//     inputs: JSON.parse(JSON.stringify(inputs)),
-//     property: "username",
-//     ignoreUndefined: true,
-//     Model: UserModel,
-//     column: "username",
-//     extend_conditions: {},
-//     error_code: "DATA_EXIST_IN_DB",
-//     comment: "",
-//   });
-
-//   // Check role
-//   const checkRole = await validateDataExistInDBByColumn({
-//     inputs: JSON.parse(JSON.stringify(inputs)),
-//     property: "roleName",
-//     ignoreUndefined: true,
-//     Model: RoleModel,
-//     column: "name",
-//     extend_conditions: {},
-//     error_code: "ROLE_NOT_EXIST",
-//     comment: "",
-//     deleteProperties: ["roleName"],
-//     setColumnsToProperties: [{ columnName: "id", newProperty: "roleId" }],
-//   });
-//   inputs = checkRole.inputs;
-
-//   let errorExistEmail = {};
-
-//   const checkDepartment = await validateDataExistInDBByColumn({
-//     inputs: JSON.parse(JSON.stringify(inputs)),
-//     property: "department",
-//     ignoreUndefined: true,
-//     Model: DepartmentModel,
-//     column: "name",
-//     extend_conditions: {},
-//     error_code: "DEPARTMENT_NOT_EXIST",
-//     comment: "",
-//     deleteProperties: ["department"],
-//     setColumnsToProperties: [
-//       { columnName: "id", newProperty: "departmentId" },
-//     ],
-//   });
-//   inputs = checkDepartment.inputs;
-
-//   const checkChevron = await validateDataExistInDBByColumn({
-//     inputs: JSON.parse(JSON.stringify(inputs)),
-//     property: "chevron",
-//     ignoreUndefined: true,
-//     Model: ChevronModel,
-//     column: "name",
-//     extend_conditions: {},
-//     error_code: "CHEVRON_NOT_EXIST",
-//     comment: "",
-//     deleteProperties: ["chevron"],
-//     setColumnsToProperties: [{ columnName: "id", newProperty: "chevronId" }],
-//   });
-//   inputs = checkChevron.inputs;
-
-//   const checkContractType = await validateDataExistInDBByColumn({
-//     inputs: JSON.parse(JSON.stringify(inputs)),
-//     property: "

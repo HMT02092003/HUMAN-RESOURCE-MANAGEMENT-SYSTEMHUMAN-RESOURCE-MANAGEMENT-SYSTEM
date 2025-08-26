@@ -92,10 +92,10 @@ const UserForm: React.FC<UserFormProps> = ({
       birthday: values.birthday ? values.birthday.toISOString() : null,
       startDate: values.startDate ? values.startDate.toISOString() : null,
       gender: values.gender === undefined || values.gender === "" ? null : values.gender, // Ensure gender is null if not selected
-      profileFamily: values.profileFamily?.map((member: any) => ({
+      profileFamily: values.profileFamily ? values.profileFamily?.map((member: any) => ({
         ...member,
         birthday: member.birthday ? member.birthday.toISOString() : null // Check null before calling toISOString
-      })),
+      })) : [],
       identificationPhoto,
     };
     console.log("Formatted UserForm data:", formattedValues);
@@ -114,14 +114,16 @@ const UserForm: React.FC<UserFormProps> = ({
           ...member,
           birthday: member.birthday ? dayjs(member.birthday) : null
         })),
-        identificationPhoto: initialValues.identificationPhoto
-          ? [{
-              uid: '-1',
-              name: 'identificationPhoto',
-              status: 'done',
-              url: `${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${initialValues.identificationPhoto}`,
-            }]
-          : [],
+        identificationPhoto: (() => {
+          const photo = initialValues.identificationPhoto;
+          if (typeof photo === 'string' && photo) {
+            const url = photo.startsWith('/')
+              ? photo
+              : `${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${photo}`;
+            return [{ uid: '-1', name: 'identificationPhoto', status: 'done', url }];
+          }
+          return [];
+        })(),
       });
       console.log("Initial values:", initialValues);
     }

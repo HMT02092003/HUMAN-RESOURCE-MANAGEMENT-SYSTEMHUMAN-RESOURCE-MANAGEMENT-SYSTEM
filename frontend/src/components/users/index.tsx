@@ -140,7 +140,11 @@ const UserTable = () => {
       width: 80,
       render: (url: string) => url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img alt="avatar" src={`${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${url}`} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }} />
+        <img
+          alt="avatar"
+          src={url.startsWith('/') ? url : `${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${url}`}
+          style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }}
+        />
       ) : '-',
     },
     {
