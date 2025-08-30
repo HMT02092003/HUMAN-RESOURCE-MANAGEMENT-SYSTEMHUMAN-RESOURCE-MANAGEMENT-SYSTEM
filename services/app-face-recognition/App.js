@@ -1,44 +1,45 @@
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { StyleSheet, View, Alert } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import CameraView from './components/CameraView';
 import AttendanceConfirmation from './components/AttendanceConfirmation';
 
 export default function App() {
   const [capturedImage, setCapturedImage] = useState(null);
-  const [attendanceData, setAttendanceData] = useState(null);
+  const [recognitionResult, setRecognitionResult] = useState(null);
 
-  const handleCapture = (imageUri, data) => {
+  const handleCapture = (imageUri, aiResult) => {
     setCapturedImage(imageUri);
-    setAttendanceData(data);
+    setRecognitionResult(aiResult);
+    
+    // Hiển thị kết quả nhận diện
+    if (aiResult) {
+      console.log('Recognition Result:', aiResult);
+      
+      // Bạn có thể thêm logic để hiển thị thông tin nhận diện
+      // Ví dụ: tên nhân viên, trạng thái chấm công, v.v.
+    }
   };
 
-  const handleRetake = () => {
+  const resetCapture = () => {
     setCapturedImage(null);
-    setAttendanceData(null);
-  };
-
-  const handleConfirm = () => {
-    // Xử lý xác nhận chấm công thành công
-    alert('Chấm công thành công!');
-    setCapturedImage(null);
-    setAttendanceData(null);
+    setRecognitionResult(null);
   };
 
   return (
     <SafeAreaProvider>
       <View style={styles.container}>
-        <StatusBar style="auto" />
-        {!capturedImage ? (
-          <CameraView onCapture={handleCapture} />
-        ) : (
+        <StatusBar style="light" />
+        
+        {capturedImage ? (
           <AttendanceConfirmation
             imageUri={capturedImage}
-            attendanceData={attendanceData}
-            onRetake={handleRetake}
-            onConfirm={handleConfirm}
+            recognitionData={recognitionResult}
+            onReset={resetCapture}
           />
+        ) : (
+          <CameraView onCapture={handleCapture} />
         )}
       </View>
     </SafeAreaProvider>
@@ -48,6 +49,6 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#000',
   },
 });

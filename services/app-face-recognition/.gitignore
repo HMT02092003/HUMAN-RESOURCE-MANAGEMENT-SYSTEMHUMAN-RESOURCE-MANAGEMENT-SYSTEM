@@ -35,8 +35,3 @@ yarn-error.*
 
 # typescript
 *.tsbuildinfo
-
-# =========================
-# Public assets (images, uploads)
-# =========================
-public/

@@ -16,6 +16,7 @@ const PORT = process.env.PORT || 4000;
 const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL;
 const EMPLOYEE_SERVICE_URL = process.env.EMPLOYEE_SERVICE_URL;
 const ATTENDANCE_SERVICE_URL = process.env.ATTENDANCE_SERVICE_URL;
+const AI_FACE_RECOGNITION_SERVICE_URL = process.env.AI_FACE_RECOGNITION_SERVICE_URL;
 
 // CORS: Cho phép mọi origin và credentials
 app.use(cors({
@@ -82,7 +83,30 @@ app.use('/api/attendance', createProxyMiddleware({
   changeOrigin: true,
   pathRewrite: { '^/api/attendance': '/api' },
   onProxyReq: (proxyReq, req, res) => {
-    if (req.body && Object.keys(req.body).length > 0) {
+    const contentType = req.headers['content-type'] || '';
+    const isJson = typeof contentType === 'string' && contentType.includes('application/json');
+    if (isJson && req.body && Object.keys(req.body).length > 0) {
+      const bodyData = JSON.stringify(req.body);
+      proxyReq.setHeader('Content-Type', 'application/json');
+      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+      proxyReq.write(bodyData);
+    }
+  },
+  onError: (err, req, res) => {
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Bad gateway', details: err.message }));
+  }
+}));
+
+// Proxy tới AI Face Recognition service
+app.use('/api/ai', createProxyMiddleware({
+  target: AI_FACE_RECOGNITION_SERVICE_URL,
+  changeOrigin: true,
+  pathRewrite: { '^/api/ai': '/api/face-recognition' },
+  onProxyReq: (proxyReq, req, res) => {
+    const contentType = req.headers['content-type'] || '';
+    const isJson = typeof contentType === 'string' && contentType.includes('application/json');
+    if (isJson && req.body && Object.keys(req.body).length > 0) {
       const bodyData = JSON.stringify(req.body);
       proxyReq.setHeader('Content-Type', 'application/json');
       proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
@@ -120,9 +144,43 @@ app.use('/uploads', createProxyMiddleware({
   changeOrigin: true,
 }));
 
-app.listen(PORT, () => {
+// Health check endpoint riêng cho API Gateway
+app.get('/gateway-health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    service: 'API Gateway',
+    timestamp: new Date().toISOString(),
+    port: PORT,
+    services: {
+      auth: AUTH_SERVICE_URL,
+      employee: EMPLOYEE_SERVICE_URL,
+      attendance: ATTENDANCE_SERVICE_URL,
+      ai: AI_FACE_RECOGNITION_SERVICE_URL
+    }
+  });
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'API Gateway Service',
+    version: '1.0.0',
+    endpoints: {
+      health: '/gateway-health',
+      auth: '/api/auth/*',
+      employee: '/api/employee/*',
+      attendance: '/api/attendance/*',
+      ai: '/api/ai/*',
+      uploads: '/uploads/*'
+    }
+  });
+});
+
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 API Gateway running on port ${PORT}`);
+  console.log(`🌐 Accessible from LAN: http://0.0.0.0:${PORT}`);
   console.log(`📡 Auth Service URL: ${AUTH_SERVICE_URL}`);
   console.log(`📡 Employee Service URL: ${EMPLOYEE_SERVICE_URL}`);
   console.log(`📡 Attendance Service URL: ${ATTENDANCE_SERVICE_URL}`);
+  console.log(`🤖 AI Face Recognition Service URL: ${AI_FACE_RECOGNITION_SERVICE_URL}`);
 }); 

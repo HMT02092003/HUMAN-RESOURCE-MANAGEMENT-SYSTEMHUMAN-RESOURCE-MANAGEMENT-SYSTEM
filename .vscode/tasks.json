@@ -13,7 +13,7 @@
       }
     },
     {
-      "label": "API Gateway",
+      "label": "API Gateway (Port 4000)",
       "type": "shell",
       "command": "yarn dev",
       "options": {
@@ -46,12 +46,48 @@
       }
     },
     {
+      "label": "Attendance Service",
+      "type": "shell",
+      "command": "yarn dev",
+      "options": {
+        "cwd": "services/attendance-service"
+      },
+      "presentation": {
+        "panel": "new"
+      }
+    },
+    {
+      "label": "AI Face Recognition Service",
+      "type": "shell",
+      "command": "yarn dev",
+      "options": {
+        "cwd": "services/ai-face-recognition-service"
+      },
+      "presentation": {
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Mobile App (Face Recognition)",
+      "type": "shell",
+      "command": "yarn start",
+      "options": {
+        "cwd": "services/app-face-recognition"
+      },
+      "presentation": {
+        "panel": "new"
+      }
+    },
+    {
       "label": "Start All",
       "dependsOn": [
         "Frontend",
-        "API Gateway",
+        "API Gateway (Port 4000)",
         "Auth Service",
-        "Employee Service"
+        "Employee Service",
+        "Attendance Service",
+        "AI Face Recognition Service",
+        "Mobile App (Face Recognition)"
       ],
       "dependsOrder": "parallel",
       "problemMatcher": [],
@@ -59,6 +95,44 @@
         "kind": "build",
         "isDefault": true
       }
+    },
+    {
+      "label": "Stop All Services",
+      "type": "shell",
+      "command": "taskkill /f /im node.exe",
+      "windows": {
+        "command": "taskkill /f /im node.exe"
+      },
+      "linux": {
+        "command": "pkill -f node"
+      },
+      "osx": {
+        "command": "pkill -f node"
+      },
+      "presentation": {
+        "panel": "new",
+        "title": "Stopping All Services"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Stop All Services (Alternative)",
+      "type": "shell",
+      "command": "echo 'Stopping all Node.js processes...' && taskkill /f /im node.exe 2>nul || echo 'No Node.js processes found'",
+      "windows": {
+        "command": "echo 'Stopping all Node.js processes...' && taskkill /f /im node.exe 2>nul || echo 'No Node.js processes found'"
+      },
+      "linux": {
+        "command": "echo 'Stopping all Node.js processes...' && pkill -f node || echo 'No Node.js processes found'"
+      },
+      "osx": {
+        "command": "echo 'Stopping all Node.js processes...' && pkill -f node || echo 'No Node.js processes found'"
+      },
+      "presentation": {
+        "panel": "new",
+        "title": "Stopping All Services (Alternative)"
+      },
+      "problemMatcher": []
     }
   ]
 }

@@ -1,28 +1,61 @@
-import React, { useState, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Alert } from 'react-native';
-import { CameraView as ExpoCamera, useCameraPermissions } from 'expo-camera';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, TouchableOpacity, Alert, StyleSheet, Dimensions } from 'react-native';
+import { Camera } from 'expo-camera';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { sendImageToAI } from '../services/apiService';
+import AttendanceAPI from '../services/AttendanceAPI';
 
-export default function CameraView({ onCapture }) {
-  const [permission, requestPermission] = useCameraPermissions();
+const { width, height } = Dimensions.get('window');
+
+export default function AttendanceCameraView({ onCapture }) {
+  const [hasPermission, setHasPermission] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState(null);
   const cameraRef = useRef(null);
 
-  if (!permission) {
+  useEffect(() => {
+    // Xin quyền camera
+    (async () => {
+      const { status } = await Camera.requestCameraPermissionsAsync();
+      setHasPermission(status === 'granted');
+    })();
+    
+    // Kiểm tra kết nối khi component mount
+    checkConnection();
+  }, []);
+
+  const checkConnection = async () => {
+    const isConnected = await AttendanceAPI.testConnection();
+    setConnectionStatus(isConnected);
+    
+    if (!isConnected) {
+      Alert.alert(
+        'Cảnh báo kết nối',
+        'Không thể kết nối đến server. Vui lòng kiểm tra:\n- Kết nối WiFi\n- Server đang chạy\n- Cùng mạng LAN',
+        [
+          { text: 'Thử lại', onPress: checkConnection },
+          { text: 'Tiếp tục', style: 'cancel' }
+        ]
+      );
+    }
+  };
+
+  if (hasPermission === null) {
     return <View />;
   }
 
-  if (!permission.granted) {
+  if (hasPermission === false) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.permissionContainer}>
-          <Text style={styles.message}>Cần quyền truy cập camera để chấm công</Text>
-          <TouchableOpacity style={styles.button} onPress={requestPermission}>
-            <Text style={styles.buttonText}>Cho phép Camera</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.message}>Ứng dụng cần quyền truy cập camera</Text>
+        <TouchableOpacity 
+          style={styles.button} 
+          onPress={async () => {
+            const { status } = await Camera.requestCameraPermissionsAsync();
+            setHasPermission(status === 'granted');
+          }}
+        >
+          <Text style={styles.buttonText}>Cấp quyền camera</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
@@ -31,17 +64,51 @@ export default function CameraView({ onCapture }) {
     if (cameraRef.current && !isLoading) {
       try {
         setIsLoading(true);
+        
+        // Chụp ảnh
         const photo = await cameraRef.current.takePictureAsync({
           quality: 0.8,
-          base64: true,
+          base64: false, // Không cần base64 cho FormData
         });
 
-        // Gửi ảnh tới AI server (fake data)
-        const aiResponse = await sendImageToAI(photo.uri);
-        onCapture(photo.uri, aiResponse);
+        console.log('Photo captured:', photo.uri);
+
+        // Gửi ảnh tới AI server để nhận diện
+        const aiResponse = await AttendanceAPI.sendImageForRecognition(photo.uri, {
+          type: 'check-in', // hoặc 'check-out'
+          location: {
+            // Thêm thông tin vị trí nếu cần
+            latitude: null,
+            longitude: null,
+          }
+        });
+
+        if (aiResponse.success) {
+          Alert.alert(
+            'Thành công',
+            aiResponse.message || 'Nhận diện khuôn mặt thành công!',
+            [{ text: 'OK' }]
+          );
+          
+          // Callback với kết quả
+          if (onCapture) {
+            onCapture(photo.uri, aiResponse.data);
+          }
+        } else {
+          Alert.alert(
+            'Lỗi nhận diện',
+            aiResponse.message || 'Không thể nhận diện khuôn mặt. Vui lòng thử lại.',
+            [{ text: 'OK' }]
+          );
+        }
+
       } catch (error) {
-        Alert.alert('Lỗi', 'Không thể chụp ảnh. Vui lòng thử lại.');
-        console.error('Camera error:', error);
+        console.error('Error during photo capture:', error);
+        Alert.alert(
+          'Lỗi',
+          `Không thể chụp ảnh: ${error.message}`,
+          [{ text: 'OK' }]
+        );
       } finally {
         setIsLoading(false);
       }
@@ -50,33 +117,33 @@ export default function CameraView({ onCapture }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ExpoCamera style={styles.camera} ref={cameraRef} facing="front">
+      {/* Hiển thị trạng thái kết nối */}
+      <View style={styles.statusBar}>
+        <Text style={[styles.statusText, { color: connectionStatus ? 'green' : 'red' }]}>
+          {connectionStatus ? '🟢 Đã kết nối server' : '🔴 Mất kết nối server'}
+        </Text>
+        <TouchableOpacity onPress={checkConnection} style={styles.refreshButton}>
+          <Text>🔄</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Camera style={styles.camera} ref={cameraRef} type={Camera.Constants.Type.front}>
         <View style={styles.overlay}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Chấm công</Text>
-            <Text style={styles.subtitle}>Đặt mặt vào khung hình và nhấn chụp</Text>
-          </View>
-          
-          <View style={styles.faceFrame} />
-          
-          <View style={styles.controls}>
-            <TouchableOpacity
-              style={[styles.captureButton, isLoading && styles.captureButtonDisabled]}
-              onPress={takePicture}
-              disabled={isLoading}
-            >
-              <Ionicons 
-                name="camera" 
-                size={40} 
-                color="white" 
-              />
-            </TouchableOpacity>
-            <Text style={styles.captureText}>
-              {isLoading ? 'Đang xử lý...' : 'Chấm công'}
-            </Text>
-          </View>
+          <View style={styles.frame} />
         </View>
-      </ExpoCamera>
+        
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[styles.captureButton, isLoading && styles.captureButtonDisabled]}
+            onPress={takePicture}
+            disabled={isLoading}
+          >
+            <Text style={styles.captureButtonText}>
+              {isLoading ? 'Đang xử lý...' : 'Chụp ảnh'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </Camera>
     </SafeAreaView>
   );
 }
@@ -84,92 +151,73 @@ export default function CameraView({ onCapture }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: 'black',
   },
-  permissionContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  statusBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 10,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+  },
+  statusText: {
+    color: 'white',
+    fontSize: 14,
+  },
+  refreshButton: {
+    padding: 5,
   },
   camera: {
     flex: 1,
   },
   overlay: {
     flex: 1,
-    backgroundColor: 'transparent',
-    justifyContent: 'space-between',
-    padding: 20,
-  },
-  header: {
-    alignItems: 'center',
-    marginTop: 40,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: 'white',
-    marginTop: 10,
-    textAlign: 'center',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
-  },
-  faceFrame: {
-    width: 200,
-    height: 200,
-    borderWidth: 3,
-    borderColor: 'white',
-    borderRadius: 100,
-    alignSelf: 'center',
-    marginTop: 50,
-  },
-  controls: {
-    alignItems: 'center',
-    marginBottom: 50,
-  },
-  captureButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 5,
+  },
+  frame: {
+    width: 250,
+    height: 250,
+    borderWidth: 2,
     borderColor: 'white',
+    borderRadius: 125,
+    backgroundColor: 'transparent',
+  },
+  buttonContainer: {
+    position: 'absolute',
+    bottom: 50,
+    alignSelf: 'center',
+  },
+  captureButton: {
+    backgroundColor: '#007AFF',
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 25,
   },
   captureButtonDisabled: {
-    backgroundColor: '#999',
+    backgroundColor: '#666',
   },
-  captureText: {
+  captureButtonText: {
     color: 'white',
-    fontSize: 16,
-    marginTop: 10,
-    fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.75)',
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 10,
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   message: {
     textAlign: 'center',
+    paddingBottom: 10,
     fontSize: 18,
-    marginBottom: 20,
+    color: 'white',
   },
   button: {
     backgroundColor: '#007AFF',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+    padding: 15,
+    margin: 20,
+    borderRadius: 10,
   },
   buttonText: {
     color: 'white',
+    textAlign: 'center',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
 });

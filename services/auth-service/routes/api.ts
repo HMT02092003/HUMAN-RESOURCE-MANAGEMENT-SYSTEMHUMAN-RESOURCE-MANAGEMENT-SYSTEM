@@ -33,6 +33,7 @@ import {
   createContract,
   getUsersByDepartment,
   getUsersByChevron,
+  getUserByUsername,
 } from '@/src/controller/UserController';
 
 const router = Router();
@@ -153,6 +154,16 @@ router.get('/users/by-department', authenticateToken, (req, res) => {
 // Route cho lấy users theo chevron (internal service use)
 router.get('/users/by-chevron', authenticateToken, (req, res) => {
   getUsersByChevron(req, res);
+});
+
+// Route cho lấy user theo username (AI service sử dụng)
+router.get('/users/username/:username', (req, res) => {
+  getUserByUsername(req, res);
+});
+
+// Route cho lấy user theo username
+router.get('/users/by-username/:username', authenticateToken, (req, res) => {
+  getUserByUsername(req, res);
 });
 
 // Route chuẩn RESTful cho tạo user

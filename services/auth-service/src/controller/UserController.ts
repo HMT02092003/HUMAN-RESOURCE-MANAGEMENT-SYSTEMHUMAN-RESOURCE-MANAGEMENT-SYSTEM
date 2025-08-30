@@ -1173,3 +1173,104 @@ export const createContract = async (req: Request, res: Response) => {
     });
   }
 };
+
+// API lấy thông tin user theo username
+export const getUserByUsername = async (req: Request, res: Response) => {
+  try {
+    const { username } = req.params;
+
+    if (!username) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username không được để trống',
+        code: 400
+      });
+    }
+
+    // Tìm user theo username
+    const user = await UserModel.query()
+      .select(
+        'id',
+        'username',
+        'email',
+        'firstName',
+        'lastName',
+        'fullName',
+        'status',
+        'identificationPhoto',
+        'departmentId',
+        'chevronId',
+        'createdAt',
+        'updatedAt'
+      )
+      .where('username', username)
+      .where('status', 1)
+      .first();
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy người dùng với username này',
+        code: 404
+      });
+    }
+
+    // Lấy thông tin department và chevron nếu có
+    let department = null;
+    let chevron = null;
+
+    if (user.departmentId) {
+      try {
+        const deptResponse = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${user.departmentId}`);
+        if (deptResponse.data.success) {
+          department = deptResponse.data.data.name;
+        }
+      } catch (error) {
+        console.warn('Không thể lấy thông tin department:', error);
+      }
+    }
+
+    if (user.chevronId) {
+      try {
+        const chevronResponse = await axios.get(`${API_GATEWAY_URL}/api/employee/chevrons/${user.chevronId}`);
+        if (chevronResponse.data.success) {
+          chevron = chevronResponse.data.data.name;
+        }
+      } catch (error) {
+        console.warn('Không thể lấy thông tin chevron:', error);
+      }
+    }
+
+    // Tạo employeeId
+    const employeeId = `NV${user.id.toString().padStart(4, '0')}`;
+
+    const userInfo = {
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      fullName: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+      employeeId,
+      department: department || 'N/A',
+      position: chevron || 'N/A',
+      identificationPhoto: user.identificationPhoto,
+      status: user.status,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: 'Lấy thông tin người dùng thành công',
+      data: userInfo
+    });
+
+  } catch (error) {
+    console.error('Error getting user by username:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ nội bộ',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      code: 500
+    });
+  }
+};
