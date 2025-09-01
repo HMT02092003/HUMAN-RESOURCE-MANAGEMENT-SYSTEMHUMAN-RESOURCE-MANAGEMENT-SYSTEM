@@ -3,18 +3,10 @@ import fs from 'fs';
 import path from 'path';
 import UserModel from "@/src/Models/UserModel";
 import RoleModel from "@/src/Models/RoleModel";
-import ChevronModel from "@/src/Models/ChevronModel";
-import ContractTypeModel from "@/src/Models/ContractTypeModel";
-import DepartmentModel from "@/src/Models/DepartmentModel";
-import ContractModel from "@/src/Models/ContractModel";
 import { validate, ValidationException } from "@/src/utils/validation-utility";
-// import MailService from "@/src/Services/Mail";
-// import baseUpload from "@/src/utils/uploadExcel";
 import constantConfig from "@/src/config/constant";
 import bcrypt from 'bcryptjs';
-import moment from "moment";
 import _ from "lodash";
-import { getDecodedToken } from '@/src/utils/decode-token';
 import axios from 'axios';
 
 import os from 'os';
@@ -362,6 +354,126 @@ export const createUser = async (req: Request, res: Response) => {
 
     // Insert the new user into the database
     const newUser = await UserModel.query().insert(userData);
+    
+    // Gọi AI service để lưu face embedding nếu có ảnh
+    if (req.file || (req as any).files?.identificationPhoto) {
+      const photoFile = req.file || (req as any).files?.identificationPhoto;
+      console.log('🔍 [CREATE USER] Found photo file for AI processing:', {
+        hasReqFile: !!req.file,
+        hasFilesPhoto: !!(req as any).files?.identificationPhoto,
+        fileName: photoFile?.originalname || photoFile?.name,
+        fileSize: photoFile?.size || photoFile?.buffer?.length,
+        mimeType: photoFile?.mimetype,
+        hasBuffer: !!photoFile?.buffer,
+        hasPath: !!photoFile?.path
+      });
+      
+      if (photoFile) {
+        try {
+          const aiServiceUrl = `${API_GATEWAY_URL}/api/ai/register-face`;
+          console.log('📡 [CREATE USER] AI Service URL:', aiServiceUrl);
+          
+          const formData = new FormData();
+          
+          // Đọc file từ vị trí đã lưu nếu có identificationPhoto path
+          let imageBuffer = null;
+          let imageName = photoFile.originalname || 'face.jpg';
+          
+          if (userData.identificationPhoto) {
+            // Đọc từ file đã lưu
+            const savedPhotoPath = resolvePhotoAbsolutePath(userData.identificationPhoto);
+            console.log('� [CREATE USER] Reading saved photo from:', savedPhotoPath);
+            
+            if (fs.existsSync(savedPhotoPath)) {
+              console.log('📎 [CREATE USER] Adding image from saved path');
+              imageBuffer = fs.readFileSync(savedPhotoPath);
+              imageName = path.basename(savedPhotoPath);
+            }
+          }
+          
+          // Fallback to original file methods
+          if (!imageBuffer) {
+            if (photoFile.buffer) {
+              console.log('📎 [CREATE USER] Adding image from buffer, size:', photoFile.buffer.length);
+              imageBuffer = photoFile.buffer;
+            } else if (photoFile.path && fs.existsSync(photoFile.path)) {
+              console.log('📎 [CREATE USER] Adding image from file path:', photoFile.path);
+              imageBuffer = fs.readFileSync(photoFile.path);
+            }
+          }
+          
+          if (imageBuffer) {
+            console.log('📎 [CREATE USER] Final image buffer size:', imageBuffer.length);
+            const blob = new Blob([imageBuffer], { type: photoFile.mimetype || 'image/jpeg' });
+            formData.append('image', blob, imageName);
+          } else {
+            console.error('❌ [CREATE USER] No valid image source found');
+            throw new Error('No valid image source found');
+          }
+          
+          formData.append('user_id', newUser.id.toString());
+          formData.append('username', params.username);
+          
+          console.log('📦 [CREATE USER] FormData contents:', {
+            user_id: newUser.id.toString(),
+            username: params.username,
+            hasImageField: formData.has('image')
+          });
+          
+          const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
+          const aiHeaders: any = {};
+          if (token) {
+            aiHeaders['Authorization'] = `Bearer ${token}`;
+          }
+          
+          console.log('🔑 [CREATE USER] Request headers:', {
+            hasToken: !!token,
+            authHeader: aiHeaders['Authorization'] ? 'Bearer [HIDDEN]' : 'None'
+          });
+          
+          console.log('🚀 [CREATE USER] Calling AI service...');
+          
+          // Gọi AI service
+          const aiResponse = await axios.post(aiServiceUrl, formData, {
+            headers: {
+              ...aiHeaders
+            }
+          });
+          
+          console.log('📥 [CREATE USER] AI service response:', {
+            status: aiResponse.status,
+            success: aiResponse.data?.success,
+            message: aiResponse.data?.message,
+            data: aiResponse.data?.data
+          });
+          
+          if (aiResponse.data.success) {
+            console.log('✅ [CREATE USER] Face embedding saved successfully for user:', params.username);
+          } else {
+            console.warn('⚠️ [CREATE USER] AI service returned error:', aiResponse.data.message);
+          }
+        } catch (aiError: any) {
+          console.error('❌ [CREATE USER] Error saving face embedding:', {
+            message: aiError.message,
+            status: aiError.response?.status,
+            statusText: aiError.response?.statusText,
+            responseData: aiError.response?.data,
+            url: aiError.config?.url,
+            method: aiError.config?.method
+          });
+          
+          if (aiError.response) {
+            console.error('❌ [CREATE USER] AI service detailed response:', aiError.response.data);
+          }
+          // Không fail user creation nếu AI service lỗi
+        }
+      } else {
+        console.log('⚠️ [CREATE USER] No photo file found despite file detection');
+      }
+    } else {
+      console.log('ℹ️ [CREATE USER] No photo file provided for AI processing');
+    }
+    
     // Remove password from the response object for security
     const { password: _, ...userWithoutPassword } = newUser;
     const newUserResponse = userWithoutPassword;
@@ -764,22 +876,123 @@ export const updateUser = async (req: Request, res: Response) => {
     // Xử lý upload ảnh đại diện mới nếu có
     if (req.file || (req as any).files?.identificationPhoto) {
       const photoFile = req.file || (req as any).files?.identificationPhoto;
+      console.log('🔍 [UPDATE USER] Found photo file for processing:', {
+        hasReqFile: !!req.file,
+        hasFilesPhoto: !!(req as any).files?.identificationPhoto,
+        fileName: photoFile?.originalname || photoFile?.name,
+        fileSize: photoFile?.size || photoFile?.buffer?.length,
+        mimeType: photoFile?.mimetype,
+        hasBuffer: !!photoFile?.buffer,
+        hasPath: !!photoFile?.path
+      });
+      
       if (photoFile) {
         try {
           // Xóa ảnh cũ nếu có
           if (existingUser.identificationPhoto) {
+            console.log('🗑️ [UPDATE USER] Deleting old photo:', existingUser.identificationPhoto);
             deleteOldIdentificationPhoto(existingUser.identificationPhoto);
           }
           
           // Lưu ảnh mới với username
+          console.log('💾 [UPDATE USER] Saving new photo with username:', updateData.username);
           updateData.identificationPhoto = handleIdentificationPhotoUpload(photoFile, updateData.username);
+          console.log('✅ [UPDATE USER] New photo saved at:', updateData.identificationPhoto);
+          
+          // Gọi AI service để cập nhật face embedding
+          try {
+            const aiServiceUrl = `${API_GATEWAY_URL}/api/ai/register-face`;
+            console.log('📡 [UPDATE USER] AI Service URL:', aiServiceUrl);
+            
+            const formData = new FormData();
+            
+            // Đọc file từ vị trí đã lưu thay vì từ file tạm thời
+            const savedPhotoPath = resolvePhotoAbsolutePath(updateData.identificationPhoto);
+            console.log('📂 [UPDATE USER] Reading saved photo from:', savedPhotoPath);
+            
+            if (fs.existsSync(savedPhotoPath)) {
+              console.log('📎 [UPDATE USER] Adding image from saved path');
+              const fileBuffer = fs.readFileSync(savedPhotoPath);
+              console.log('📎 [UPDATE USER] File buffer size:', fileBuffer.length);
+              const blob = new Blob([fileBuffer], { type: photoFile.mimetype || 'image/jpeg' });
+              formData.append('image', blob, path.basename(savedPhotoPath));
+            } else if (photoFile.buffer) {
+              console.log('📎 [UPDATE USER] Adding image from buffer, size:', photoFile.buffer.length);
+              const blob = new Blob([photoFile.buffer], { type: photoFile.mimetype || 'image/jpeg' });
+              formData.append('image', blob, photoFile.originalname || 'face.jpg');
+            } else {
+              console.error('❌ [UPDATE USER] No valid image source found');
+              throw new Error('No valid image source found');
+            }
+            
+            formData.append('user_id', id.toString());
+            formData.append('username', updateData.username);
+            
+            console.log('📦 [UPDATE USER] FormData contents:', {
+              user_id: id.toString(),
+              username: updateData.username,
+              hasImageField: formData.has('image')
+            });
+            
+            const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
+            const aiHeaders: any = {};
+            if (token) {
+              aiHeaders['Authorization'] = `Bearer ${token}`;
+            }
+            
+            console.log('🔑 [UPDATE USER] Request headers:', {
+              hasToken: !!token,
+              authHeader: aiHeaders['Authorization'] ? 'Bearer [HIDDEN]' : 'None'
+            });
+            
+            console.log('🚀 [UPDATE USER] Calling AI service...');
+            
+            // Gọi AI service
+            const aiResponse = await axios.post(aiServiceUrl, formData, {
+              headers: {
+                ...aiHeaders
+              }
+            });
+            
+            console.log('📥 [UPDATE USER] AI service response:', {
+              status: aiResponse.status,
+              success: aiResponse.data?.success,
+              message: aiResponse.data?.message,
+              data: aiResponse.data?.data
+            });
+            
+            if (aiResponse.data.success) {
+              console.log('✅ [UPDATE USER] Face embedding updated successfully for user:', updateData.username);
+            } else {
+              console.warn('⚠️ [UPDATE USER] AI service returned error:', aiResponse.data.message);
+            }
+          } catch (aiError: any) {
+            console.error('❌ [UPDATE USER] Error updating face embedding:', {
+              message: aiError.message,
+              status: aiError.response?.status,
+              statusText: aiError.response?.statusText,
+              responseData: aiError.response?.data,
+              url: aiError.config?.url,
+              method: aiError.config?.method
+            });
+            
+            if (aiError.response) {
+              console.error('❌ [UPDATE USER] AI service detailed response:', aiError.response.data);
+            }
+            // Không fail user update nếu AI service lỗi
+          }
         } catch (uploadError) {
+          console.error('❌ [UPDATE USER] Upload error:', uploadError);
           return res.status(400).json({ 
             message: uploadError instanceof Error ? uploadError.message : "Lỗi khi tải ảnh", 
             code: 7003 
           });
         }
+      } else {
+        console.log('⚠️ [UPDATE USER] No photo file found despite file detection');
       }
+    } else {
+      console.log('ℹ️ [UPDATE USER] No photo file provided for update');
     }
 
     // Nếu username thay đổi và có ảnh đại diện, cần đổi tên file ảnh
@@ -1195,13 +1408,10 @@ export const getUserByUsername = async (req: Request, res: Response) => {
         'email',
         'firstName',
         'lastName',
-        'fullName',
         'status',
         'identificationPhoto',
         'departmentId',
-        'chevronId',
-        'createdAt',
-        'updatedAt'
+        'chevronId'
       )
       .where('username', username)
       .where('status', 1)
@@ -1248,14 +1458,12 @@ export const getUserByUsername = async (req: Request, res: Response) => {
       id: user.id,
       username: user.username,
       email: user.email,
-      fullName: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+      fullName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
       employeeId,
       department: department || 'N/A',
       position: chevron || 'N/A',
       identificationPhoto: user.identificationPhoto,
-      status: user.status,
-      createdAt: user.createdAt,
-      updatedAt: user.updatedAt
+      status: user.status
     };
 
     return res.status(200).json({
@@ -1274,3 +1482,5 @@ export const getUserByUsername = async (req: Request, res: Response) => {
     });
   }
 };
+
+// aintelligence787@gmail.com

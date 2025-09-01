@@ -59,7 +59,7 @@
     {
       "label": "AI Face Recognition Service",
       "type": "shell",
-      "command": "yarn dev",
+      "command": "conda activate face_env && python main.py",
       "options": {
         "cwd": "services/ai-face-recognition-service"
       },

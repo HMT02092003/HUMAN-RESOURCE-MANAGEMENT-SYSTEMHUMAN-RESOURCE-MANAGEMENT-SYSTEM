@@ -104,9 +104,18 @@ app.use('/api/ai', createProxyMiddleware({
   changeOrigin: true,
   pathRewrite: { '^/api/ai': '/api/face-recognition' },
   onProxyReq: (proxyReq, req, res) => {
+    // Handle multipart form data for image uploads
     const contentType = req.headers['content-type'] || '';
-    const isJson = typeof contentType === 'string' && contentType.includes('application/json');
-    if (isJson && req.body && Object.keys(req.body).length > 0) {
+    const isMultipart = typeof contentType === 'string' && contentType.includes('multipart/form-data');
+    
+    if (isMultipart && req.body && Object.keys(req.body).length > 0) {
+      // For multipart data, we need to handle it differently
+      const boundary = contentType.split('boundary=')[1];
+      if (boundary) {
+        proxyReq.setHeader('Content-Type', `multipart/form-data; boundary=${boundary}`);
+      }
+    } else if (req.body && Object.keys(req.body).length > 0) {
+      // Handle JSON data
       const bodyData = JSON.stringify(req.body);
       proxyReq.setHeader('Content-Type', 'application/json');
       proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
