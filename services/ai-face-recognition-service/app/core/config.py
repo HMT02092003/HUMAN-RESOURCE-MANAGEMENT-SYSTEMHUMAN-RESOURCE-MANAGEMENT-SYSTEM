@@ -47,7 +47,12 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
     
     # Model Weights Path
-    WEIGHTS_DIR: str = os.getenv("WEIGHTS_DIR", "./weights")
+    WEIGHTS_DIR: str = os.getenv("WEIGHTS_DIR", "./weight")
+    
+    # YOLO Face Recognition Configuration
+    YOLO_FACE_MODEL_PATH: str = os.getenv("YOLO_FACE_MODEL_PATH", "./weight/yolov11n-face.pt")
+    YOLO_FACE_ONNX_PATH: str = os.getenv("YOLO_FACE_ONNX_PATH", "./weight/yolov11n-face.onnx")
+    ARCFACE_MODEL_PATH: str = os.getenv("ARCFACE_MODEL_PATH", "./weight/arcface_r100.pth")
     
     class Config:
         env_file = ".env"

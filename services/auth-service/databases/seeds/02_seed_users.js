@@ -6,7 +6,8 @@ export async function seed(knex) {
       "password": "$2a$12$ihZ5rvWqsxsdBNTeLmjz3uxdtt5Qs3eLbgNE4kRDiCILxVhT4D6vK", // 123456@
       "firstName": "Admin",
       "lastName": "Admin",
-      "roleId": 1
+      "roleId": 1,
+      "status": 1  
     }
   ]
 

@@ -93,8 +93,14 @@ export const loginHandler = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Mật khẩu không chính xác' });
     }
 
+    // Debug: log user status
+    console.log('User status:', user.status, 'Type:', typeof user.status);
+
     const checkStatusAccount = await UserModel.query().findOne({ id: user.id, status: 1 });
+    console.log('checkStatusAccount:', checkStatusAccount);
+    
     if (!checkStatusAccount) {
+      console.log('Status check failed - user status is:', user.status);
       return res.status(400).json({ error: 'Hiện tại không thể đăng nhập vào tài khoản này' });
     }
 
