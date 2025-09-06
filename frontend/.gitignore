@@ -57,3 +57,4 @@ yarn-error.log*
 # Public assets (images, uploads)
 # =========================
 public/
+!public/logo/
