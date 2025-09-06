@@ -4,107 +4,57 @@ import connection from '@/lib/Databases/Connection';
 // API xác nhận chấm công
 export const confirmAttendance = async (req: Request, res: Response) => {
   try {
-    const { userId, attendanceType, location, device } = req.body;
+    console.log('=== ATTENDANCE DATA RECEIVED ===');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    console.log('Headers:', JSON.stringify(req.headers, null, 2));
+    console.log('Method:', req.method);
+    console.log('URL:', req.url);
+    console.log('=================================');
 
+    const { userId, attendanceType, location, device, confidence, method, timestamp } = req.body;
+
+    // Validate required fields
     if (!userId || !attendanceType) {
+      console.log('❌ Missing required fields:', { userId, attendanceType });
       return res.status(400).json({
         success: false,
         message: 'Thiếu thông tin userId hoặc attendanceType'
       });
     }
 
-    const now = new Date();
-    const today = now.toISOString().split('T')[0];
+    // Log all received data
+    console.log('✅ Received attendance data:');
+    console.log('- User ID:', userId);
+    console.log('- Attendance Type:', attendanceType);
+    console.log('- Location:', location);
+    console.log('- Device:', device);
+    console.log('- Confidence:', confidence);
+    console.log('- Method:', method);
+    console.log('- Timestamp:', timestamp);
+    console.log('- Current Time:', new Date().toISOString());
 
-    // Kiểm tra xem đã chấm công chưa
-    const existingAttendance = await connection('time_attendances')
-      .where('userId', userId)
-      .where('date', today)
-      .first();
-
-    if (existingAttendance) {
-      if (attendanceType === 'checkin' && existingAttendance.checkInTime) {
-        return res.status(409).json({
-          success: false,
-          message: 'Đã chấm công vào ngày hôm nay'
-        });
-      }
-      
-      if (attendanceType === 'checkout' && existingAttendance.checkOutTime) {
-        return res.status(409).json({
-          success: false,
-          message: 'Đã chấm công ra ngày hôm nay'
-        });
-      }
-    }
-
-    // Tạo hoặc cập nhật bản ghi chấm công
-    let attendanceRecord;
-    
-    if (existingAttendance) {
-      // Cập nhật bản ghi hiện có
-      const updateData: any = {};
-      if (attendanceType === 'checkin') {
-        updateData.checkInTime = now;
-      } else if (attendanceType === 'checkout') {
-        updateData.checkOutTime = now;
-      }
-      updateData.updated_at = now;
-
-      await connection('time_attendances')
-        .where('id', existingAttendance.id)
-        .update(updateData);
-
-      attendanceRecord = await connection('time_attendances')
-        .where('id', existingAttendance.id)
-        .first();
-    } else {
-      // Tạo bản ghi mới
-      const newAttendance = {
-        userId,
-        date: today,
-        checkInTime: attendanceType === 'checkin' ? now : null,
-        checkOutTime: attendanceType === 'checkout' ? now : null,
-        created_at: now,
-        updated_at: now,
-        location: location || 'Văn phòng chính',
-        device: device || 'Mobile App'
-      };
-
-      const [newId] = await connection('time_attendances').insert(newAttendance);
-      attendanceRecord = await connection('time_attendances').where('id', newId).first();
-    }
-
-    // Tính toán thời gian làm việc nếu có cả check-in và check-out
-    if (attendanceRecord.checkInTime && attendanceRecord.checkOutTime) {
-      const checkInTime = new Date(attendanceRecord.checkInTime);
-      const checkOutTime = new Date(attendanceRecord.checkOutTime);
-      const workHours = (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60);
-      
-      await connection('time_attendances')
-        .where('id', attendanceRecord.id)
-        .update({
-          dailyTotalWorkHours: workHours,
-          updated_at: now
-        });
-    }
-
-    return res.status(200).json({
+    // Tạm thời trả về success không lưu database
+    const responseData = {
       success: true,
-      message: `Chấm công ${attendanceType === 'checkin' ? 'vào' : 'ra'} thành công`,
+      message: `Chấm công ${attendanceType} thành công cho user ${userId}`,
       data: {
-        id: attendanceRecord.id,
-        userId: attendanceRecord.userId,
-        date: attendanceRecord.date,
-        checkInTime: attendanceRecord.checkInTime,
-        checkOutTime: attendanceRecord.checkOutTime,
-        location: attendanceRecord.location,
-        device: attendanceRecord.device
+        userId,
+        attendanceType,
+        timestamp: timestamp || new Date().toISOString(),
+        confidence,
+        method,
+        device,
+        location,
+        processedAt: new Date().toISOString()
       }
-    });
+    };
+
+    console.log('✅ Response data:', JSON.stringify(responseData, null, 2));
+    
+    return res.status(200).json(responseData);
 
   } catch (error) {
-    console.error('Error confirming attendance:', error);
+    console.error('❌ Error confirming attendance:', error);
     return res.status(500).json({
       success: false,
       message: 'Lỗi khi xác nhận chấm công',

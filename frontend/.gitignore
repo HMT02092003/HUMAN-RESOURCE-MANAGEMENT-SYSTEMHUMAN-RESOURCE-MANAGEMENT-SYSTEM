@@ -51,7 +51,7 @@ yarn-error.log*
 # =========================
 # Vercel deployment
 # =========================
-.vercel
+.vercel 
 
 # =========================
 # Public assets (images, uploads)

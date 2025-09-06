@@ -51,13 +51,17 @@ export async function sendImageForRecognition(imageUri, meta = {}) {
     name: 'capture.jpg',
     type: 'image/jpeg',
   });
+  
+  // Thêm recognition_type bắt buộc (mặc định là check_in)
+  form.append('recognition_type', meta.recognition_type || 'check_in');
+  
   Object.entries(meta || {}).forEach(([key, value]) => {
-    if (value !== undefined && value !== null) {
+    if (value !== undefined && value !== null && key !== 'recognition_type') {
       form.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
     }
   });
 
-  const res = await fetch(`${base}/api/ai/recognize`, {
+  const res = await fetch(`${base}/api/ai/recognize-face`, {
     method: 'POST',
     headers: {
       'Accept': 'application/json',
@@ -81,15 +85,58 @@ export async function sendImageForRecognition(imageUri, meta = {}) {
 }
 
 export async function submitAttendance(payload) {
-  const base = await getBaseUrl();
-  const res = await fetch(`${base}/api/attendance/submit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json().catch(() => ({ success: false }));
-  if (!res.ok) return { success: false, ...data };
-  return data;
+  try {
+    const base = await getBaseUrl();
+    
+    // Chuẩn bị dữ liệu cho attendance service
+    const attendanceData = {
+      userId: payload.userId,
+      attendanceType: payload.type === 'check_in' ? 'checkin' : 'checkout', // Chuyển đổi format
+      location: payload.location || null,
+      device: 'mobile_app',
+      confidence: payload.confidence,
+      method: payload.method,
+      timestamp: payload.timestamp
+    };
+    
+    console.log('Sending attendance data:', attendanceData);
+    
+    const res = await fetch(`${base}/api/attendance/confirm`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json', 
+        'Accept': 'application/json' 
+      },
+      body: JSON.stringify(attendanceData),
+    });
+    
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      data = { success: false, message: 'Invalid JSON response from attendance service' };
+    }
+    
+    if (!res.ok) {
+      console.error('Attendance API error:', data);
+      return { 
+        success: false, 
+        message: data?.message || `HTTP ${res.status}: ${res.statusText}`,
+        error: data 
+      };
+    }
+    
+    console.log('Attendance response:', data);
+    return data;
+    
+  } catch (error) {
+    console.error('Submit attendance error:', error);
+    return { 
+      success: false, 
+      message: `Network error: ${error.message}`,
+      error: error 
+    };
+  }
 }
 
 const AttendanceAPI = { testConnection, sendImageForRecognition, submitAttendance };

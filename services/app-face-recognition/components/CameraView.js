@@ -75,7 +75,7 @@ export default function AttendanceCameraView({ onCapture }) {
 
         // Gửi ảnh tới AI server để nhận diện
         const aiResponse = await AttendanceAPI.sendImageForRecognition(photo.uri, {
-          type: 'check-in', // hoặc 'check-out'
+          recognition_type: 'check_in', // Sửa từ 'type' thành 'recognition_type'
           location: {
             // Thêm thông tin vị trí nếu cần
             latitude: null,
@@ -83,23 +83,27 @@ export default function AttendanceCameraView({ onCapture }) {
           }
         });
 
+        console.log('Recognition Result:', JSON.stringify(aiResponse));
+        
+        // Debug thông tin chi tiết
+        if (aiResponse?.data?.user) {
+          console.log('User info found:', {
+            username: aiResponse.data.user.username,
+            confidence: aiResponse.data.user.confidence_score,
+            user_id: aiResponse.data.user.user_id
+          });
+        }
+
+        // Luôn callback với kết quả (thành công hoặc thất bại)
+        if (onCapture) {
+          onCapture(photo.uri, aiResponse);
+        }
+
+        // Hiển thị thông báo tùy theo kết quả
         if (aiResponse.success) {
-          Alert.alert(
-            'Thành công',
-            aiResponse.message || 'Nhận diện khuôn mặt thành công!',
-            [{ text: 'OK' }]
-          );
-          
-          // Callback với kết quả
-          if (onCapture) {
-            onCapture(photo.uri, aiResponse.data);
-          }
+          // Không cần hiển thị alert ở đây, để AttendanceConfirmation xử lý
         } else {
-          Alert.alert(
-            'Lỗi nhận diện',
-            aiResponse.message || 'Không thể nhận diện khuôn mặt. Vui lòng thử lại.',
-            [{ text: 'OK' }]
-          );
+          // Cũng không cần alert, AttendanceConfirmation sẽ hiển thị lỗi phù hợp
         }
 
       } catch (error) {
