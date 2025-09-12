@@ -24,6 +24,9 @@ yolov5>=7.0.0
 # ArcFace Dependencies  
 timm>=0.9.0
 
+# HTTP Requests for service communication
+requests>=2.31.0
+
 # Image processing optimization
 cmake>=3.18
 wheel

@@ -4,10 +4,15 @@ export interface AttendanceData {
   id: number;
   userId: number;
   date: string;
-  checkIn: string;
-  checkOut: string;
+  checkIn: string | null;
+  checkOut: string | null;
+  checkInTime: string | null;
+  checkOutTime: string | null;
   status: 'on_time' | 'late' | 'early_leave' | 'absent';
   totalHours: number;
+  workHours: number;
+  lateMinutes: number;
+  earlyDepartureMinutes: number;
   overtime: number;
 }
 
@@ -26,12 +31,19 @@ class AttendanceService {
   // Lấy dữ liệu chấm công của user trong tháng
   async getUserAttendanceByMonth(userId: number, year: number, month: number): Promise<AttendanceData[]> {
     try {
+      console.log('🔄 Calling attendance API:', `/api/attendance/user/${userId}/month?year=${year}&month=${month}`);
       const response = await apiService.get(`/api/attendance/user/${userId}/month`, {
         params: { year, month }
       });
-      return response.data;
+      console.log('📥 Raw API response:', response.data);
+      
+      // API trả về {success: true, data: [...]} nên cần lấy response.data.data
+      const attendanceData = response.data.success ? response.data.data : [];
+      console.log('✅ Parsed attendance data:', attendanceData);
+      
+      return attendanceData;
     } catch (error) {
-      console.error('Error fetching user attendance:', error);
+      console.error('❌ Error fetching user attendance:', error);
       return [];
     }
   }
@@ -39,12 +51,28 @@ class AttendanceService {
   // Lấy thống kê chấm công của user trong tháng
   async getUserMonthlyStats(userId: number, year: number, month: number): Promise<MonthlyStats> {
     try {
+      console.log('📊 Calling stats API:', `/api/attendance/user/${userId}/stats?year=${year}&month=${month}`);
       const response = await apiService.get(`/api/attendance/user/${userId}/stats`, {
         params: { year, month }
       });
-      return response.data;
+      console.log('📥 Raw stats response:', response.data);
+      
+      // API trả về {success: true, data: {...}} nên cần lấy response.data.data
+      const statsData = response.data.success ? response.data.data : {
+        totalDays: 0,
+        presentDays: 0,
+        absentDays: 0,
+        lateDays: 0,
+        earlyLeaveDays: 0,
+        totalHours: 0,
+        averageHours: 0,
+        overtimeHours: 0
+      };
+      console.log('✅ Parsed stats data:', statsData);
+      
+      return statsData;
     } catch (error) {
-      console.error('Error fetching user monthly stats:', error);
+      console.error('❌ Error fetching user monthly stats:', error);
       return {
         totalDays: 0,
         presentDays: 0,

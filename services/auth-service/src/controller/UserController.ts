@@ -290,11 +290,8 @@ export const createUser = async (req: Request, res: Response) => {
       params.startDate = params.startDate.toISOString();
     }
 
-    // Destructure contract out of params, the rest goes into userData
-    let { contract, ...userData } = params;
-
     // Validate required identificationPhoto presence on create
-    if (!userData.identificationPhoto) {
+    if (!params.identificationPhoto) {
       return res.status(400).json({ message: "Vui lòng tải ảnh đại diện (identificationPhoto)", code: 7002 });
     }
 
@@ -341,8 +338,12 @@ export const createUser = async (req: Request, res: Response) => {
     } catch (e) {
       return res.status(400).json({ message: "Chức vụ không tồn tại!", code: 5007 });
     }
+
     // Hash the user's password using bcrypt
     params.password = await bcrypt.hash(params.password, 10);
+
+    // Destructure contract out of params, the rest goes into userData
+    let { contract, ...userData } = params;
 
     // Add createdBy from auth ID
     userData = {

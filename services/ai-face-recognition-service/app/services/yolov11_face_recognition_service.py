@@ -14,6 +14,7 @@ from torchvision import transforms
 from typing import List, Tuple, Optional, Dict, Any
 from PIL import Image
 import io
+import requests
 from sklearn.metrics.pairwise import cosine_similarity
 from sqlalchemy.orm import Session
 from app.core.database import FaceEmbedding, AttendanceLog
@@ -45,7 +46,8 @@ class YOLOv11FaceRecognitionService:
             ])
             self.conf_threshold = 0.4
             self.iou_threshold = 0.5
-            self.similarity_threshold = 0.3
+            self.similarity_threshold = 0.75  # Ngưỡng chấp nhận 75%
+            self.minimum_threshold = 0.70     # Ngưỡng tối thiểu 70%
     
     @classmethod
     async def initialize_models(cls):
@@ -193,11 +195,13 @@ class YOLOv11FaceRecognitionService:
         Returns user info if match found
         """
         try:
-            # Get all active face embeddings from database
-            embeddings = db.query(FaceEmbedding).filter(FaceEmbedding.is_active == True).all()
+            # Get all ACTIVE face embeddings from database (loại bỏ is_active = false)
+            embeddings = db.query(FaceEmbedding).filter(
+                FaceEmbedding.is_active == True
+            ).all()
             
             if not embeddings:
-                logger.info("No face embeddings found in database")
+                logger.info("No active face embeddings found in database")
                 return None
             
             best_match = None
@@ -211,22 +215,35 @@ class YOLOv11FaceRecognitionService:
                     # Compare faces
                     match, similarity = self.compare_faces(face_encoding, stored_encoding)
                     
-                    if match and similarity > best_similarity:
+                    logger.info(f"Comparing with {embedding.username}: similarity={similarity:.4f}")
+                    
+                    if similarity > best_similarity:
                         best_similarity = similarity
                         best_match = {
                             'user_id': embedding.user_id,
                             'username': embedding.username,
                             'confidence_score': int(similarity * 100),
-                            'embedding_id': embedding.id
+                            'embedding_id': embedding.id,
+                            'similarity': similarity
                         }
                         
                 except Exception as e:
                     logger.warning(f"Error processing embedding {embedding.id}: {e}")
                     continue
             
+            # Kiểm tra ngưỡng nhận diện
             if best_match:
-                logger.info(f"Found matching user: {best_match['username']} (similarity: {best_similarity:.4f})")
-                return best_match
+                similarity = best_match['similarity']
+                
+                if similarity >= self.similarity_threshold:  # >= 75%
+                    logger.info(f"✅ Found matching user: {best_match['username']} (similarity: {similarity:.4f})")
+                    return best_match
+                elif similarity >= self.minimum_threshold:  # 70-75%
+                    logger.warning(f"⚠️ Low confidence match: {best_match['username']} (similarity: {similarity:.4f}) - below 75% threshold")
+                    return None  # Không chấp nhận
+                else:  # < 70%
+                    logger.info(f"❌ No sufficient match found (best: {similarity:.4f} < 70%)")
+                    return None
             else:
                 logger.info("No matching user found")
                 return None
@@ -403,6 +420,11 @@ class YOLOv11FaceRecognitionService:
                 
                 logger.info(f"Face recognized successfully: {user_match['username']} - {recognition_type}")
                 
+                # Gửi dữ liệu tới attendance service
+                attendance_result = self._send_to_attendance_service(
+                    user_match, recognition_type, user_match['confidence_score']
+                )
+                
                 return {
                     "success": True,
                     "message": f"Face recognized successfully: {user_match['username']}",
@@ -410,7 +432,8 @@ class YOLOv11FaceRecognitionService:
                         "user": user_match,
                         "recognition_type": recognition_type,
                         "timestamp": attendance_log.timestamp.isoformat(),
-                        "method": "YOLOv11 + ArcFace"
+                        "method": "YOLOv11 + ArcFace",
+                        "attendance_result": attendance_result
                     },
                     "confidence_score": user_match['confidence_score'] / 100.0,
                     "user_info": user_match
@@ -531,3 +554,60 @@ class YOLOv11FaceRecognitionService:
         except Exception as e:
             logger.error(f"Error getting attendance logs: {e}")
             return []
+    
+    def _send_to_attendance_service(self, user_match: Dict[str, Any], recognition_type: str, confidence: int) -> Dict[str, Any]:
+        """Gửi dữ liệu nhận diện khuôn mặt tới attendance service"""
+        try:
+            # URL của attendance service  
+            attendance_url = "http://localhost:4003/api/confirm"
+            
+            # Chuẩn bị dữ liệu gửi
+            payload = {
+                "userId": user_match['user_id'],
+                "confidence": confidence,
+                "method": "YOLOv11_Face_Recognition",
+                "device": "AI_Service",
+                "location": "Office"
+            }
+            
+            logger.info(f"📤 Sending attendance data to service: {payload}")
+            
+            # Gửi request tới attendance service
+            response = requests.post(
+                attendance_url,
+                json=payload,
+                headers={'Content-Type': 'application/json'},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                logger.info(f"✅ Attendance service response: {result}")
+                return {
+                    "success": True,
+                    "attendance_type": result.get('data', {}).get('attendanceType', 'unknown'),
+                    "status": result.get('data', {}).get('status', 'unknown'),
+                    "message": result.get('message', 'Success')
+                }
+            else:
+                logger.error(f"❌ Attendance service error: {response.status_code} - {response.text}")
+                return {
+                    "success": False,
+                    "error": f"HTTP {response.status_code}",
+                    "message": "Failed to send to attendance service"
+                }
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"❌ Network error sending to attendance service: {e}")
+            return {
+                "success": False,
+                "error": "NETWORK_ERROR",
+                "message": f"Network error: {str(e)}"
+            }
+        except Exception as e:
+            logger.error(f"❌ Unexpected error sending to attendance service: {e}")
+            return {
+                "success": False,
+                "error": "UNEXPECTED_ERROR", 
+                "message": f"Unexpected error: {str(e)}"
+            }

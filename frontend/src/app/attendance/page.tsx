@@ -2,7 +2,7 @@
 
 import React from 'react';
 import MainLayout from '@/src/app/main-layout';
-import AttendanceSimplePage from '@/src/components/attendance/simple-page';
+import AttendanceSimplePage from '@/src/components/attendance';
 import { HomeOutlined } from '@ant-design/icons';
 
 const AttendancePage = () => {
