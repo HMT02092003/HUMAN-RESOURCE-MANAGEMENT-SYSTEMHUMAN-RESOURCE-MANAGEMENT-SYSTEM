@@ -340,7 +340,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                     trigger={null}
                 >
                     <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "50px" }}>
-                        <img src="/logo/logo.png" alt="" style={{ width: "100px" }} />
+                        <img src="/logo/logo.png" alt="" style={{ width: "200px" }} />
                     </div>
                     <Menu
                         theme="light"
