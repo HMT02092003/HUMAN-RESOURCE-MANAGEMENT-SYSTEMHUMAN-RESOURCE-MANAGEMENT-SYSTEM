@@ -88,37 +88,35 @@ export async function submitAttendance(payload) {
   try {
     const base = await getBaseUrl();
     
-    // Chuẩn bị dữ liệu cho attendance service
-    const attendanceData = {
-      userId: payload.userId,
-      attendanceType: payload.type === 'check_in' ? 'checkin' : 'checkout', // Chuyển đổi format
-      location: payload.location || null,
-      device: 'mobile_app',
-      confidence: payload.confidence,
-      method: payload.method,
-      timestamp: payload.timestamp
-    };
+    // Sử dụng endpoint mới của AI service để xác nhận chấm công
+    // Dựa trên recognition_log_id từ kết quả nhận diện
+    if (!payload.recognition_log_id) {
+      throw new Error('Recognition log ID is required for attendance confirmation');
+    }
     
-    console.log('Sending attendance data:', attendanceData);
+    const form = new FormData();
+    form.append('recognition_log_id', payload.recognition_log_id.toString());
     
-    const res = await fetch(`${base}/api/attendance/confirm`, {
+    console.log('Confirming attendance with recognition_log_id:', payload.recognition_log_id);
+    
+    const res = await fetch(`${base}/api/ai/confirm-attendance`, {
       method: 'POST',
       headers: { 
-        'Content-Type': 'application/json', 
         'Accept': 'application/json' 
+        // Don't set Content-Type for FormData, let fetch handle it
       },
-      body: JSON.stringify(attendanceData),
+      body: form,
     });
     
     let data;
     try {
       data = await res.json();
     } catch {
-      data = { success: false, message: 'Invalid JSON response from attendance service' };
+      data = { success: false, message: 'Invalid JSON response from AI service' };
     }
     
     if (!res.ok) {
-      console.error('Attendance API error:', data);
+      console.error('Attendance confirmation API error:', data);
       return { 
         success: false, 
         message: data?.message || `HTTP ${res.status}: ${res.statusText}`,
@@ -126,7 +124,7 @@ export async function submitAttendance(payload) {
       };
     }
     
-    console.log('Attendance response:', data);
+    console.log('Attendance confirmation response:', data);
     return data;
     
   } catch (error) {

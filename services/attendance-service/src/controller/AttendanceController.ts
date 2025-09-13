@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import connection from '@/lib/Databases/Connection';
+import dayjs from 'dayjs';
 
 // API xác nhận chấm công với logic check-in/check-out tự động
 export const confirmAttendance = async (req: Request, res: Response) => {
@@ -18,8 +19,8 @@ export const confirmAttendance = async (req: Request, res: Response) => {
       });
     }
 
-    const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-    const currentTime = new Date().toISOString(); // ISO timestamp
+    const currentDate = dayjs().format('YYYY-MM-DD'); // YYYY-MM-DD
+    const currentTime = dayjs().toISOString(); // ISO timestamp
 
     console.log('✅ Processing attendance for:');
     console.log('- User ID:', userId);
@@ -37,7 +38,7 @@ export const confirmAttendance = async (req: Request, res: Response) => {
     let isNewRecord = false;
 
     if (!existingAttendance) {
-      // Chưa có bản ghi -> Tạo mới với CHECK-IN
+      // Chưa có bản ghi -> Tạo mới với CHECK-IN (Lần chấm công đầu tiên)
       attendanceType = 'check_in';
       updateData = {
         userId: parseInt(userId),
@@ -57,33 +58,51 @@ export const confirmAttendance = async (req: Request, res: Response) => {
         updated_at: currentTime
       };
       isNewRecord = true;
-      console.log('📝 Creating new attendance record (CHECK-IN)');
+      console.log('📝 LẦN 1: Creating new attendance record (CHECK-IN ONLY)');
     } else {
-      // Đã có record -> LUÔN UPDATE CHECK-OUT (không quan tâm đã có checkOut hay chưa)
-      attendanceType = 'check_out';
-      
-      // Tính toán giờ làm việc từ checkIn đầu tiên đến checkOut mới nhất
-      const checkInTime = new Date(existingAttendance.checkInTime);
-      const checkOutTime = new Date(currentTime);
-      const workHours = (checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60); // hours
-      
-      updateData = {
-        checkOutTime: currentTime, // Luôn cập nhật thời gian check-out mới nhất
-        dailyTotalWorkHours: Math.round(workHours * 100) / 100, // Round to 2 decimal places
-        updated_at: currentTime
-      };
-      
+      // Đã có record -> Kiểm tra xem đã có check-out chưa
       if (!existingAttendance.checkOutTime) {
-        console.log('📝 First CHECK-OUT of the day');
+        // Lần 2: Chưa có check-out -> CẬP NHẬT CHECK-OUT
+        attendanceType = 'check_out';
+        
+        // Tính toán giờ làm việc từ checkIn đến checkOut
+        const checkInTime = dayjs(existingAttendance.checkInTime);
+        const checkOutTime = dayjs(currentTime);
+        const workHours = checkOutTime.diff(checkInTime, 'hour', true); // hours with decimal
+        
+        updateData = {
+          checkOutTime: currentTime,
+          dailyTotalWorkHours: Math.round(workHours * 100) / 100, // Round to 2 decimal places
+          updated_at: currentTime
+        };
+        
+        console.log('📝 LẦN 2: First CHECK-OUT of the day');
+        console.log('- Check-in time:', existingAttendance.checkInTime);
+        console.log('- Check-out time:', currentTime);
+        console.log('- Work hours calculated:', updateData.dailyTotalWorkHours);
       } else {
-        console.log('📝 Updating CHECK-OUT time (multiple check-outs allowed)');
+        // Lần 3 trở đi: Đã có check-out -> CẬP NHẬT LẠI CHECK-OUT (thời gian mới nhất)
+        attendanceType = 'check_out_update';
+        
+        // Tính toán lại giờ làm việc từ checkIn đầu tiên đến checkOut mới nhất
+        const checkInTime = dayjs(existingAttendance.checkInTime);
+        const checkOutTime = dayjs(currentTime);
+        const workHours = checkOutTime.diff(checkInTime, 'hour', true); // hours with decimal
+        
+        updateData = {
+          checkOutTime: currentTime, // Cập nhật thời gian check-out mới nhất
+          dailyTotalWorkHours: Math.round(workHours * 100) / 100, // Round to 2 decimal places
+          updated_at: currentTime
+        };
+        
+        console.log('📝 LẦN 3+: Updating CHECK-OUT time (multiple check-outs allowed)');
         console.log('- Previous check-out:', existingAttendance.checkOutTime);
         console.log('- New check-out:', currentTime);
+        console.log('- Work hours calculated:', updateData.dailyTotalWorkHours);
       }
-      console.log('- Work hours calculated:', updateData.dailyTotalWorkHours);
     }
 
-    // Thực hiện lưu database
+    // Thực hiện lưu databasea
     let result;
     if (isNewRecord) {
       [result] = await connection('time_attendances').insert(updateData).returning('*');
@@ -104,10 +123,25 @@ export const confirmAttendance = async (req: Request, res: Response) => {
     console.log('- Attendance Type:', attendanceType);
     console.log('- Record:', result);
 
-    // Tạo response
+    // Tạo response với message phù hợp
+    let message = '';
+    switch (attendanceType) {
+      case 'check_in':
+        message = 'Check-in thành công (Lần đầu trong ngày)';
+        break;
+      case 'check_out':
+        message = 'Check-out thành công (Lần đầu check-out)';
+        break;
+      case 'check_out_update':
+        message = 'Cập nhật check-out thành công (Check-out lần tiếp theo)';
+        break;
+      default:
+        message = 'Chấm công thành công';
+    }
+
     const responseData = {
       success: true,
-      message: `${attendanceType === 'check_in' ? 'Check-in' : 'Check-out'} thành công`,
+      message: message,
       data: {
         userId: parseInt(userId),
         attendanceType,
@@ -121,7 +155,7 @@ export const confirmAttendance = async (req: Request, res: Response) => {
         device,
         location,
         status: result.checkOutTime ? 'completed' : 'partial',
-        processedAt: new Date().toISOString()
+        processedAt: dayjs().toISOString()
       }
     };
 
@@ -152,7 +186,7 @@ export const getAttendanceStatus = async (req: Request, res: Response) => {
       });
     }
 
-    const targetDate = date || new Date().toISOString().split('T')[0];
+    const targetDate = date || dayjs().format('YYYY-MM-DD');
 
     const attendance = await connection('time_attendances')
       .where('userId', userId)
@@ -253,9 +287,8 @@ export const getUserAttendanceByMonth = async (req: Request, res: Response) => {
     }
 
     // Tạo startDate và endDate cho tháng
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-    const lastDay = new Date(parseInt(year as string), parseInt(month as string), 0).getDate();
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    const startDate = dayjs(`${year}-${String(month).padStart(2, '0')}-01`).format('YYYY-MM-DD');
+    const endDate = dayjs(`${year}-${String(month).padStart(2, '0')}-01`).endOf('month').format('YYYY-MM-DD');
 
     console.log('📅 Fetching attendance data:', { userId, year, month, startDate, endDate });
 
@@ -266,15 +299,15 @@ export const getUserAttendanceByMonth = async (req: Request, res: Response) => {
 
     // Format dữ liệu cho frontend
     const formattedData = attendanceRecords.map(record => {
-      const checkInTime = record.checkInTime ? new Date(record.checkInTime) : null;
-      const checkOutTime = record.checkOutTime ? new Date(record.checkOutTime) : null;
+      const checkInTime = record.checkInTime ? dayjs(record.checkInTime) : null;
+      const checkOutTime = record.checkOutTime ? dayjs(record.checkOutTime) : null;
       
       return {
         id: record.id,
         userId: record.userId,
-        date: record.date.toISOString().split('T')[0], // YYYY-MM-DD
-        checkIn: checkInTime ? checkInTime.toTimeString().slice(0, 5) : null, // HH:MM
-        checkOut: checkOutTime ? checkOutTime.toTimeString().slice(0, 5) : null, // HH:MM
+        date: dayjs(record.date).format('YYYY-MM-DD'), // YYYY-MM-DD
+        checkIn: checkInTime ? checkInTime.format('HH:mm') : null, // HH:MM
+        checkOut: checkOutTime ? checkOutTime.format('HH:mm') : null, // HH:MM
         checkInTime: record.checkInTime,
         checkOutTime: record.checkOutTime,
         totalHours: parseFloat(record.dailyTotalWorkHours || 0),
@@ -319,9 +352,9 @@ export const getUserMonthlyStats = async (req: Request, res: Response) => {
     }
 
     // Tạo startDate và endDate cho tháng
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-    const lastDay = new Date(parseInt(year as string), parseInt(month as string), 0).getDate();
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    const startDate = dayjs(`${year}-${String(month).padStart(2, '0')}-01`).format('YYYY-MM-DD');
+    const lastDay = dayjs(`${year}-${String(month).padStart(2, '0')}-01`).daysInMonth();
+    const endDate = dayjs(`${year}-${String(month).padStart(2, '0')}-01`).endOf('month').format('YYYY-MM-DD');
 
     console.log('📊 Calculating monthly stats:', { userId, year, month, startDate, endDate });
 

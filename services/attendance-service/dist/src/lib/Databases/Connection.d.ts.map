@@ -1,1 +1,1 @@
-{"version":3,"file":"Connection.d.ts","sourceRoot":"","sources":["../../../../src/lib/Databases/Connection.ts"],"names":[],"mappings":"AAGA,OAAO,IAAI,MAAM,MAAM,CAAC;AAGxB,QAAA,MAAM,YAAY,2BAUhB,CAAC;AAIH,eAAe,YAAY,CAAC"}
+{"version":3,"file":"Connection.d.ts","sourceRoot":"","sources":["../../../../src/lib/Databases/Connection.ts"],"names":[],"mappings":"AAMA,QAAA,MAAM,YAAY,qCAUhB,CAAC;AAaH,eAAe,YAAY,CAAC"}

@@ -243,6 +243,79 @@ async def get_attendance_logs(
             detail=f"Internal server error: {str(e)}"
         )
 
+@router.post("/confirm-attendance")
+async def confirm_attendance(
+    recognition_log_id: int = Form(..., description="Recognition log ID from previous recognition"),
+    db: Session = Depends(get_db)
+):
+    """
+    Confirm attendance after face recognition
+    Only saves to attendance system when user explicitly confirms
+    """
+    try:
+        from app.core.database import AttendanceLog
+        
+        # Find the recognition log
+        recognition_log = db.query(AttendanceLog).filter(
+            AttendanceLog.id == recognition_log_id,
+            AttendanceLog.status == "recognized"
+        ).first()
+        
+        if not recognition_log:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Recognition log not found or already processed"
+            )
+        
+        # Get face recognition service instance
+        service = YOLOv11FaceRecognitionService()
+        
+        # Prepare user match data
+        user_match = {
+            'user_id': recognition_log.user_id,
+            'username': recognition_log.username,
+            'confidence_score': recognition_log.confidence_score
+        }
+        
+        # Send to attendance service
+        attendance_result = service._send_to_attendance_service(
+            user_match, 
+            recognition_log.recognition_type, 
+            recognition_log.confidence_score
+        )
+        
+        # Update recognition log status
+        recognition_log.status = "confirmed"
+        recognition_log.notes = "Attendance confirmed by user"
+        db.commit()
+        
+        logger.info(f"Attendance confirmed for user: {recognition_log.username} - {recognition_log.recognition_type}")
+        
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "success": True,
+                "message": f"Attendance confirmed successfully for {recognition_log.username}",
+                "data": {
+                    "user_id": recognition_log.user_id,
+                    "username": recognition_log.username,
+                    "recognition_type": recognition_log.recognition_type,
+                    "confidence_score": recognition_log.confidence_score,
+                    "timestamp": recognition_log.timestamp.isoformat(),
+                    "attendance_result": attendance_result
+                }
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in confirm_attendance: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {str(e)}"
+        )
+
 @router.get("/stats")
 async def get_service_stats(db: Session = Depends(get_db)):
     """
@@ -257,7 +330,8 @@ async def get_service_stats(db: Session = Depends(get_db)):
         
         # Count total attendance logs
         total_logs = db.query(AttendanceLog).count()
-        successful_logs = db.query(AttendanceLog).filter(AttendanceLog.status == "success").count()
+        successful_logs = db.query(AttendanceLog).filter(AttendanceLog.status == "confirmed").count()  # Updated to "confirmed"
+        recognized_logs = db.query(AttendanceLog).filter(AttendanceLog.status == "recognized").count()  # New: waiting for confirmation
         unknown_faces = db.query(AttendanceLog).filter(AttendanceLog.status == "unknown_face").count()
         
         return JSONResponse(
@@ -272,7 +346,8 @@ async def get_service_stats(db: Session = Depends(get_db)):
                     },
                     "attendance_logs": {
                         "total": total_logs,
-                        "successful": successful_logs,
+                        "confirmed": successful_logs,
+                        "waiting_confirmation": recognized_logs,
                         "unknown_faces": unknown_faces,
                         "success_rate": (successful_logs / total_logs * 100) if total_logs > 0 else 0
                     }

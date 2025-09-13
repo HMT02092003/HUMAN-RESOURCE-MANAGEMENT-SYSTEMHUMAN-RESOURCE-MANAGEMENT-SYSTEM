@@ -228,7 +228,7 @@ const AttendanceSimplePage = () => {
                     >
                       <div style={{ fontSize: isMobile ? 10 : 12, marginBottom: 4 }}>{value.date()}</div>
                       {attendance && (
-                        <div style={{ fontSize: isMobile ? 9 : 11 }}>
+                        <div style={{ fontSize: isMobile ? 12 : 15 }}>
                           {attendance.checkIn} - {attendance.checkOut}
                         </div>
                       )}

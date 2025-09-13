@@ -13,6 +13,13 @@ const knexInstance = knex({
     },
     pool: { min: 0, max: 10 },
 });
+knexInstance.raw('SELECT 1+1 as result')
+    .then(() => {
+    console.log('✅ Database connection established successfully');
+})
+    .catch((error) => {
+    console.error('❌ Database connection failed:', error);
+});
 Model.knex(knexInstance);
 export default knexInstance;
 //# sourceMappingURL=Connection.js.map

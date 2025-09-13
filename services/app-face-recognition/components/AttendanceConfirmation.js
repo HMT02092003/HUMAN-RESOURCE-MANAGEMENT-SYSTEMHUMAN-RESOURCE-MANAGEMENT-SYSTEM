@@ -23,8 +23,15 @@ export default function AttendanceConfirmation({
 
     setIsConfirming(true);
     try {
-      // Gọi API xác nhận chấm công
+      // Kiểm tra recognition_log_id từ dữ liệu nhận diện
+      const recognitionLogId = recognitionData?.data?.recognition_log_id;
+      if (!recognitionLogId) {
+        throw new Error('Không tìm thấy ID nhận diện. Vui lòng thử lại.');
+      }
+      
+      // Gọi API xác nhận chấm công với recognition_log_id
       const result = await AttendanceAPI.submitAttendance({
+        recognition_log_id: recognitionLogId,
         userId: user.user_id,
         type: recognitionData?.data?.recognition_type || 'check_in',
         timestamp: recognitionData?.data?.timestamp || new Date().toISOString(),

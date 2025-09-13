@@ -396,11 +396,11 @@ class YOLOv11FaceRecognitionService:
             user_match = self.find_matching_user(face_encoding, db)
             
             if user_match:
-                # Save image
-                image_path = self._save_image(image_data, f"attendance_{user_match['username']}")
+                # Save image for recognition (not attendance yet)
+                image_path = self._save_image(image_data, f"recognition_{user_match['username']}")
                 
-                # Create attendance log
-                attendance_log = AttendanceLog(
+                # Create recognition log (not attendance log)
+                recognition_log = AttendanceLog(
                     user_id=user_match['user_id'],
                     username=user_match['username'],
                     recognition_type=recognition_type,
@@ -412,18 +412,17 @@ class YOLOv11FaceRecognitionService:
                         "x2": face_location[2],
                         "y2": face_location[3]
                     },
-                    status="success"
+                    status="recognized",  # Changed from "success" to "recognized"
+                    notes="Face recognized, waiting for user confirmation"
                 )
                 
-                db.add(attendance_log)
+                db.add(recognition_log)
                 db.commit()
                 
-                logger.info(f"Face recognized successfully: {user_match['username']} - {recognition_type}")
+                logger.info(f"Face recognized successfully: {user_match['username']} - {recognition_type} (waiting for confirmation)")
                 
-                # Gửi dữ liệu tới attendance service
-                attendance_result = self._send_to_attendance_service(
-                    user_match, recognition_type, user_match['confidence_score']
-                )
+                # Don't automatically send to attendance service
+                # Will be sent only when user confirms
                 
                 return {
                     "success": True,
@@ -431,9 +430,10 @@ class YOLOv11FaceRecognitionService:
                     "data": {
                         "user": user_match,
                         "recognition_type": recognition_type,
-                        "timestamp": attendance_log.timestamp.isoformat(),
+                        "timestamp": recognition_log.timestamp.isoformat(),
                         "method": "YOLOv11 + ArcFace",
-                        "attendance_result": attendance_result
+                        "recognition_log_id": recognition_log.id,  # Add log ID for confirmation
+                        "image_path": image_path
                     },
                     "confidence_score": user_match['confidence_score'] / 100.0,
                     "user_info": user_match

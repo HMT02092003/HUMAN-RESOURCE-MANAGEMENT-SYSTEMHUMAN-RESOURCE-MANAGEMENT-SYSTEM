@@ -11,14 +11,18 @@ const { Title, Text, Link } = Typography;
 const Login = () => {
   const [form] = Form.useForm();
   const router = useRouter();
+  const [loading, setLoading] = React.useState(false);
 
   const onFinish = async (values: any) => {
+    setLoading(true);
     try {
       await authService.login(values);
       message.success("Đăng nhập thành công");
       router.push("/home");
     } catch (err: any) {
       message.error(err?.response?.data?.error || 'Đăng nhập thất bại');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -88,9 +92,17 @@ const Login = () => {
               <Checkbox>Ghi nhớ đăng nhập</Checkbox>
               <Link className="forgot-password" href="/forgotPassword">Quên mật khẩu?</Link>
             </div>
-            <Button type="primary" htmlType="submit" block className="login-button" style={{ height: '50px', marginTop: "20px" }}>
+            <Form.Item>
+              <Button
+              type="primary"
+              loading={loading}
+              block
+              className="login-button"
+              style={{ height: '50px', marginTop: "20px" }}
+              >
               Đăng nhập
-            </Button>
+              </Button>
+            </Form.Item>
             <div className="register-link">
               <Text style={{ fontSize: "15px" }}>
                 Chưa có tài khoản? <Link href="../../register">Đăng ký</Link>
