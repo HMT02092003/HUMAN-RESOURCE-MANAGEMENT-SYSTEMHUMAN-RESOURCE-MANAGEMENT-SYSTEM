@@ -6,6 +6,10 @@ import {
   getUserAttendanceByMonth,
   getUserMonthlyStats
 } from '../src/controller/AttendanceController';
+import {
+  getSettings,
+  updateSettings
+}  from '@/controller/SettingsController';
 
 const router = express.Router();
 
@@ -49,6 +53,20 @@ router.get('/user/:userId/month', (req, res) => {
 // API lấy thống kê chấm công theo tháng
 router.get('/user/:userId/stats', (req, res) => {
   getUserMonthlyStats(req, res).catch((err: any) => {
+    res.status(500).json({ error: err.message || 'Internal Server Error' });
+  });
+});
+
+// API lấy cấu hình settings
+router.get('/settings', (req, res) => {
+  getSettings(req, res).catch((err: any) => {
+    res.status(500).json({ error: err.message || 'Internal Server Error' });
+  });
+});
+
+// API cập nhật cấu hình settings
+router.post('/settings', (req, res) => {
+  updateSettings(req, res).catch((err: any) => {
     res.status(500).json({ error: err.message || 'Internal Server Error' });
   });
 });

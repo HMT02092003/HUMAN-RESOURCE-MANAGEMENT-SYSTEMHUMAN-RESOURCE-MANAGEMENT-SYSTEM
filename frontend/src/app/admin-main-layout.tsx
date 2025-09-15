@@ -12,7 +12,8 @@ import {
     LogoutOutlined,
     InfoCircleOutlined,
     HomeOutlined,
-    CalendarOutlined
+    CalendarOutlined,
+    SettingOutlined
 } from '@ant-design/icons';
 
 import type { MenuProps } from 'antd';
@@ -91,6 +92,7 @@ const menuItemsList: ExtendedMenuItem[] = [
     getItem('Quản lí hợp đồng', 'contractTypes', <AppstoreOutlined />, undefined, 'contractTypes'),
     getItem('Quản lí vai trò', 'roles', <TeamOutlined />, undefined, 'roles'),
     getItem('Chấm công', 'attendance', <CalendarOutlined />, undefined, ''),
+    getItem('Cài đăt hệ thống', 'settings', <SettingOutlined />, undefined, ''),
 ];
 
 const isDeepEqual = (obj1: any, obj2: any): boolean => {
@@ -232,6 +234,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                 break;
             case 'roles':
                 router.push('/roles');
+                break;
+            case 'settings':
+                router.push('/settings');
                 break;
             default:
                 break;

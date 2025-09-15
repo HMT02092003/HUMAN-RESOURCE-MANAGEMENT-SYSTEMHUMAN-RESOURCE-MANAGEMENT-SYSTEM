@@ -88,13 +88,10 @@ const Login = () => {
               </Form.Item>
             </div>
 
-            <div className="form-options">
-              <Checkbox>Ghi nhớ đăng nhập</Checkbox>
-              <Link className="forgot-password" href="/forgotPassword">Quên mật khẩu?</Link>
-            </div>
             <Form.Item>
               <Button
               type="primary"
+              htmlType="submit"
               loading={loading}
               block
               className="login-button"
@@ -103,17 +100,6 @@ const Login = () => {
               Đăng nhập
               </Button>
             </Form.Item>
-            <div className="register-link">
-              <Text style={{ fontSize: "15px" }}>
-                Chưa có tài khoản? <Link href="../../register">Đăng ký</Link>
-              </Text>
-            </div>
-            <br />
-            <div className="register-link">
-              <Text style={{ fontSize: "15px" }}>
-                Quay trở lại trang chủ? <Link href="../home" style={{ fontSize: "15px" }}>Trang chủ</Link>
-              </Text>
-            </div>
           </Form>
         </Col>
       </Row>

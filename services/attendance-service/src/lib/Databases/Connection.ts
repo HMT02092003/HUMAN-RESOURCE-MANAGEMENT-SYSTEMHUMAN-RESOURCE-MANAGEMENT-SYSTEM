@@ -16,15 +16,6 @@ const knexInstance = knex({
   pool: { min: 0, max: 10 },
 });
 
-// Test connection on startup
-knexInstance.raw('SELECT 1+1 as result')
-  .then(() => {
-    console.log('✅ Database connection established successfully');
-  })
-  .catch((error: any) => {
-    console.error('❌ Database connection failed:', error);
-  });
-
 Model.knex(knexInstance as any);
 
 export default knexInstance;
