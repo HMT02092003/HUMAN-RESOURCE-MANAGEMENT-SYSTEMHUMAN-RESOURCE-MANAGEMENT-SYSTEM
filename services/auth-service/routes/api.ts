@@ -34,6 +34,8 @@ import {
   getUsersByDepartment,
   getUsersByChevron,
   getUserByUsername,
+  getSalaryInfo,
+  updateSalaryInfo,
 } from '@/src/controller/UserController';
 
 const router = Router();
@@ -206,6 +208,15 @@ router.put('/users/:id', authenticateToken, upload.single('identificationPhoto')
 // Route chuẩn RESTful cho xóa user
 router.delete('/users/:id', authenticateToken, (req, res) => {
   deleteUser(req, res);
+});
+
+// Routes cho quản lý lương
+router.get('/users/:id/salary', authenticateToken, (req, res) => {
+  getSalaryInfo(req, res);
+});
+
+router.put('/users/:id/salary', authenticateToken, (req, res) => {
+  updateSalaryInfo(req, res);
 });
 // ===================================END USER===================================
 

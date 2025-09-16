@@ -84,6 +84,26 @@ const UserService = {
     } catch (error) {
       throw error;
     }
+  },
+
+  // Lấy thông tin lương của user
+  getSalaryInfo: async (userId: number) => {
+    try {
+      const response = await api.get(`/api/auth/users/${userId}/salary`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Cập nhật thông tin lương của user
+  updateSalaryInfo: async (userId: number, salaryData: { salary?: number; allowance?: number }) => {
+    try {
+      const response = await api.put(`/api/auth/users/${userId}/salary`, salaryData);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 };
 

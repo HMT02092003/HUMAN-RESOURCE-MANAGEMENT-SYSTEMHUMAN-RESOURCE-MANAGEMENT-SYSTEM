@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Tabs, Card, Form, TimePicker, InputNumber, Button, message, Spin, Row, Col, Checkbox, Typography, Space } from 'antd';
-import { SaveOutlined, SettingOutlined, ClockCircleOutlined, DollarCircleOutlined, CalendarOutlined, ReloadOutlined, ScheduleOutlined } from '@ant-design/icons';
+import { SaveOutlined, SettingOutlined, ClockCircleOutlined, DollarCircleOutlined, CalendarOutlined, ReloadOutlined, ScheduleOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import utc from 'dayjs/plugin/utc';
@@ -44,6 +44,10 @@ interface HolidayRateConfig {
   rate: number;
 }
 
+interface PenaltyRateConfig {
+  rate: number;
+}
+
 interface WorkingDaysConfig {
   monday: boolean;
   tuesday: boolean;
@@ -59,6 +63,7 @@ interface SettingsData {
   LunchBreak: LunchBreakConfig;
   OvertimeRate: OvertimeRateConfig;
   HolidayRate: HolidayRateConfig;
+  PenaltyRate: PenaltyRateConfig;
   WorkingDays: WorkingDaysConfig;
 }
 
@@ -78,6 +83,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
     LunchBreak: { start: '12:00', end: '13:00' },
     OvertimeRate: { rate: 1.5 },
     HolidayRate: { rate: 3.0 },
+    PenaltyRate: { rate: 0.001 },
     WorkingDays: {
       monday: true,
       tuesday: true,
@@ -122,6 +128,9 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       },
       HolidayRate: {
         rate: transformedData?.HolidayRate?.rate || defaultSettings.HolidayRate.rate
+      },
+      PenaltyRate: {
+        rate: transformedData?.PenaltyRate?.rate || defaultSettings.PenaltyRate.rate
       },
       WorkingDays: {
         monday: transformedData?.WorkingDays?.monday ?? defaultSettings.WorkingDays.monday,
@@ -214,6 +223,9 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       HolidayRate: {
         rate: data?.HolidayRate?.rate || defaultSettings.HolidayRate.rate
       },
+      PenaltyRate: {
+        rate: data?.PenaltyRate?.rate || defaultSettings.PenaltyRate.rate
+      },
       WorkingDays: {
         monday: data?.WorkingDays?.monday ?? defaultSettings.WorkingDays.monday,
         tuesday: data?.WorkingDays?.tuesday ?? defaultSettings.WorkingDays.tuesday,
@@ -241,6 +253,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
         lunchBreakEnd: dayjs().hour(parseInt(lunchEndTime[0])).minute(parseInt(lunchEndTime[1])).second(0),
         overtimeRate: data.OvertimeRate.rate,
         holidayRate: data.HolidayRate.rate,
+        penaltyRate: data.PenaltyRate.rate,
         workingDays: {
           monday: data.WorkingDays.monday,
           tuesday: data.WorkingDays.tuesday,
@@ -267,6 +280,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
         lunchBreakEnd: dayjs().hour(parseInt(defaultLunchEndTime[0])).minute(parseInt(defaultLunchEndTime[1])).second(0),
         overtimeRate: defaultSettings.OvertimeRate.rate,
         holidayRate: defaultSettings.HolidayRate.rate,
+        penaltyRate: defaultSettings.PenaltyRate.rate,
         workingDays: {
           monday: defaultSettings.WorkingDays.monday,
           tuesday: defaultSettings.WorkingDays.tuesday,
@@ -319,6 +333,15 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       throw new Error('Tỷ lệ OT ngày lễ phải cao hơn tỷ lệ OT ngày thường');
     }
 
+    // Kiểm tra tỷ lệ phạt
+    if (values.penaltyRate < 0.0001) {
+      throw new Error('Tỷ lệ phạt đi muộn/về sớm phải lớn hơn hoặc bằng 0.0001');
+    }
+
+    if (values.penaltyRate > 1) {
+      throw new Error('Tỷ lệ phạt đi muộn/về sớm không được vượt quá 1.0');
+    }
+
     // Kiểm tra ngày làm việc - phải có ít nhất 1 ngày
     if (values.workingDays) {
       const hasAtLeastOneDay = Object.values(values.workingDays).some(day => day === true);
@@ -353,6 +376,9 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
         },
         HolidayRate: {
           rate: parseFloat(values.holidayRate) || defaultSettings.HolidayRate.rate
+        },
+        PenaltyRate: {
+          rate: parseFloat(values.penaltyRate) || defaultSettings.PenaltyRate.rate
         },
         WorkingDays: {
           monday: values.workingDays?.monday ?? defaultSettings.WorkingDays.monday,
@@ -816,6 +842,93 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
     </Card>
   );
 
+  const renderPenaltyRateTab = () => (
+    <Card
+      title={
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <ExclamationCircleOutlined style={{ color: '#f5222d' }} />
+          <span>Cấu hình tỉ lệ phạt đi muộn/về sớm</span>
+        </div>
+      }
+      style={{ marginBottom: 0 }}
+    >
+      <Row gutter={24}>
+        <Col xs={24} md={12}>
+          <Form.Item
+            label="Tỉ lệ phạt (x lần lương cơ bản trên phút)"
+            name="penaltyRate"
+            rules={[
+              { required: true, message: 'Vui lòng nhập tỉ lệ phạt!' },
+              { type: 'number', min: 0.0001, message: 'Tỉ lệ phạt phải lớn hơn hoặc bằng 0.0001' },
+              { type: 'number', max: 1, message: 'Tỉ lệ phạt không được vượt quá 1.0' },
+            ]}
+          >
+            <InputNumber
+              min={0.0001}
+              max={1}
+              step={0.0001}
+              precision={4}
+              placeholder="Nhập tỉ lệ phạt"
+              style={{ width: '100%' }}
+              size="large"
+              formatter={(value) => `${value}x`}
+              parser={(value) => value!.replace('x', '') as any}
+            />
+          </Form.Item>
+        </Col>
+        <Col xs={24} md={12}>
+          <div style={{
+            background: '#fff1f0',
+            border: '1px solid #ffccc7',
+            borderRadius: '6px',
+            padding: '16px',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center'
+          }}>
+            <div>
+              <p style={{ margin: '0 0 4px 0', fontWeight: 600, color: '#f5222d' }}>
+                Tỉ lệ hiện tại
+              </p>
+              <p style={{ margin: 0, fontSize: '24px', fontWeight: 'bold', color: '#f5222d' }}>
+                {settingsData?.PenaltyRate?.rate || defaultSettings.PenaltyRate.rate}x
+              </p>
+            </div>
+          </div>
+        </Col>
+      </Row>
+
+      <div style={{
+        background: '#fff2e8',
+        border: '1px solid #ffbb96',
+        borderRadius: '6px',
+        padding: '16px',
+        marginTop: '24px'
+      }}>
+        <p style={{ margin: '0 0 8px 0', color: '#fa541c', fontWeight: 600 }}>
+          <strong>Lưu ý:</strong>
+        </p>
+        <ul style={{ margin: 0, paddingLeft: '20px' }}>
+          <li style={{ color: '#666', marginBottom: '4px' }}>
+            Tỉ lệ phạt áp dụng cho mỗi phút đi muộn hoặc về sớm
+          </li>
+          <li style={{ color: '#666', marginBottom: '4px' }}>
+            Ví dụ: 0.0001x = 0.01% mỗi phút, 0.1x = 10% mỗi phút
+          </li>
+          <li style={{ color: '#666', marginBottom: '4px' }}>
+            Giá trị tối thiểu: 0.0001 (0.01%), tối đa: 1.0 (100%)
+          </li>
+          <li style={{ color: '#666', marginBottom: '4px' }}>
+            Tỉ lệ này sẽ được áp dụng để tính toán khấu trừ lương
+          </li>
+          <li style={{ color: '#666', marginBottom: '4px' }}>
+            Nên sử dụng tỉ lệ thấp (0.0001-0.01) để tránh ảnh hưởng nghiêm trọng
+          </li>
+        </ul>
+      </div>
+    </Card>
+  );
+
   const renderWorkingDaysTab = () => {
     const weekDays = [
       { key: 'monday', label: 'THỨ HAI', english: 'Monday', color: '#1890ff' },
@@ -992,6 +1105,18 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
             key="holidayRate"
           >
             {renderHolidayRateTab()}
+          </TabPane>
+
+          <TabPane
+            tab={
+              <span>
+                <ExclamationCircleOutlined />
+                Phạt đi muộn/về sớm
+              </span>
+            }
+            key="penaltyRate"
+          >
+            {renderPenaltyRateTab()}
           </TabPane>
 
           <TabPane

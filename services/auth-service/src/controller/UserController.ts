@@ -232,6 +232,8 @@ export const createUser = async (req: Request, res: Response) => {
       birthday: "date",
       startDate: "date",
       identificationPhoto: "string", // saved file relative path
+      salary: "number",
+      allowance: "number",
       profileFamily: [
         {
           name: "string",
@@ -249,11 +251,16 @@ export const createUser = async (req: Request, res: Response) => {
       },
     };
 
+    console.log("Before validation - salary:", inputs.salary, "type:", typeof inputs.salary);
+    console.log("Before validation - allowance:", inputs.allowance, "type:", typeof inputs.allowance);
+    
     const params = validate(inputs, allowFields, {
       removeNotAllow: true,
     });
 
     console.log("Create user params:", params);
+    console.log("After validation - salary:", params.salary, "type:", typeof params.salary);
+    console.log("After validation - allowance:", params.allowance, "type:", typeof params.allowance);
 
     // Xử lý upload ảnh đại diện nếu có
     if (req.file || (req as any).files?.identificationPhoto) {
@@ -852,6 +859,8 @@ export const updateUser = async (req: Request, res: Response) => {
       vacationDay: "number",
       dayOff: "number",
       identificationPhoto: "string",
+      salary: "number",
+      allowance: "number",
       profileFamily: [
         {
           name: "string",
@@ -1485,3 +1494,105 @@ export const getUserByUsername = async (req: Request, res: Response) => {
 };
 
 // aintelligence787@gmail.com
+
+// Lấy thông tin lương của người dùng
+export const getSalaryInfo = async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  try {
+    const user = await UserModel.query()
+      .findById(id)
+      .select('id', 'firstName', 'lastName', 'salary', 'allowance');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy người dùng',
+        code: 404
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Lấy thông tin lương thành công',
+      data: {
+        id: user.id,
+        fullName: `${user.firstName} ${user.lastName}`,
+        salary: user.salary || 0,
+        allowance: user.allowance || 0,
+        totalSalary: (user.salary || 0) + (user.allowance || 0)
+      }
+    });
+
+  } catch (error) {
+    console.error('Error getting salary info:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ nội bộ',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      code: 500
+    });
+  }
+};
+
+// Cập nhật thông tin lương của người dùng
+export const updateSalaryInfo = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { salary, allowance } = req.body;
+
+  try {
+    // Validate input
+    if (salary !== undefined && (typeof salary !== 'number' || salary < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Lương phải là số và không được âm',
+        code: 400
+      });
+    }
+
+    if (allowance !== undefined && (typeof allowance !== 'number' || allowance < 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phụ cấp phải là số và không được âm',
+        code: 400
+      });
+    }
+
+    const user = await UserModel.query().findById(id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Không tìm thấy người dùng',
+        code: 404
+      });
+    }
+
+    const updatedUser = await UserModel.query()
+      .patchAndFetchById(id, {
+        salary: salary !== undefined ? salary : user.salary,
+        allowance: allowance !== undefined ? allowance : user.allowance,
+        updatedBy: (req as any).user?.id || 1
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Cập nhật thông tin lương thành công',
+      data: {
+        id: updatedUser.id,
+        fullName: `${updatedUser.firstName} ${updatedUser.lastName}`,
+        salary: updatedUser.salary || 0,
+        allowance: updatedUser.allowance || 0,
+        totalSalary: (updatedUser.salary || 0) + (updatedUser.allowance || 0)
+      }
+    });
+
+  } catch (error) {
+    console.error('Error updating salary info:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi máy chủ nội bộ',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      code: 500
+    });
+  }
+};

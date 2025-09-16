@@ -33,6 +33,8 @@ class UserModel extends Model {
   updatedBy!: number;
   birthday!: string;
   identificationPhoto?: string;
+  salary?: number;
+  allowance?: number;
 
   // Optional relation fields
   contract?: ContractModel[];
@@ -83,6 +85,8 @@ class UserModel extends Model {
         gender: { type: 'integer' },
         phone: { type: 'string' },
         identificationPhoto: { type: ['string', 'null'] },
+        salary: { type: ['number', 'null'] },
+        allowance: { type: ['number', 'null'] },
       },
     };
   }
