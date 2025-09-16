@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
-import connection from '@/lib/Databases/Connection';
 import dayjs from 'dayjs';
+import { validate } from '@/utils/validation-utility';
+import TimeAttendanceModel from '@/Models/TimeAttendanceModel';
+import { AttendanceCalculationService } from '@/services/AttendanceCalculationService';
 
 // API xác nhận chấm công với logic check-in/check-out tự động
 export const confirmAttendance = async (req: Request, res: Response) => {
@@ -8,16 +10,19 @@ export const confirmAttendance = async (req: Request, res: Response) => {
     console.log('=== ATTENDANCE DATA RECEIVED ===');
     console.log('Request body:', JSON.stringify(req.body, null, 2));
 
-    const { userId, location, device, confidence, method } = req.body;
+    // Validate input data
+    const inputs = req.body;
+    const allowFields = {
+      userId: 'number!',
+      location: 'string',
+      device: 'string',
+      confidence: 'number',
+      method: 'string'
+    };
 
-    // Validate required fields
-    if (!userId) {
-      console.log('❌ Missing required fields:', { userId });
-      return res.status(400).json({
-        success: false,
-        message: 'Thiếu thông tin userId'
-      });
-    }
+    const params = validate(inputs, allowFields, { removeNotAllow: true });
+    
+    const { userId, location, device, confidence, method } = params;
 
     const currentDate = dayjs().format('YYYY-MM-DD'); // YYYY-MM-DD
     const currentTime = dayjs().toISOString(); // ISO timestamp
@@ -28,112 +33,133 @@ export const confirmAttendance = async (req: Request, res: Response) => {
     console.log('- Current Time:', currentTime);
 
     // Kiểm tra xem đã có bản ghi chấm công ngày hôm nay chưa
-    const existingAttendance = await connection('time_attendances')
+    const existingAttendance = await TimeAttendanceModel.query()
       .where('userId', userId)
       .where('date', currentDate)
       .first();
 
     let attendanceType: string;
     let updateData: any = {};
-    let isNewRecord = false;
+    let result: any;
 
     if (!existingAttendance) {
-      // Chưa có bản ghi -> Tạo mới với CHECK-IN (Lần chấm công đầu tiên)
+      // Lần đầu tiên trong ngày - CHECK-IN
       attendanceType = 'check_in';
+      
+      // Tính toán attendance data dựa trên settings
+      const calculation = await AttendanceCalculationService.calculateAttendance(
+        currentTime,
+        null,
+        currentDate
+      );
+
       updateData = {
-        userId: parseInt(userId),
+        userId: parseInt(userId.toString()),
         date: currentDate,
         checkInTime: currentTime,
         checkOutTime: null,
-        dailyTotalWorkHours: 0,
-        lateMinutes: 0,
-        earlyDepartureMinutes: 0,
-        dailyWorkingUnit: 0,
-        earlyLeavePenalty: 0,
-        lateArrivalPenalty: 0,
-        otWorkingUnit: 0,
-        otMinutes: 0,
-        otSalary: 0,
+        dailyTotalWorkHours: 0.0,
+        lateMinutes: parseFloat(calculation.lateMinutes.toString()) || 0.0,
+        earlyDepartureMinutes: 0.0,
+        dailyWorkingUnit: 0.0,
+        earlyLeavePenalty: 0.0,
+        lateArrivalPenalty: 0.0,
+        otWorkingUnit: 0.0,
+        otMinutes: 0.0,
+        otSalary: 0.0,
         created_at: currentTime,
         updated_at: currentTime
       };
-      isNewRecord = true;
+
+      result = await TimeAttendanceModel.query().insert(updateData);
       console.log('📝 LẦN 1: Creating new attendance record (CHECK-IN ONLY)');
+      
     } else {
-      // Đã có record -> Kiểm tra xem đã có check-out chưa
       if (!existingAttendance.checkOutTime) {
-        // Lần 2: Chưa có check-out -> CẬP NHẬT CHECK-OUT
+        // Lần 2: CHECK-OUT đầu tiên
         attendanceType = 'check_out';
         
-        // Tính toán giờ làm việc từ checkIn đến checkOut
-        const checkInTime = dayjs(existingAttendance.checkInTime);
-        const checkOutTime = dayjs(currentTime);
-        const workHours = checkOutTime.diff(checkInTime, 'hour', true); // hours with decimal
-        
+        // Tính toán lại toàn bộ dữ liệu với check-out
+        const calculation = await AttendanceCalculationService.calculateAttendance(
+          existingAttendance.checkInTime,
+          currentTime,
+          currentDate
+        );
+
         updateData = {
           checkOutTime: currentTime,
-          dailyTotalWorkHours: Math.round(workHours * 100) / 100, // Round to 2 decimal places
+          dailyTotalWorkHours: parseFloat((Math.round(calculation.workHours * 100) / 100).toString()),
+          earlyDepartureMinutes: parseFloat(calculation.earlyDepartureMinutes.toString()) || 0.0,
+          otMinutes: parseFloat(calculation.otMinutes.toString()) || 0.0,
           updated_at: currentTime
         };
-        
+
+        await TimeAttendanceModel.query()
+          .where('userId', userId)
+          .where('date', currentDate)
+          .patch(updateData);
+
+        result = await TimeAttendanceModel.query()
+          .where('userId', userId)
+          .where('date', currentDate)
+          .first();
+
         console.log('📝 LẦN 2: First CHECK-OUT of the day');
-        console.log('- Check-in time:', existingAttendance.checkInTime);
-        console.log('- Check-out time:', currentTime);
         console.log('- Work hours calculated:', updateData.dailyTotalWorkHours);
+        console.log('- Late minutes:', result?.lateMinutes);
+        console.log('- Early departure minutes:', updateData.earlyDepartureMinutes);
+        console.log('- OT minutes:', updateData.otMinutes);
+        
       } else {
-        // Lần 3 trở đi: Đã có check-out -> CẬP NHẬT LẠI CHECK-OUT (thời gian mới nhất)
+        // Lần 3+: Cập nhật CHECK-OUT
         attendanceType = 'check_out_update';
         
-        // Tính toán lại giờ làm việc từ checkIn đầu tiên đến checkOut mới nhất
-        const checkInTime = dayjs(existingAttendance.checkInTime);
-        const checkOutTime = dayjs(currentTime);
-        const workHours = checkOutTime.diff(checkInTime, 'hour', true); // hours with decimal
-        
+        // Tính toán lại với check-out mới
+        const calculation = await AttendanceCalculationService.calculateAttendance(
+          existingAttendance.checkInTime,
+          currentTime,
+          currentDate
+        );
+
         updateData = {
-          checkOutTime: currentTime, // Cập nhật thời gian check-out mới nhất
-          dailyTotalWorkHours: Math.round(workHours * 100) / 100, // Round to 2 decimal places
+          checkOutTime: currentTime,
+          dailyTotalWorkHours: parseFloat((Math.round(calculation.workHours * 100) / 100).toString()),
+          earlyDepartureMinutes: parseFloat(calculation.earlyDepartureMinutes.toString()) || 0.0,
+          otMinutes: parseFloat(calculation.otMinutes.toString()) || 0.0,
           updated_at: currentTime
         };
-        
-        console.log('📝 LẦN 3+: Updating CHECK-OUT time (multiple check-outs allowed)');
+
+        await TimeAttendanceModel.query()
+          .where('userId', userId)
+          .where('date', currentDate)
+          .patch(updateData);
+
+        result = await TimeAttendanceModel.query()
+          .where('userId', userId)
+          .where('date', currentDate)
+          .first();
+
+        console.log('📝 LẦN 3+: Updating CHECK-OUT time');
         console.log('- Previous check-out:', existingAttendance.checkOutTime);
         console.log('- New check-out:', currentTime);
         console.log('- Work hours calculated:', updateData.dailyTotalWorkHours);
       }
     }
 
-    // Thực hiện lưu databasea
-    let result;
-    if (isNewRecord) {
-      [result] = await connection('time_attendances').insert(updateData).returning('*');
-    } else {
-      await connection('time_attendances')
-        .where('userId', userId)
-        .where('date', currentDate)
-        .update(updateData);
-      
-      // Lấy bản ghi đã update
-      result = await connection('time_attendances')
-        .where('userId', userId)
-        .where('date', currentDate)
-        .first();
-    }
-
     console.log('✅ Database operation completed');
     console.log('- Attendance Type:', attendanceType);
-    console.log('- Record:', result);
 
-    // Tạo response với message phù hợp
+    // Tạo response message
     let message = '';
     switch (attendanceType) {
       case 'check_in':
-        message = 'Check-in thành công (Lần đầu trong ngày)';
+        message = `Check-in thành công${result?.lateMinutes > 0 ? ` (Đi muộn ${result.lateMinutes} phút)` : ''}`;
         break;
       case 'check_out':
-        message = 'Check-out thành công (Lần đầu check-out)';
+        message = `Check-out thành công (Làm việc ${result?.dailyTotalWorkHours || 0} giờ)`;
         break;
       case 'check_out_update':
-        message = 'Cập nhật check-out thành công (Check-out lần tiếp theo)';
+        message = `Cập nhật check-out thành công (Tổng ${result?.dailyTotalWorkHours || 0} giờ)`;
         break;
       default:
         message = 'Chấm công thành công';
@@ -146,15 +172,18 @@ export const confirmAttendance = async (req: Request, res: Response) => {
         userId: parseInt(userId),
         attendanceType,
         date: currentDate,
-        checkInTime: result.checkInTime,
-        checkOutTime: result.checkOutTime,
-        workHours: result.dailyTotalWorkHours,
+        checkInTime: result?.checkInTime,
+        checkOutTime: result?.checkOutTime,
+        workHours: result?.dailyTotalWorkHours || 0,
+        lateMinutes: result?.lateMinutes || 0,
+        earlyDepartureMinutes: result?.earlyDepartureMinutes || 0,
+        otMinutes: result?.otMinutes || 0,
         timestamp: currentTime,
         confidence,
         method,
         device,
         location,
-        status: result.checkOutTime ? 'completed' : 'partial',
+        status: result?.checkOutTime ? 'completed' : 'partial',
         processedAt: dayjs().toISOString()
       }
     };
@@ -179,17 +208,14 @@ export const getAttendanceStatus = async (req: Request, res: Response) => {
     const { userId } = req.params;
     const { date } = req.query;
 
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Thiếu userId'
-      });
-    }
+    const inputs = { userId: parseInt(userId) };
+    const allowFields = { userId: 'number!' };
+    const params = validate(inputs, allowFields, { removeNotAllow: true });
 
     const targetDate = date || dayjs().format('YYYY-MM-DD');
 
-    const attendance = await connection('time_attendances')
-      .where('userId', userId)
+    const attendance = await TimeAttendanceModel.query()
+      .where('userId', params.userId)
       .where('date', targetDate)
       .first();
 
@@ -197,7 +223,7 @@ export const getAttendanceStatus = async (req: Request, res: Response) => {
       return res.status(200).json({
         success: true,
         data: {
-          userId,
+          userId: params.userId,
           date: targetDate,
           hasCheckedIn: false,
           hasCheckedOut: false,
@@ -209,13 +235,15 @@ export const getAttendanceStatus = async (req: Request, res: Response) => {
     return res.status(200).json({
       success: true,
       data: {
-        userId,
+        userId: params.userId,
         date: targetDate,
         hasCheckedIn: !!attendance.checkInTime,
         hasCheckedOut: !!attendance.checkOutTime,
         checkInTime: attendance.checkInTime,
         checkOutTime: attendance.checkOutTime,
         workHours: attendance.dailyTotalWorkHours,
+        lateMinutes: attendance.lateMinutes,
+        earlyDepartureMinutes: attendance.earlyDepartureMinutes,
         status: attendance.checkInTime && attendance.checkOutTime ? 'completed' : 'partial'
       }
     });
@@ -236,15 +264,12 @@ export const getAttendanceHistory = async (req: Request, res: Response) => {
     const { userId } = req.params;
     const { startDate, endDate, limit = 30 } = req.query;
 
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Thiếu userId'
-      });
-    }
+    const inputs = { userId: parseInt(userId) };
+    const allowFields = { userId: 'number!' };
+    const params = validate(inputs, allowFields, { removeNotAllow: true });
 
-    let query = connection('time_attendances')
-      .where('userId', userId)
+    let query = TimeAttendanceModel.query()
+      .where('userId', params.userId)
       .orderBy('date', 'desc')
       .limit(parseInt(limit as string));
 
@@ -279,21 +304,24 @@ export const getUserAttendanceByMonth = async (req: Request, res: Response) => {
     const { userId } = req.params;
     const { year, month } = req.query;
 
-    if (!userId || !year || !month) {
-      return res.status(400).json({
-        success: false,
-        message: 'Thiếu thông tin userId, year hoặc month'
-      });
-    }
+    // Validate input
+    const inputs = { userId: parseInt(userId), year: parseInt(year as string), month: parseInt(month as string) };
+    const allowFields = {
+      userId: 'number!',
+      year: 'number!',
+      month: 'number!'
+    };
+
+    const params = validate(inputs, allowFields, { removeNotAllow: true });
 
     // Tạo startDate và endDate cho tháng
-    const startDate = dayjs(`${year}-${String(month).padStart(2, '0')}-01`).format('YYYY-MM-DD');
-    const endDate = dayjs(`${year}-${String(month).padStart(2, '0')}-01`).endOf('month').format('YYYY-MM-DD');
+    const startDate = dayjs(`${params.year}-${String(params.month).padStart(2, '0')}-01`).format('YYYY-MM-DD');
+    const endDate = dayjs(`${params.year}-${String(params.month).padStart(2, '0')}-01`).endOf('month').format('YYYY-MM-DD');
 
-    console.log('📅 Fetching attendance data:', { userId, year, month, startDate, endDate });
+    console.log('📅 Fetching attendance data:', { userId: params.userId, year: params.year, month: params.month, startDate, endDate });
 
-    const attendanceRecords = await connection('time_attendances')
-      .where('userId', userId)
+    const attendanceRecords = await TimeAttendanceModel.query()
+      .where('userId', params.userId)
       .whereBetween('date', [startDate, endDate])
       .orderBy('date', 'asc');
 
@@ -310,22 +338,22 @@ export const getUserAttendanceByMonth = async (req: Request, res: Response) => {
         checkOut: checkOutTime ? checkOutTime.format('HH:mm') : null, // HH:MM
         checkInTime: record.checkInTime,
         checkOutTime: record.checkOutTime,
-        totalHours: parseFloat(record.dailyTotalWorkHours || 0),
-        workHours: parseFloat(record.dailyTotalWorkHours || 0),
-        lateMinutes: parseFloat(record.lateMinutes || 0),
-        earlyDepartureMinutes: parseFloat(record.earlyDepartureMinutes || 0),
+        totalHours: parseFloat(record.dailyTotalWorkHours?.toString() || '0'),
+        workHours: parseFloat(record.dailyTotalWorkHours?.toString() || '0'),
+        lateMinutes: parseFloat(record.lateMinutes?.toString() || '0'),
+        earlyDepartureMinutes: parseFloat(record.earlyDepartureMinutes?.toString() || '0'),
         status: determineAttendanceStatus(record),
-        overtime: parseFloat(record.otMinutes || 0) / 60 // Convert minutes to hours
+        overtime: parseFloat(record.otMinutes?.toString() || '0') / 60
       };
     });
 
-    console.log(`✅ Found ${formattedData.length} attendance records for user ${userId}`);
+    console.log(`✅ Found ${formattedData.length} attendance records for user ${params.userId}`);
 
     return res.status(200).json({
       success: true,
       data: formattedData,
       total: formattedData.length,
-      period: { year: parseInt(year as string), month: parseInt(month as string) }
+      period: { year: params.year, month: params.month }
     });
 
   } catch (error) {
@@ -344,22 +372,25 @@ export const getUserMonthlyStats = async (req: Request, res: Response) => {
     const { userId } = req.params;
     const { year, month } = req.query;
 
-    if (!userId || !year || !month) {
-      return res.status(400).json({
-        success: false,
-        message: 'Thiếu thông tin userId, year hoặc month'
-      });
-    }
+    // Validate input
+    const inputs = { userId: parseInt(userId), year: parseInt(year as string), month: parseInt(month as string) };
+    const allowFields = {
+      userId: 'number!',
+      year: 'number!',
+      month: 'number!'
+    };
+
+    const params = validate(inputs, allowFields, { removeNotAllow: true });
 
     // Tạo startDate và endDate cho tháng
-    const startDate = dayjs(`${year}-${String(month).padStart(2, '0')}-01`).format('YYYY-MM-DD');
-    const lastDay = dayjs(`${year}-${String(month).padStart(2, '0')}-01`).daysInMonth();
-    const endDate = dayjs(`${year}-${String(month).padStart(2, '0')}-01`).endOf('month').format('YYYY-MM-DD');
+    const startDate = dayjs(`${params.year}-${String(params.month).padStart(2, '0')}-01`).format('YYYY-MM-DD');
+    const lastDay = dayjs(`${params.year}-${String(params.month).padStart(2, '0')}-01`).daysInMonth();
+    const endDate = dayjs(`${params.year}-${String(params.month).padStart(2, '0')}-01`).endOf('month').format('YYYY-MM-DD');
 
-    console.log('📊 Calculating monthly stats:', { userId, year, month, startDate, endDate });
+    console.log('📊 Calculating monthly stats:', { userId: params.userId, year: params.year, month: params.month, startDate, endDate });
 
-    const attendanceRecords = await connection('time_attendances')
-      .where('userId', userId)
+    const attendanceRecords = await TimeAttendanceModel.query()
+      .where('userId', params.userId)
       .whereBetween('date', [startDate, endDate]);
 
     // Tính toán thống kê
@@ -367,23 +398,20 @@ export const getUserMonthlyStats = async (req: Request, res: Response) => {
     const presentDays = attendanceRecords.filter(record => record.checkInTime).length;
     const absentDays = totalDays - presentDays;
     
-    // Tính các loại chấm công
     const lateDays = attendanceRecords.filter(record => 
-      parseFloat(record.lateMinutes || 0) > 0
+      parseFloat(record.lateMinutes?.toString() || '0') > 0
     ).length;
     
     const earlyLeaveDays = attendanceRecords.filter(record => 
-      parseFloat(record.earlyDepartureMinutes || 0) > 0
+      parseFloat(record.earlyDepartureMinutes?.toString() || '0') > 0
     ).length;
 
-    // Tính tổng giờ làm việc
     const totalHours = attendanceRecords.reduce((sum, record) => 
-      sum + parseFloat(record.dailyTotalWorkHours || 0), 0
+      sum + parseFloat(record.dailyTotalWorkHours?.toString() || '0'), 0
     );
 
-    // Tính giờ overtime
     const overtimeHours = attendanceRecords.reduce((sum, record) => 
-      sum + (parseFloat(record.otMinutes || 0) / 60), 0
+      sum + (parseFloat(record.otMinutes?.toString() || '0') / 60), 0
     );
 
     const averageHours = presentDays > 0 ? totalHours / presentDays : 0;
@@ -404,7 +432,7 @@ export const getUserMonthlyStats = async (req: Request, res: Response) => {
     return res.status(200).json({
       success: true,
       data: stats,
-      period: { year: parseInt(year as string), month: parseInt(month as string) }
+      period: { year: params.year, month: params.month }
     });
 
   } catch (error) {
@@ -423,8 +451,8 @@ function determineAttendanceStatus(record: any): 'on_time' | 'late' | 'early_lea
     return 'absent';
   }
   
-  const lateMinutes = parseFloat(record.lateMinutes || 0);
-  const earlyDepartureMinutes = parseFloat(record.earlyDepartureMinutes || 0);
+  const lateMinutes = parseFloat(record.lateMinutes?.toString() || '0');
+  const earlyDepartureMinutes = parseFloat(record.earlyDepartureMinutes?.toString() || '0');
   
   if (lateMinutes > 0 && earlyDepartureMinutes > 0) {
     return 'late'; // Ưu tiên late nếu cả 2

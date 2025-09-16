@@ -206,25 +206,6 @@ const Roles: React.FC = () => {
         <Col xs={24}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <Select
-                style={{ width: screens.lg ? 160 : 120 }}
-                value={searchColumn}
-                onChange={setSearchColumn}
-                options={[
-                  { value: 'name', label: 'Tên vai trò' },
-                  { value: 'description', label: 'Mô tả' },
-                ]}
-              />
-              <Input
-                placeholder="Tìm kiếm..."
-                value={searchText}
-                onChange={e => setSearchText(e.target.value)}
-                style={{ width: screens.lg ? 240 : 180 }}
-                allowClear
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <Popconfirm
                 title="Bạn có chắc chắn muốn xóa các vai trò đã chọn?"
                 onConfirm={handleDelete}

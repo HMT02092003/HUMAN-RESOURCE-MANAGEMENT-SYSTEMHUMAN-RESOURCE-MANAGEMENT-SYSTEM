@@ -20,7 +20,16 @@ export const updateSettings = async (req: Request, res: Response) => {
             WorkingHours: { start: 'string', end: 'string' },
             LunchBreak: { start: 'string', end: 'string' },
             OvertimeRate: { rate: 'number' },
-            HolidayRate: { rate: 'number' }
+            HolidayRate: { rate: 'number' },
+            WorkingDays: {
+                monday: 'boolean',
+                tuesday: 'boolean',
+                wednesday: 'boolean',
+                thursday: 'boolean',
+                friday: 'boolean',
+                saturday: 'boolean',
+                sunday: 'boolean'
+            }
         };
 
         const params = validate(inputs, allowFields, {
@@ -49,20 +58,41 @@ export const updateSettings = async (req: Request, res: Response) => {
                 key: 'HolidayRate',
                 name: "Tỷ lệ ngày nghỉ",
                 value: JSON.stringify(params['HolidayRate'])
+            },
+            {
+                key: 'WorkingDays',
+                name: "Ngày làm việc trong tuần",
+                value: JSON.stringify(params['WorkingDays'])
             }
         ];
 
         console.log('Converted data for database:', convertData);
 
-        await SettingModel.query().delete();
-        await SettingModel.query().insert(convertData);
+        // Xử lý từng setting riêng biệt để tránh duplicate key
+        for (const setting of convertData) {
+            const existing = await SettingModel.query().findOne('key', setting.key);
+            
+            if (existing) {
+                // Cập nhật nếu đã tồn tại
+                await SettingModel.query()
+                    .where('key', setting.key)
+                    .update({
+                        name: setting.name,
+                        value: setting.value
+                    });
+            } else {
+                // Insert nếu chưa tồn tại
+                await SettingModel.query().insert(setting);
+            }
+        }
 
         // Trả về format object cho frontend
         const responseData = {
             WorkingHours: params['WorkingHours'],
             LunchBreak: params['LunchBreak'],
             OvertimeRate: params['OvertimeRate'],
-            HolidayRate: params['HolidayRate']
+            HolidayRate: params['HolidayRate'],
+            WorkingDays: params['WorkingDays']
         };
 
         return res.status(200).json(responseData);

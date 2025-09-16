@@ -1,19 +1,24 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Tabs, Card, Form, TimePicker, InputNumber, Button, message, Spin, Row, Col } from 'antd';
-import { SaveOutlined, SettingOutlined, ClockCircleOutlined, DollarCircleOutlined, CalendarOutlined, ReloadOutlined } from '@ant-design/icons';
-import moment from 'moment';
+import { Tabs, Card, Form, TimePicker, InputNumber, Button, message, Spin, Row, Col, Checkbox, Typography, Space } from 'antd';
+import { SaveOutlined, SettingOutlined, ClockCircleOutlined, DollarCircleOutlined, CalendarOutlined, ReloadOutlined, ScheduleOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import customParseFormat from 'dayjs/plugin/customParseFormat';
+import utc from 'dayjs/plugin/utc';
 import SettingsService from '../../service/settingsService';
+
+// Configure dayjs plugins
+dayjs.extend(customParseFormat);
+dayjs.extend(utc);
 
 // CSS cho TimePicker hover effect
 const timePickerStyle = {
   width: '100%',
-  transition: 'all 0.3s ease',
-  borderRadius: '6px',
 };
 
 const { TabPane } = Tabs;
+const { Title, Text } = Typography;
 
 interface SettingsComponentProps {
   onSave?: (data: any) => void;
@@ -39,11 +44,22 @@ interface HolidayRateConfig {
   rate: number;
 }
 
+interface WorkingDaysConfig {
+  monday: boolean;
+  tuesday: boolean;
+  wednesday: boolean;
+  thursday: boolean;
+  friday: boolean;
+  saturday: boolean;
+  sunday: boolean;
+}
+
 interface SettingsData {
   WorkingHours: WorkingHoursConfig;
   LunchBreak: LunchBreakConfig;
   OvertimeRate: OvertimeRateConfig;
   HolidayRate: HolidayRateConfig;
+  WorkingDays: WorkingDaysConfig;
 }
 
 const SettingsComponent: React.FC<SettingsComponentProps> = ({
@@ -61,7 +77,16 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
     WorkingHours: { start: '08:00', end: '17:00' },
     LunchBreak: { start: '12:00', end: '13:00' },
     OvertimeRate: { rate: 1.5 },
-    HolidayRate: { rate: 3.0 }
+    HolidayRate: { rate: 3.0 },
+    WorkingDays: {
+      monday: true,
+      tuesday: true,
+      wednesday: true,
+      thursday: true,
+      friday: true,
+      saturday: false,
+      sunday: false
+    }
   };
   
   const [settingsData, setSettingsData] = useState<SettingsData>(defaultSettings);
@@ -97,6 +122,15 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       },
       HolidayRate: {
         rate: transformedData?.HolidayRate?.rate || defaultSettings.HolidayRate.rate
+      },
+      WorkingDays: {
+        monday: transformedData?.WorkingDays?.monday ?? defaultSettings.WorkingDays.monday,
+        tuesday: transformedData?.WorkingDays?.tuesday ?? defaultSettings.WorkingDays.tuesday,
+        wednesday: transformedData?.WorkingDays?.wednesday ?? defaultSettings.WorkingDays.wednesday,
+        thursday: transformedData?.WorkingDays?.thursday ?? defaultSettings.WorkingDays.thursday,
+        friday: transformedData?.WorkingDays?.friday ?? defaultSettings.WorkingDays.friday,
+        saturday: transformedData?.WorkingDays?.saturday ?? defaultSettings.WorkingDays.saturday,
+        sunday: transformedData?.WorkingDays?.sunday ?? defaultSettings.WorkingDays.sunday
       }
     };
   };
@@ -179,47 +213,86 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       },
       HolidayRate: {
         rate: data?.HolidayRate?.rate || defaultSettings.HolidayRate.rate
+      },
+      WorkingDays: {
+        monday: data?.WorkingDays?.monday ?? defaultSettings.WorkingDays.monday,
+        tuesday: data?.WorkingDays?.tuesday ?? defaultSettings.WorkingDays.tuesday,
+        wednesday: data?.WorkingDays?.wednesday ?? defaultSettings.WorkingDays.wednesday,
+        thursday: data?.WorkingDays?.thursday ?? defaultSettings.WorkingDays.thursday,
+        friday: data?.WorkingDays?.friday ?? defaultSettings.WorkingDays.friday,
+        saturday: data?.WorkingDays?.saturday ?? defaultSettings.WorkingDays.saturday,
+        sunday: data?.WorkingDays?.sunday ?? defaultSettings.WorkingDays.sunday
       }
     };
   };
 
   const updateFormFields = (data: SettingsData) => {
     try {
+      // Create time values that work with Antd TimePicker
+      const startTime = data.WorkingHours.start.split(':');
+      const endTime = data.WorkingHours.end.split(':');
+      const lunchStartTime = data.LunchBreak.start.split(':');
+      const lunchEndTime = data.LunchBreak.end.split(':');
+      
       form.setFieldsValue({
-        workingHoursStart: moment(data.WorkingHours.start, 'HH:mm'),
-        workingHoursEnd: moment(data.WorkingHours.end, 'HH:mm'),
-        lunchBreakStart: moment(data.LunchBreak.start, 'HH:mm'),
-        lunchBreakEnd: moment(data.LunchBreak.end, 'HH:mm'),
+        workingHoursStart: dayjs().hour(parseInt(startTime[0])).minute(parseInt(startTime[1])).second(0),
+        workingHoursEnd: dayjs().hour(parseInt(endTime[0])).minute(parseInt(endTime[1])).second(0),
+        lunchBreakStart: dayjs().hour(parseInt(lunchStartTime[0])).minute(parseInt(lunchStartTime[1])).second(0),
+        lunchBreakEnd: dayjs().hour(parseInt(lunchEndTime[0])).minute(parseInt(lunchEndTime[1])).second(0),
         overtimeRate: data.OvertimeRate.rate,
         holidayRate: data.HolidayRate.rate,
+        workingDays: {
+          monday: data.WorkingDays.monday,
+          tuesday: data.WorkingDays.tuesday,
+          wednesday: data.WorkingDays.wednesday,
+          thursday: data.WorkingDays.thursday,
+          friday: data.WorkingDays.friday,
+          saturday: data.WorkingDays.saturday,
+          sunday: data.WorkingDays.sunday,
+        }
       });
     } catch (error) {
       console.error('Error updating form fields:', error);
       // Nếu có lỗi, sử dụng cấu hình mặc định
+      // Create default time values
+      const defaultStartTime = defaultSettings.WorkingHours.start.split(':');
+      const defaultEndTime = defaultSettings.WorkingHours.end.split(':');
+      const defaultLunchStartTime = defaultSettings.LunchBreak.start.split(':');
+      const defaultLunchEndTime = defaultSettings.LunchBreak.end.split(':');
+      
       form.setFieldsValue({
-        workingHoursStart: moment(defaultSettings.WorkingHours.start, 'HH:mm'),
-        workingHoursEnd: moment(defaultSettings.WorkingHours.end, 'HH:mm'),
-        lunchBreakStart: moment(defaultSettings.LunchBreak.start, 'HH:mm'),
-        lunchBreakEnd: moment(defaultSettings.LunchBreak.end, 'HH:mm'),
+        workingHoursStart: dayjs().hour(parseInt(defaultStartTime[0])).minute(parseInt(defaultStartTime[1])).second(0),
+        workingHoursEnd: dayjs().hour(parseInt(defaultEndTime[0])).minute(parseInt(defaultEndTime[1])).second(0),
+        lunchBreakStart: dayjs().hour(parseInt(defaultLunchStartTime[0])).minute(parseInt(defaultLunchStartTime[1])).second(0),
+        lunchBreakEnd: dayjs().hour(parseInt(defaultLunchEndTime[0])).minute(parseInt(defaultLunchEndTime[1])).second(0),
         overtimeRate: defaultSettings.OvertimeRate.rate,
         holidayRate: defaultSettings.HolidayRate.rate,
+        workingDays: {
+          monday: defaultSettings.WorkingDays.monday,
+          tuesday: defaultSettings.WorkingDays.tuesday,
+          wednesday: defaultSettings.WorkingDays.wednesday,
+          thursday: defaultSettings.WorkingDays.thursday,
+          friday: defaultSettings.WorkingDays.friday,
+          saturday: defaultSettings.WorkingDays.saturday,
+          sunday: defaultSettings.WorkingDays.sunday,
+        }
       });
     }
   };
 
   const validateTimeLogic = (values: any) => {
-    const workStart = moment(values.workingHoursStart);
-    const workEnd = moment(values.workingHoursEnd);
-    const lunchStart = moment(values.lunchBreakStart);
-    const lunchEnd = moment(values.lunchBreakEnd);
+    const workStart = dayjs(values.workingHoursStart);
+    const workEnd = dayjs(values.workingHoursEnd);
+    const lunchStart = dayjs(values.lunchBreakStart);
+    const lunchEnd = dayjs(values.lunchBreakEnd);
 
     // Kiểm tra thời gian làm việc
-    if (workEnd.isSameOrBefore(workStart)) {
+    if (workEnd.isBefore(workStart) || workEnd.isSame(workStart)) {
       throw new Error('Giờ kết thúc làm việc phải sau giờ bắt đầu');
     }
 
     // Kiểm tra thời gian nghỉ trưa
-    if (lunchEnd.isSameOrBefore(lunchStart)) {
+    if (lunchEnd.isBefore(lunchStart) || lunchEnd.isSame(lunchStart)) {
       throw new Error('Giờ kết thúc nghỉ trưa phải sau giờ bắt đầu nghỉ trưa');
     }
 
@@ -246,6 +319,14 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       throw new Error('Tỷ lệ OT ngày lễ phải cao hơn tỷ lệ OT ngày thường');
     }
 
+    // Kiểm tra ngày làm việc - phải có ít nhất 1 ngày
+    if (values.workingDays) {
+      const hasAtLeastOneDay = Object.values(values.workingDays).some(day => day === true);
+      if (!hasAtLeastOneDay) {
+        throw new Error('Vui lòng chọn ít nhất 1 ngày làm việc trong tuần!');
+      }
+    }
+
     return true;
   };
 
@@ -268,10 +349,19 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
           end: values.lunchBreakEnd.format('HH:mm') || defaultSettings.LunchBreak.end
         },
         OvertimeRate: {
-          rate: parseFloat(values.overtimeRate.toFixed(2)) || defaultSettings.OvertimeRate.rate
+          rate: parseFloat(values.overtimeRate) || defaultSettings.OvertimeRate.rate
         },
         HolidayRate: {
-          rate: parseFloat(values.holidayRate.toFixed(2)) || defaultSettings.HolidayRate.rate
+          rate: parseFloat(values.holidayRate) || defaultSettings.HolidayRate.rate
+        },
+        WorkingDays: {
+          monday: values.workingDays?.monday ?? defaultSettings.WorkingDays.monday,
+          tuesday: values.workingDays?.tuesday ?? defaultSettings.WorkingDays.tuesday,
+          wednesday: values.workingDays?.wednesday ?? defaultSettings.WorkingDays.wednesday,
+          thursday: values.workingDays?.thursday ?? defaultSettings.WorkingDays.thursday,
+          friday: values.workingDays?.friday ?? defaultSettings.WorkingDays.friday,
+          saturday: values.workingDays?.saturday ?? defaultSettings.WorkingDays.saturday,
+          sunday: values.workingDays?.sunday ?? defaultSettings.WorkingDays.sunday
         }
       };
 
@@ -351,7 +441,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
                   if (!value || !endTime) {
                     return Promise.resolve();
                   }
-                  if (moment(value).isSameOrAfter(moment(endTime))) {
+                  if (dayjs(value).isAfter(endTime) || dayjs(value).isSame(endTime)) {
                     return Promise.reject(new Error('Giờ bắt đầu phải trước giờ kết thúc!'));
                   }
                   return Promise.resolve();
@@ -364,6 +454,8 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
               placeholder="Chọn giờ bắt đầu"
               style={timePickerStyle}
               size="large"
+              showNow={false}
+              use12Hours={false}
             />
           </Form.Item>
         </Col>
@@ -379,7 +471,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
                   if (!value || !startTime) {
                     return Promise.resolve();
                   }
-                  if (moment(value).isSameOrBefore(moment(startTime))) {
+                  if (dayjs(value).isBefore(startTime) || dayjs(value).isSame(startTime)) {
                     return Promise.reject(new Error('Giờ kết thúc phải sau giờ bắt đầu!'));
                   }
                   return Promise.resolve();
@@ -392,11 +484,8 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
               placeholder="Chọn giờ kết thúc"
               style={timePickerStyle}
               size="large"
-              minuteStep={15}
-              allowClear={false}
               showNow={false}
               use12Hours={false}
-              inputReadOnly={false}
             />
           </Form.Item>
         </Col>
@@ -452,15 +541,15 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
                   const workEnd = getFieldValue('workingHoursEnd');
                   const lunchEnd = getFieldValue('lunchBreakEnd');
                   
-                  if (workStart && moment(value).isBefore(moment(workStart))) {
+                  if (workStart && dayjs(value).isBefore(workStart)) {
                     return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
                   }
                   
-                  if (workEnd && moment(value).isAfter(moment(workEnd))) {
+                  if (workEnd && dayjs(value).isAfter(workEnd)) {
                     return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
                   }
                   
-                  if (lunchEnd && moment(value).isSameOrAfter(moment(lunchEnd))) {
+                  if (lunchEnd && (dayjs(value).isAfter(lunchEnd) || dayjs(value).isSame(lunchEnd))) {
                     return Promise.reject(new Error('Giờ bắt đầu nghỉ trưa phải trước giờ kết thúc!'));
                   }
                   
@@ -474,11 +563,8 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
               placeholder="Chọn giờ bắt đầu nghỉ trưa"
               style={timePickerStyle}
               size="large"
-              minuteStep={15}
-              allowClear={false}
               showNow={false}
               use12Hours={false}
-              inputReadOnly={false}
             />
           </Form.Item>
         </Col>
@@ -496,15 +582,15 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
                   const workEnd = getFieldValue('workingHoursEnd');
                   const lunchStart = getFieldValue('lunchBreakStart');
                   
-                  if (workStart && moment(value).isBefore(moment(workStart))) {
+                  if (workStart && dayjs(value).isBefore(workStart)) {
                     return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
                   }
                   
-                  if (workEnd && moment(value).isAfter(moment(workEnd))) {
+                  if (workEnd && dayjs(value).isAfter(workEnd)) {
                     return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
                   }
                   
-                  if (lunchStart && moment(value).isSameOrBefore(moment(lunchStart))) {
+                  if (lunchStart && (dayjs(value).isBefore(lunchStart) || dayjs(value).isSame(lunchStart))) {
                     return Promise.reject(new Error('Giờ kết thúc nghỉ trưa phải sau giờ bắt đầu!'));
                   }
                   
@@ -518,11 +604,8 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
               placeholder="Chọn giờ kết thúc nghỉ trưa"
               style={timePickerStyle}
               size="large"
-              minuteStep={15}
-              allowClear={false}
               showNow={false}
               use12Hours={false}
-              inputReadOnly={false}
             />
           </Form.Item>
         </Col>
@@ -733,35 +816,123 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
     </Card>
   );
 
+  const renderWorkingDaysTab = () => {
+    const weekDays = [
+      { key: 'monday', label: 'THỨ HAI', english: 'Monday', color: '#1890ff' },
+      { key: 'tuesday', label: 'THỨ BA', english: 'Tuesday', color: '#1890ff' },
+      { key: 'wednesday', label: 'THỨ TƯ', english: 'Wednesday', color: '#1890ff' },
+      { key: 'thursday', label: 'THỨ NĂM', english: 'Thursday', color: '#1890ff' },
+      { key: 'friday', label: 'THỨ SÁU', english: 'Friday', color: '#1890ff' },
+      { key: 'saturday', label: 'THỨ BẢY', english: 'Saturday', color: '#fa8c16' },
+      { key: 'sunday', label: 'CHỦ NHẬT', english: 'Sunday', color: '#fa541c' }
+    ];
+
+    const handleDayToggle = (dayKey: string) => {
+      const currentValue = form.getFieldValue(['workingDays', dayKey]) || false;
+      const newValue = !currentValue;
+      
+      // Cập nhật giá trị trong form
+      form.setFieldValue(['workingDays', dayKey], newValue);
+      
+      // Force re-render bằng cách cập nhật settingsData
+      setSettingsData(prev => ({
+        ...prev,
+        WorkingDays: {
+          ...prev?.WorkingDays,
+          [dayKey]: newValue
+        }
+      }));
+    };
+
+    return (
+      <Card
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <ScheduleOutlined style={{ color: '#1890ff' }} />
+            <span>Cấu hình ngày làm việc trong tuần</span>
+          </div>
+        }
+        style={{ marginBottom: 0 }}
+      >
+        <div style={{ marginBottom: '24px' }}>
+          <Text strong style={{ fontSize: '16px', marginBottom: '16px', display: 'block' }}>
+            Chọn ngày làm việc trong tuần:
+          </Text>
+          <Row gutter={[16, 16]}>
+            {weekDays.map((day) => {
+              const isSelected = form.getFieldValue(['workingDays', day.key]) || settingsData?.WorkingDays?.[day.key as keyof WorkingDaysConfig] || false;
+              
+              return (
+                <Col xs={24} sm={12} md={8} key={day.key}>
+                  <Form.Item name={['workingDays', day.key]} valuePropName="checked" style={{ margin: 0 }}>
+                    <Card
+                      size="small"
+                      hoverable
+                      style={{ 
+                        textAlign: 'center',
+                        border: `2px solid ${isSelected ? '#52c41a' : '#d9d9d9'}`,
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                        backgroundColor: isSelected ? '#f6ffed' : 'white'
+                      }}
+                      bodyStyle={{ padding: '16px 8px' }}
+                      onClick={() => handleDayToggle(day.key)}
+                    >
+                      <div style={{ 
+                        marginBottom: '8px',
+                        fontSize: '24px',
+                        color: isSelected ? '#52c41a' : '#d9d9d9'
+                      }}>
+                        {isSelected ? '✓' : '○'}
+                      </div>
+                      <Title level={4} style={{ margin: '0 0 4px 0', color: day.color }}>
+                        {day.label}
+                      </Title>
+                      <Text type="secondary" style={{ fontSize: '12px' }}>
+                        {day.english}
+                      </Text>
+                    </Card>
+                  </Form.Item>
+                </Col>
+              );
+            })}
+          </Row>
+        </div>
+
+        <div style={{
+          background: '#f6ffed',
+          border: '1px solid #b7eb8f',
+          borderRadius: '6px',
+          padding: '16px',
+          marginTop: '24px'
+        }}>
+          <p style={{ margin: '0 0 8px 0', color: '#389e0d', fontWeight: 600 }}>
+            <strong>Lưu ý:</strong>
+          </p>
+          <ul style={{ margin: 0, paddingLeft: '20px' }}>
+            <li style={{ color: '#666', marginBottom: '4px' }}>
+              Chọn các ngày trong tuần mà nhân viên cần phải làm việc
+            </li>
+            <li style={{ color: '#666', marginBottom: '4px' }}>
+              Mặc định: Thứ 2 đến Thứ 6 (ngày làm việc hành chính)
+            </li>
+            <li style={{ color: '#666', marginBottom: '4px' }}>
+              Có thể chọn thêm Thứ 7, Chủ nhật nếu công ty làm việc cuối tuần
+            </li>
+            <li style={{ color: '#666', marginBottom: '4px' }}>
+              Phải chọn ít nhất 1 ngày làm việc trong tuần
+            </li>
+          </ul>
+        </div>
+
+
+      </Card>
+    );
+  };
+
   return (
     <div>
-      <style jsx global>{`
-        .ant-picker:hover {
-          border-color: #40a9ff !important;
-          box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2) !important;
-          transform: translateY(-1px);
-        }
-        
-        .ant-picker-focused {
-          border-color: #40a9ff !important;
-          box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2) !important;
-        }
-        
-        .ant-picker {
-          transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1) !important;
-        }
-        
-        .ant-input-number:hover {
-          border-color: #40a9ff !important;
-          transform: translateY(-1px);
-        }
-        
-        .ant-input-number-focused {
-          border-color: #40a9ff !important;
-          box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2) !important;
-        }
-      `}</style>
-      
       <Spin spinning={loading || externalLoading || fetchLoading}>
         <Form
           form={form}
@@ -822,6 +993,18 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
           >
             {renderHolidayRateTab()}
           </TabPane>
+
+          <TabPane
+            tab={
+              <span>
+                <ScheduleOutlined />
+                Ngày làm việc
+              </span>
+            }
+            key="workingDays"
+          >
+            {renderWorkingDaysTab()}
+          </TabPane>
         </Tabs>
 
         <div style={{
@@ -839,15 +1022,6 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
             style={{ minWidth: '120px' }}
           >
             Khôi phục
-          </Button>
-          <Button
-            icon={<SettingOutlined />}
-            size="large"
-            onClick={fetchSettings}
-            loading={fetchLoading}
-            style={{ minWidth: '120px' }}
-          >
-            Tải lại
           </Button>
           <Button
             type="primary"

@@ -217,6 +217,29 @@
   pointer-events: none;
 }
 
+/* Fix TimePicker scroll speed only */
+.ant-picker-time-panel-column {
+  scroll-behavior: auto !important;
+}
+
+.ant-picker-dropdown {
+  position: fixed !important;
+}
+
+/* Prevent auto-scroll when hovering over TimePicker */
+.ant-picker:hover,
+.ant-picker-focused {
+  transform: none !important;
+}
+
+/* Prevent auto-scroll for all interactive elements */
+.ant-input-number:hover,
+.ant-tabs-tab:hover,
+.ant-card:hover,
+.ant-btn:hover {
+  transform: none !important;
+}
+
 /* Custom scrollbar for content */
 .settings-tabs .ant-tabs-content-holder::-webkit-scrollbar {
   width: 6px;

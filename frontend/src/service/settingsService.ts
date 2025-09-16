@@ -13,7 +13,16 @@ const SettingsService = {
         WorkingHours: { start: '08:00', end: '17:00' },
         LunchBreak: { start: '12:00', end: '13:00' },
         OvertimeRate: { rate: 1.5 },
-        HolidayRate: { rate: 3.0 }
+        HolidayRate: { rate: 3.0 },
+        WorkingDays: {
+          monday: true,
+          tuesday: true,
+          wednesday: true,
+          thursday: true,
+          friday: true,
+          saturday: false,
+          sunday: false
+        }
       };
     }
   },

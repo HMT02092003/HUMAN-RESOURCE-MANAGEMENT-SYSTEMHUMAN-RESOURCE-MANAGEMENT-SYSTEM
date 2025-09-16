@@ -5,14 +5,23 @@ import { Card, Row, Col, Typography, Tag, Divider, Button, Space, Calendar, Conf
 import viVN from 'antd/locale/vi_VN';
 import dayjs, { Dayjs } from 'dayjs';
 import localeData from 'dayjs/plugin/localeData';
+import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
+import isBetween from 'dayjs/plugin/isBetween';
+import weekday from 'dayjs/plugin/weekday';
+import customParseFormat from 'dayjs/plugin/customParseFormat';
 import 'dayjs/locale/vi';
 import { LeftOutlined, RightOutlined } from '@ant-design/icons';
-
-dayjs.extend(localeData);
-dayjs.locale('vi');
 import { attendanceService, AttendanceData, MonthlyStats } from '@/src/service/attendanceService';
 import Cookies from 'js-cookie';
 import { getDecodedToken } from '@/src/utils/decode-token';
+
+// Configure dayjs plugins once
+dayjs.extend(localeData);
+dayjs.extend(isSameOrAfter);
+dayjs.extend(isBetween);
+dayjs.extend(weekday);
+dayjs.extend(customParseFormat);
+dayjs.locale('vi');
 
 const AttendanceSimplePage = () => {
   const screens = Grid.useBreakpoint();
@@ -87,16 +96,17 @@ const AttendanceSimplePage = () => {
     switch (status) {
       case 'on_time':
         return <Tag color="green">Đúng giờ</Tag>;
-      case 'late':
-        return <Tag color="gold">Đi muộn</Tag>;
-      case 'early_leave':
-        return <Tag color="red">Về sớm</Tag>;
       case 'absent':
-        return <Tag>Vắng mặt</Tag>;
+        return <Tag color="red">Vắng mặt ❌</Tag>;
       default:
         return <Tag color="blue">Không xác định</Tag>;
     }
   };
+
+  // Tính tổng số ngày bị phạt
+  const getPenaltyDays = useMemo(() => {
+    return monthlyStats.lateDays + monthlyStats.earlyLeaveDays + monthlyStats.absentDays;
+  }, [monthlyStats]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -116,6 +126,16 @@ const AttendanceSimplePage = () => {
     attendanceData.forEach((i) => map.set(i.date, i));
     return map;
   }, [attendanceData]);
+
+  // Kiểm tra xem ngày có bị phạt không
+  const isPenaltyDay = (attendance: AttendanceData | undefined) => {
+    if (!attendance) return false;
+    return attendance.status === 'late' || 
+           attendance.status === 'early_leave' || 
+           attendance.status === 'absent' ||
+           attendance.lateMinutes > 0 ||
+           attendance.earlyDepartureMinutes > 0;
+  };
 
   const cellStyle: React.CSSProperties = {
     padding: 8,
@@ -202,34 +222,33 @@ const AttendanceSimplePage = () => {
           >
             <ConfigProvider locale={viVN}>
               <Calendar
+                className="attendance-calendar-improved"
                 value={calendarValue}
-                onChange={(v) => setCalendarValue(v)}
+                onChange={(v) => setCalendarValue(v as Dayjs)}
                 onPanelChange={(v) => {
-                  setCalendarValue(v);
+                  setCalendarValue(v as Dayjs);
                   setCurrentDate(v.toDate());
                 }}
                 fullscreen={!isMobile}
                 headerRender={() => null}
-                dateFullCellRender={(value) => {
+                cellRender={(value, info) => {
+                  if (info.type !== 'date') return info.originNode;
+                  
                   const dateStr = value.format('YYYY-MM-DD');
                   const attendance = attendanceMap.get(dateStr);
                   const isCurrentMonth = value.month() === calendarValue.month();
+                  const hasPenalty = isPenaltyDay(attendance);
+                  
                   return (
                     <div
-                      style={{
-                        padding: isMobile ? 4 : 8,
-                        height: isMobile ? 60 : 90,
-                        border: '1px solid #f0f0f0',
-                        background: attendance ? '#e6f7ff' : undefined,
-                        color: isCurrentMonth ? undefined : '#d9d9d9',
-                        cursor: 'pointer'
-                      }}
+                      className={`calendar-cell ${!isCurrentMonth ? 'other-month' : ''}`}
                       onClick={() => setSelectedDate(value.toDate())}
                     >
-                      <div style={{ fontSize: isMobile ? 10 : 12, marginBottom: 4 }}>{value.date()}</div>
                       {attendance && (
-                        <div style={{ fontSize: isMobile ? 12 : 15 }}>
-                          {attendance.checkIn} - {attendance.checkOut}
+                        <div className="attendance-content">
+                          <div className="time-info" style={{ color: hasPenalty ? '#ff4d4f' : '#666' }}>
+                            <div className="check">{attendance.checkIn || '--:--'} - {attendance.checkOut || '--:--'}</div>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -245,30 +264,60 @@ const AttendanceSimplePage = () => {
           <Card title="Thống kê tháng" style={{ marginBottom: 16 }}>
             <Row gutter={[8, 8]}>
               <Col xs={12} sm={6} lg={12}>
-                <div style={{ textAlign: 'center', background: '#f0f5ff', padding: isMobile ? 8 : 12, borderRadius: 8 }}>
+                <div className="stats-card-present" style={{ 
+                  textAlign: 'center', 
+                  padding: isMobile ? 8 : 12, 
+                  borderRadius: 8,
+                  background: 'linear-gradient(135deg, #e6f4ff 0%, #e6f4ff 100%)',
+                }}>
                   <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#2f54eb' }}>{monthlyStats.presentDays}</Title>
-                  <Text type="secondary" style={{ fontSize: isMobile ? 11 : 12 }}>Ngày có mặt</Text>
+                  <Text style={{ fontSize: isMobile ? 11 : 12, color: '#2f54eb', fontWeight: 500 }}>Ngày có mặt</Text>
                 </div>
               </Col>
               <Col xs={12} sm={6} lg={12}>
-                <div style={{ textAlign: 'center', background: '#fff1f0', padding: isMobile ? 8 : 12, borderRadius: 8 }}>
+                <div className="stats-card-absent" style={{ 
+                  textAlign: 'center', 
+                  padding: isMobile ? 8 : 12, 
+                  borderRadius: 8,
+                  background: 'linear-gradient(135deg, #fff1f0 0%, #fff1f0 100%)',
+                }}>
                   <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#cf1322' }}>{monthlyStats.absentDays}</Title>
-                  <Text type="secondary" style={{ fontSize: isMobile ? 11 : 12 }}>Ngày vắng</Text>
+                  <Text style={{ fontSize: isMobile ? 11 : 12, color: '#cf1322', fontWeight: 500 }}>
+                    Ngày vắng 
+                  </Text>
                 </div>
               </Col>
               <Col xs={12} sm={6} lg={12}>
-                <div style={{ textAlign: 'center', background: '#fff7e6', padding: isMobile ? 8 : 12, borderRadius: 8 }}>
+                <div className="stats-card-late" style={{ 
+                  textAlign: 'center', 
+                  padding: isMobile ? 8 : 12, 
+                  borderRadius: 8,
+                  background: 'linear-gradient(135deg, #fff7e6 0%, #fff7e6 100%)',
+                }}>
                   <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#d48806' }}>{monthlyStats.lateDays}</Title>
-                  <Text type="secondary" style={{ fontSize: isMobile ? 11 : 12 }}>Đi muộn</Text>
+                  <Text style={{ fontSize: isMobile ? 11 : 12, color: '#d48806', fontWeight: 500 }}>
+                    Đi muộn
+                  </Text>
                 </div>
               </Col>
               <Col xs={12} sm={6} lg={12}>
-                <div style={{ textAlign: 'center', background: '#fff7e6', padding: isMobile ? 8 : 12, borderRadius: 8 }}>
+                <div className="stats-card-early-leave" style={{ 
+                  textAlign: 'center', 
+                  padding: isMobile ? 8 : 12, 
+                  borderRadius: 8,
+                  background: 'linear-gradient(135deg, #fff2e8 0%, #fff2e8 100%)',
+                }}>
                   <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#fa8c16' }}>{monthlyStats.earlyLeaveDays}</Title>
-                  <Text type="secondary" style={{ fontSize: isMobile ? 11 : 12 }}>Về sớm</Text>
+                  <Text style={{ fontSize: isMobile ? 11 : 12, color: '#fa8c16', fontWeight: 500 }}>
+                    Về sớm
+                  </Text>
                 </div>
               </Col>
             </Row>
+            
+            {/* Thông báo cảnh báo tổng hợp */}
+            <Divider style={{ margin: '12px 0' }} />
+            
             <Divider style={{ margin: '12px 0' }} />
             <Row>
               <Col span={24} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -288,51 +337,6 @@ const AttendanceSimplePage = () => {
 
           <Card
             title="Chi tiết ngày"
-            extra={
-              <Button
-                type="primary"
-                size="small"
-                onClick={async () => {
-                  try {
-                    const userId = 1; // TODO: lấy từ auth
-                    const time = dayjs().format('HH:mm');
-                    await attendanceService.checkIn(userId, { time });
-                    message.success(`Đã chấm công vào lúc ${time}`);
-
-                    // Cập nhật nhanh UI cho ngày hiện tại
-                    const dateStr = dayjs().format('YYYY-MM-DD');
-                    const exist = attendanceData.find((i) => i.date === dateStr);
-                    if (exist) {
-                      exist.checkIn = time;
-                      setAttendanceData([...attendanceData]);
-                    } else {
-                      setAttendanceData([
-                        ...attendanceData,
-                        {
-                          id: Date.now(),
-                          userId,
-                          date: dateStr,
-                          checkIn: time,
-                          checkOut: null,
-                          checkInTime: null,
-                          checkOutTime: null,
-                          status: 'on_time',
-                          totalHours: 0,
-                          workHours: 0,
-                          lateMinutes: 0,
-                          earlyDepartureMinutes: 0,
-                          overtime: 0,
-                        },
-                      ]);
-                    }
-                  } catch (e) {
-                    message.error('Chấm công thất bại');
-                  }
-                }}
-              >
-                {isMobile ? 'Chấm công' : 'Chấm công vào (tạm)'}
-              </Button>
-            }
           >
             {selectedDate ? (
               (() => {
