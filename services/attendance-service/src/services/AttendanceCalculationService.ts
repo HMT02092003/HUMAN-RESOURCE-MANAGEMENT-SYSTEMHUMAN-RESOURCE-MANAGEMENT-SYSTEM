@@ -2,9 +2,26 @@ import SettingModel from '@/Models/SettingsModel';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
+import axios from 'axios';
+import os from 'os';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
+
+// Helper function to get local IP address
+function getLocalIpAddress(): string {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]!) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return '127.0.0.1';
+}
+
+const API_GATEWAY_URL = `http://${getLocalIpAddress()}:${process.env['API_GATEWAY_PORT'] || 4000}`;
 
 interface WorkingHours {
   start: string;
@@ -16,8 +33,13 @@ interface LunchBreak {
   end: string;
 }
 
-interface RateConfig {
+interface PenaltyConfig {
   rate: number;
+}
+
+interface UserSalaryInfo {
+  baseSalary: number;
+  allowance?: number;
 }
 
 interface AttendanceCalculation {
@@ -27,83 +49,282 @@ interface AttendanceCalculation {
   otMinutes: number;
   isLate: boolean;
   isEarlyLeave: boolean;
+  penaltyRate: number;
+  latePenaltyAmount: number;
+  earlyLeavePenaltyAmount: number;
 }
 
 export class AttendanceCalculationService {
-  private static async getSettings() {
-    console.log('🔧 NEW CODE LOADED - UPDATED VERSION');
+  
+  // Lấy thông tin lương của user từ auth-service qua API Gateway
+  private static async getUserSalaryInfo(userId: number, token?: string): Promise<UserSalaryInfo | null> {
     try {
-      console.log('🔍 Getting settings from database...');
+      console.log(`🔍 Getting salary info for user ${userId}...`);
+      
+      // Thử với token trước nếu có
+      if (token) {
+        const headers: any = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
+
+        try {
+          // Gọi API lấy thông tin user qua gateway
+          console.log(`🔄 Calling API Gateway with token: ${API_GATEWAY_URL}/api/auth/users/detail/${userId}`);
+          const response = await axios.get(`${API_GATEWAY_URL}/api/auth/users/detail/${userId}`, { headers });
+          
+          console.log('📥 Gateway response status:', response.status);
+          console.log('📥 Gateway response data:', response.data);
+          
+          if (response.data && (response.data.salary !== undefined || response.data.baseSalary !== undefined)) {
+            const salaryInfo: UserSalaryInfo = {
+              baseSalary: response.data.salary || response.data.baseSalary || 0,
+              allowance: response.data.allowance || 0
+            };
+            console.log('💰 Salary info retrieved via Gateway with token:', salaryInfo);
+            return salaryInfo;
+          } else {
+            console.log('⚠️ Gateway response does not contain salary info, trying direct auth service...');
+          }
+        } catch (tokenError: any) {
+          console.log('⚠️ Failed to get salary via Gateway with token:', tokenError.response?.status, tokenError.message);
+          console.log('🔄 Trying direct auth service call...');
+        }
+      }
+
+      // Fallback: Gọi trực tiếp auth service với token nếu có
+      try {
+        console.log(`🔄 Trying direct auth service call for user ${userId}:`);
+        
+        const headers: any = {
+          'Content-Type': 'application/json',
+          'X-Internal-Request': 'true'
+        };
+        
+        // Thử với token nếu có
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        // Try new internal salary endpoint first (no token required)
+        const salaryEndpoint = `http://localhost:4001/api/internal/users/${userId}/salary`;
+        console.log(`🔍 Trying internal salary endpoint: ${salaryEndpoint}`);
+        
+        try {
+          const salaryResponse = await axios.get(salaryEndpoint, {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 10000
+          });
+          
+          console.log('📥 Internal salary response status:', salaryResponse.status);
+          console.log('📥 Internal salary response data:', salaryResponse.data);
+          
+          if (salaryResponse.data && salaryResponse.data.success && salaryResponse.data.data) {
+            const salaryData = salaryResponse.data.data;
+            const salaryInfo: UserSalaryInfo = {
+              baseSalary: salaryData.salary || salaryData.baseSalary || 0,
+              allowance: salaryData.allowance || 0
+            };
+            console.log('✅ Salary info retrieved from internal endpoint:', salaryInfo);
+            return salaryInfo;
+          }
+        } catch (salaryError: any) {
+          console.log('⚠️ Internal salary endpoint failed:', salaryError.response?.status, salaryError.message);
+        }
+        
+        // Fallback to old endpoint with token
+        const endpoint = `http://localhost:4001/api/users/detail/${userId}`;
+        console.log(`🔍 Trying fallback auth service endpoint: ${endpoint}`);
+        console.log('📤 Headers:', headers);
+        
+        const response = await axios.get(endpoint, {
+          headers,
+          timeout: 10000
+        });
+        
+        console.log('📥 Auth service response status:', response.status);
+        console.log('📥 Auth service response data keys:', Object.keys(response.data));
+        
+        if (response.data && (response.data.salary !== undefined || response.data.baseSalary !== undefined)) {
+          const salaryInfo: UserSalaryInfo = {
+            baseSalary: response.data.salary || response.data.baseSalary || 0,
+            allowance: response.data.allowance || 0
+          };
+          console.log(`✅ Salary info retrieved from internal auth service:`, salaryInfo);
+          return salaryInfo;
+        } else {
+          console.error('❌ Auth service response does not contain salary information');
+          console.error('Response data:', response.data);
+        }
+      } catch (directError: any) {
+        console.error('❌ Internal auth service call failed:', {
+          status: directError.response?.status,
+          message: directError.message,
+          data: directError.response?.data
+        });
+      }
+      
+      console.log('⚠️ No salary info found - this might be because:');
+      console.log('  - Token expired or invalid');
+      console.log('  - User does not exist in auth service');
+      console.log('  - User has no salary data');
+      console.log('  - Network/service connection issues');
+      
+      // NOTE: Salary info retrieval failed - this could be due to:
+      // - User does not exist in database
+      // - User has no salary data configured
+      // - Network connectivity issues between services
+      
+      console.log('  - Will set penalty to 0 and continue attendance recording');
+      return null;
+    } catch (error) {
+      console.error('❌ Error getting user salary info:', error);
+      console.log('⚠️ Will set penalty to 0 and continue attendance recording');
+      return null;
+    }
+  }
+
+  // Tính toán tiền phạt dựa trên lương thực tế
+  private static calculatePenaltyAmount(
+    minutes: number, 
+    salaryInfo: UserSalaryInfo | null, 
+    penaltyRatePercent: number
+  ): number {
+    if (!salaryInfo || !salaryInfo.baseSalary || minutes <= 0) {
+      return 0;
+    }
+
+    // Công thức penalty: (Lương cơ bản / 100) * Penalty Rate * Số phút
+    // Penalty rate là % lương cơ bản bị phạt mỗi phút (ví dụ: 0.0001 = 0.01% lương/phút)
+    const baseSalary = parseFloat(salaryInfo.baseSalary.toString());
+    const penaltyPerMinute = baseSalary * penaltyRatePercent;
+    const penaltyAmount = penaltyPerMinute * minutes;
+    
+    console.log(`💸 Penalty calculation for ${minutes} minutes:`);
+    console.log(`- Base salary: ${baseSalary.toLocaleString('vi-VN')} VND`);
+    console.log(`- Penalty rate: ${penaltyRatePercent}% per minute`);
+    console.log(`- Penalty per minute: ${penaltyPerMinute.toLocaleString('vi-VN')} VND`);
+    console.log(`- Minutes: ${minutes}`);
+    console.log(`- Formula: (${baseSalary.toLocaleString('vi-VN')} ÷ 100) × ${penaltyRatePercent} × ${minutes}`);
+    console.log(`- Penalty amount: ${penaltyAmount.toLocaleString('vi-VN')} VND`);
+    
+    return Math.round(penaltyAmount * 100) / 100; // Round to 2 decimal places
+  }
+
+  private static async getSettings() {
+    console.log('🔧 ATTENDANCE CALCULATION SERVICE - Getting settings...');
+    try {
       const settings = await SettingModel.query();
       console.log('📊 Raw settings from DB:', settings);
       
       // Nếu chưa có settings thì return default
       if (!settings || settings.length === 0) {
         console.log('⚠️ No settings found in database, using defaults');
-        return {
-          workingHours: { start: '08:00', end: '17:00' },
-          lunchBreak: { start: '12:00', end: '13:00' },
-          overtimeRate: { rate: 1.5 },
-          holidayRate: { rate: 3.0 }
-        };
+        return this.getDefaultSettings();
       }
 
       const settingsMap: { [key: string]: any } = {};
       
       settings.forEach(setting => {
-        // Tạm thời sử dụng default values
-        console.log(`⚙️ Processing setting: ${setting.key}, value type: ${typeof setting.value}`);
-        settingsMap[setting.key] = setting.key; // Placeholder
+        try {
+          // Parse JSON value từ database
+          const parsedValue = typeof setting.value === 'string' 
+            ? JSON.parse(setting.value) 
+            : setting.value;
+          settingsMap[setting.key] = parsedValue;
+          console.log(`⚙️ Setting loaded: ${setting.key} =`, parsedValue);
+        } catch (parseError) {
+          console.error(`❌ Error parsing setting ${setting.key}:`, parseError);
+          // Nếu parse lỗi thì skip setting này
+        }
       });
 
-      console.log('✅ Using default settings for now');
+      // Merge với default values nếu thiếu settings
+      const defaults = this.getDefaultSettings();
+      
       return {
-        workingHours: { start: '08:00', end: '17:00' },
-        lunchBreak: { start: '12:00', end: '13:00' },
-        overtimeRate: { rate: 1.5 },
-        holidayRate: { rate: 3.0 }
+        workingHours: settingsMap['WorkingHours'] || defaults.workingHours,
+        lunchBreak: settingsMap['LunchBreak'] || defaults.lunchBreak,
+        overtimeRate: settingsMap['OvertimeRate'] || defaults.overtimeRate,
+        holidayRate: settingsMap['HolidayRate'] || defaults.holidayRate,
+        penaltyRate: settingsMap['PenaltyRate'] || defaults.penaltyRate
       };
     } catch (error) {
       console.error('❌ Error getting settings:', error);
-      // Return default settings if database error
-      return {
-        workingHours: { start: '08:00', end: '17:00' },
-        lunchBreak: { start: '12:00', end: '13:00' },
-        overtimeRate: { rate: 1.5 },
-        holidayRate: { rate: 3.0 }
-      };
+      return this.getDefaultSettings();
     }
+  }
+
+  private static getDefaultSettings() {
+    return {
+      workingHours: { start: '08:00', end: '17:00' },
+      lunchBreak: { start: '12:00', end: '13:00' },
+      overtimeRate: { rate: 1.5 },
+      holidayRate: { rate: 3.0 },
+      penaltyRate: { rate: 0.01 } // 0.01% lương cơ bản mỗi phút (tương đương ~600 VND/phút với lương 6M)
+    };
   }
 
   static async calculateAttendance(
     checkInTime: string | null,
     checkOutTime: string | null,
-    date: string
+    date: string,
+    userId?: number,
+    token?: string
   ): Promise<AttendanceCalculation> {
+    console.log('🧮 Starting attendance calculation for:', { date, checkInTime, checkOutTime, userId });
+    
     const settings = await this.getSettings();
     const workingHours = settings.workingHours as WorkingHours;
     const lunchBreak = settings.lunchBreak as LunchBreak;
+    const penaltyRate = (settings.penaltyRate as PenaltyConfig).rate;
+
+    // Lấy thông tin lương của user nếu có userId
+    let salaryInfo: UserSalaryInfo | null = null;
+    if (userId) {
+      salaryInfo = await this.getUserSalaryInfo(userId, token);
+    }
+
+    console.log('⚙️ Using settings:', { workingHours, lunchBreak, penaltyRate });
+    console.log('💰 User salary info:', salaryInfo);
 
     // Nếu không có check-in thì return default
     if (!checkInTime) {
+      console.log('❌ No check-in time provided');
       return {
         workHours: 0,
         lateMinutes: 0,
         earlyDepartureMinutes: 0,
         otMinutes: 0,
         isLate: false,
-        isEarlyLeave: false
+        isEarlyLeave: false,
+        penaltyRate,
+        latePenaltyAmount: 0,
+        earlyLeavePenaltyAmount: 0
       };
     }
 
-    const checkIn = dayjs(checkInTime);
-    const expectedCheckIn = dayjs(`${date} ${workingHours.start}`);
-    const expectedCheckOut = dayjs(`${date} ${workingHours.end}`);
+    // Convert all times to Vietnam timezone (UTC+7) for consistent calculation
+    const checkIn = dayjs(checkInTime).tz('Asia/Ho_Chi_Minh');
+    const expectedCheckIn = dayjs(`${date} ${workingHours.start}`).tz('Asia/Ho_Chi_Minh');
+    const expectedCheckOut = dayjs(`${date} ${workingHours.end}`).tz('Asia/Ho_Chi_Minh');
 
-    // Tính late minutes
+    console.log('🕐 Time comparison (Vietnam timezone):');
+    console.log('- Check-in raw input:', checkInTime);
+    console.log('- Check-in in UTC:', dayjs(checkInTime).utc().format('YYYY-MM-DD HH:mm:ss'));
+    console.log('- Check-in in Vietnam:', checkIn.format('YYYY-MM-DD HH:mm:ss'));
+    console.log('- Expected check-in:', expectedCheckIn.format('YYYY-MM-DD HH:mm:ss'));
+    console.log('- Expected check-out:', expectedCheckOut.format('YYYY-MM-DD HH:mm:ss'));
+
+    // Tính late minutes - chỉ tính nếu check-in muộn hơn giờ quy định
     const lateMinutes = checkIn.isAfter(expectedCheckIn) 
       ? checkIn.diff(expectedCheckIn, 'minute') 
       : 0;
+
+    console.log('⏰ Late calculation:');
+    console.log('- checkIn.isAfter(expectedCheckIn):', checkIn.isAfter(expectedCheckIn));
+    console.log('- Diff in minutes:', checkIn.diff(expectedCheckIn, 'minute'));
+    console.log('- Final lateMinutes:', lateMinutes);
 
     let result: AttendanceCalculation = {
       workHours: 0,
@@ -111,20 +332,26 @@ export class AttendanceCalculationService {
       earlyDepartureMinutes: 0,
       otMinutes: 0,
       isLate: lateMinutes > 0,
-      isEarlyLeave: false
+      isEarlyLeave: false,
+      penaltyRate,
+      latePenaltyAmount: 0,
+      earlyLeavePenaltyAmount: 0
     };
 
     // Nếu có check-out thì tính toán chi tiết
     if (checkOutTime) {
-      const checkOut = dayjs(checkOutTime);
+      const checkOut = dayjs(checkOutTime).tz('Asia/Ho_Chi_Minh');
+      console.log('- Actual check-out:', checkOut.format('YYYY-MM-DD HH:mm:ss'));
       
-      // Tính early departure minutes
+      // Tính early departure minutes - chỉ tính nếu check-out sớm hơn giờ quy định
       const earlyDepartureMinutes = checkOut.isBefore(expectedCheckOut)
         ? expectedCheckOut.diff(checkOut, 'minute')
         : 0;
 
       result.earlyDepartureMinutes = earlyDepartureMinutes;
       result.isEarlyLeave = earlyDepartureMinutes > 0;
+
+      console.log('🏃 Early departure calculation:', { earlyDepartureMinutes });
 
       // Tính tổng giờ làm việc (trừ lunch break)
       const totalMinutes = checkOut.diff(checkIn, 'minute');
@@ -136,17 +363,52 @@ export class AttendanceCalculationService {
       );
       
       const workMinutes = Math.max(0, totalMinutes - lunchBreakMinutes);
-      result.workHours = workMinutes / 60;
+      result.workHours = Math.round((workMinutes / 60) * 100) / 100; // Round to 2 decimal places
 
-      // Tính overtime (nếu làm quá giờ quy định)
-      const standardWorkMinutes = dayjs(`${date} ${workingHours.end}`)
-        .diff(dayjs(`${date} ${workingHours.start}`), 'minute') - 60; // Trừ 60 phút lunch
-      
-      if (workMinutes > standardWorkMinutes) {
-        result.otMinutes = workMinutes - standardWorkMinutes;
-      }
+      console.log('💼 Work hours calculation:');
+      console.log('- Total minutes:', totalMinutes);
+      console.log('- Lunch break minutes:', lunchBreakMinutes);
+      console.log('- Actual work minutes:', workMinutes);
+      console.log('- Work hours:', result.workHours);
+
+      // Tính overtime - KHÔNG tính ở đây theo yêu cầu
+      result.otMinutes = 0; // Không tính OT theo yêu cầu
     }
 
+    // Tính toán tiền phạt dựa trên lương thực tế
+    if (salaryInfo) {
+      result.latePenaltyAmount = this.calculatePenaltyAmount(
+        result.lateMinutes, 
+        salaryInfo, 
+        penaltyRate
+      );
+      
+      result.earlyLeavePenaltyAmount = this.calculatePenaltyAmount(
+        result.earlyDepartureMinutes, 
+        salaryInfo, 
+        penaltyRate
+      );
+      
+      console.log('💰 Penalty amounts calculated:');
+      console.log('- Late penalty:', result.latePenaltyAmount);
+      console.log('- Early leave penalty:', result.earlyLeavePenaltyAmount);
+    } else {
+      console.warn('⚠️ WARNING: Cannot get salary info - penalty will be set to 0');
+      console.warn('- User ID:', userId);
+      console.warn('- Token available:', !!token);
+      console.warn('- Late minutes:', result.lateMinutes);
+      console.warn('- Early departure minutes:', result.earlyDepartureMinutes);
+      console.warn('- Penalty rate:', penaltyRate);
+      console.warn('- Attendance will be saved but penalty amounts will be 0');
+      
+      // Không tính penalty nếu không có thông tin lương
+      result.latePenaltyAmount = 0;
+      result.earlyLeavePenaltyAmount = 0;
+      
+      console.log('💰 Penalty amounts set to 0 due to missing salary info');
+    }
+
+    console.log('✅ Final calculation result:', result);
     return result;
   }
 
@@ -156,11 +418,16 @@ export class AttendanceCalculationService {
     lunchBreak: LunchBreak,
     date: string
   ): number {
-    const lunchStart = dayjs(`${date} ${lunchBreak.start}`);
-    const lunchEnd = dayjs(`${date} ${lunchBreak.end}`);
+    const lunchStart = dayjs(`${date} ${lunchBreak.start}`).tz('Asia/Ho_Chi_Minh');
+    const lunchEnd = dayjs(`${date} ${lunchBreak.end}`).tz('Asia/Ho_Chi_Minh');
+
+    console.log('🍽️ Lunch break calculation:');
+    console.log('- Lunch break period:', `${lunchStart.format('HH:mm')} - ${lunchEnd.format('HH:mm')}`);
+    console.log('- Work period:', `${checkIn.format('HH:mm')} - ${checkOut.format('HH:mm')}`);
 
     // Nếu không có overlap với lunch break thì return 0
     if (checkOut.isBefore(lunchStart) || checkIn.isAfter(lunchEnd)) {
+      console.log('- No overlap with lunch break');
       return 0;
     }
 
@@ -168,7 +435,10 @@ export class AttendanceCalculationService {
     const overlapStart = checkIn.isAfter(lunchStart) ? checkIn : lunchStart;
     const overlapEnd = checkOut.isBefore(lunchEnd) ? checkOut : lunchEnd;
     
-    return Math.max(0, overlapEnd.diff(overlapStart, 'minute'));
+    const overlapMinutes = Math.max(0, overlapEnd.diff(overlapStart, 'minute'));
+    console.log(`- Lunch break overlap: ${overlapMinutes} minutes`);
+    
+    return overlapMinutes;
   }
 
   // Helper method để format time cho logging

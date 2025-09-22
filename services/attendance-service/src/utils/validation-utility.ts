@@ -52,7 +52,7 @@ export const validateFields = (
     newData: Record<string, any> | null = null,
     trimStrings: boolean = true
 ): { error: boolean; message: string; data?: Record<string, any> } => {
-    const debug = (message: string, ...args: any[]) => {
+    const debug = (_message: string, ..._args: any[]) => {
         // You can enable this for debugging
         // console.log(`[DEBUG] ${message}`, ...args);
     };
@@ -64,7 +64,6 @@ export const validateFields = (
     let result: { error: boolean; message: string; data?: Record<string, any> } = {
         error: false,
         message: "OK",
-        data: undefined,
     };
 
     let root = false;

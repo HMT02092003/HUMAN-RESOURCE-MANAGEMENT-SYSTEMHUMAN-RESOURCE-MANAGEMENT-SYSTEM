@@ -77,6 +77,48 @@ app.use('/api/employee', createProxyMiddleware({
   }
 }));
 
+// Proxy trực tiếp cho settings (shortcut route)
+app.use('/api/settings', createProxyMiddleware({
+  target: ATTENDANCE_SERVICE_URL,
+  changeOrigin: true,
+  pathRewrite: { '^/api/settings': '/api/settings' },
+  onProxyReq: (proxyReq, req, res) => {
+    const contentType = req.headers['content-type'] || '';
+    const isJson = typeof contentType === 'string' && contentType.includes('application/json');
+    if (isJson && req.body && Object.keys(req.body).length > 0) {
+      const bodyData = JSON.stringify(req.body);
+      proxyReq.setHeader('Content-Type', 'application/json');
+      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+      proxyReq.write(bodyData);
+    }
+  },
+  onError: (err, req, res) => {
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Bad gateway', details: err.message }));
+  }
+}));
+
+// Proxy trực tiếp cho user stats và month (shortcut routes)
+app.use('/api/user', createProxyMiddleware({
+  target: ATTENDANCE_SERVICE_URL,
+  changeOrigin: true,
+  pathRewrite: { '^/api/user': '/api/user' },
+  onProxyReq: (proxyReq, req, res) => {
+    const contentType = req.headers['content-type'] || '';
+    const isJson = typeof contentType === 'string' && contentType.includes('application/json');
+    if (isJson && req.body && Object.keys(req.body).length > 0) {
+      const bodyData = JSON.stringify(req.body);
+      proxyReq.setHeader('Content-Type', 'application/json');
+      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
+      proxyReq.write(bodyData);
+    }
+  },
+  onError: (err, req, res) => {
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Bad gateway', details: err.message }));
+  }
+}));
+
 // Proxy tới attendance-service
 app.use('/api/attendance', createProxyMiddleware({
   target: ATTENDANCE_SERVICE_URL,

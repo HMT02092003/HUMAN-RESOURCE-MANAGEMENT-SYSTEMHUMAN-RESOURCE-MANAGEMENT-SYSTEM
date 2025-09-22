@@ -13,6 +13,8 @@ export interface AttendanceData {
   workHours: number;
   lateMinutes: number;
   earlyDepartureMinutes: number;
+  lateArrivalPenalty: number; // Tiền phạt đi muộn (VND)
+  earlyLeavePenalty: number;  // Tiền phạt về sớm (VND)
   overtime: number;
 }
 
@@ -25,6 +27,10 @@ export interface MonthlyStats {
   totalHours: number;
   averageHours: number;
   overtimeHours: number;
+  totalLatePenalty: number;      // Tổng tiền phạt đi muộn (VND)
+  totalEarlyLeavePenalty: number; // Tổng tiền phạt về sớm (VND)
+  totalPenalty: number;          // Tổng tiền phạt (VND)
+  totalOvertimePay?: number;     // Tổng tiền overtime (VND)
 }
 
 class AttendanceService {
@@ -48,14 +54,14 @@ class AttendanceService {
     }
   }
 
-  // Lấy thống kê chấm công của user trong tháng
+  // Lấy thống kê chấm công của user trong tháng từ API mới
   async getUserMonthlyStats(userId: number, year: number, month: number): Promise<MonthlyStats> {
     try {
-      console.log('📊 Calling stats API:', `/api/attendance/user/${userId}/stats?year=${year}&month=${month}`);
-      const response = await apiService.get(`/api/attendance/user/${userId}/stats`, {
+      console.log('📊 Calling monthly stats API:', `/api/attendance/user/${userId}/stats/monthly?year=${year}&month=${month}`);
+      const response = await apiService.get(`/api/attendance/user/${userId}/stats/monthly`, {
         params: { year, month }
       });
-      console.log('📥 Raw stats response:', response.data);
+      console.log('📥 Raw monthly stats response:', response.data);
       
       // API trả về {success: true, data: {...}} nên cần lấy response.data.data
       const statsData = response.data.success ? response.data.data : {
@@ -66,9 +72,12 @@ class AttendanceService {
         earlyLeaveDays: 0,
         totalHours: 0,
         averageHours: 0,
-        overtimeHours: 0
+        overtimeHours: 0,
+        totalLatePenalty: 0,
+        totalEarlyLeavePenalty: 0,
+        totalPenalty: 0
       };
-      console.log('✅ Parsed stats data:', statsData);
+      console.log('✅ Parsed monthly stats data:', statsData);
       
       return statsData;
     } catch (error) {
@@ -81,9 +90,28 @@ class AttendanceService {
         earlyLeaveDays: 0,
         totalHours: 0,
         averageHours: 0,
-        overtimeHours: 0
+        overtimeHours: 0,
+        totalLatePenalty: 0,
+        totalEarlyLeavePenalty: 0,
+        totalPenalty: 0
       };
     }
+  }
+
+  // Tính tổng penalty từ attendance data
+  calculatePenaltyFromAttendanceData(attendanceData: AttendanceData[]): {
+    totalLatePenalty: number;
+    totalEarlyLeavePenalty: number;
+    totalPenalty: number;
+  } {
+    const totalLatePenalty = attendanceData.reduce((sum, item) => sum + (item.lateArrivalPenalty || 0), 0);
+    const totalEarlyLeavePenalty = attendanceData.reduce((sum, item) => sum + (item.earlyLeavePenalty || 0), 0);
+    
+    return {
+      totalLatePenalty,
+      totalEarlyLeavePenalty,
+      totalPenalty: totalLatePenalty + totalEarlyLeavePenalty
+    };
   }
 
   // Lấy dữ liệu chấm công theo ngày

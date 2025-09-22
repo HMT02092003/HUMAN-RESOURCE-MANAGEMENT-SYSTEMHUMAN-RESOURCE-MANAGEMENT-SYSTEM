@@ -1,0 +1,77 @@
+/* Enhanced attendance calendar styles for penalty display */
+.attendance-calendar-improved .ant-picker-calendar-date-content {
+  height: auto !important;
+  min-height: 60px !important;
+}
+
+.attendance-calendar-improved .calendar-cell {
+  height: 100%;
+  padding: 2px;
+  font-size: 12px;
+}
+
+.attendance-calendar-improved .attendance-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.attendance-calendar-improved .time-info {
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.attendance-calendar-improved .penalty-info {
+  margin-top: 2px;
+  font-size: 9px;
+  font-weight: bold;
+  color: #ff4d4f;
+  background: rgba(255, 77, 79, 0.1);
+  padding: 1px 3px;
+  border-radius: 2px;
+}
+
+.attendance-calendar-improved .other-month {
+  opacity: 0.3;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .attendance-calendar-improved .ant-picker-calendar-date-content {
+    min-height: 50px !important;
+  }
+  
+  .attendance-calendar-improved .time-info {
+    font-size: 10px;
+  }
+  
+  .attendance-calendar-improved .penalty-info {
+    font-size: 8px;
+    margin-top: 1px;
+  }
+}
+
+/* Enhanced daily detail section */
+.penalty-section {
+  background: #fff2f0;
+  border: 1px solid #ffccc7;
+  border-radius: 6px;
+  padding: 8px;
+  margin: 8px 0;
+}
+
+.penalty-amount {
+  color: #ff4d4f;
+  font-weight: bold;
+}
+
+.penalty-total {
+  background: rgba(255, 77, 79, 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
+  border-top: 1px solid #ffccc7;
+  margin-top: 4px;
+}

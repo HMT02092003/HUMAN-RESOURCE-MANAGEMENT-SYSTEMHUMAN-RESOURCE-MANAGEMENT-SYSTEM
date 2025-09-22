@@ -10,10 +10,26 @@ import isBetween from 'dayjs/plugin/isBetween';
 import weekday from 'dayjs/plugin/weekday';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import 'dayjs/locale/vi';
-import { LeftOutlined, RightOutlined } from '@ant-design/icons';
+import { 
+  LeftOutlined, 
+  RightOutlined, 
+  ClockCircleOutlined, 
+  UserOutlined,
+  CalendarOutlined,
+  HomeOutlined,
+  ExclamationCircleOutlined,
+  DollarOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  MinusCircleOutlined,
+  FieldTimeOutlined,
+  TrophyOutlined,
+  WarningOutlined
+} from '@ant-design/icons';
 import { attendanceService, AttendanceData, MonthlyStats } from '@/src/service/attendanceService';
 import Cookies from 'js-cookie';
 import { getDecodedToken } from '@/src/utils/decode-token';
+import './penalty-styles.css';
 
 // Configure dayjs plugins once
 dayjs.extend(localeData);
@@ -37,7 +53,10 @@ const AttendanceSimplePage = () => {
     earlyLeaveDays: 0,
     totalHours: 0,
     averageHours: 0,
-    overtimeHours: 0
+    overtimeHours: 0,
+    totalLatePenalty: 0,
+    totalEarlyLeavePenalty: 0,
+    totalPenalty: 0
   });
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
 
@@ -59,17 +78,18 @@ const AttendanceSimplePage = () => {
         const currentMonth = currentDate.getMonth() + 1;
         
         console.log('📊 Fetching attendance data for user:', userId, 'Month:', `${currentYear}-${currentMonth}`);
-        
-        const [attendanceData, statsData] = await Promise.all([
+
+        // Gọi song song 2 API: attendance data và monthly stats
+        const [attendanceData, monthlyStatsData] = await Promise.all([
           attendanceService.getUserAttendanceByMonth(userId, currentYear, currentMonth),
           attendanceService.getUserMonthlyStats(userId, currentYear, currentMonth)
         ]);
-        
+
         console.log('✅ Attendance data loaded:', attendanceData);
-        console.log('📈 Monthly stats loaded:', statsData);
+        console.log('� Monthly stats loaded:', monthlyStatsData);
         
         setAttendanceData(attendanceData);
-        setMonthlyStats(statsData);
+        setMonthlyStats(monthlyStatsData);
       } catch (error) {
         console.error('❌ Error fetching attendance data from API:', error);
         message.error('Không thể tải dữ liệu chấm công. Vui lòng thử lại sau.');
@@ -84,24 +104,16 @@ const AttendanceSimplePage = () => {
           earlyLeaveDays: 0,
           totalHours: 0,
           averageHours: 0,
-          overtimeHours: 0
+          overtimeHours: 0,
+          totalLatePenalty: 0,
+          totalEarlyLeavePenalty: 0,
+          totalPenalty: 0
         });
       }
     };
 
     fetchAttendanceData();
   }, [currentDate]);
-
-  const getStatusTag = (status: string) => {
-    switch (status) {
-      case 'on_time':
-        return <Tag color="green">Đúng giờ</Tag>;
-      case 'absent':
-        return <Tag color="red">Vắng mặt ❌</Tag>;
-      default:
-        return <Tag color="blue">Không xác định</Tag>;
-    }
-  };
 
   // Tính tổng số ngày bị phạt
   const getPenaltyDays = useMemo(() => {
@@ -246,7 +258,7 @@ const AttendanceSimplePage = () => {
                     >
                       {attendance && (
                         <div className="attendance-content">
-                          <div className="time-info" style={{ color: hasPenalty ? '#ff4d4f' : '#666' }}>
+                          <div className="time-info" style={{ color: hasPenalty ? '#ff4d4f' : '#666' , fontSize: isMobile ? 10 : 14}}>
                             <div className="check">{attendance.checkIn || '--:--'} - {attendance.checkOut || '--:--'}</div>
                           </div>
                         </div>
@@ -260,83 +272,190 @@ const AttendanceSimplePage = () => {
         </Col>
 
         {/* Stats Section - 30% */}
-        <Col xs={24} lg={7}>
+        <Col xs={24} lg={7} style={{ height: '100vh', overflowY: 'auto'  }}>
           <Card title="Thống kê tháng" style={{ marginBottom: 16 }}>
-            <Row gutter={[8, 8]}>
-              <Col xs={12} sm={6} lg={12}>
-                <div className="stats-card-present" style={{ 
+            <Row gutter={[12, 12]}>
+              <Col xs={12} sm={12} lg={12}>
+                <div style={{ 
                   textAlign: 'center', 
-                  padding: isMobile ? 8 : 12, 
+                  padding: isMobile ? 12 : 16, 
                   borderRadius: 8,
-                  background: 'linear-gradient(135deg, #e6f4ff 0%, #e6f4ff 100%)',
+                  background: '#f6ffed',
+                  border: '1px solid #b7eb8f',
                 }}>
-                  <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#2f54eb' }}>{monthlyStats.presentDays}</Title>
-                  <Text style={{ fontSize: isMobile ? 11 : 12, color: '#2f54eb', fontWeight: 500 }}>Ngày có mặt</Text>
+                  <CheckCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#52c41a', marginBottom: 4 }} />
+                  <div>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#52c41a' }}>{monthlyStats.presentDays}</Title>
+                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#52c41a', fontWeight: 500 }}>
+                      Có mặt
+                    </Text>
+                  </div>
                 </div>
               </Col>
-              <Col xs={12} sm={6} lg={12}>
-                <div className="stats-card-absent" style={{ 
+              <Col xs={12} sm={12} lg={12}>
+                <div style={{ 
                   textAlign: 'center', 
-                  padding: isMobile ? 8 : 12, 
+                  padding: isMobile ? 12 : 16, 
                   borderRadius: 8,
-                  background: 'linear-gradient(135deg, #fff1f0 0%, #fff1f0 100%)',
+                  background: '#fff1f0',
+                  border: '1px solid #ffccc7',
                 }}>
-                  <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#cf1322' }}>{monthlyStats.absentDays}</Title>
-                  <Text style={{ fontSize: isMobile ? 11 : 12, color: '#cf1322', fontWeight: 500 }}>
-                    Ngày vắng 
-                  </Text>
+                  <ClockCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#ff4d4f', marginBottom: 4 }} />
+                  <div>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#ff4d4f' }}>{monthlyStats.lateDays}</Title>
+                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#ff4d4f', fontWeight: 500 }}>
+                      Đi muộn
+                    </Text>
+                  </div>
                 </div>
               </Col>
-              <Col xs={12} sm={6} lg={12}>
-                <div className="stats-card-late" style={{ 
+              <Col xs={12} sm={12} lg={12}>
+                <div style={{ 
                   textAlign: 'center', 
-                  padding: isMobile ? 8 : 12, 
+                  padding: isMobile ? 12 : 16, 
                   borderRadius: 8,
-                  background: 'linear-gradient(135deg, #fff7e6 0%, #fff7e6 100%)',
+                  background: '#fff2e8',
+                  border: '1px solid #ffd591',
                 }}>
-                  <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#d48806' }}>{monthlyStats.lateDays}</Title>
-                  <Text style={{ fontSize: isMobile ? 11 : 12, color: '#d48806', fontWeight: 500 }}>
-                    Đi muộn
-                  </Text>
+                  <ExclamationCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#fa8c16', marginBottom: 4 }} />
+                  <div>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#fa8c16' }}>{monthlyStats.earlyLeaveDays}</Title>
+                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#fa8c16', fontWeight: 500 }}>
+                      Về sớm
+                    </Text>
+                  </div>
                 </div>
               </Col>
-              <Col xs={12} sm={6} lg={12}>
-                <div className="stats-card-early-leave" style={{ 
+              <Col xs={12} sm={12} lg={12}>
+                <div style={{ 
                   textAlign: 'center', 
-                  padding: isMobile ? 8 : 12, 
+                  padding: isMobile ? 12 : 16, 
                   borderRadius: 8,
-                  background: 'linear-gradient(135deg, #fff2e8 0%, #fff2e8 100%)',
+                  background: '#f0f0f0',
+                  border: '1px solid #d9d9d9',
                 }}>
-                  <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#fa8c16' }}>{monthlyStats.earlyLeaveDays}</Title>
-                  <Text style={{ fontSize: isMobile ? 11 : 12, color: '#fa8c16', fontWeight: 500 }}>
-                    Về sớm
-                  </Text>
+                  <CloseCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#8c8c8c', marginBottom: 4 }} />
+                  <div>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#8c8c8c' }}>{monthlyStats.absentDays}</Title>
+                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#8c8c8c', fontWeight: 500 }}>
+                      Vắng mặt
+                    </Text>
+                  </div>
                 </div>
               </Col>
             </Row>
             
-            {/* Thông báo cảnh báo tổng hợp */}
-            <Divider style={{ margin: '12px 0' }} />
-            
-            <Divider style={{ margin: '12px 0' }} />
-            <Row>
-              <Col span={24} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>Tổng giờ làm:</Text>
-                <Text strong style={{ fontSize: isMobile ? 12 : 14 }}>{monthlyStats.totalHours.toFixed(1)}h</Text>
+            {/* Additional stats row */}
+            <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
+              <Col xs={24} sm={12} lg={24}>
+                <div style={{ 
+                  textAlign: 'center', 
+                  padding: isMobile ? 12 : 16, 
+                  borderRadius: 8,
+                  background: '#e6f7ff',
+                  border: '1px solid #91d5ff',
+                }}>
+                  <FieldTimeOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#1890ff', marginBottom: 4 }} />
+                  <div>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#1890ff' }}>{monthlyStats.totalHours.toFixed(1)}h</Title>
+                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#1890ff', fontWeight: 500 }}>
+                      Tổng giờ làm
+                    </Text>
+                  </div>
+                </div>
               </Col>
-              <Col span={24} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>Trung bình/ngày:</Text>
-                <Text strong style={{ fontSize: isMobile ? 12 : 14 }}>{monthlyStats.averageHours.toFixed(1)}h</Text>
-              </Col>
-              <Col span={24} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>Giờ làm thêm:</Text>
-                <Text strong style={{ color: '#389e0d', fontSize: isMobile ? 12 : 14 }}>{monthlyStats.overtimeHours.toFixed(1)}h</Text>
+              <Col xs={24} sm={12} lg={24}>
+                <div style={{ 
+                  textAlign: 'center', 
+                  padding: isMobile ? 12 : 16, 
+                  borderRadius: 8,
+                  background: '#f9f0ff',
+                  border: '1px solid #d3adf7',
+                }}>
+                  <TrophyOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#722ed1', marginBottom: 4 }} />
+                  <div>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#722ed1' }}>{monthlyStats.overtimeHours.toFixed(1)}h</Title>
+                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#722ed1', fontWeight: 500 }}>
+                      Làm thêm
+                    </Text>
+                  </div>
+                </div>
               </Col>
             </Row>
+            
+            {/* Thông tin tiền phạt */}
+            <Divider style={{ margin: '16px 0' }} />
+            <div style={{ 
+              background: '#fff2f0', 
+              padding: isMobile ? 12 : 16, 
+              borderRadius: 8,
+              border: '1px solid #ffccc7'
+            }}>
+              <Row style={{ marginBottom: 12 }}>
+                <Col span={24} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <DollarOutlined style={{ fontSize: isMobile ? 16 : 18, color: '#ff4d4f', marginRight: 8 }} />
+                  <Text strong style={{ fontSize: isMobile ? 14 : 16, color: '#ff4d4f' }}>Tiền phạt tháng này</Text>
+                </Col>
+              </Row>
+              <Row gutter={[8, 8]}>
+                <Col xs={24} sm={12}>
+                  <div style={{ 
+                    textAlign: 'center',
+                    padding: isMobile ? 8 : 12,
+                    background: 'white',
+                    borderRadius: 6,
+                    border: '1px solid #ffccc7'
+                  }}>
+                    <WarningOutlined style={{ fontSize: isMobile ? 14 : 16, color: '#ff4d4f', marginBottom: 4 }} />
+                    <div>
+                      <Text style={{ fontSize: isMobile ? 10 : 11, color: '#8c8c8c', display: 'block' }}>Đi muộn</Text>
+                      <Text strong style={{ color: '#ff4d4f', fontSize: isMobile ? 12 : 14 }}>
+                        {monthlyStats.totalLatePenalty.toLocaleString('vi-VN')}đ
+                      </Text>
+                    </div>
+                  </div>
+                </Col>
+                <Col xs={24} sm={12}>
+                  <div style={{ 
+                    textAlign: 'center',
+                    padding: isMobile ? 8 : 12,
+                    background: 'white',
+                    borderRadius: 6,
+                    border: '1px solid #ffccc7'
+                  }}>
+                    <ExclamationCircleOutlined style={{ fontSize: isMobile ? 14 : 16, color: '#fa8c16', marginBottom: 4 }} />
+                    <div>
+                      <Text style={{ fontSize: isMobile ? 10 : 11, color: '#8c8c8c', display: 'block' }}>Về sớm</Text>
+                      <Text strong style={{ color: '#fa8c16', fontSize: isMobile ? 12 : 14 }}>
+                        {monthlyStats.totalEarlyLeavePenalty.toLocaleString('vi-VN')}đ
+                      </Text>
+                    </div>
+                  </div>
+                </Col>
+              </Row>
+              <div style={{ 
+                marginTop: 12, 
+                paddingTop: 12, 
+                borderTop: '1px solid #ffccc7',
+                textAlign: 'center'
+              }}>
+                <Text style={{ fontSize: isMobile ? 11 : 12, color: '#8c8c8c' }}>Tổng cộng</Text>
+                <div>
+                  <Text strong style={{ color: '#ff4d4f', fontSize: isMobile ? 16 : 18 }}>
+                    {monthlyStats.totalPenalty.toLocaleString('vi-VN')}đ
+                  </Text>
+                </div>
+              </div>
+            </div>
           </Card>
 
           <Card
-            title="Chi tiết ngày"
+            title={
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <CalendarOutlined style={{ marginRight: 8, color: '#1890ff' }} />
+                Chi tiết ngày
+              </div>
+            }
           >
             {selectedDate ? (
               (() => {
@@ -344,29 +463,157 @@ const AttendanceSimplePage = () => {
                 const selectedDateData = attendanceData.find(item => item.date === dateStr);
                 return selectedDateData ? (
                   <div>
-                    <div style={{ textAlign: 'center', marginBottom: 12 }}>
-                      <Title level={isMobile ? 4 : 5} style={{ margin: 0 }}>{formatDate(selectedDateData.date)}</Title>
+                    <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#fafafa', borderRadius: 8 }}>
+                      <CalendarOutlined style={{ fontSize: 18, color: '#1890ff', marginRight: 8 }} />
+                      <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline' }}>{formatDate(selectedDateData.date)}</Title>
                     </div>
-                    <Row style={{ marginBottom: 6, justifyContent: 'space-between' }}>
-                      <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>Giờ vào:</Text>
-                      <Text strong style={{ fontSize: isMobile ? 12 : 14 }}>{selectedDateData.checkIn}</Text>
-                    </Row>
-                    <Row style={{ marginBottom: 6, justifyContent: 'space-between' }}>
-                      <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>Giờ ra:</Text>
-                      <Text strong style={{ fontSize: isMobile ? 12 : 14 }}>{selectedDateData.checkOut}</Text>
-                    </Row>
-                    <Row style={{ marginBottom: 6, justifyContent: 'space-between' }}>
-                      <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>Tổng giờ:</Text>
-                      <Text strong style={{ fontSize: isMobile ? 12 : 14 }}>{selectedDateData.totalHours}h</Text>
-                    </Row>
-                    <Row style={{ marginBottom: 6, justifyContent: 'space-between' }}>
-                      <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>Làm thêm:</Text>
-                      <Text strong style={{ color: '#389e0d', fontSize: isMobile ? 12 : 14 }}>{selectedDateData.overtime}h</Text>
-                    </Row>
-                    <Row style={{ marginBottom: 6, justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>Trạng thái:</Text>
-                      {getStatusTag(selectedDateData.status)}
-                    </Row>
+                    
+                    {/* Thời gian section */}
+                    <div style={{ marginBottom: 16 }}>
+                      <Row gutter={[12, 8]} style={{ marginBottom: 8 }}>
+                        <Col span={24}>
+                          <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#595959' }}>
+                            <ClockCircleOutlined style={{ marginRight: 6 }} />
+                            Thời gian làm việc
+                          </Text>
+                        </Col>
+                      </Row>
+                      <Row gutter={[12, 8]}>
+                        <Col xs={12} sm={12}>
+                          <div style={{ textAlign: 'center', padding: 8, background: '#f6ffed', borderRadius: 6, border: '1px solid #b7eb8f' }}>
+                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#52c41a', display: 'block' }}>Vào làm</Text>
+                            <Text strong style={{ fontSize: isMobile ? 14 : 16, color: '#52c41a' }}>
+                              {selectedDateData.checkIn || '--:--'}
+                            </Text>
+                          </div>
+                        </Col>
+                        <Col xs={12} sm={12}>
+                          <div style={{ textAlign: 'center', padding: 8, background: '#fff7e6', borderRadius: 6, border: '1px solid #ffd591' }}>
+                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#d48806', display: 'block' }}>Tan làm</Text>
+                            <Text strong style={{ fontSize: isMobile ? 14 : 16, color: '#d48806' }}>
+                              {selectedDateData.checkOut || '--:--'}
+                            </Text>
+                          </div>
+                        </Col>
+                      </Row>
+                    </div>
+                    
+                    {/* Thống kê section */}
+                    <div style={{ marginBottom: 16 }}>
+                      <Row gutter={[12, 8]} style={{ marginBottom: 8 }}>
+                        <Col span={24}>
+                          <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#595959' }}>
+                            <FieldTimeOutlined style={{ marginRight: 6 }} />
+                            Thống kê
+                          </Text>
+                        </Col>
+                      </Row>
+                      <Row gutter={[8, 8]}>
+                        <Col xs={12} sm={6}>
+                          <div style={{ textAlign: 'center', padding: 8, background: '#e6f7ff', borderRadius: 6, border: '1px solid #91d5ff' }}>
+                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#1890ff', display: 'block' }}>Tổng giờ</Text>
+                            <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#1890ff' }}>
+                              {selectedDateData.totalHours}h
+                            </Text>
+                          </div>
+                        </Col>
+                        <Col xs={12} sm={6}>
+                          <div style={{ textAlign: 'center', padding: 8, background: '#f9f0ff', borderRadius: 6, border: '1px solid #d3adf7' }}>
+                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#722ed1', display: 'block' }}>Làm thêm</Text>
+                            <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#722ed1' }}>
+                              {selectedDateData.overtime}h
+                            </Text>
+                          </div>
+                        </Col>
+                        <Col xs={12} sm={6}>
+                          <div style={{ textAlign: 'center', padding: 8, background: '#fff1f0', borderRadius: 6, border: '1px solid #ffccc7' }}>
+                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#ff4d4f', display: 'block' }}>Muộn</Text>
+                            <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#ff4d4f' }}>
+                              {selectedDateData.lateMinutes}p
+                            </Text>
+                          </div>
+                        </Col>
+                        <Col xs={12} sm={6}>
+                          <div style={{ textAlign: 'center', padding: 8, background: '#fff2e8', borderRadius: 6, border: '1px solid #ffd591' }}>
+                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#fa8c16', display: 'block' }}>Sớm</Text>
+                            <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#fa8c16' }}>
+                              {selectedDateData.earlyDepartureMinutes}p
+                            </Text>
+                          </div>
+                        </Col>
+                      </Row>
+                    </div>
+                    
+                    {/* Thông tin tiền phạt cho ngày này */}
+                    {(selectedDateData.lateArrivalPenalty > 0 || selectedDateData.earlyLeavePenalty > 0) && (
+                      <div style={{ 
+                        background: '#fff2f0', 
+                        padding: isMobile ? 12 : 16, 
+                        borderRadius: 8,
+                        border: '1px solid #ffccc7',
+                        marginBottom: 16
+                      }}>
+                        <Row style={{ marginBottom: 12 }}>
+                          <Col span={24} style={{ textAlign: 'center' }}>
+                            <DollarOutlined style={{ fontSize: isMobile ? 16 : 18, color: '#ff4d4f', marginRight: 8 }} />
+                            <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#ff4d4f' }}>Tiền phạt ngày này</Text>
+                          </Col>
+                        </Row>
+                        <Row gutter={[8, 8]}>
+                          {selectedDateData.lateArrivalPenalty > 0 && (
+                            <Col xs={24} sm={12}>
+                              <div style={{ 
+                                textAlign: 'center',
+                                padding: isMobile ? 8 : 12,
+                                background: 'white',
+                                borderRadius: 6,
+                                border: '1px solid #ffccc7'
+                              }}>
+                                <WarningOutlined style={{ fontSize: isMobile ? 14 : 16, color: '#ff4d4f', marginBottom: 4 }} />
+                                <div>
+                                  <Text style={{ fontSize: isMobile ? 10 : 11, color: '#8c8c8c', display: 'block' }}>Phạt đi muộn</Text>
+                                  <Text strong style={{ color: '#ff4d4f', fontSize: isMobile ? 12 : 14 }}>
+                                    {selectedDateData.lateArrivalPenalty.toLocaleString('vi-VN')}đ
+                                  </Text>
+                                </div>
+                              </div>
+                            </Col>
+                          )}
+                          {selectedDateData.earlyLeavePenalty > 0 && (
+                            <Col xs={24} sm={12}>
+                              <div style={{ 
+                                textAlign: 'center',
+                                padding: isMobile ? 8 : 12,
+                                background: 'white',
+                                borderRadius: 6,
+                                border: '1px solid #ffccc7'
+                              }}>
+                                <ExclamationCircleOutlined style={{ fontSize: isMobile ? 14 : 16, color: '#fa8c16', marginBottom: 4 }} />
+                                <div>
+                                  <Text style={{ fontSize: isMobile ? 10 : 11, color: '#8c8c8c', display: 'block' }}>Phạt về sớm</Text>
+                                  <Text strong style={{ color: '#fa8c16', fontSize: isMobile ? 12 : 14 }}>
+                                    {selectedDateData.earlyLeavePenalty.toLocaleString('vi-VN')}đ
+                                  </Text>
+                                </div>
+                              </div>
+                            </Col>
+                          )}
+                        </Row>
+                        <div style={{ 
+                          marginTop: 12, 
+                          paddingTop: 12, 
+                          borderTop: '1px solid #ffccc7',
+                          textAlign: 'center'
+                        }}>
+                          <Text style={{ fontSize: isMobile ? 11 : 12, color: '#8c8c8c' }}>Tổng cộng</Text>
+                          <div>
+                            <Text strong style={{ color: '#ff4d4f', fontSize: isMobile ? 16 : 18 }}>
+                              {(selectedDateData.lateArrivalPenalty + selectedDateData.earlyLeavePenalty).toLocaleString('vi-VN')}đ
+                            </Text>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div style={{ textAlign: 'center', padding: '24px 0' }}>

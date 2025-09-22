@@ -705,6 +705,8 @@ export const getUserDetail = async (req: Request, res: Response) => {
         "users.gender",
         "users.startDate",
         "users.baseSalary",
+        "users.salary", 
+        "users.allowance",
         "users.vacationDay",
         "users.dayOff",
         "users.identificationPhoto"

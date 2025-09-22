@@ -218,6 +218,12 @@ router.get('/users/:id/salary', authenticateToken, (req, res) => {
 router.put('/users/:id/salary', authenticateToken, (req, res) => {
   updateSalaryInfo(req, res);
 });
+
+// Route lấy thông tin lương không cần token (dành cho internal service calls)
+router.get('/internal/users/:id/salary', (req, res) => {
+  getSalaryInfo(req, res);
+});
+
 // ===================================END USER===================================
 
 export default router;
