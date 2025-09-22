@@ -1,27 +1,26 @@
 {
-  "name": "api-gateway",
-  "version": "1.0.0",
-  "description": "API Gateway for HRMS Microservices",
+  "name": "hrms-api-gateway",
+  "version": "2.0.0",
+  "description": "Optimized API Gateway for HRMS Microservices",
   "main": "server.js",
   "type": "module",
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "migrate": "echo 'API Gateway does not use database migrations'",
-    "seed": "echo 'API Gateway does not use database seeding'"
+    "health": "curl http://localhost:4000/gateway-health",
+    "clean": "rm -rf node_modules yarn.lock",
+    "reinstall": "yarn clean && yarn install"
   },
   "dependencies": {
-    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
-    "express-rate-limit": "^7.1.5",
-    "helmet": "^7.1.0",
-    "http-proxy-middleware": "^2.0.6",
-    "jsonwebtoken": "^9.0.2",
-    "morgan": "^1.10.1"
+    "http-proxy-middleware": "^2.0.6"
   },
   "devDependencies": {
     "nodemon": "^3.1.7"
-  }
+  },
+  "keywords": ["api-gateway", "microservices", "hrms", "proxy"],
+  "author": "HRMS Team",
+  "license": "MIT"
 }

@@ -1,237 +1,86 @@
-import express from 'express';
-import cors from 'cors';
-import { createProxyMiddleware } from 'http-proxy-middleware';
 import dotenv from 'dotenv';
 import path from 'path';
 
-// Load env file (ưu tiên .env, fallback sang config.env)
+// Load environment variables TRƯỚC KHI import các module khác
 const envPath = path.resolve(process.cwd(), '.env');
 const configEnvPath = path.resolve(process.cwd(), 'config.env');
 
 dotenv.config({ path: envPath });
 dotenv.config({ path: configEnvPath, override: false });
 
+// Import sau khi đã load env
+import express from 'express';
+import cors from 'cors';
+import { getServices, ROUTE_CONFIG } from './config/services.js';
+import { createOptimizedProxy, requestLogger } from './middleware/proxy.js';
+
 const app = express();
 const PORT = process.env.PORT || 4000;
-const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL;
-const EMPLOYEE_SERVICE_URL = process.env.EMPLOYEE_SERVICE_URL;
-const ATTENDANCE_SERVICE_URL = process.env.ATTENDANCE_SERVICE_URL;
-const AI_FACE_RECOGNITION_SERVICE_URL = process.env.AI_FACE_RECOGNITION_SERVICE_URL;
+const SERVICES = getServices(); // Lấy services từ env vars
 
-// CORS: Cho phép mọi origin và credentials
+// CORS configuration
 app.use(cors({
   origin: true,
   credentials: true
 }));
 
-app.use((req, res, next) => {
-  // Bỏ qua logging cho tất cả request
-  next();
-});
+// Request logging (chỉ trong development)
+app.use(requestLogger);
 
-// Parse JSON/urlencoded để có thể log req.body và re-stream body sang dịch vụ đích
+// Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Health check proxy
-app.use('/health', createProxyMiddleware({
-  target: AUTH_SERVICE_URL,
-  changeOrigin: true,
-}));
-
-// Proxy refresh-token trực tiếp sang auth-service
-app.use('/api/refresh-token', createProxyMiddleware({
-  target: AUTH_SERVICE_URL,
-  changeOrigin: true,
-  pathRewrite: { '^/api/refresh-token': '/api/refresh-token' },
-  onProxyReq: (proxyReq, req, res) => {
-    if (req.body && Object.keys(req.body).length > 0) {
-      const bodyData = JSON.stringify(req.body);
-      proxyReq.setHeader('Content-Type', 'application/json');
-      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
-      proxyReq.write(bodyData);
-    }
-  },
-  onError: (err, req, res) => {
-    res.writeHead(502, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Bad gateway', details: err.message }));
+// Tự động tạo proxy routes từ config
+ROUTE_CONFIG.forEach(route => {
+  const targetService = SERVICES[route.target];
+  
+  if (!targetService) {
+    console.error(`❌ Service '${route.target}' not found for route '${route.path}'`);
+    return;
   }
-}));
+  
+  app.use(
+    route.path, 
+    createOptimizedProxy(targetService, route.pathRewrite, route.handleMultipart)
+  );
+  
+  console.log(`✅ Route registered: ${route.path} -> ${route.target} (${targetService})`);
+});
 
-// Proxy tới employee-service
-app.use('/api/employee', createProxyMiddleware({
-  target: EMPLOYEE_SERVICE_URL,
-  changeOrigin: true,
-  pathRewrite: { '^/api/employee': '/api' },
-  onProxyReq: (proxyReq, req, res) => {
-    if (req.body && Object.keys(req.body).length > 0) {
-      const bodyData = JSON.stringify(req.body);
-      proxyReq.setHeader('Content-Type', 'application/json');
-      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
-      proxyReq.write(bodyData);
-    }
-  },
-  onError: (err, req, res) => {
-    res.writeHead(502, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Bad gateway', details: err.message }));
-  }
-}));
-
-// Proxy trực tiếp cho settings (shortcut route)
-app.use('/api/settings', createProxyMiddleware({
-  target: ATTENDANCE_SERVICE_URL,
-  changeOrigin: true,
-  pathRewrite: { '^/api/settings': '/api/settings' },
-  onProxyReq: (proxyReq, req, res) => {
-    const contentType = req.headers['content-type'] || '';
-    const isJson = typeof contentType === 'string' && contentType.includes('application/json');
-    if (isJson && req.body && Object.keys(req.body).length > 0) {
-      const bodyData = JSON.stringify(req.body);
-      proxyReq.setHeader('Content-Type', 'application/json');
-      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
-      proxyReq.write(bodyData);
-    }
-  },
-  onError: (err, req, res) => {
-    res.writeHead(502, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Bad gateway', details: err.message }));
-  }
-}));
-
-// Proxy trực tiếp cho user stats và month (shortcut routes)
-app.use('/api/user', createProxyMiddleware({
-  target: ATTENDANCE_SERVICE_URL,
-  changeOrigin: true,
-  pathRewrite: { '^/api/user': '/api/user' },
-  onProxyReq: (proxyReq, req, res) => {
-    const contentType = req.headers['content-type'] || '';
-    const isJson = typeof contentType === 'string' && contentType.includes('application/json');
-    if (isJson && req.body && Object.keys(req.body).length > 0) {
-      const bodyData = JSON.stringify(req.body);
-      proxyReq.setHeader('Content-Type', 'application/json');
-      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
-      proxyReq.write(bodyData);
-    }
-  },
-  onError: (err, req, res) => {
-    res.writeHead(502, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Bad gateway', details: err.message }));
-  }
-}));
-
-// Proxy tới attendance-service
-app.use('/api/attendance', createProxyMiddleware({
-  target: ATTENDANCE_SERVICE_URL,
-  changeOrigin: true,
-  pathRewrite: { '^/api/attendance': '/api' },
-  onProxyReq: (proxyReq, req, res) => {
-    const contentType = req.headers['content-type'] || '';
-    const isJson = typeof contentType === 'string' && contentType.includes('application/json');
-    if (isJson && req.body && Object.keys(req.body).length > 0) {
-      const bodyData = JSON.stringify(req.body);
-      proxyReq.setHeader('Content-Type', 'application/json');
-      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
-      proxyReq.write(bodyData);
-    }
-  },
-  onError: (err, req, res) => {
-    res.writeHead(502, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Bad gateway', details: err.message }));
-  }
-}));
-
-// Proxy tới AI Face Recognition service
-app.use('/api/ai', createProxyMiddleware({
-  target: AI_FACE_RECOGNITION_SERVICE_URL,
-  changeOrigin: true,
-  pathRewrite: { '^/api/ai': '/api/face-recognition' },
-  onProxyReq: (proxyReq, req, res) => {
-    // Handle multipart form data for image uploads
-    const contentType = req.headers['content-type'] || '';
-    const isMultipart = typeof contentType === 'string' && contentType.includes('multipart/form-data');
-    
-    if (isMultipart && req.body && Object.keys(req.body).length > 0) {
-      // For multipart data, we need to handle it differently
-      const boundary = contentType.split('boundary=')[1];
-      if (boundary) {
-        proxyReq.setHeader('Content-Type', `multipart/form-data; boundary=${boundary}`);
-      }
-    } else if (req.body && Object.keys(req.body).length > 0) {
-      // Handle JSON data
-      const bodyData = JSON.stringify(req.body);
-      proxyReq.setHeader('Content-Type', 'application/json');
-      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
-      proxyReq.write(bodyData);
-    }
-  },
-  onError: (err, req, res) => {
-    res.writeHead(502, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Bad gateway', details: err.message }));
-  }
-}));
-
-// Proxy tất cả các route /api/auth/* sang auth-service
-app.use('/api/auth', createProxyMiddleware({
-  target: AUTH_SERVICE_URL,
-  changeOrigin: true,
-  pathRewrite: { '^/api/auth': '/api' },
-  onProxyReq: (proxyReq, req, res) => {
-    if (req.body && Object.keys(req.body).length > 0) {
-      const bodyData = JSON.stringify(req.body);
-      proxyReq.setHeader('Content-Type', 'application/json');
-      proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
-      proxyReq.write(bodyData);
-    }
-  },
-  onError: (err, req, res) => {
-    res.writeHead(502, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Bad gateway', details: err.message }));
-  }
-}));
-
-// Serve uploaded files via gateway
-app.use('/uploads', createProxyMiddleware({
-  target: AUTH_SERVICE_URL,
-  changeOrigin: true,
-}));
-
-// Health check endpoint riêng cho API Gateway
+// Health check endpoint cho API Gateway
 app.get('/gateway-health', (req, res) => {
   res.status(200).json({
     status: 'OK',
     service: 'API Gateway',
     timestamp: new Date().toISOString(),
     port: PORT,
-    services: {
-      auth: AUTH_SERVICE_URL,
-      employee: EMPLOYEE_SERVICE_URL,
-      attendance: ATTENDANCE_SERVICE_URL,
-      ai: AI_FACE_RECOGNITION_SERVICE_URL
-    }
+    services: SERVICES
   });
 });
 
-// Root endpoint
+// Root endpoint với thông tin các routes
 app.get('/', (req, res) => {
+  const endpoints = ROUTE_CONFIG.reduce((acc, route) => {
+    acc[route.path] = `${route.target} service`;
+    return acc;
+  }, {});
+
   res.json({
-    message: 'API Gateway Service',
-    version: '1.0.0',
-    endpoints: {
-      health: '/gateway-health',
-      auth: '/api/auth/*',
-      employee: '/api/employee/*',
-      attendance: '/api/attendance/*',
-      ai: '/api/ai/*',
-      uploads: '/uploads/*'
-    }
+    message: 'HRMS API Gateway',
+    version: '2.0.0',
+    status: 'running',
+    endpoints
   });
 });
 
+// Khởi động server
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 API Gateway running on port ${PORT}`);
-  console.log(`🌐 Accessible from LAN: http://0.0.0.0:${PORT}`);
-  console.log(`📡 Auth Service URL: ${AUTH_SERVICE_URL}`);
-  console.log(`📡 Employee Service URL: ${EMPLOYEE_SERVICE_URL}`);
-  console.log(`📡 Attendance Service URL: ${ATTENDANCE_SERVICE_URL}`);
-  console.log(`🤖 AI Face Recognition Service URL: ${AI_FACE_RECOGNITION_SERVICE_URL}`);
+  console.log(`🚀 API Gateway v2.0 running on port ${PORT}`);
+  console.log(`🌐 Health check: http://localhost:${PORT}/gateway-health`);
+  
+  // Hiển thị trạng thái services
+  Object.entries(SERVICES).forEach(([name, url]) => {
+    console.log(`📡 ${name.toUpperCase()}: ${url || '❌ NOT CONFIGURED'}`);
+  });
 }); 
