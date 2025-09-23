@@ -16,6 +16,7 @@ interface SalaryInfoProps {
 const SalaryInfo: React.FC<SalaryInfoProps> = ({ userId, userData }) => {
   const [loading, setLoading] = useState(false);
   const [salaryInfo, setSalaryInfo] = useState<any>(null);
+  const [totalSalary, setTotalSalary] = useState(0);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalLoading, setModalLoading] = useState(false);
 
@@ -24,6 +25,7 @@ const SalaryInfo: React.FC<SalaryInfoProps> = ({ userId, userData }) => {
       setLoading(true);
       const response = await UserService.getSalaryInfo(userId);
       setSalaryInfo(response.data);
+      setTotalSalary(Number(response.data.salary) + Number(response.data.allowance) || 0);
     } catch (error: any) {
       message.error("Không thể lấy thông tin lương");
       console.error(error);
@@ -93,7 +95,7 @@ const SalaryInfo: React.FC<SalaryInfoProps> = ({ userId, userData }) => {
             <div style={{ marginBottom: '16px' }}>
               <Text type="secondary">Lương cơ bản</Text>
               <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#1890ff' }}>
-                {(salaryInfo?.salary || 0).toLocaleString('vi-VN')} VNĐ
+                {Number(salaryInfo?.salary || 0).toLocaleString('vi-VN')} VNĐ
               </div>
             </div>
           </Col>
@@ -101,8 +103,8 @@ const SalaryInfo: React.FC<SalaryInfoProps> = ({ userId, userData }) => {
           <Col xs={24} sm={12} md={8}>
             <div style={{ marginBottom: '16px' }}>
               <Text type="secondary">Phụ cấp</Text>
-              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#52c41a' }}>
-                {(salaryInfo?.allowance || 0).toLocaleString('vi-VN')} VNĐ
+              <div style={{ fontSize: '18px', fontWeight: 'bold', color: 'orange' }}>
+                {Number(salaryInfo?.allowance || 0).toLocaleString('vi-VN')} VNĐ
               </div>
             </div>
           </Col>
@@ -110,8 +112,8 @@ const SalaryInfo: React.FC<SalaryInfoProps> = ({ userId, userData }) => {
           <Col xs={24} sm={12} md={8}>
             <div style={{ marginBottom: '16px' }}>
               <Text type="secondary">Tổng lương</Text>
-              <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#f5222d' }}>
-                {(salaryInfo?.totalSalary || 0).toLocaleString('vi-VN')} VNĐ
+              <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#52c41a' }}>
+                {totalSalary.toLocaleString('vi-VN')} VNĐ
               </div>
             </div>
           </Col>

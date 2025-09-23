@@ -1,6 +1,10 @@
-import { Router } from 'express';
+/**
+ * API routes for Auth Service v2.0 - Optimized and TypeScript compliant
+ */
+import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs';
 import {
   loginHandler,
   logoutHandler,
@@ -40,190 +44,159 @@ import {
 
 const router = Router();
 
-// Multer setup for identification photo uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.resolve(process.cwd(), 'public', 'uploads', 'identificationPhoto'));
-  },
-  filename: (req: any, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, `${uniqueSuffix}${ext}`);
+// Enhanced multer setup with better error handling
+const createUploadMiddleware = () => {
+  // Ensure upload directory exists
+  const uploadPath = path.resolve(process.cwd(), 'public', 'uploads', 'identificationPhoto');
+  try {
+    fs.mkdirSync(uploadPath, { recursive: true });
+  } catch (error: any) {
+    console.warn('Warning: Could not create upload directory:', error?.message || 'Unknown error');
   }
-});
 
-const imageOnlyFilter = (req: any, file: any, cb: any) => {
-  if (/^image\//.test(file.mimetype)) return cb(null, true);
-  cb(new Error('Chỉ chấp nhận tệp hình ảnh'));
+  const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, uploadPath);
+    },
+    filename: (req: Request, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      const ext = path.extname(file.originalname);
+      cb(null, `${uniqueSuffix}${ext}`);
+    }
+  });
+
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  const imageOnlyFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`File type ${file.mimetype} not allowed. Allowed types: ${allowedTypes.join(', ')}`));
+    }
+  };
+
+  return multer({ 
+    storage, 
+    fileFilter: imageOnlyFilter, 
+    limits: { fileSize: 5 * 1024 * 1024 } // 5MB
+  });
 };
 
-const upload = multer({ storage, fileFilter: imageOnlyFilter, limits: { fileSize: 5 * 1024 * 1024 } });
+const upload = createUploadMiddleware();
 
 
-// ===================================AUTHENTICATION===================================
-router.post('/register', (req, res) => {
-  console.log('Received data:', req.body);
-  registerHandler(req, res);
-});
+// ===================================
+// AUTHENTICATION ROUTES
+// ===================================
+const authRoutes = [
+  { method: 'post', path: '/register', handler: registerHandler, auth: false },
+  { method: 'post', path: '/login', handler: loginHandler, auth: false },
+  { method: 'post', path: '/logout', handler: logoutHandler, auth: false },
+  { method: 'post', path: '/refresh-token', handler: refreshToken, auth: false },
+  { method: 'post', path: '/forgot-password', handler: sendOTPController, auth: false },
+  { method: 'post', path: '/reset-password', handler: resetPasswordController, auth: false },
+  { method: 'post', path: '/send-otp', handler: sendOTPController, auth: false },
+  { method: 'post', path: '/change-password', handler: changePassword, auth: true },
+  { method: 'get', path: '/check-auth', handler: (req: Request, res: Response) => {
+    res.status(200).json({
+      status: 'success',
+      user: (req as any).auth || null
+    });
+  }, auth: true },
+];
 
-router.post('/login', (req, res) => {
-  console.log('Received data:', req.body);
-  loginHandler(req, res);
-})
+// ===================================
+// ROLE MANAGEMENT ROUTES
+// ===================================
+const roleRoutes = [
+  { method: 'get', path: '/roles', handler: getAllRoles, auth: true },
+  { method: 'post', path: '/createRole', handler: createRole, auth: true },
+  { method: 'get', path: '/roles/:id', handler: getRoleDetail, auth: true },
+  { method: 'put', path: '/roles', handler: updateRole, auth: true },
+  { method: 'delete', path: '/deleteMultipleRoles', handler: deleteMultipleRoles, auth: true },
+  { method: 'delete', path: '/deleteRole', handler: deleteRole, auth: true },
+  { method: 'put', path: '/rolePermission', handler: updateRolePermissions, auth: true },
+  { method: 'get', path: '/rolePermission/:id', handler: getPermissionsByRoleId, auth: true },
+];
 
-router.post('/forgot-password', (req, res) => {
-  console.log('Received data:', req.body);
-  sendOTPController(req, res);
-})
+// ===================================
+// USER MANAGEMENT ROUTES
+// ===================================
+const userRoutes = [
+  { method: 'get', path: '/users', handler: getAllUsers, auth: true },
+  { method: 'get', path: '/users/by-department', handler: getUsersByDepartment, auth: true },
+  { method: 'get', path: '/users/by-chevron', handler: getUsersByChevron, auth: true },
+  { method: 'get', path: '/users/username/:username', handler: getUserByUsername, auth: false }, // AI service
+  { method: 'get', path: '/users/by-username/:username', handler: getUserByUsername, auth: true },
+  { method: 'delete', path: '/users/multiple', handler: deleteMultipleUsers, auth: true },
+  { method: 'post', path: '/users/:id/contract', handler: createContract, auth: true },
+  { method: 'get', path: '/users/detail/:id', handler: getUserDetail, auth: true },
+  { method: 'get', path: '/users/:id', handler: getUserDetail, auth: true },
+  { method: 'delete', path: '/users/:id', handler: deleteUser, auth: true },
+  { method: 'get', path: '/users/:id/salary', handler: getSalaryInfo, auth: true },
+  { method: 'put', path: '/users/:id/salary', handler: updateSalaryInfo, auth: true },
+  { method: 'get', path: '/internal/users/:id/salary', handler: getSalaryInfo, auth: false }, // Internal
+];
 
-router.post('/reset-password', (req, res) => {
-  console.log('Received data:', req.body);
-  resetPasswordController(req, res);
-});
+// Routes with file upload
+const uploadRoutes = [
+  { 
+    method: 'post', 
+    path: '/users', 
+    handler: (req: Request, res: Response) => {
+      if ((req as any).file) {
+        req.body.identificationPhoto = `/uploads/identificationPhoto/${(req as any).file.filename}`;
+      }
+      createUser(req, res);
+    }, 
+    auth: true,
+    upload: true 
+  },
+  { 
+    method: 'put', 
+    path: '/users/:id', 
+    handler: (req: Request, res: Response) => {
+      if ((req as any).file) {
+        req.body.identificationPhoto = `/uploads/identificationPhoto/${(req as any).file.filename}`;
+      }
+      updateUser(req, res);
+    }, 
+    auth: true,
+    upload: true 
+  },
+];
 
-router.post('/logout', (req, res) => {
-  logoutHandler(req, res);
-});
-
-router.post('/refresh-token', (req, res) => {
-  refreshToken(req, res);
-})
-
-router.post('/change-password', authenticateToken, (req, res) => {
-  changePassword(req, res);
-})
-
-// API kiểm tra xác thực token
-router.get('/check-auth', authenticateToken, (req, res) => {
-  res.status(200).json({
-    status: 'success',
-    user: (req as any).auth || null
+// ===================================
+// REGISTER ROUTES DYNAMICALLY
+// ===================================
+const registerRoutes = (routes: any[]) => {
+  routes.forEach(route => {
+    const middlewares: any[] = [];
+    
+    // Add authentication middleware if required
+    if (route.auth) {
+      middlewares.push(authenticateToken);
+    }
+    
+    // Add upload middleware if required
+    if (route.upload) {
+      middlewares.push(upload.single('identificationPhoto'));
+    }
+    
+    // Add handler
+    middlewares.push((req: Request, res: Response) => {
+      console.log(`[${route.method.toUpperCase()}] ${route.path}`);
+      route.handler(req, res);
+    });
+    
+    // Register route
+    (router as any)[route.method](route.path, ...middlewares);
   });
-});
+};
 
-router.post('/send-otp', (req, res) => {
-  sendOTPController(req, res);
-})
-
-// ===================================END AUTHENTICATION===================================
-
-// ===================================START ROLE===================================
-router.get('/roles', authenticateToken, (req, res) => {
-  getAllRoles(req, res);
-});
-
-router.post('/createRole', authenticateToken, (req, res) => {
-  createRole(req, res);
-});
-
-router.get('/roles/:id', authenticateToken, (req, res) => {
-  getRoleDetail(req, res);
-});
-
-router.put('/roles', authenticateToken, (req, res) => {
-  updateRole(req, res);
-});
-
-router.delete('/deleteMultipleRoles', authenticateToken, (req, res) => {
-  deleteMultipleRoles(req, res);
-});
-
-router.delete('/deleteRole', authenticateToken, (req, res) => {
-  deleteRole(req, res);
-});
-// ===================================END ROLE===================================
-
-// ===================================START ROLE PERMISSION===================================
-router.put('/rolePermission', authenticateToken, (req, res) => {
-  updateRolePermissions(req, res);
-});
-router.get('/rolePermission/:id', authenticateToken, (req, res) => {
-  getPermissionsByRoleId(req, res);
-});
-// ===================================END ROLE PERMISSION===================================
-
-// ===================================START USER===================================
-// Route đúng chuẩn RESTful cho lấy danh sách user
-router.get('/users', authenticateToken, (req, res) => {
-  getAllUsers(req, res);
-});
-
-// Route cho lấy users theo department (internal service use)
-router.get('/users/by-department', authenticateToken, (req, res) => {
-  getUsersByDepartment(req, res);
-});
-
-// Route cho lấy users theo chevron (internal service use)
-router.get('/users/by-chevron', authenticateToken, (req, res) => {
-  getUsersByChevron(req, res);
-});
-
-// Route cho lấy user theo username (AI service sử dụng)
-router.get('/users/username/:username', (req, res) => {
-  getUserByUsername(req, res);
-});
-
-// Route cho lấy user theo username
-router.get('/users/by-username/:username', authenticateToken, (req, res) => {
-  getUserByUsername(req, res);
-});
-
-// Route chuẩn RESTful cho tạo user
-router.post('/users', authenticateToken, upload.single('identificationPhoto'), (req: any, res) => {
-  // Attach saved relative path to body for controller
-  if (req.file) {
-    req.body.identificationPhoto = `/uploads/identificationPhoto/${req.file.filename}`;
-  }
-  createUser(req, res);
-});
-
-// Route cho xóa nhiều user (phải đặt trước /users/:id)
-router.delete('/users/multiple', authenticateToken, (req, res) => {
-  deleteMultipleUsers(req, res);
-});
-
-// Route cho tạo hợp đồng cho user (phải đặt trước /users/:id)
-router.post('/users/:id/contract', authenticateToken, (req, res) => {
-  createContract(req, res);
-});
-
-// Route cho lấy chi tiết user với đầy đủ thông tin
-router.get('/users/detail/:id', authenticateToken, (req, res) => {
-  getUserDetail(req, res);
-});
-
-// Route chuẩn RESTful cho lấy chi tiết user
-router.get('/users/:id', authenticateToken, (req, res) => {
-  getUserDetail(req, res);
-});
-
-// Route chuẩn RESTful cho cập nhật user
-router.put('/users/:id', authenticateToken, upload.single('identificationPhoto'), (req: any, res) => {
-  if (req.file) {
-    req.body.identificationPhoto = `/uploads/identificationPhoto/${req.file.filename}`;
-  }
-  updateUser(req, res);
-});
-
-// Route chuẩn RESTful cho xóa user
-router.delete('/users/:id', authenticateToken, (req, res) => {
-  deleteUser(req, res);
-});
-
-// Routes cho quản lý lương
-router.get('/users/:id/salary', authenticateToken, (req, res) => {
-  getSalaryInfo(req, res);
-});
-
-router.put('/users/:id/salary', authenticateToken, (req, res) => {
-  updateSalaryInfo(req, res);
-});
-
-// Route lấy thông tin lương không cần token (dành cho internal service calls)
-router.get('/internal/users/:id/salary', (req, res) => {
-  getSalaryInfo(req, res);
-});
-
-// ===================================END USER===================================
+// Register all routes
+registerRoutes(authRoutes);
+registerRoutes(roleRoutes);
+registerRoutes(userRoutes);
+registerRoutes(uploadRoutes);
 
 export default router;

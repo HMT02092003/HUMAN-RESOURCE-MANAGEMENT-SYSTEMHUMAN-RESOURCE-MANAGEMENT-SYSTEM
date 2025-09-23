@@ -99,13 +99,13 @@ const SalaryModal: React.FC<SalaryModalProps> = ({
           <Form.Item label="Tổng lương hiện tại">
             <Space direction="vertical" style={{ width: '100%' }}>
               <Text>
-                <strong>Lương cơ bản:</strong> {(salaryInfo?.salary || 0).toLocaleString('vi-VN')} VNĐ
+                <strong>Lương cơ bản:</strong> {Number(salaryInfo?.salary || 0).toLocaleString('vi-VN')} VNĐ
               </Text>
               <Text>
-                <strong>Phụ cấp:</strong> {(salaryInfo?.allowance || 0).toLocaleString('vi-VN')} VNĐ
+                <strong>Phụ cấp:</strong> {Number(salaryInfo?.allowance || 0).toLocaleString('vi-VN')} VNĐ
               </Text>
               <Text strong style={{ fontSize: '16px', color: '#1890ff' }}>
-                <strong>Tổng lương:</strong> {(salaryInfo?.totalSalary || 0).toLocaleString('vi-VN')} VNĐ
+                <strong>Tổng lương:</strong> {(Number(salaryInfo?.salary) + Number(salaryInfo?.allowance) || 0).toLocaleString('vi-VN')} VNĐ
               </Text>
             </Space>
           </Form.Item>
