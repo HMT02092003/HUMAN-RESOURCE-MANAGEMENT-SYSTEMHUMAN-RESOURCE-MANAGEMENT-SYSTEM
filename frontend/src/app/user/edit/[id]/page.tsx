@@ -1,8 +1,8 @@
 "use client";
 
 import React from 'react';
-import Edit from '@/src/components/users/edit';
-import MainLayout from "@/src/app/main-layout";
+import Edit from '@/components/users/edit';
+import MainLayout from "@/components/main-layout";
 import { HomeOutlined } from '@ant-design/icons';
 import { useParams } from 'next/navigation';
 

@@ -5,8 +5,8 @@ import { Button, Form, message, Spin, Modal } from 'antd';
 import { LeftCircleFilled, SaveFilled, DeleteFilled } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 
-import DepartmentsForm from '@/src/components/departments/Departments/DepartmentsForm';
-import { departmentService } from '@/src/service/departmentService';
+import DepartmentsForm from '@/components/departments/Departments/DepartmentsForm';
+import { departmentService } from '@/service/departmentService';
 
 
 

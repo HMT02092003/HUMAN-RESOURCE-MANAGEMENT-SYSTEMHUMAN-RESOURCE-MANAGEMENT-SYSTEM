@@ -3,7 +3,7 @@ import { Button, ConfigProvider, Tooltip, Space, Table, Modal, message, Input, G
 import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, SearchOutlined } from "@ant-design/icons";
 import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
-import { chevronService } from '@/src/service/chevronService';
+import { chevronService } from '@/service/chevronService';
 import type { InputRef } from 'antd';
 import type { FilterDropdownProps } from 'antd/es/table/interface';
 import Highlighter from 'react-highlight-words';

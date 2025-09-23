@@ -2,7 +2,7 @@
 
 import React from 'react'
 import Home from "../../components/home/index"
-import MainLayout from "../main-layout"
+import MainLayout from "@/components/main-layout"
 
 const HomePage = () => {
   const breadcrumbItems = [

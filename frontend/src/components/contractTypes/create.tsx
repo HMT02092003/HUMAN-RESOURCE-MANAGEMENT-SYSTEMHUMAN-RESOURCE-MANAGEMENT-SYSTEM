@@ -5,9 +5,9 @@ import React, { use, useState } from 'react'
 import { Button, Form, message } from "antd";
 import { LeftCircleFilled, SaveFilled } from "@ant-design/icons";
 
-import ContractTypesForm from '@/src/components/contractTypes/ContractTypes/ContractsTypeForm';
+import ContractTypesForm from '@/components/contractTypes/ContractTypes/ContractsTypeForm';
 import { useRouter } from 'next/navigation';
-import { contractTypeService } from '@/src/service/contractTypeService';
+import { contractTypeService } from '@/service/contractTypeService';
 
 
 const formItemLayout = {

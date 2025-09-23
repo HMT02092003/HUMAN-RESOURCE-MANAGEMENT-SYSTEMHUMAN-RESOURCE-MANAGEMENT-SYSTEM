@@ -4,7 +4,7 @@ import { Button, ConfigProvider, Space, Table, Tooltip, Modal, message, Input, G
 import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, SearchOutlined } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import dayjs from 'dayjs';
-import { contractTypeService } from '@/src/service/contractTypeService';
+import { contractTypeService } from '@/service/contractTypeService';
 import type { InputRef } from 'antd';
 import type { FilterDropdownProps } from 'antd/es/table/interface';
 import Highlighter from 'react-highlight-words';

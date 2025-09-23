@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Button, ConfigProvider, message, Space, Table, Tooltip, Modal, Popconfirm, Input, Select, Grid, Row, Col } from 'antd';
 import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, PlusOutlined, KeyOutlined, SearchOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
-import { roleService } from '@/src/service/roleService';
+import { roleService } from '@/service/roleService';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 

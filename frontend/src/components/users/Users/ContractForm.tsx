@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Form, Row, Col, Select, DatePicker, Input, InputNumber, Button } from "antd";
 import dayjs from "dayjs"; // Thư viện để xử lý ngày
 import { LeftCircleFilled, SaveFilled } from "@ant-design/icons";
-import { contractTypeService } from "@/src/service/contractTypeService";
+import { contractTypeService } from "@/service/contractTypeService";
 
 const { Option } = Select;
 

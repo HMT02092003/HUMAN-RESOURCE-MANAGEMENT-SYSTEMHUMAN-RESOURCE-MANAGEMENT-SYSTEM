@@ -6,7 +6,7 @@ import { Button, Form, Col, Row, Descriptions, theme, Table, Grid } from 'antd';
 import { LeftOutlined, RightCircleFilled } from '@ant-design/icons';
 import type { DescriptionsProps } from 'antd';
 import { useRouter } from 'next/navigation';
-import constantConfig from '@/src/config/constant';
+import constantConfig from '@/config/constant';
 
 // Use shared constants to avoid mapping mismatches
 const { Gender, Relationship } = constantConfig;

@@ -1,7 +1,7 @@
 "use client";
 
-import MainLayout from "@/src/app/main-layout";
-import Create from '@/src/components/roles/create';
+import MainLayout from "@/components/main-layout";
+import Create from '@/components/roles/create';
 import { HomeOutlined } from '@ant-design/icons';
 
 

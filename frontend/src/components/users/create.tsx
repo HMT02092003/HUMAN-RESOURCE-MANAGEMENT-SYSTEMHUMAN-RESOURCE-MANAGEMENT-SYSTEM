@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import UserForm from "./Users/UserForm";
 import ContractForm from "./Users/ContractForm"; // Đảm bảo bạn đã có component này
 import SalaryForm from "./Users/SalaryForm";
-import UserService from "@/src/service/userService";
+import UserService from "@/service/userService";
 
 const { TabPane } = Tabs;
 

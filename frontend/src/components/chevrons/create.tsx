@@ -3,9 +3,9 @@ import React, { useState } from 'react'
 import { Button, Form, message } from "antd";
 import { LeftCircleFilled, SaveFilled } from "@ant-design/icons";
 
-import ChevronsForm from '@/src/components/chevrons/Chevrons/ChevronsForm';
+import ChevronsForm from '@/components/chevrons/Chevrons/ChevronsForm';
 import { useRouter } from "next/navigation";
-import { chevronService } from '@/src/service/chevronService';
+import { chevronService } from '@/service/chevronService';
 
 
 

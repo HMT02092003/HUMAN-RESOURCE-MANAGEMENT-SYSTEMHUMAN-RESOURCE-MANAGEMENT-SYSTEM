@@ -13,16 +13,31 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "downlevelIteration": true,
+    "forceConsistentCasingInFileNames": true,
     "plugins": [
       {
         "name": "next"
       }
     ],
+    "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./src/*"],
+      "@/components/*": ["./src/components/*"],
+      "@/lib/*": ["./src/lib/*"],
+      "@/utils/*": ["./src/utils/*"],
+      "@/types/*": ["./src/types/*"],
+      "@/constants/*": ["./src/constants/*"],
+      "@/hooks/*": ["./src/hooks/*"],
+      "@/service/*": ["./src/service/*"],
+      "@/config/*": ["./src/config/*"],
+      "@/styles/*": ["./src/styles/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "databases/migrations/20240607143104_create_table.js", "knexfile.js", "server.js", "components/NotificationProvider.js", "socketServer.js"],
-  "exclude": ["node_modules"]
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".next", "out"]
 }

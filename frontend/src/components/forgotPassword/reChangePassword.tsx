@@ -2,11 +2,11 @@
 
 import * as React from "react";
 import { Button, Checkbox, Col, Input, Row, Typography, Form, message } from "antd";
-import "@/src/cssfolder/ForgotPassword.css";
+import "@/styles/forgotPassword.css";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircleOutlined } from "@ant-design/icons";
 import { useState, useEffect } from "react";
-import { authService } from "@/src/service/authService";
+import { authService } from "@/service/authService";
 
 const { Title, Text, Link } = Typography;
 

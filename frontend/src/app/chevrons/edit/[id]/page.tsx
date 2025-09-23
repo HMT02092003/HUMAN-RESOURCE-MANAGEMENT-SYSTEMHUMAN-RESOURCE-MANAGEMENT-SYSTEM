@@ -1,8 +1,8 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import Edit from '@/src/components/chevrons/edit';
-import MainLayout from "@/src/app/main-layout"
+import Edit from '@/components/chevrons/edit';
+import MainLayout from "@/components/main-layout"
 import { HomeOutlined } from '@ant-design/icons';
 
 

@@ -1,8 +1,8 @@
 'use client';
 
 import { useParams } from 'next/navigation';
-import Decentralization from '@/src/components/roles/decentralization';
-import MainLayout from "@/src/app/main-layout"
+import Decentralization from '@/components/roles/decentralization';
+import MainLayout from "@/components/main-layout"
 import { HomeOutlined } from '@ant-design/icons';
 
 

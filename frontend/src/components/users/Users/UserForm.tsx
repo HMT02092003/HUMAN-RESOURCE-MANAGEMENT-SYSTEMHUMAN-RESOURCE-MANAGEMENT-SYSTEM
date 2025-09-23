@@ -7,10 +7,10 @@ import { LeftCircleFilled, DeleteFilled, LockOutlined, PlusOutlined, SaveFilled,
 import dayjs from "dayjs";
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import { useRouter } from "next/navigation";
-import constantConfig from "@/src/config/constant";
-import { roleService } from "@/src/service/roleService";
-import { departmentService } from "@/src/service/departmentService";
-import { chevronService } from "@/src/service/chevronService";
+import constantConfig from "@/config/constant";
+import { roleService } from "@/service/roleService";
+import { departmentService } from "@/service/departmentService";
+import { chevronService } from "@/service/chevronService";
 
 dayjs.extend(customParseFormat);
 

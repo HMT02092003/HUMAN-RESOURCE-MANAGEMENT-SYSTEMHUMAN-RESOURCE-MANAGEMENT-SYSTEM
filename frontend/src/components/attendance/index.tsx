@@ -26,9 +26,9 @@ import {
   TrophyOutlined,
   WarningOutlined
 } from '@ant-design/icons';
-import { attendanceService, AttendanceData, MonthlyStats } from '@/src/service/attendanceService';
+import { attendanceService, AttendanceData, MonthlyStats } from '@/service/attendanceService';
 import Cookies from 'js-cookie';
-import { getDecodedToken } from '@/src/utils/decode-token';
+import { getDecodedToken } from '@/utils/decode-token';
 import './penalty-styles.css';
 
 // Configure dayjs plugins once

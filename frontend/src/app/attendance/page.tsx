@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import MainLayout from '@/src/app/main-layout';
-import AttendanceSimplePage from '@/src/components/attendance';
+import MainLayout from '@/components/main-layout';
+import AttendanceSimplePage from '@/components/attendance';
 import { HomeOutlined } from '@ant-design/icons';
 
 const AttendancePage = () => {

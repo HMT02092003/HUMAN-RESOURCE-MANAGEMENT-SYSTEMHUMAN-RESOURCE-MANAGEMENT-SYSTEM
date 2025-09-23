@@ -7,9 +7,9 @@ import { Button, Form, message, Spin, Modal } from 'antd';
 import { LeftCircleFilled, SaveFilled, DeleteFilled } from '@ant-design/icons';
 import to from 'await-to-js'
 
-import ContractTypesForm from '@/src/components/contractTypes/ContractTypes/ContractsTypeForm';
+import ContractTypesForm from '@/components/contractTypes/ContractTypes/ContractsTypeForm';
 import { useRouter } from 'next/navigation';
-import { contractTypeService } from '@/src/service/contractTypeService';
+import { contractTypeService } from '@/service/contractTypeService';
 
 
 const formItemLayout = {

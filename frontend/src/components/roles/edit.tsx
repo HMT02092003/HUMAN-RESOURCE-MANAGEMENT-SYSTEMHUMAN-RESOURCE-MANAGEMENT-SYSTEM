@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Form, Input, Button, message, Spin } from 'antd';
 import { useRouter } from 'next/navigation';
-import { roleService } from '@/src/service/roleService';
+import { roleService } from '@/service/roleService';
 
 interface RoleForm {
   name: string;

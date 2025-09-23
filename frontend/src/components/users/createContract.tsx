@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Col, Row, message } from 'antd';
 import { useRouter, useParams } from 'next/navigation';
 import ContractForm from './Users/ContractForm';
-import UserService from '@/src/service/userService';
+import UserService from '@/service/userService';
 
 const CreateContract = () => {
   const router = useRouter();

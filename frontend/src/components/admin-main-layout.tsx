@@ -21,11 +21,10 @@ import { Breadcrumb, Layout, Menu, theme, Avatar, Dropdown, Badge, Modal, Button
 import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
-import axios from 'axios';
 import TopBarProgress from 'react-topbar-progress-indicator';
-import { decodePermissions } from '@/src/utils/decode-permisison';
-import LoadingProgress from '@/src/components/LoadingProgress';
-import { authService } from '../service/authService';
+import { decodePermissions } from '@/utils/decode-permisison';
+import LoadingProgress from '@/components/LoadingProgress';
+import { authService } from '@/service/authService';
 
 const { Header, Content, Footer, Sider } = Layout;
 
@@ -403,8 +402,8 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                             style={{
                                 background: "linear-gradient(to right, #e6f7ff, rgb(106, 218, 255))",
                                 padding: isMobile ? "20px 16px" : "20px 50px",
-                                height: isMobile ? "140px" : "200px",
-                                marginBottom: isMobile ? "-20px" : "-60px",
+                                height: isMobile ? "160px" : "200px",
+                                marginBottom: isMobile ? "-60px" : "-90px",
                             }}
                         >
                             <div

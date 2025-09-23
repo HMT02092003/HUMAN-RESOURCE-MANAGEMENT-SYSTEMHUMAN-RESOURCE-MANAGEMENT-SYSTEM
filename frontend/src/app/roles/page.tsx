@@ -1,8 +1,8 @@
 "use client";
 
 import React from 'react'
-import Index from "@/src/components/roles/index"
-import MainLayout from "@/src/app/main-layout"
+import Index from "@/components/roles/index"
+import MainLayout from "@/components/main-layout"
 import { HomeOutlined } from '@ant-design/icons';
 
 const HomePage = () => {

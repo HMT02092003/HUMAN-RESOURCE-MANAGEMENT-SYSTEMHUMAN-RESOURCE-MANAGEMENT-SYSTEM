@@ -3,9 +3,9 @@ import React, { useState } from 'react'
 import { Button, Form, message } from "antd";
 import { LeftCircleFilled, SaveFilled } from "@ant-design/icons";
 
-import DepartmentsForm from '@/src/components/departments/Departments/DepartmentsForm';
+import DepartmentsForm from '@/components/departments/Departments/DepartmentsForm';
 import { useRouter } from "next/navigation";
-import { departmentService } from '@/src/service/departmentService';
+import { departmentService } from '@/service/departmentService';
 
 
 

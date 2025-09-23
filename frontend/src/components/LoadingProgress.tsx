@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import TopBarProgress from 'react-topbar-progress-indicator';
-import { useLoadingProgress } from '@/src/hooks/useLoadingProgress';
+import { useLoadingProgress } from '@/hooks/useLoadingProgress';
 import { usePathname } from 'next/navigation';
 
 // Cấu hình cho thanh tiến trình

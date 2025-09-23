@@ -1,0 +1,88 @@
+/* Admin interface button and table customization */
+
+/* Button size adjustments */
+.ant-btn {
+  height: 28px !important;
+  padding: 2px 12px !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+  min-width: auto !important;
+}
+
+.ant-btn-sm {
+  height: 22px !important;
+  padding: 0 6px !important;
+  font-size: 11px !important;
+}
+
+.ant-btn-lg {
+  height: 36px !important;
+  padding: 4px 15px !important;
+  font-size: 15px !important;
+}
+
+/* Table action buttons */
+.ant-table .ant-btn {
+  margin-right: 8px;
+  margin-bottom: 4px;
+}
+
+/* Form buttons */
+.ant-form .ant-btn {
+  margin-right: 8px;
+}
+
+/* Page header buttons */
+.page-header-buttons .ant-btn {
+  margin-left: 8px;
+}
+
+/* Input size consistency */
+.ant-input,
+.ant-input-password,
+.ant-select-selector {
+  height: 32px !important;
+  font-size: 14px !important;
+}
+
+/* Table pagination */
+.ant-pagination .ant-pagination-item {
+  min-width: 32px;
+  height: 32px;
+  line-height: 30px;
+}
+
+.ant-pagination .ant-pagination-prev,
+.ant-pagination .ant-pagination-next {
+  min-width: 32px;
+  height: 32px;
+  line-height: 32px;
+}
+
+/* Modal buttons */
+.ant-modal-footer .ant-btn {
+  height: 32px !important;
+  margin-left: 8px;
+}
+
+/* Drawer buttons */
+.ant-drawer-footer .ant-btn {
+  height: 32px !important;
+  margin-right: 8px;
+}
+
+/* Card action buttons */
+.ant-card-actions .ant-btn {
+  height: 28px !important;
+  padding: 0 12px !important;
+  font-size: 13px !important;
+}
+
+/* Compact table styling */
+.ant-table-small .ant-table-tbody > tr > td {
+  padding: 8px;
+}
+
+.ant-table-small .ant-table-thead > tr > th {
+  padding: 8px;
+}

@@ -6,7 +6,7 @@ import { useRouter, useParams } from 'next/navigation';
 import ContractInfo from './Users/ContractInfo';
 import UserInfo from './userInfo';
 import SalaryInfo from './Users/SalaryInfo';
-import UserService from '@/src/service/userService';
+import UserService from '@/service/userService';
 
 const View = () => {
   const [activeTab, setActiveTab] = useState("1");

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Typography, Row, Col, Spin, message, Button, Modal } from 'antd';
 import { EditOutlined } from '@ant-design/icons';
-import UserService from '@/src/service/userService';
+import UserService from '@/service/userService';
 import SalaryModal from '../SalaryModal';
 
 const { Title, Text } = Typography;

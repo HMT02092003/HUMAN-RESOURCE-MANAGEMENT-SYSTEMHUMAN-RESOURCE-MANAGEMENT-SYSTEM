@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { message, Button, Space, Card } from 'antd';
 import { SettingOutlined, ReloadOutlined, HistoryOutlined } from '@ant-design/icons';
 import SettingsComponent from './SettingsComponent';
-import settingsService from '@/src/service/settingsService';
-import '../../cssfolder/settings.css';
+import settingsService from '@/service/settingsService';
+import '@/styles/settings.css';
 
 const SettingsIndex: React.FC = () => {
   const [loading, setLoading] = useState(false);

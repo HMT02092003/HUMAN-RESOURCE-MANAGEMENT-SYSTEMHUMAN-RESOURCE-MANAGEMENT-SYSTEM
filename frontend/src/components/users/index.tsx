@@ -11,9 +11,9 @@ import {
   DollarOutlined
 } from "@ant-design/icons";
 import dayjs from 'dayjs';
-import UserService from '@/src/service/userService'; // Ensure this path is correct
+import UserService from '@/service/userService'; // Ensure this path is correct
 import { useRouter } from "next/navigation";
-import constantConfig from "@/src/config/constant";
+import constantConfig from "@/config/constant";
 import SalaryModal from './SalaryModal';
 
 const { statusOptions, Gender } = constantConfig;
@@ -303,7 +303,7 @@ const UserTable = () => {
             },
           }}
         >
-          <Space size="small">
+          <Space size={4}>
             <Tooltip title="Xem">
               <Button
                 type="default"
@@ -353,7 +353,7 @@ const UserTable = () => {
     <div style={{ padding: screens.lg ? 24 : 16 }}>
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24}>
-          <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-start', flexWrap: 'wrap' }}>
             {selectedRowKeys.length > 0 && (
               <Button
                 danger
@@ -380,6 +380,7 @@ const UserTable = () => {
               hidden={!createPer}
               onClick={() => alert("Chức năng upload excel")}
               type="primary"
+              className="btn-top"
               style={{
                 backgroundColor: '#fc5603',
                 border: 'none'
@@ -392,6 +393,7 @@ const UserTable = () => {
             <Button
               onClick={() => alert("Đang xuất file Excel")}
               type="primary"
+              className="btn-top"
               style={{
                 backgroundColor: '#52c41a',
                 border: 'none'

@@ -1,0 +1,33 @@
+{
+  "extends": [
+    "next/core-web-vitals",
+    "next/typescript"
+  ],
+  "rules": {
+    // Remove console.log in production
+    "no-console": "warn",
+    
+    // Prefer const over let
+    "prefer-const": "error",
+    
+    // No unused variables
+    "@typescript-eslint/no-unused-vars": "error",
+    
+    // Enforce consistent return
+    "consistent-return": "error",
+    
+    // No debugger statements
+    "no-debugger": "error",
+    
+    // Prefer template literals
+    "prefer-template": "warn"
+  },
+  "overrides": [
+    {
+      "files": ["*.js", "*.jsx"],
+      "rules": {
+        "@typescript-eslint/no-var-requires": "off"
+      }
+    }
+  ]
+}

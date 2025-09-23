@@ -5,8 +5,8 @@ import { Button, Form, message, Spin, Modal } from 'antd';
 import { LeftCircleFilled, SaveFilled, DeleteFilled } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 
-import ChevronsForm from '@/src/components/chevrons/Chevrons/ChevronsForm';
-import { chevronService } from '@/src/service/chevronService';
+import ChevronsForm from '@/components/chevrons/Chevrons/ChevronsForm';
+import { chevronService } from '@/service/chevronService';
 
 
 

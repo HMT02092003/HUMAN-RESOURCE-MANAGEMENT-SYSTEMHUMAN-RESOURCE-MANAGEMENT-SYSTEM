@@ -3,11 +3,11 @@
 import React from 'react';
 import Cookies from 'js-cookie';
 import { useEffect, useState } from 'react';
-import { getDecodedToken } from '../utils/decode-token';
+import { getDecodedToken } from '@/utils/decode-token';
 import AdminMainLayout from './admin-main-layout';
-import api from '@/src/service/apiService';
+import api from '@/service/apiService';
 import { usePathname, useRouter } from 'next/navigation';
-import { decodePermissions, PermissionObject } from '@/src/utils/decode-permisison'; // Import your permission utilities
+import { decodePermissions, PermissionObject } from '@/utils/decode-permisison'; // Import your permission utilities
 
 type PermissionType = 'create' | 'read' | 'update' | 'delete' | 'approve';
 

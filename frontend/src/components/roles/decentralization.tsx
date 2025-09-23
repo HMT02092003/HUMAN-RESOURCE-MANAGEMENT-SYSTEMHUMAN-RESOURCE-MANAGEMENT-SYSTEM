@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Button, Checkbox, Table, Spin, Select, message } from 'antd';
 import { LeftCircleFilled, SaveFilled } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
-import { roleService } from '@/src/service/roleService';
-import config from '@/src/config/constant';
+import { roleService } from '@/service/roleService';
+import config from '@/config/constant';
 
 interface Permission {
   id: number;

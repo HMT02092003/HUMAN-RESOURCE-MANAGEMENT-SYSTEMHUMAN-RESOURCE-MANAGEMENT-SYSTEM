@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Col, Row, message } from 'antd';
 import { useRouter, useParams } from 'next/navigation';
 import UserForm from './Users/UserForm';
-import UserService from '@/src/service/userService';
+import UserService from '@/service/userService';
 
 const Edit = () => {
   const router = useRouter();

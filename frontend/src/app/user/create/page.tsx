@@ -1,8 +1,8 @@
 "use client";
 
 import React from 'react';
-import Create from '@/src/components/users/create';
-import MainLayout from "@/src/app/main-layout";
+import Create from '@/components/users/create';
+import MainLayout from "@/components/main-layout";
 import { HomeOutlined } from '@ant-design/icons';
 
 const CreateUserPage = () => {
