@@ -1,33 +1,30 @@
 {
-  "name": "employee-service",
-  "version": "1.0.0",
-  "description": "Employee Management Microservice",
+  "name": "hrms-employee-service",
+  "version": "2.0.0",
+  "description": "Employee Management Microservice - Optimized",
   "main": "server.js",
   "type": "module",
   "scripts": {
     "dev": "nodemon --watch . --ext js,ts,json --exec tsx server.js",
-    "build": "next build",
-    "start": "next start",
+    "start": "tsx server.js",
     "migrate": "knex migrate:latest",
-    "seed": "knex seed:run",
-    "lint": "next lint"
+    "seed": "knex seed:run"
   },
   "dependencies": {
-    "axios": "^1.10.0",
-    "bcryptjs": "^2.4.3",
-    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
-    "express-fileupload": "^1.5.1",
-    "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "knex": "^3.1.0",
-    "morgan": "^1.10.1",
-    "multer": "^1.4.5-lts.1",
     "pg": "^8.13.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.7"
+    "nodemon": "^3.1.7",
+    "tsx": "^4.7.0",
+    "@types/node": "^20.5.0",
+    "typescript": "^5.1.6"
+  },
+  "engines": {
+    "node": ">=16.0.0"
   }
 }

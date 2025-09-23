@@ -1,4 +1,7 @@
-import { Router } from 'express';
+/**
+ * Employee Service API Routes v2.0 - Optimized with Dynamic Registration
+ */
+import { Router, Request, Response } from 'express';
 import { authenticateToken } from '../src/middleware/authenticateToken';
 import {
   getAllChevrons,
@@ -26,109 +29,122 @@ import {
 } from '@/src/controller/ContractTypeController';
 import { createContract, getContractsByUser, deleteContractsByUser } from '@/src/controller/ContractController';
 
-
 const router = Router();
 
+// ===================================
+// ROUTE DEFINITIONS
+// ===================================
+const routeGroups = [
+  // CHEVRONS
+  {
+    group: 'chevrons',
+    routes: [
+      { method: 'get', path: '/getAllChevrons', handler: getAllChevrons, auth: true },
+      { method: 'post', path: '/createChevrons', handler: createChevron, auth: true },
+      { method: 'post', path: '/getChevronDetail', handler: getChevronDetail, auth: true },
+      { method: 'put', path: '/updateChevron', handler: updateChevron, auth: true },
+      { method: 'delete', path: '/deleteChevron', handler: deleteChevron, auth: true },
+      { method: 'delete', path: '/deleteMultipleChevrons', handler: deleteMultipleChevrons, auth: true },
+    ]
+  },
 
-// ===================================CHEVRONS===================================
-router.get('/getAllChevrons', authenticateToken, (req, res) => {
-  getAllChevrons(req, res);
+  // DEPARTMENTS
+  {
+    group: 'departments',
+    routes: [
+      { method: 'get', path: '/departments', handler: getAllDepartments, auth: true },
+      { method: 'post', path: '/createDepartments', handler: createDepartment, auth: true },
+      { method: 'get', path: '/departments/:id', handler: getDepartmentDetail, auth: true },
+      { method: 'put', path: '/departments', handler: updateDepartment, auth: true },
+      { method: 'delete', path: '/deleteMultipleDepartments', handler: deleteMultipleDepartments, auth: true },
+      { method: 'delete', path: '/deleteDepartment', handler: deleteDepartment, auth: true },
+    ]
+  },
+  // CONTRACT TYPES
+  {
+    group: 'contract-types',
+    routes: [
+      { method: 'get', path: '/contractTypes', handler: getAllContractTypes, auth: true },
+      { method: 'post', path: '/createContractType', handler: createContractType, auth: true },
+      { method: 'get', path: '/contractTypes/:id', handler: getContractTypeDetail, auth: true },
+      { method: 'put', path: '/contractTypes', handler: updateContractType, auth: true },
+      { method: 'delete', path: '/deleteMultipleContractTypes', handler: deleteMultipleContractTypes, auth: true },
+      { method: 'delete', path: '/deleteContractType', handler: deleteContractType, auth: true },
+    ]
+  },
+  // CONTRACTS
+  {
+    group: 'contracts',
+    routes: [
+      { method: 'post', path: '/users/:userId/contracts', handler: createContract, auth: true },
+      { method: 'post', path: '/contracts', handler: createContract, auth: true }, // Backward compatible
+      { method: 'get', path: '/contracts/user/:userId', handler: getContractsByUser, auth: true },
+      { method: 'delete', path: '/contracts/user/:userId', handler: deleteContractsByUser, auth: true },
+    ]
+  }
+];
+
+// ===================================
+// DYNAMIC ROUTE REGISTRATION
+// ===================================
+const registerRoutes = (groups: any[]) => {
+  groups.forEach(({ group, routes }) => {
+    routes.forEach((route: any) => {
+      const middlewares: any[] = [];
+      
+      // Add authentication middleware if required
+      if (route.auth) {
+        middlewares.push(authenticateToken);
+      }
+      
+      // Add handler with error handling
+      middlewares.push(async (req: Request, res: Response) => {
+        try {
+          console.log(`[${route.method.toUpperCase()}] ${route.path} - ${group}`);
+          await route.handler(req, res);
+        } catch (error) {
+          console.error(`Error in ${group}.${route.handler.name}:`, error);
+          res.status(500).json({
+            error: 'Internal server error',
+            group,
+            endpoint: `${route.method.toUpperCase()} ${route.path}`,
+            timestamp: new Date().toISOString()
+          });
+        }
+      });
+      
+      // Register route
+      (router as any)[route.method](route.path, ...middlewares);
+    });
+  });
+};
+
+// Register all routes
+registerRoutes(routeGroups);
+
+// ===================================
+// API INFO ENDPOINT
+// ===================================
+router.get('/', (req: Request, res: Response) => {
+  const totalRoutes = routeGroups.reduce((sum, group) => sum + group.routes.length, 0);
+  
+  const apiInfo = {
+    service: 'Employee Service API v2.0',
+    status: 'active',
+    totalRoutes,
+    routeGroups: routeGroups.map(({ group, routes }) => ({
+      group,
+      endpoints: routes.length,
+      routes: routes.map(route => ({
+        method: route.method.toUpperCase(),
+        path: route.path,
+        auth: route.auth
+      }))
+    })),
+    timestamp: new Date().toISOString()
+  };
+
+  res.json(apiInfo);
 });
-
-router.post('/createChevrons', authenticateToken, (req, res) => {
-  createChevron(req, res);
-});
-
-router.post('/getChevronDetail', authenticateToken, (req, res) => {
-  getChevronDetail(req, res);
-});
-
-router.put('/updateChevron', authenticateToken, (req, res) => {
-  updateChevron(req, res);
-});
-
-router.delete('/deleteChevron', authenticateToken, (req, res) => {
-  deleteChevron(req, res);
-});
-
-router.delete('/deleteMultipleChevrons', authenticateToken, (req, res) => {
-  console.log('Received data:', req.body);
-  deleteMultipleChevrons(req, res);
-});
-
-// ===================================END CHEVRONS===================================
-
-// ===================================DEPARTMENTS===================================
-router.post('/createDepartments', authenticateToken, (req, res) => {
-  createDepartment(req, res);
-});
-
-router.get('/departments', authenticateToken, (req, res) => {
-  getAllDepartments(req, res);
-});
-
-router.delete('/deleteMultipleDepartments', authenticateToken, (req, res) => {
-  deleteMultipleDepartments(req, res);
-});
-
-router.get('/departments/:id', authenticateToken, (req, res) => {
-  getDepartmentDetail(req, res);
-});
-
-router.put('/departments', authenticateToken, (req, res) => {
-  updateDepartment(req, res);
-});
-
-router.delete('/deleteDepartment', authenticateToken, (req, res) => {
-  deleteDepartment(req, res);
-});
-
-// ===================================END DEPARTMENTS===================================
-
-// ===================================CONTRACT TYPES===================================
-router.get('/contractTypes', authenticateToken, (req, res) => {
-  getAllContractTypes(req, res);
-});
-
-router.post('/createContractType', authenticateToken, (req, res) => {
-  createContractType(req, res);
-});
-
-router.get('/contractTypes/:id', authenticateToken, (req, res) => {
-  getContractTypeDetail(req, res);
-});
-
-router.put('/contractTypes', authenticateToken, (req, res) => {
-  updateContractType(req, res);
-});
-
-router.delete('/deleteMultipleContractTypes', authenticateToken, (req, res) => {
-  deleteMultipleContractTypes(req, res);
-});
-
-router.delete('/deleteContractType', authenticateToken, (req, res) => {
-  deleteContractType(req, res);
-});
-// ===================================END DEPARTMENTS===================================
-
-// ===================================CONTRACTS===================================
-// New RESTful style: userId in path
-router.post('/users/:userId/contracts', authenticateToken, (req, res) => {
-  createContract(req, res);
-});
-
-// Backward compatible endpoint (body contains userId)
-router.post('/contracts', authenticateToken, (req, res) => {
-  createContract(req, res);
-});
-
-router.get('/contracts/user/:userId', authenticateToken, (req, res) => {
-  getContractsByUser(req, res);
-});
-
-router.delete('/contracts/user/:userId', authenticateToken, (req, res) => {
-  deleteContractsByUser(req, res);
-});
-// ===================================END CONTRACTS===================================
 
 export default router;
