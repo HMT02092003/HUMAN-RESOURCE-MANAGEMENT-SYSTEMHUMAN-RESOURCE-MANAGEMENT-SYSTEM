@@ -1,4 +1,7 @@
-import express from 'express';
+/**
+ * Attendance Service API Routes v2.0 - Optimized with Dynamic Registration
+ */
+import { Router, Request, Response } from 'express';
 import { 
   confirmAttendance,
   getUserAttendanceByMonth,
@@ -9,61 +12,104 @@ import {
   updateSettings
 }  from '@/controller/SettingsController';
 
-const router = express.Router();
+const router = Router();
 
-// Health check endpoint
-router.get('/health', (_req, res) => {
-  res.status(200).json({ 
-    status: 'OK', 
-    service: 'attendance-service',
+// ===================================
+// ROUTE DEFINITIONS
+// ===================================
+const routeGroups = [
+  // ATTENDANCE ROUTES
+  {
+    group: 'attendance',
+    routes: [
+      { method: 'post', path: '/confirm', handler: confirmAttendance, auth: false },
+      { method: 'get', path: '/user/:userId/month', handler: getUserAttendanceByMonth, auth: false },
+      { method: 'get', path: '/user/:userId/stats/monthly', handler: getMonthlyStats, auth: false },
+      { 
+        method: 'get', 
+        path: '/user/:userId/stats', 
+        handler: (_req: Request, res: Response) => {
+          // Basic stats endpoint - returns mock data for compatibility
+          res.status(200).json({
+            totalHours: 0,
+            totalDays: 0,
+            penalty: 0,
+            onTimeRate: 100,
+            note: 'Mock data for compatibility'
+          });
+        }, 
+        auth: false 
+      },
+    ]
+  },
+  // SETTINGS ROUTES
+  {
+    group: 'settings',
+    routes: [
+      { method: 'get', path: '/settings', handler: getSettings, auth: false },
+      { method: 'post', path: '/settings', handler: updateSettings, auth: false },
+    ]
+  }
+];
+
+// ===================================
+// DYNAMIC ROUTE REGISTRATION
+// ===================================
+const registerRoutes = (groups: any[]) => {
+  groups.forEach(({ group, routes }) => {
+    routes.forEach((route: any) => {
+      const middlewares: any[] = [];
+      
+      // Add handler with enhanced error handling
+      middlewares.push(async (req: Request, res: Response) => {
+        try {
+          console.log(`[${route.method.toUpperCase()}] ${route.path} - ${group}`);
+          await route.handler(req, res);
+        } catch (error: any) {
+          console.error(`Error in ${group}.${route.handler.name}:`, error);
+          res.status(500).json({
+            error: 'Internal server error',
+            group,
+            endpoint: `${route.method.toUpperCase()} ${route.path}`,
+            message: error.message || 'Unknown error',
+            timestamp: new Date().toISOString()
+          });
+        }
+      });
+      
+      // Register route
+      (router as any)[route.method](route.path, ...middlewares);
+    });
+  });
+};
+
+// Register all routes
+registerRoutes(routeGroups);
+
+// ===================================
+// API INFO ENDPOINT
+// ===================================
+router.get('/', (_req: Request, res: Response) => {
+  const totalRoutes = routeGroups.reduce((sum, group) => sum + group.routes.length, 0);
+  
+  const apiInfo = {
+    service: 'Attendance Service API v2.0',
+    status: 'active',
+    totalRoutes,
+    routeGroups: routeGroups.map(({ group, routes }) => ({
+      group,
+      endpoints: routes.length,
+      routes: routes.map(route => ({
+        method: route.method.toUpperCase(),
+        path: route.path,
+        auth: route.auth
+      }))
+    })),
+    features: ['Time Tracking', 'Attendance Confirmation', 'Monthly Statistics', 'Settings Management'],
     timestamp: new Date().toISOString()
-  });
-});
+  };
 
-// API xác nhận chấm công
-router.post('/confirm', (req, res) => {
-  confirmAttendance(req, res).catch((err: any) => {
-    res.status(500).json({ error: err.message || 'Internal Server Error' });
-  });
-});
-
-// API lấy dữ liệu chấm công theo tháng
-router.get('/user/:userId/month', (req, res) => {
-  getUserAttendanceByMonth(req, res).catch((err: any) => {
-    res.status(500).json({ error: err.message || 'Internal Server Error' });
-  });
-});
-
-// API lấy cấu hình settings
-router.get('/settings', (req, res) => {
-  getSettings(req, res).catch((err: any) => {
-    res.status(500).json({ error: err.message || 'Internal Server Error' });
-  });
-});
-
-// API cập nhật cấu hình settings
-router.post('/settings', (req, res) => {
-  updateSettings(req, res).catch((err: any) => {
-    res.status(500).json({ error: err.message || 'Internal Server Error' });
-  });
-});
-
-// API lấy thống kê tháng
-router.get('/user/:userId/stats/monthly', (req, res) => {
-  getMonthlyStats(req, res).catch((err: any) => {
-    res.status(500).json({ error: err.message || 'Internal Server Error' });
-  });
-});
-
-// API lấy thống kê cơ bản (tạm thời trả về dữ liệu cơ bản)
-router.get('/user/:userId/stats', (_req, res) => {
-  // Tạm thời trả về dữ liệu mock để không bị lỗi
-  res.status(200).json({
-    totalHours: 0,
-    totalDays: 0,
-    penalty: 0,
-    onTimeRate: 100
-  });
+  res.json(apiInfo);
 });
 
 export default router;

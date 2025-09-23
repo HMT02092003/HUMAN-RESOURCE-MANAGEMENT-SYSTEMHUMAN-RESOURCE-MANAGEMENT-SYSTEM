@@ -1,45 +1,30 @@
 {
-  "name": "attendance-service",
-  "version": "1.0.0",
-  "description": "Attendance service for time tracking and attendance management",
+  "name": "hrms-attendance-service",
+  "version": "2.0.0",
+  "description": "Attendance Management Microservice - Optimized",
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "build": "tsc",
-    "start": "tsx server.js",
     "dev": "nodemon --watch . --ext js,ts,json --exec tsx server.js",
-    "dev:watch": "tsc -w",
-    "test": "jest",
+    "start": "tsx server.js",
     "migrate": "knex migrate:latest",
     "seed": "knex seed:run"
   },
   "dependencies": {
-    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dayjs": "^1.11.18",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "helmet": "^7.1.0",
     "knex": "^2.5.1",
     "pg": "^8.11.3"
   },
   "devDependencies": {
-    "@types/cookie-parser": "^1.4.9",
-    "@types/cors": "^2.8.17",
-    "@types/express": "^4.17.21",
-    "@types/node": "^20.10.0",
     "nodemon": "^3.0.2",
-    "ts-node": "^10.9.1",
     "tsx": "^4.19.0",
+    "@types/node": "^20.10.0",
     "typescript": "^5.3.2"
   },
-  "keywords": [
-    "attendance",
-    "time-tracking",
-    "microservice",
-    "express",
-    "typescript"
-  ],
-  "author": "Your Name",
-  "license": "MIT"
+  "engines": {
+    "node": ">=16.0.0"
+  }
 }
