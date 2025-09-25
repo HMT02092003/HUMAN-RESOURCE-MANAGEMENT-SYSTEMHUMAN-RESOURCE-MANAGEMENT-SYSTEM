@@ -288,7 +288,7 @@ const UserTable = () => {
       title: "Thao tác",
       key: "actions",
       fixed: "right" as "right",
-      width: 100,
+      width: 150,
       render: (_: any, record: any) => (
         <ConfigProvider
           theme={{
@@ -303,47 +303,65 @@ const UserTable = () => {
             },
           }}
         >
-          <Space size={4}>
             <Tooltip title="Xem">
               <Button
-                type="default"
-                shape="circle"
+                type="text"
                 icon={<EyeOutlined />}
                 size="small"
                 onClick={() => router.push(`/user/view/${record.id}`)}
                 hidden={!viewPer}
+                style={{ 
+                  padding: '4px 6px',
+                  minWidth: 'auto',
+                  height: '26px',
+                  color: '#1677ff'
+                }}
               />
             </Tooltip>
             <Tooltip title="Sửa">
               <Button
-                type="default"
-                shape="circle"
+                type="text"
                 icon={<EditOutlined />}
                 size="small"
                 onClick={() => router.push(`/user/edit/${record.id}`)}
                 hidden={!updatePer}
+                style={{ 
+                  padding: '4px 6px',
+                  minWidth: 'auto',
+                  height: '26px',
+                  color: '#52c41a'
+                }}
               />
             </Tooltip>
             <Tooltip title="Tạo hợp đồng">
               <Button
-                type="default"
-                shape="circle"
+                type="text"
                 icon={<FormOutlined />}
                 size="small"
                 onClick={() => router.push(`/user/createContract/${record.id}`)}
+                style={{ 
+                  padding: '4px 6px',
+                  minWidth: 'auto',
+                  height: '26px',
+                  color: '#722ed1'
+                }}
               />
             </Tooltip>
             <Tooltip title="Thông tin lương">
               <Button
-                type="default"
-                shape="circle"
+                type="text"
                 icon={<DollarOutlined />}
                 size="small"
                 onClick={() => handleOpenSalaryModal(record.id)}
                 hidden={!updatePer}
+                style={{ 
+                  padding: '4px 6px',
+                  minWidth: 'auto',
+                  height: '26px',
+                  color: '#fa8c16'
+                }}
               />
             </Tooltip>
-          </Space>
         </ConfigProvider>
       ),
     },

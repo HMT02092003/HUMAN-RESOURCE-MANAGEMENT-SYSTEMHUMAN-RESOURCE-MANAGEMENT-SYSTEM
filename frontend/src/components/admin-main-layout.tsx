@@ -13,7 +13,8 @@ import {
     InfoCircleOutlined,
     HomeOutlined,
     CalendarOutlined,
-    SettingOutlined
+    SettingOutlined,
+    FileTextOutlined
 } from '@ant-design/icons';
 
 import type { MenuProps } from 'antd';
@@ -90,6 +91,7 @@ const menuItemsList: ExtendedMenuItem[] = [
     getItem('Quản lí chức vụ', 'chevrons', <ShoppingCartOutlined />, undefined, 'chevrons'),
     getItem('Quản lí hợp đồng', 'contractTypes', <AppstoreOutlined />, undefined, 'contractTypes'),
     getItem('Quản lí vai trò', 'roles', <TeamOutlined />, undefined, 'roles'),
+    getItem('Quản lí đơn từ', 'applications', <FileTextOutlined />, undefined, 'applications'),
     getItem('Chấm công', 'attendance', <CalendarOutlined />, undefined, ''),
     getItem('Cài đăt hệ thống', 'settings', <SettingOutlined />, undefined, ''),
 ];
@@ -237,6 +239,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
             case 'settings':
                 router.push('/settings');
                 break;
+            case 'applications':
+                router.push('/applications');
+                break;
             default:
                 break;
         }
@@ -327,7 +332,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
         <Layout style={{ minHeight: '100vh' }}>
             <LoadingProgress>
                 <Sider
-                    style={{ 
+                    style={{
                         backgroundColor: "white",
                         position: isMobile ? 'fixed' : 'relative',
                         height: isMobile ? '100vh' : 'auto',
@@ -377,9 +382,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                             />
                         </div>
 
-                        <div style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
                             gap: isMobile ? '8px' : '16px',
                             flexWrap: 'wrap'
                         }}>
@@ -416,17 +421,17 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                                 }}
                             >
                                 <div style={{ display: "flex", flexDirection: "column" }}>
-                                    <h1 style={{ 
-                                        color: "#91caff", 
-                                        margin: 0, 
+                                    <h1 style={{
+                                        color: "#91caff",
+                                        margin: 0,
                                         fontSize: isMobile ? "24px" : "32px",
                                         fontWeight: "bold",
                                         lineHeight: isMobile ? "1.2" : "1.4"
                                     }}>
                                         {pageTitle}
                                     </h1>
-                                    <p style={{ 
-                                        color: "#8c8c8c", 
+                                    <p style={{
+                                        color: "#8c8c8c",
                                         margin: 0,
                                         fontSize: isMobile ? "14px" : "16px",
                                         marginTop: isMobile ? "8px" : "12px"
@@ -472,7 +477,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
 
                 {/* Overlay for mobile menu */}
                 {isMobile && !collapsed && (
-                    <div 
+                    <div
                         style={{
                             position: 'fixed',
                             top: 0,
