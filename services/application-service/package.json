@@ -1,0 +1,25 @@
+{
+  "name": "hrms-application-service",
+  "version": "1.0.0",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "nodemon --watch . --ext js,ts,json --exec tsx server.js",
+    "start": "tsx server.js",
+    "migrate": "knex migrate:latest",
+    "seed": "knex seed:run"
+  },
+  "dependencies": {
+    "express": "^4.21.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "knex": "^3.1.0",
+    "objection": "^3.1.5",
+    "pg": "^8.13.1",
+    "dayjs": "^1.11.13"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.7",
+    "tsx": "^4.19.2"
+  }
+}

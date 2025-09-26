@@ -407,16 +407,16 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                             style={{
                                 background: "linear-gradient(to right, #e6f7ff, rgb(106, 218, 255))",
                                 padding: isMobile ? "20px 16px" : "20px 50px",
-                                height: isMobile ? "160px" : "200px",
-                                marginBottom: isMobile ? "-60px" : "-90px",
+                                height: isMobile ? "200px" : "250px",
+                                marginBottom: isMobile ? "-60px" : "-80px",
                             }}
                         >
                             <div
                                 style={{
                                     display: "flex",
-                                    justifyContent: isMobile ? "flex-start" : "space-between",
-                                    alignItems: "center",
-                                    gap: 12,
+                                    flexDirection: "row",
+                                    justifyContent:"space-between",
+                                    alignItems:"center",
                                     flexWrap: 'wrap'
                                 }}
                             >
@@ -434,25 +434,38 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                                         color: "#8c8c8c",
                                         margin: 0,
                                         fontSize: isMobile ? "14px" : "16px",
-                                        marginTop: isMobile ? "8px" : "12px"
+                                        marginTop: isMobile ? "8px" : "12px",
                                     }}>
                                         {pageDescription}
                                     </p>
                                 </div>
 
-                                {!isMobile && (
-                                    <Breadcrumb style={{ padding: "16px 28px", backgroundColor: "white", borderRadius: "25px", fontWeight: "bold", opacity: 0.6, color: "#595959" }}>
-                                        {breadcrumbItems.map((item, index) => (
-                                            <Breadcrumb.Item key={index.toString()}>
-                                                {item.href ? (
-                                                    <Link href={item.href}>{item.title}</Link>
-                                                ) : (
-                                                    item.title
-                                                )}
-                                            </Breadcrumb.Item>
-                                        ))}
-                                    </Breadcrumb>
-                                )}
+                                <Breadcrumb 
+                                    style={{ 
+                                        padding: isMobile ? "8px 16px" : "16px 28px", 
+                                        backgroundColor: "white", 
+                                        borderRadius: "25px", 
+                                        fontWeight: "bold", 
+                                        opacity: 0.6, 
+                                        color: "#595959",
+                                        fontSize: isMobile ? "12px" : "14px",
+                                        marginTop: isMobile ? "12px" : "0"
+                                    }}
+                                >
+                                    {breadcrumbItems.map((item, index) => (
+                                        <Breadcrumb.Item key={index.toString()}>
+                                            {item.href ? (
+                                                <Link href={item.href} style={{ fontSize: isMobile ? "12px" : "14px" }}>
+                                                    {item.title}
+                                                </Link>
+                                            ) : (
+                                                <span style={{ fontSize: isMobile ? "12px" : "14px" }}>
+                                                    {item.title}
+                                                </span>
+                                            )}
+                                        </Breadcrumb.Item>
+                                    ))}
+                                </Breadcrumb>
                             </div>
                         </div>
 

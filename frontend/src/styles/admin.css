@@ -37,14 +37,6 @@
   margin-left: 8px;
 }
 
-/* Input size consistency */
-.ant-input,
-.ant-input-password,
-.ant-select-selector {
-  height: 32px !important;
-  font-size: 14px !important;
-}
-
 /* Table pagination */
 .ant-pagination .ant-pagination-item {
   min-width: 32px;

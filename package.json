@@ -14,6 +14,7 @@
         "services/notification-service"
     ],
     "scripts": {
+        "create:service": "node create-service.js",
         "setup:env": "bash setup-env.sh",
         "setup:env:windows": "setup-env.bat",
         "dev:gateway": "cd services/api-gateway && yarn dev",

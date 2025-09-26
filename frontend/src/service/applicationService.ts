@@ -21,67 +21,54 @@ export interface LeaveApplication extends BaseApplication {
   startDate: string;
   endDate: string;
   leaveType: 'sick' | 'personal' | 'vacation' | 'maternity' | 'emergency';
-  totalDays: number;
-  attachments?: string[];
+  reason: string; // Lý do nghỉ
 }
 
 export interface ShiftRegistrationApplication extends BaseApplication {
   applicationType: 'shift_registration';
-  shiftId: number;
-  requestedDate: string;
-  preferredShift: string;
+  requestedDates: string[]; // Nhiều ngày đăng ký ca
+  shiftType: 'morning' | 'afternoon' | 'night';
+  reason: string; // Lý do đăng ký ca
 }
 
-export interface CheckoutApplication extends BaseApplication {
-  applicationType: 'checkout';
-  checkoutDate: string;
-  checkoutTime: string;
-  earlyCheckoutReason: string;
-  plannedReturnTime?: string;
+export interface ForgotCheckInApplication extends BaseApplication {
+  applicationType: 'forgot_checkin';
+  forgotDate: string; // Hôm nào quên check
+  forgotTime: string; // Quên check lúc mấy giờ
+  reason: string; // Lý do quên check
 }
 
-export interface ShiftChangeApplication extends BaseApplication {
-  applicationType: 'shift_change';
-  currentShiftId: number;
-  requestedShiftId: number;
-  changeDate: string;
-  exchangeWithEmployee?: number;
-}
-
-export interface IncreasedWorkingHoursApplication extends BaseApplication {
-  applicationType: 'increased_hours';
-  effectiveDate: string;
-  currentWorkingHours: number;
-  requestedWorkingHours: number;
-  duration: number; // in months
+export interface OvertimeApplication extends BaseApplication {
+  applicationType: 'overtime';
+  overtimeDate: string; // Hôm nào tăng ca
+  overtimeHours: 2 | 4 | 6; // Chọn 2/4/6 giờ
+  reason: string; // Lý do tăng ca
+  startTime: string; // Giờ bắt đầu tăng ca
 }
 
 export interface BusinessTripApplication extends BaseApplication {
   applicationType: 'business_trip';
-  destination: string;
-  startDate: string;
-  endDate: string;
-  purpose: string;
-  estimatedCost?: number;
-  transportationMode: 'flight' | 'car' | 'train' | 'other';
-  accommodationNeeded: boolean;
+  startDate: string; // Từ hôm nào
+  endDate: string; // Tới hôm nào
+  destination: string; // Đi đâu
+  purpose: string; // Lý do công tác
+  evidenceImages?: string[]; // Ảnh chứng minh (nếu có)
 }
 
 export interface ResignationApplication extends BaseApplication {
   applicationType: 'resignation';
-  lastWorkingDate: string;
-  resignationReason: string;
-  noticePeriod: number; // in days
-  handoverNotes?: string;
-  exitInterviewScheduled?: boolean;
+  lastWorkingDate: string; // Nghỉ từ hôm nào
+  resignationReason: string; // Lý do thôi việc
+  handoverTo: string; // Bàn giao công việc với ai
+  handoverNotes?: string; // Ghi chú bàn giao
+  handoverCompleted: boolean; // Đã bàn giao xong chưa
 }
 
 export type ApplicationTypes = 
   | LeaveApplication 
   | ShiftRegistrationApplication 
-  | CheckoutApplication 
-  | ShiftChangeApplication 
-  | IncreasedWorkingHoursApplication 
+  | ForgotCheckInApplication
+  | OvertimeApplication 
   | BusinessTripApplication 
   | ResignationApplication;
 

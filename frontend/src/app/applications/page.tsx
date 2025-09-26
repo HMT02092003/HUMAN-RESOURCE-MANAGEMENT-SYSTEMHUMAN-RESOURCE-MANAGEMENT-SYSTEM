@@ -2,29 +2,32 @@
 
 import React from 'react';
 import MainLayout from '@/components/main-layout';
-import ApplicationManagement from '../../components/applications/ApplicationManagement';
-import { HomeOutlined, FileTextOutlined } from '@ant-design/icons';
+import ApplicationList from '@/components/applications';
+import { HomeOutlined } from '@ant-design/icons';
+import { useRouter } from 'next/navigation';
 
 const ApplicationsPage = () => {
+  const router = useRouter();
+
   const breadcrumbItems = [
     { title: <HomeOutlined style={{ fontSize: "20px" }} />, href: '/home' },
-    { title: 'Quản lý đơn từ', href: '/applications' }
+    { title: 'Đơn từ', href: '/applications' }
   ];
 
-  const pageName = 'Quản lý đơn từ';
-  const pageDes = 'Tạo và quản lý các loại đơn từ của nhân viên';
-  const requiredPermission = 'applications';
-  const permissionType = 'read' as const;
+  const pageName = 'Danh sách đơn từ';
+  const pageDes = 'Xem và quản lý tất cả các đơn từ đã gửi';
+
+  const handleCreateClick = () => {
+    router.push('/applications/select-type');
+  };
 
   return (
     <MainLayout
       breadcrumbItems={breadcrumbItems}
       pageName={pageName}
       pageDes={pageDes}
-      // requiredPermission={requiredPermission}
-      // permissionType={permissionType}
     >
-      <ApplicationManagement />
+      <ApplicationList onCreateClick={handleCreateClick} />
     </MainLayout>
   );
 };
