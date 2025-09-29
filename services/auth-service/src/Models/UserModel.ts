@@ -35,6 +35,7 @@ class UserModel extends Model {
   identificationPhoto?: string;
   salary?: number;
   allowance?: number;
+  monthly_leave_balance?: number;
 
   // Optional relation fields
   contract?: ContractModel[];
@@ -158,20 +159,30 @@ class UserModel extends Model {
 
   static async checkScope(permissionKey: string, req: any) { // Thêm `req: any` vào tham số
 
-    const tokenFromCookie = req.cookies.token;
+    // Lấy token từ cookie hoặc header Authorization
+    let tokenFromCookie = req.cookies?.token;
+    
+    // Nếu không có token trong cookie, thử lấy từ Authorization header
+    if (!tokenFromCookie && req.headers.authorization) {
+      const authHeader = req.headers.authorization;
+      if (authHeader.startsWith('Bearer ')) {
+        tokenFromCookie = authHeader.substring(7); // Loại bỏ "Bearer "
+      }
+    }
+    
     let decodedAuth: any = null;
 
     if (tokenFromCookie) {
       try {
         decodedAuth = getDecodedToken(tokenFromCookie);
-        // console.log("decodedAuth", decodedAuth);
+        console.log("decodedAuth in checkScope:", decodedAuth?.user?.id, "permission:", permissionKey);
       } catch (decodeError) {
         console.error("Error decoding token in checkScope:", decodeError);
         // Nếu token không hợp lệ, không thể xác định scope, trả về mảng rỗng hoặc ném lỗi
         return [];
       }
     } else {
-      console.log("No token cookie found in checkScope.");
+      console.log("No token found in checkScope (neither cookie nor Authorization header).");
       return []; // Không có token, không thể xác định scope
     }
 
@@ -183,7 +194,8 @@ class UserModel extends Model {
 
     // Lấy giá trị scope tương ứng với permissionKey từ token
     const actualScopeValue = decodedAuth.user.scope[permissionKey];
-    // console.log(`Actual scope value for '${permissionKey}':`, actualScopeValue);
+    console.log(`Scope check - User: ${decodedAuth.user.id}, Permission: '${permissionKey}', Scope Value:`, actualScopeValue);
+    console.log(`Available scopes in token:`, decodedAuth.user.scope);
 
 
     let ids: number[] = [];

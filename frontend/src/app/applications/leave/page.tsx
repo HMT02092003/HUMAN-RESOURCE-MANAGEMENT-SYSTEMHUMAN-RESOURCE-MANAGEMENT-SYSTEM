@@ -40,7 +40,6 @@ const LeavePage = () => {
         permissionType={permissionType}
       >
         <LeaveForm 
-          onSubmit={handleSubmit}
           onCancel={handleCancel}
         />
       </MainLayout>

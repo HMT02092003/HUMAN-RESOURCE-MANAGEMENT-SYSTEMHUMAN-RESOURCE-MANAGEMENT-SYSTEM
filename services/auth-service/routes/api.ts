@@ -40,6 +40,9 @@ import {
   getUserByUsername,
   getSalaryInfo,
   updateSalaryInfo,
+  getNumberOfDaysOff,
+  checkUserScope,
+  getUsersByIds,
 } from '@/src/controller/UserController';
 
 const router = Router();
@@ -125,6 +128,7 @@ const userRoutes = [
   { method: 'get', path: '/users', handler: getAllUsers, auth: true },
   { method: 'get', path: '/users/by-department', handler: getUsersByDepartment, auth: true },
   { method: 'get', path: '/users/by-chevron', handler: getUsersByChevron, auth: true },
+  { method: 'post', path: '/users/bulk', handler: getUsersByIds, auth: false }, // Internal bulk fetch
   { method: 'get', path: '/users/username/:username', handler: getUserByUsername, auth: false }, // AI service
   { method: 'get', path: '/users/by-username/:username', handler: getUserByUsername, auth: true },
   { method: 'delete', path: '/users/multiple', handler: deleteMultipleUsers, auth: true },
@@ -135,6 +139,8 @@ const userRoutes = [
   { method: 'get', path: '/users/:id/salary', handler: getSalaryInfo, auth: true },
   { method: 'put', path: '/users/:id/salary', handler: updateSalaryInfo, auth: true },
   { method: 'get', path: '/internal/users/:id/salary', handler: getSalaryInfo, auth: false }, // Internal
+  { method: 'get', path: '/users/:id/number-of-days-off', handler: getNumberOfDaysOff, auth: false }, // Internal
+  { method: 'post', path: '/users/check-scope', handler: checkUserScope, auth: true }, // Internal scope check
 ];
 
 // Routes with file upload

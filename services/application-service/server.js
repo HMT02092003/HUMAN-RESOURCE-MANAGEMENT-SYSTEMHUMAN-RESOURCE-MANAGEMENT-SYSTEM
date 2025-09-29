@@ -1,8 +1,10 @@
 import dotenv from 'dotenv';
 dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
-import routes from './routes/api.js';
+import cookieParser from 'cookie-parser';
+import routes from './routes/api.ts';
 import knex from './src/lib/database.js';
 import { Model } from 'objection';
 
@@ -14,8 +16,14 @@ const PORT = process.env.PORT || 4004;
 const serviceName = 'Application Service';
 
 app.use(cors({ origin: true, credentials: true }));
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Logging middleware
+app.use((req, res, next) => {
+  next();
+});
 
 app.get('/health', (req, res) => {
   res.json({ 

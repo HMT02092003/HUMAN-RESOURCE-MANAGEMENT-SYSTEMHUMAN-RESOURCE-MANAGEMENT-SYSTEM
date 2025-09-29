@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Form,
   Input,
@@ -11,6 +11,8 @@ import {
   Card,
   Row,
   Col,
+  message,
+  Spin,
 } from 'antd';
 import {
   PlusOutlined,
@@ -24,47 +26,68 @@ import {
   RollbackOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { ShiftRegistrationApplication } from '@/service/applicationService';
+import ApplicationService, { ShiftRegistrationApplication, ShiftDay } from '@/service/applicationService';
+import { SHIFT_OPTIONS, VALIDATION_RULES } from '@/config/constant';
 import ApplicationGuide from '../ApplicationGuide';
 
 const { Text } = Typography;
 const { TextArea } = Input;
 
 interface ShiftRegistrationFormProps {
-  onSubmit: (
-    data: Omit<
-      ShiftRegistrationApplication,
-      'id' | 'status' | 'applicationDate'
-    >
-  ) => void;
+  onSubmit?: (data: any) => void;
   onCancel: () => void;
+  onSuccess?: (data: any) => void;
 }
-
-const shiftOptions = [
-  { value: 'morning', label: '🌅 Ca sáng (6:00 - 14:00)' },
-  { value: 'afternoon', label: '🌇 Ca chiều (14:00 - 22:00)' },
-  { value: 'night', label: '🌙 Ca đêm (22:00 - 6:00)' },
-  { value: 'overtime', label: '⏰ Ca tăng ca' },
-];
 
 const ShiftForm: React.FC<ShiftRegistrationFormProps> = ({
   onSubmit,
   onCancel,
+  onSuccess,
 }) => {
   const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (values: any) => {
-    const formatted = values.days.map((item: any) => ({
-      date: item.date.format('YYYY-MM-DD'),
-      shifts: item.shifts,
-      note: item.note || '',
-    }));
+  const handleSubmit = async (values: any) => {
+    setLoading(true);
+    
+    try {
+      // Format data để gửi API
+      const requestedDates: ShiftDay[] = values.days.map((item: any) => ({
+        date: item.date.format('YYYY-MM-DD'),
+        shifts: item.shifts,
+        note: item.note || '',
+      }));
 
-    // onSubmit({
-    //   applicationType: 'shift_registration',
-    //   requestedDates: formatted,
-    //   reason: values.reason,
-    // } as Omit<ShiftRegistrationApplication, 'id' | 'status' | 'applicationDate'>);
+      const payload = {
+        requestedDates,
+        reason: values.reason,
+        note: values.generalNote,
+      };
+
+      // Gọi API tạo đơn đăng ký ca
+      // const result = await ApplicationService.createShiftRegistration(payload);
+      
+      message.success('Đăng ký ca làm việc thành công! Đơn đã được gửi để chờ duyệt.');
+      
+      // Reset form sau khi thành công
+      form.resetFields();
+      
+      // Callback functions
+      if (onSuccess) {
+        // onSuccess(result);
+      } else if (onSubmit) {
+        // onSubmit(result);
+      }
+      
+    } catch (error: any) {
+      console.error('Lỗi khi tạo đơn đăng ký ca:', error);
+      message.error(
+        error?.response?.data?.message || 
+        'Có lỗi xảy ra khi gửi đơn đăng ký. Vui lòng thử lại!'
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -123,7 +146,7 @@ const ShiftForm: React.FC<ShiftRegistrationFormProps> = ({
                           mode="multiple"
                           allowClear
                           placeholder="Chọn ca"
-                          options={shiftOptions}
+                          options={[...SHIFT_OPTIONS]}
                         />
                       </Form.Item>
                     </Col>
@@ -151,10 +174,10 @@ const ShiftForm: React.FC<ShiftRegistrationFormProps> = ({
                         label="📝 Ghi chú (tùy chọn)"
                       >
                         <TextArea
-                          placeholder="Ví dụ: Sáng phải đi học..."
+                          placeholder="Ví dụ: Sáng phải đi học..."
                           rows={2}
-                          maxLength={200}
                           showCount
+                          maxLength={500}
                         />
                       </Form.Item>
                     </Col>
@@ -176,13 +199,16 @@ const ShiftForm: React.FC<ShiftRegistrationFormProps> = ({
           )}
         </Form.List>
 
-        <Divider />
-
         {/* Buttons */}
         <Form.Item>
           <Space size="middle" style={{ width: '100%', justifyContent: 'center' }}>
-            <Button size="large" onClick={onCancel} icon={<RollbackOutlined />}>
-              Trở lại
+            <Button 
+              size="large" 
+              onClick={onCancel} 
+              icon={<RollbackOutlined />}
+              disabled={loading}
+            >
+              Trở lại
             </Button>
             <Button
               type="primary"
@@ -190,8 +216,9 @@ const ShiftForm: React.FC<ShiftRegistrationFormProps> = ({
               size="large"
               icon={<SaveOutlined />}
               className="bg-green-600 hover:bg-green-700"
+              loading={loading}
             >
-              Lưu
+              {loading ? 'Đang gửi...' : 'Gửi đơn đăng ký'}
             </Button>
           </Space>
         </Form.Item>

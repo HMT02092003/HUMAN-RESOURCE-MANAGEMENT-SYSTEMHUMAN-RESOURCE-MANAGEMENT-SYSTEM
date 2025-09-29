@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Card, Table, Button, Space, Typography, Empty, message, Tooltip, DatePicker, Input, Row, Col, Tag, Modal } from 'antd';
-import { PlusOutlined, EyeOutlined, DeleteOutlined, SearchOutlined, EditOutlined, ExclamationCircleOutlined, CheckOutlined } from '@ant-design/icons';
+import { PlusOutlined, EyeOutlined, DeleteOutlined, SearchOutlined, EditOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import type { FilterConfirmProps, FilterDropdownProps } from 'antd/es/table/interface';
 import dayjs from 'dayjs';
 import applicationService from '@/service/applicationService';
 import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS } from '@/config/constant';
-import { render } from 'react-dom';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -15,14 +14,12 @@ interface MyApplicationListProps {
     onEditClick?: (record: any) => void;
 }
 
-const ApplicationList: React.FC<MyApplicationListProps> = ({
+const MyApplicationList: React.FC<MyApplicationListProps> = ({
     onCreateClick,
     onEditClick
 }) => {
     const [applications, setApplications] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [searchText, setSearchText] = useState('');
-    const [searchedColumn, setSearchedColumn] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [total, setTotal] = useState(0);
@@ -33,7 +30,7 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
     const fetchMyApplications = useCallback(async (page = 1, size = 10) => {
         try {
             setLoading(true);
-            const response = await applicationService.getAllApplications({
+            const response = await applicationService.getMyApplications({
                 page: page,
                 pageSize: size
             });
@@ -72,7 +69,6 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
             cancelText: 'Hủy',
             onOk: async () => {
                 try {
-                    // For now, just remove from local state until API method is available
                     const selectedIds = selectedRowKeys;
                     setApplications(prev => prev.filter(app => !selectedIds.includes(app.id)));
                     setTotal(prev => prev - selectedRows.length);
@@ -84,21 +80,6 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
                 }
             }
         });
-    };
-
-    const handleSearch = (
-        selectedKeys: string[],
-        confirm: (param?: FilterConfirmProps) => void,
-        dataIndex: string,
-    ) => {
-        confirm();
-        setSearchText(selectedKeys[0]);
-        setSearchedColumn(dataIndex);
-    };
-
-    const handleReset = (clearFilters: () => void) => {
-        clearFilters();
-        setSearchText('');
     };
 
     const handleView = (record: any) => {
@@ -122,7 +103,6 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
             cancelText: 'Không',
             onOk: async () => {
                 try {
-                    // For now, just remove from local state until API method is available
                     setApplications(prev => prev.filter(app => app.id !== record.id));
                     setTotal(prev => prev - 1);
                     message.success('Hủy đơn thành công');
@@ -141,13 +121,13 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
                     placeholder={placeholder}
                     value={selectedKeys[0]}
                     onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-                    onPressEnter={() => handleSearch(selectedKeys as string[], confirm, dataIndex)}
+                    onPressEnter={() => confirm()}
                     style={{ marginBottom: 8, display: 'block' }}
                 />
                 <Space>
                     <Button
                         type="primary"
-                        onClick={() => handleSearch(selectedKeys as string[], confirm, dataIndex)}
+                        onClick={() => confirm()}
                         icon={<SearchOutlined />}
                         size="small"
                         style={{ width: 90 }}
@@ -155,7 +135,7 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
                         Tìm
                     </Button>
                     <Button
-                        onClick={() => clearFilters && handleReset(clearFilters)}
+                        onClick={() => clearFilters && clearFilters()}
                         size="small"
                         style={{ width: 90 }}
                     >
@@ -164,9 +144,7 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
                     <Button
                         type="link"
                         size="small"
-                        onClick={() => {
-                            close();
-                        }}
+                        onClick={() => close()}
                     >
                         Đóng
                     </Button>
@@ -178,7 +156,7 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
         ),
         onFilter: (value: any, record: any) =>
             record[dataIndex]
-                .toString()
+                ?.toString()
                 .toLowerCase()
                 .includes((value as string).toLowerCase()),
         onFilterDropdownOpenChange: (visible: boolean) => {
@@ -256,7 +234,7 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
                 { text: '🕒 Đăng ký ca', value: 'shift_registration' },
                 { text: '📄 Thôi việc', value: 'resignation' }
             ],
-            onFilter: (value: any, record: any) => record.applicationType === value,
+            onFilter: (value: any, record: any) => record.type === value,
         },
         {
             title: 'Trạng thái',
@@ -278,15 +256,10 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
             onFilter: (value: any, record: any) => record.status === value,
         },
         {
-            title: 'Người tạo đơn',
-            dataIndex: ['userInfo', 'fullName'],
-            key: 'userInfo.fullName',
-        },
-        {
             title: 'Người duyệt',
             dataIndex: 'approvedBy',
             key: 'approvedBy',
-            render: (approvedBy: any) => approvedBy || '-',
+            ...getColumnSearchProps('approvedBy', 'Tìm người duyệt...'),
         },
         {
             title: 'Ngày duyệt',
@@ -296,8 +269,8 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
         },
         {
             title: 'Ngày tạo',
-            dataIndex: 'created_at',
-            key: 'created_at',
+            dataIndex: 'applicationDate',
+            key: 'applicationDate',
             render: (date: string) => (
                 <Text>{dayjs(date).format('DD/MM/YYYY')}</Text>
             ),
@@ -309,20 +282,42 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
             title: 'Thao tác',
             key: 'actions',
             fixed: 'right' as const,
+            width: 150,
             render: (record: any) => (
                 <>
-                    <Tooltip title="Duyệt">
+                    <Tooltip title="Xem chi tiết">
                         <Button
                             type="text"
                             size="small"
-                            icon={<CheckOutlined />}
+                            icon={<EyeOutlined />}
                             onClick={() => handleView(record)}
                         />
                     </Tooltip>
+                    {record.status === 0 && (
+                        <>
+                            <Tooltip title="Chỉnh sửa">
+                                <Button
+                                    type="text"
+                                    size="small"
+                                    icon={<EditOutlined />}
+                                    onClick={() => handleEdit(record)}
+                                />
+                            </Tooltip>
+                            <Tooltip title="Hủy đơn">
+                                <Button
+                                    type="text"
+                                    size="small"
+                                    icon={<DeleteOutlined />}
+                                    onClick={() => handleCancel(record)}
+                                    danger
+                                />
+                            </Tooltip>
+                        </>
+                    )}
                 </>
             )
         }
-    ], [onEditClick, currentPage, pageSize]);
+    ], [currentPage, pageSize]);
 
     // Row selection configuration
     const rowSelection = {
@@ -331,11 +326,8 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
             setSelectedRowKeys(selectedRowKeys);
             setSelectedRows(selectedRows);
         },
-        onSelectAll: (selected: boolean, selectedRows: any[], changeRows: any[]) => {
-            // Handle select all
-        },
         getCheckboxProps: (record: any) => ({
-            disabled: record.status !== 0,
+            disabled: record.status !== 0, 
             name: record.id,
         }),
     };
@@ -346,7 +338,22 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
             <Row justify="space-between" align="middle" style={{ marginBottom: '24px' }}>
                 <Col>
                     <Space>
-                        {selectedRowKeys.length > 0 ? (
+                        <Button
+                            type="primary"
+                            icon={<PlusOutlined />}
+                            onClick={onCreateClick}
+                            style={{
+                                borderRadius: '8px',
+                                height: '48px',
+                                paddingLeft: '24px',
+                                paddingRight: '24px',
+                                fontSize: '16px',
+                                fontWeight: '500'
+                            }}
+                        >
+                            Tạo đơn mới
+                        </Button>
+                        {selectedRowKeys.length > 0 && (
                             <Button
                                 danger
                                 icon={<DeleteOutlined />}
@@ -362,11 +369,11 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
                             >
                                 Xóa đã chọn ({selectedRowKeys.length})
                             </Button>
-                        ) : null}
+                        )}
                     </Space>
                 </Col>
                 <Col>
-                    <Space direction="vertical" size={0}>
+                    <Space direction="vertical" size={0} align="end">
                         <Text type="secondary" style={{ fontSize: '16px' }}>
                             Tổng số: <Text strong style={{ color: '#1677ff' }}>{total}</Text> đơn từ
                         </Text>
@@ -394,7 +401,7 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
                     showSizeChanger: true,
                     showQuickJumper: true,
                     showTotal: (total, range) =>
-                        `${range[0]}-${range[1]} của ${total} đơn từ của bạn`,
+                        `${range[0]}-${range[1]} của ${total} đơn từ`,
                     pageSizeOptions: ['10', '20', '50', '100'],
                     style: { marginTop: '24px' }
                 }}
@@ -426,4 +433,4 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
     );
 };
 
-export default ApplicationList;
+export default MyApplicationList;

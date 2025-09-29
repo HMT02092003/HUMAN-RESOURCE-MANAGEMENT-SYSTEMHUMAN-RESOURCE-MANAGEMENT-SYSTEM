@@ -8,8 +8,10 @@ import constantConfig from "@/src/config/constant";
 import bcrypt from 'bcryptjs';
 import _ from "lodash";
 import axios from 'axios';
+import { getDecodedToken } from "@/src/utils/decode-token";
 
 import os from 'os';
+import MonthlySalaryModel from "../Models/MonthlySalaryModel";
 
 function getLocalIpAddress(): string {
   const interfaces = os.networkInterfaces();
@@ -53,7 +55,7 @@ const handleIdentificationPhotoUpload = (file: any, username: string): string =>
 
     // Lấy extension từ file gốc
     const fileExtension = path.extname(file.originalname || file.name || '.jpg');
-    
+
     // Tạo tên file mới với username
     const fileName = `${username}${fileExtension}`;
     const filePath = path.join(uploadDir, fileName);
@@ -94,7 +96,7 @@ const deleteOldIdentificationPhoto = (oldPhotoPath: string): void => {
       candidates.forEach((p) => {
         try {
           if (p && fs.existsSync(p)) fs.unlinkSync(p);
-        } catch {}
+        } catch { }
       });
     }
   } catch (error) {
@@ -129,6 +131,7 @@ export const getAllUsers = async (req: any, res: Response) => {
       .whereIn("users.id", userIds)
       .whereNot("users.id", auth.id)
       .where("users.status", 1)
+      .withGraphJoined("[role]")
       .page(page, pageSize)) as any;
 
     // Lấy chi tiết department và chevron cho từng user (nếu có id)
@@ -253,7 +256,7 @@ export const createUser = async (req: Request, res: Response) => {
 
     console.log("Before validation - salary:", inputs.salary, "type:", typeof inputs.salary);
     console.log("Before validation - allowance:", inputs.allowance, "type:", typeof inputs.allowance);
-    
+
     const params = validate(inputs, allowFields, {
       removeNotAllow: true,
     });
@@ -269,9 +272,9 @@ export const createUser = async (req: Request, res: Response) => {
         try {
           params.identificationPhoto = handleIdentificationPhotoUpload(photoFile, params.username);
         } catch (uploadError) {
-          return res.status(400).json({ 
-            message: uploadError instanceof Error ? uploadError.message : "Lỗi khi tải ảnh", 
-            code: 7003 
+          return res.status(400).json({
+            message: uploadError instanceof Error ? uploadError.message : "Lỗi khi tải ảnh",
+            code: 7003
           });
         }
       }
@@ -362,7 +365,7 @@ export const createUser = async (req: Request, res: Response) => {
 
     // Insert the new user into the database
     const newUser = await UserModel.query().insert(userData);
-    
+
     // Gọi AI service để lưu face embedding nếu có ảnh
     if (req.file || (req as any).files?.identificationPhoto) {
       const photoFile = req.file || (req as any).files?.identificationPhoto;
@@ -375,30 +378,30 @@ export const createUser = async (req: Request, res: Response) => {
         hasBuffer: !!photoFile?.buffer,
         hasPath: !!photoFile?.path
       });
-      
+
       if (photoFile) {
         try {
           const aiServiceUrl = `${API_GATEWAY_URL}/api/ai/register-face`;
           console.log('📡 [CREATE USER] AI Service URL:', aiServiceUrl);
-          
+
           const formData = new FormData();
-          
+
           // Đọc file từ vị trí đã lưu nếu có identificationPhoto path
           let imageBuffer = null;
           let imageName = photoFile.originalname || 'face.jpg';
-          
+
           if (userData.identificationPhoto) {
             // Đọc từ file đã lưu
             const savedPhotoPath = resolvePhotoAbsolutePath(userData.identificationPhoto);
             console.log('� [CREATE USER] Reading saved photo from:', savedPhotoPath);
-            
+
             if (fs.existsSync(savedPhotoPath)) {
               console.log('📎 [CREATE USER] Adding image from saved path');
               imageBuffer = fs.readFileSync(savedPhotoPath);
               imageName = path.basename(savedPhotoPath);
             }
           }
-          
+
           // Fallback to original file methods
           if (!imageBuffer) {
             if (photoFile.buffer) {
@@ -409,7 +412,7 @@ export const createUser = async (req: Request, res: Response) => {
               imageBuffer = fs.readFileSync(photoFile.path);
             }
           }
-          
+
           if (imageBuffer) {
             console.log('📎 [CREATE USER] Final image buffer size:', imageBuffer.length);
             const blob = new Blob([imageBuffer], { type: photoFile.mimetype || 'image/jpeg' });
@@ -418,43 +421,43 @@ export const createUser = async (req: Request, res: Response) => {
             console.error('❌ [CREATE USER] No valid image source found');
             throw new Error('No valid image source found');
           }
-          
+
           formData.append('user_id', newUser.id.toString());
           formData.append('username', params.username);
-          
+
           console.log('📦 [CREATE USER] FormData contents:', {
             user_id: newUser.id.toString(),
             username: params.username,
             hasImageField: formData.has('image')
           });
-          
+
           const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
           const aiHeaders: any = {};
           if (token) {
             aiHeaders['Authorization'] = `Bearer ${token}`;
           }
-          
+
           console.log('🔑 [CREATE USER] Request headers:', {
             hasToken: !!token,
             authHeader: aiHeaders['Authorization'] ? 'Bearer [HIDDEN]' : 'None'
           });
-          
+
           console.log('🚀 [CREATE USER] Calling AI service...');
-          
+
           // Gọi AI service
           const aiResponse = await axios.post(aiServiceUrl, formData, {
             headers: {
               ...aiHeaders
             }
           });
-          
+
           console.log('📥 [CREATE USER] AI service response:', {
             status: aiResponse.status,
             success: aiResponse.data?.success,
             message: aiResponse.data?.message,
             data: aiResponse.data?.data
           });
-          
+
           if (aiResponse.data.success) {
             console.log('✅ [CREATE USER] Face embedding saved successfully for user:', params.username);
           } else {
@@ -469,7 +472,7 @@ export const createUser = async (req: Request, res: Response) => {
             url: aiError.config?.url,
             method: aiError.config?.method
           });
-          
+
           if (aiError.response) {
             console.error('❌ [CREATE USER] AI service detailed response:', aiError.response.data);
           }
@@ -481,7 +484,7 @@ export const createUser = async (req: Request, res: Response) => {
     } else {
       console.log('ℹ️ [CREATE USER] No photo file provided for AI processing');
     }
-    
+
     // Remove password from the response object for security
     const { password: _, ...userWithoutPassword } = newUser;
     const newUserResponse = userWithoutPassword;
@@ -668,21 +671,21 @@ export const getUserDetail = async (req: Request, res: Response) => {
     };
     const currentDate = new Date();
     // Lấy id từ params (RESTful URL), query, hoặc body
-    let inputs = { 
+    let inputs = {
       id: req.params.id || req.query.id || req.body.id,
-      ...req.query, 
-      ...req.body 
+      ...req.query,
+      ...req.body
     };
-    
+
     // Debug logging để kiểm tra id
     console.log("=== getUserDetail Debug ===");
     console.log("req.params:", req.params);
     console.log("req.query:", req.query);
     console.log("req.body:", req.body);
     console.log("inputs:", inputs);
-    
+
     let params = validate(inputs, allowFields, { removeNotAllow: true });
-        
+
     console.log("params after validation:", params);
 
     // Fetch user basic info
@@ -705,7 +708,7 @@ export const getUserDetail = async (req: Request, res: Response) => {
         "users.gender",
         "users.startDate",
         "users.baseSalary",
-        "users.salary", 
+        "users.salary",
         "users.allowance",
         "users.vacationDay",
         "users.dayOff",
@@ -718,12 +721,12 @@ export const getUserDetail = async (req: Request, res: Response) => {
 
     // Get role info
     const role = await RoleModel.query().findById(result.roleId);
-    
+
     // Get department and chevron from employee-service
-    const token = req.cookies.token || req.headers.authorization?.split(' ')[1];      
+    const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
     const headers: any = {};
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`; 
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
     let department = null;
@@ -897,7 +900,7 @@ export const updateUser = async (req: Request, res: Response) => {
         hasBuffer: !!photoFile?.buffer,
         hasPath: !!photoFile?.path
       });
-      
+
       if (photoFile) {
         try {
           // Xóa ảnh cũ nếu có
@@ -905,23 +908,23 @@ export const updateUser = async (req: Request, res: Response) => {
             console.log('🗑️ [UPDATE USER] Deleting old photo:', existingUser.identificationPhoto);
             deleteOldIdentificationPhoto(existingUser.identificationPhoto);
           }
-          
+
           // Lưu ảnh mới với username
           console.log('💾 [UPDATE USER] Saving new photo with username:', updateData.username);
           updateData.identificationPhoto = handleIdentificationPhotoUpload(photoFile, updateData.username);
           console.log('✅ [UPDATE USER] New photo saved at:', updateData.identificationPhoto);
-          
+
           // Gọi AI service để cập nhật face embedding
           try {
             const aiServiceUrl = `${API_GATEWAY_URL}/api/ai/register-face`;
             console.log('📡 [UPDATE USER] AI Service URL:', aiServiceUrl);
-            
+
             const formData = new FormData();
-            
+
             // Đọc file từ vị trí đã lưu thay vì từ file tạm thời
             const savedPhotoPath = resolvePhotoAbsolutePath(updateData.identificationPhoto);
             console.log('📂 [UPDATE USER] Reading saved photo from:', savedPhotoPath);
-            
+
             if (fs.existsSync(savedPhotoPath)) {
               console.log('📎 [UPDATE USER] Adding image from saved path');
               const fileBuffer = fs.readFileSync(savedPhotoPath);
@@ -936,43 +939,43 @@ export const updateUser = async (req: Request, res: Response) => {
               console.error('❌ [UPDATE USER] No valid image source found');
               throw new Error('No valid image source found');
             }
-            
+
             formData.append('user_id', id.toString());
             formData.append('username', updateData.username);
-            
+
             console.log('📦 [UPDATE USER] FormData contents:', {
               user_id: id.toString(),
               username: updateData.username,
               hasImageField: formData.has('image')
             });
-            
+
             const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
             const aiHeaders: any = {};
             if (token) {
               aiHeaders['Authorization'] = `Bearer ${token}`;
             }
-            
+
             console.log('🔑 [UPDATE USER] Request headers:', {
               hasToken: !!token,
               authHeader: aiHeaders['Authorization'] ? 'Bearer [HIDDEN]' : 'None'
             });
-            
+
             console.log('🚀 [UPDATE USER] Calling AI service...');
-            
+
             // Gọi AI service
             const aiResponse = await axios.post(aiServiceUrl, formData, {
               headers: {
                 ...aiHeaders
               }
             });
-            
+
             console.log('📥 [UPDATE USER] AI service response:', {
               status: aiResponse.status,
               success: aiResponse.data?.success,
               message: aiResponse.data?.message,
               data: aiResponse.data?.data
             });
-            
+
             if (aiResponse.data.success) {
               console.log('✅ [UPDATE USER] Face embedding updated successfully for user:', updateData.username);
             } else {
@@ -987,7 +990,7 @@ export const updateUser = async (req: Request, res: Response) => {
               url: aiError.config?.url,
               method: aiError.config?.method
             });
-            
+
             if (aiError.response) {
               console.error('❌ [UPDATE USER] AI service detailed response:', aiError.response.data);
             }
@@ -995,9 +998,9 @@ export const updateUser = async (req: Request, res: Response) => {
           }
         } catch (uploadError) {
           console.error('❌ [UPDATE USER] Upload error:', uploadError);
-          return res.status(400).json({ 
-            message: uploadError instanceof Error ? uploadError.message : "Lỗi khi tải ảnh", 
-            code: 7003 
+          return res.status(400).json({
+            message: uploadError instanceof Error ? uploadError.message : "Lỗi khi tải ảnh",
+            code: 7003
           });
         }
       } else {
@@ -1069,10 +1072,10 @@ export const updateUser = async (req: Request, res: Response) => {
 
       if (duplicateUser) {
         if (usernameChanged && duplicateUser.username === params.username) {
-           return res.status(400).json({ message: "Tên đăng nhập đã tồn tại!", code: 6007 });
+          return res.status(400).json({ message: "Tên đăng nhập đã tồn tại!", code: 6007 });
         }
         if (emailChanged && duplicateUser.email === updateData.email) {
-           return res.status(400).json({ message: "Email đã tồn tại!", code: 6021 });
+          return res.status(400).json({ message: "Email đã tồn tại!", code: 6021 });
         }
       }
     }
@@ -1087,9 +1090,9 @@ export const updateUser = async (req: Request, res: Response) => {
     try {
       if (updateData.departmentId) {
         const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${updateData.departmentId}`, { headers });
-         if (!depRes.data) {
-           return res.status(400).json({ message: "Phòng ban không tồn tại!", code: 5008 });
-         }
+        if (!depRes.data) {
+          return res.status(400).json({ message: "Phòng ban không tồn tại!", code: 5008 });
+        }
       }
     } catch (e) {
       return res.status(400).json({ message: "Phòng ban không tồn tại!", code: 5008 });
@@ -1098,9 +1101,9 @@ export const updateUser = async (req: Request, res: Response) => {
     try {
       if (updateData.chevronId) {
         const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: updateData.chevronId }, { headers });
-         if (!chvRes.data) {
-           return res.status(400).json({ message: "Chức vụ không tồn tại!", code: 5007 });
-         }
+        if (!chvRes.data) {
+          return res.status(400).json({ message: "Chức vụ không tồn tại!", code: 5007 });
+        }
       }
     } catch (e) {
       return res.status(400).json({ message: "Chức vụ không tồn tại!", code: 5007 });
@@ -1161,14 +1164,14 @@ export const deleteUser = async (req: Request, res: Response) => {
     const { auth } = req as any;
     // Lấy id từ params (RESTful URL), query, hoặc body
     let id = req.params.id || req.query.id || req.body.id;
-    
+
     // Debug logging để kiểm tra id
     console.log("=== deleteUser Debug ===");
     console.log("req.params:", req.params);
     console.log("req.query:", req.query);
     console.log("req.body:", req.body);
     console.log("id:", id);
-    
+
     if (!id) {
       return res.status(400).json({ message: "Thiếu ID!", code: 9996 });
     }
@@ -1177,11 +1180,11 @@ export const deleteUser = async (req: Request, res: Response) => {
     if (!exist) {
       return res.status(404).json({ message: "Người dùng không tồn tại!", code: 6006 });
     }
-    
+
     if ([id].includes(auth.id)) {
-      return res.status(400).json({ 
-        message: "Bạn không thể xóa tài khoản của chính mình.", 
-        code: 6022 
+      return res.status(400).json({
+        message: "Bạn không thể xóa tài khoản của chính mình.",
+        code: 6022
       });
     }
 
@@ -1218,11 +1221,11 @@ export const deleteMultipleUsers = async (req: Request, res: Response) => {
     if (!exist || exist.length !== params.ids.length) {
       return res.status(404).json({ message: "Người dùng không tồn tại!", code: 6006 });
     }
-    
+
     if (params.ids.includes(auth.id)) {
-      return res.status(400).json({ 
-        message: "Bạn không thể xóa tài khoản của chính mình.", 
-        code: 6022 
+      return res.status(400).json({
+        message: "Bạn không thể xóa tài khoản của chính mình.",
+        code: 6022
       });
     }
 
@@ -1290,13 +1293,13 @@ export const createContract = async (req: Request, res: Response) => {
       id: req.params.id || req.body.id,
       ...req.body
     };
-    
+
     // Debug logging để kiểm tra id
     console.log("=== createContract Debug ===");
     console.log("req.params:", req.params);
     console.log("req.body:", req.body);
     console.log("inputs:", inputs);
-    
+
     const allowFields = {
       id: "number!",
       contractTypeId: "number!",
@@ -1307,7 +1310,7 @@ export const createContract = async (req: Request, res: Response) => {
     };
 
     let params = validate(inputs, allowFields, { removeNotAllow: true });
-    
+
     console.log("params after validation:", params);
 
     // Convert Date objects to ISO strings for database storage
@@ -1595,6 +1598,164 @@ export const updateSalaryInfo = async (req: Request, res: Response) => {
       message: 'Lỗi máy chủ nội bộ',
       error: error instanceof Error ? error.message : 'Unknown error',
       code: 500
+    });
+  }
+};
+
+export const getNumberOfDaysOff = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const user = await UserModel.query().findById(id);
+    if (!user) {
+      return res.status(404).json({ message: "Người dùng không tồn tại", code: 6006 });
+    }
+    return res.status(200).json({
+      monthly_leave_balance: user.monthly_leave_balance || 0,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error instanceof Error ? error.message : "Lỗi khi lấy số ngày nghỉ của người dùng",
+      code: 500
+    });
+  }
+};
+
+/**
+ * Check scope của user - dành cho internal service calls
+ * POST /api/users/check-scope
+ */
+export const checkUserScope = async (req: Request, res: Response) => {
+  try {
+    const { permissionKey } = req.body;
+    
+    if (!permissionKey) {
+      return res.status(400).json({
+        success: false,
+        message: "Permission key is required"
+      });
+    }
+
+    // Sử dụng UserModel.checkScope với req (có token trong header/cookie)
+    const userIds = await UserModel.checkScope(permissionKey, req);
+    
+    // Determine actual scope type based on the actualScopeValue from UserModel.checkScope
+    let scope = "personal";
+    const { auth } = req as any;
+    
+    // Get the actual scope value that was used in UserModel.checkScope 
+    let actualScopeValue = null;
+    if (auth && auth.user && auth.user.scope && auth.user.scope[permissionKey]) {
+      actualScopeValue = auth.user.scope[permissionKey];
+    } else {
+      // Try to get from token in cookies or header
+      const tokenFromCookie = req.cookies?.token || 
+                             (req.headers.authorization?.startsWith('Bearer ') ? 
+                              req.headers.authorization.substring(7) : null);
+      if (tokenFromCookie) {
+        try {
+          const decodedAuth = getDecodedToken(tokenFromCookie);
+          actualScopeValue = decodedAuth?.user?.scope?.[permissionKey];
+        } catch (err) {
+          console.error("Error decoding token in checkUserScope:", err);
+        }
+      }
+    }
+    
+    // Map scope value to scope name using constantConfig
+    const { permissionScope } = constantConfig;
+    if (actualScopeValue === permissionScope.global) {
+      scope = "global";
+    } else if (actualScopeValue === permissionScope.department) {
+      scope = "department";  
+    } else if (actualScopeValue === permissionScope.personal) {
+      scope = "personal";
+    } else {
+      // Fallback: determine by userIds count and relationships
+      if (userIds.length > 1) {
+        const totalUsers = await UserModel.query().resultSize();
+        if (userIds.length === totalUsers) {
+          scope = "global";
+        } else if (auth && auth.departmentId) {
+          const deptUsers = await UserModel.query()
+            .select("id")
+            .where("departmentId", auth.departmentId);
+          
+          if (userIds.length === deptUsers.length) {
+            scope = "department";
+          } else {
+            scope = "chevron";
+          }
+        }
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      userIds: userIds,
+      scope: scope,
+      message: `Scope check completed for permission: ${permissionKey}`
+    });
+
+  } catch (error) {
+    console.error("Error checking user scope:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Lỗi server khi kiểm tra phạm vi quyền",
+      error: error instanceof Error ? error.message : "Internal Server Error",
+    });
+  }
+};
+
+/**
+ * Get multiple users by IDs - for internal service use
+ * POST /api/users/bulk
+ */
+export const getUsersByIds = async (req: Request, res: Response) => {
+  try {
+    const { userIds } = req.body;
+    
+    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "userIds array is required"
+      });
+    }
+
+    // Validate that all userIds are numbers
+    const numericUserIds = userIds.map(id => {
+      const numId = parseInt(id);
+      if (isNaN(numId)) {
+        throw new Error(`Invalid user ID: ${id}`);
+      }
+      return numId;
+    });
+
+    // Fetch users by IDs with basic info
+    const users = await UserModel.query()
+      .select([
+        'id',
+        'username', 
+        'firstName',
+        'lastName',
+        'email',
+        'departmentId',
+        'chevronId',
+        'identificationPhoto'
+      ])
+      .whereIn('id', numericUserIds)
+      .where('status', 1); // Only active users
+
+    return res.status(200).json({
+      success: true,
+      data: users,
+      total: users.length
+    });
+
+  } catch (error) {
+    console.error("Error fetching users by IDs:", error);
+    return res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : "Internal Server Error",
     });
   }
 };

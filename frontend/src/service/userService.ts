@@ -104,6 +104,15 @@ const UserService = {
     } catch (error) {
       throw error;
     }
+  },
+
+  getNumberOfDaysOff: async (userId: number) => {
+    try {
+      const response = await api.get(`/api/auth/users/${userId}/number-of-days-off`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 };
 

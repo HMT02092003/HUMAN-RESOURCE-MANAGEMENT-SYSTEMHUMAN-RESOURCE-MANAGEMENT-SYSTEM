@@ -1,25 +1,25 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-    ShoppingCartOutlined,
-    AppstoreOutlined,
-    TeamOutlined,
     UserOutlined,
-    UnorderedListOutlined,
-    GlobalOutlined,
-    PieChartOutlined,
-    BellOutlined,
     KeyOutlined,
     LogoutOutlined,
     InfoCircleOutlined,
-    HomeOutlined,
     CalendarOutlined,
     SettingOutlined,
-    FileTextOutlined
+    FileTextOutlined,
+    ContainerOutlined,
+    MenuFoldOutlined,
+    MenuUnfoldOutlined,
+    ApartmentOutlined,
+    IdcardOutlined,
+    SafetyOutlined,
+    ProfileOutlined,
+    ReadOutlined,
+    DashboardOutlined
 } from '@ant-design/icons';
 
 import type { MenuProps } from 'antd';
-import { Breadcrumb, Layout, Menu, theme, Avatar, Dropdown, Badge, Modal, Button, Descriptions, message, notification, Popconfirm, Grid } from 'antd';
-import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import { Breadcrumb, Layout, Menu, theme, Avatar, Dropdown, Modal, Button, Descriptions, message, Grid } from 'antd';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import TopBarProgress from 'react-topbar-progress-indicator';
@@ -29,14 +29,18 @@ import { authService } from '@/service/authService';
 
 const { Header, Content, Footer, Sider } = Layout;
 
-// Extend the MenuItem type to include our custom permission property
-// Extended type to include our custom permission property
+// Type cho các loại quyền có thể kiểm tra
+type PermissionType = 'read' | 'create' | 'update' | 'delete' | 'approve';
+
 interface ExtendedMenuItem {
     key: React.Key;
     icon?: React.ReactNode;
     children?: ExtendedMenuItem[];
     label: React.ReactNode;
     permission?: string;
+    permissions?: string[];
+    requireAllPermissions?: boolean;
+    requirePermission?: PermissionType; // Thay đổi từ requireApprove thành requirePermission
     type?: 'group' | 'divider';
     danger?: boolean;
     onClick?: () => void;
@@ -56,25 +60,37 @@ interface AdminMainLayoutProps {
     userPermissions?: Record<string, string>;
 }
 
+// Hàm getItem linh hoạt với tham số tùy chọn
 function getItem(
     label: React.ReactNode,
     key: React.Key,
-    icon?: React.ReactNode,
-    children?: ExtendedMenuItem[],
-    permission?: string,
+    icon: React.ReactNode,
+    permissionOrChildren?: string | ExtendedMenuItem[],
+    requirePermissionOrPermissions?: PermissionType | string[],
+    requireAllPermissions?: boolean
 ): ExtendedMenuItem {
+    // Xác định xem tham số thứ 4 là permission hay children
+    const isChildren = Array.isArray(permissionOrChildren);
+    
+    // Xác định xem tham số thứ 5 là requirePermission hay permissions array
+    const isPermissionsArray = Array.isArray(requirePermissionOrPermissions);
+    const isPermissionType = typeof requirePermissionOrPermissions === 'string' && 
+                             ['read', 'create', 'update', 'delete', 'approve'].includes(requirePermissionOrPermissions);
+    
     return {
         key,
         icon,
-        children,
         label,
-        permission,
+        children: isChildren ? permissionOrChildren : undefined,
+        permission: !isChildren ? permissionOrChildren : undefined,
+        requirePermission: isPermissionType ? requirePermissionOrPermissions as PermissionType : undefined,
+        permissions: isPermissionsArray ? requirePermissionOrPermissions as string[] : undefined,
+        requireAllPermissions: isPermissionsArray ? requireAllPermissions : undefined,
     };
 }
 
 const ColorList = ['#f56a00', '#7265e6', '#ffbf00', '#00a2ae'];
 
-// Cấu hình cho thanh tiến trình
 TopBarProgress.config({
     barColors: {
         '0': '#2196f3',
@@ -83,17 +99,50 @@ TopBarProgress.config({
     shadowBlur: 5
 });
 
-// Define menu items with their required permissions
-const menuItemsList: ExtendedMenuItem[] = [
-    getItem('Dashboard', 'home', <PieChartOutlined />, undefined, 'home'),
-    getItem('Quản lí người dùng', 'users', <UserOutlined />, undefined, 'users'),
-    getItem('Quản lí phòng ban', 'departments', <UserOutlined />, undefined, 'departments'),
-    getItem('Quản lí chức vụ', 'chevrons', <ShoppingCartOutlined />, undefined, 'chevrons'),
-    getItem('Quản lí hợp đồng', 'contractTypes', <AppstoreOutlined />, undefined, 'contractTypes'),
-    getItem('Quản lí vai trò', 'roles', <TeamOutlined />, undefined, 'roles'),
-    getItem('Quản lí đơn từ', 'applications', <FileTextOutlined />, undefined, 'applications'),
-    getItem('Chấm công', 'attendance', <CalendarOutlined />, undefined, ''),
-    getItem('Cài đăt hệ thống', 'settings', <SettingOutlined />, undefined, ''),
+// Menu items với cú pháp gọn gàng
+const baseMenuItemsList: ExtendedMenuItem[] = [
+    // Dashboard
+    getItem('Dashboard', 'home', <DashboardOutlined />, 'home'),
+
+    // Quản lí tài khoản (menu cha với điều kiện OR cho 2 quyền con)
+    getItem(
+        'Quản lí tài khoản',
+        'account_management_parent',
+        <UserOutlined />,
+        [
+            getItem('Quản lí người dùng', 'users', <UserOutlined />, 'users'),
+            getItem('Quản lí vai trò', 'roles', <SafetyOutlined />, 'roles'),
+        ],
+        ['users', 'roles'], // permissions array
+        false // requireAllPermissions = false (chỉ cần 1 trong 2)
+    ),
+
+    // Quản lí phòng ban
+    getItem('Quản lí phòng ban', 'departments', <ApartmentOutlined />, 'departments'),
+
+    // Quản lí chức vụ
+    getItem('Quản lí chức vụ', 'chevrons', <IdcardOutlined />, 'chevrons'),
+
+    // Quản lí hợp đồng
+    getItem('Quản lí hợp đồng', 'contractTypes', <ContainerOutlined />, 'contractTypes'),
+
+    // Danh sách đơn từ - Sử dụng requirePermission
+    getItem(
+        'Danh sách đơn từ',
+        'applications_parent',
+        <FileTextOutlined />,
+        [
+            getItem('Đơn từ cá nhân', 'myApplications', <ProfileOutlined />, 'applications'),
+            getItem('Quản lí đơn từ', 'manageApplications', <ReadOutlined />, 'applications', 'approve'),
+        ],
+        ['applications']
+    ),
+
+    // Chấm công
+    getItem('Chấm công', 'attendance', <CalendarOutlined />, 'attendance'),
+
+    // Cài đặt hệ thống
+    getItem('Cài đặt hệ thống', 'settings', <SettingOutlined />, 'settings'),
 ];
 
 const isDeepEqual = (obj1: any, obj2: any): boolean => {
@@ -112,8 +161,6 @@ const isDeepEqual = (obj1: any, obj2: any): boolean => {
         return true;
     }
 
-    // Special handling for React elements: consider them equal if both are valid React elements.
-    // This prevents deep comparison into dynamically created JSX elements which would always be new references.
     if (React.isValidElement(obj1) && React.isValidElement(obj2)) {
         return true;
     }
@@ -132,7 +179,14 @@ const isDeepEqual = (obj1: any, obj2: any): boolean => {
     return true;
 };
 
-const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, breadcrumbItems = [], pageTitle, pageDescription, userPermissions = {} }) => {
+const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ 
+    children, 
+    userData, 
+    breadcrumbItems = [], 
+    pageTitle, 
+    pageDescription, 
+    userPermissions = {} 
+}) => {
     const [collapsed, setCollapsed] = useState(false);
     const screens = Grid.useBreakpoint();
     const isMobile = !screens.lg;
@@ -141,7 +195,6 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
     const [color, setColor] = useState(() => {
         return ColorList[Math.floor(Math.random() * ColorList.length)];
     });
-    const [notifications, setNotifications] = useState<{ title: string; description: string }[]>([]);
     const [menuItems, setMenuItems] = useState<ExtendedMenuItem[]>([]);
     const pathname = usePathname();
 
@@ -163,57 +216,113 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
 
     const router = useRouter();
 
-    // Filter menu items based on user permissions
+    const filterMenuItems = useCallback((items: ExtendedMenuItem[]): ExtendedMenuItem[] => {
+        return items.flatMap(item => {
+            // Hàm helper để kiểm tra permissions
+            const hasPermissionAccess = (permissionKeys: string[], requireAll: boolean = false) => {
+                if (!permissionKeys || permissionKeys.length === 0) return false;
+
+                const permissionChecks = permissionKeys.map(key => {
+                    const permissionValue = userPermissions[key];
+                    if (!permissionValue) return false;
+                    return decodePermissions(parseInt(permissionValue)).read;
+                });
+
+                return requireAll ?
+                    permissionChecks.every(check => check) :
+                    permissionChecks.some(check => check);
+            };
+
+            // Xử lý các mục con trước (nếu có)
+            if (item.children) {
+                const filteredChildren = filterMenuItems(item.children);
+
+                if (filteredChildren.length > 0) {
+                    return [{ ...item, children: filteredChildren }];
+                }
+
+                if (item.permissions && item.permissions.length > 0) {
+                    const requireAll = item.requireAllPermissions || false;
+                    if (hasPermissionAccess(item.permissions, requireAll)) {
+                        return [{ ...item, children: filteredChildren }];
+                    }
+                    return [];
+                }
+
+                const parentPermissionKey = item.permission;
+                const hasParentPermission = !parentPermissionKey ||
+                    (userPermissions[parentPermissionKey] && decodePermissions(parseInt(userPermissions[parentPermissionKey])).read);
+
+                if (hasParentPermission) {
+                    return [{ ...item, children: filteredChildren }];
+                }
+
+                return [];
+            }
+
+            // Xử lý các mục đơn lẻ (không có children)
+
+            // ✅ Kiểm tra quyền cụ thể (approve, create, update, delete) nếu requirePermission được set
+            if (item.requirePermission) {
+                const permKey = item.permission;
+                if (!permKey) return [];
+                
+                const permVal = userPermissions[permKey];
+                if (!permVal) return [];
+                
+                const decoded = decodePermissions(parseInt(permVal));
+                
+                // Phải có cả quyền READ và quyền được yêu cầu (approve/create/update/delete)
+                if (!decoded.read || !decoded[item.requirePermission]) return [];
+                
+                return [item];
+            }
+
+            // Kiểm tra permissions array trước
+            if (item.permissions && item.permissions.length > 0) {
+                const requireAll = item.requireAllPermissions || false;
+                return hasPermissionAccess(item.permissions, requireAll) ? [item] : [];
+            }
+
+            // Fallback - Kiểm tra single permission
+            const permissionKey = item.permission;
+            if (!permissionKey) return [item];
+
+            const permissionValue = userPermissions[permissionKey];
+            if (!permissionValue) return [];
+
+            const decodedPermission = decodePermissions(parseInt(permissionValue));
+            return decodedPermission.read === true ? [item] : [];
+        });
+    }, [userPermissions]);
+
+    // Cập nhật Menu Items khi Permissions thay đổi
     useEffect(() => {
-        console.log("userPermissions=====================", userPermissions);
         if (userPermissions && Object.keys(userPermissions).length > 0) {
-            // Filter menu items based on permissions
-            const filteredItems = menuItemsList.filter(item => {
-                // Always show Dashboard
-                if (item.key === 'home') return true;
-
-                // Check if user has permission for this menu item
-                const permissionKey = item.permission;
-                if (!permissionKey) return true; // If no permission required, show it
-
-                const permissionValue = userPermissions[permissionKey];
-                if (!permissionValue) return false; // No permission for this item
-
-                // Check if user has at least read permission
-                const decodedPermission = decodePermissions(parseInt(permissionValue));
-                return decodedPermission.read === true;
-            });
-
+            const filteredItems = filterMenuItems(baseMenuItemsList);
             updateMenuItemsState(filteredItems);
         } else {
-            // If no permissions data, only show Dashboard
-            updateMenuItemsState([menuItemsList[0]]);
+            const dashboardItem = baseMenuItemsList.find(item => item.key === 'home');
+            updateMenuItemsState(dashboardItem ? [dashboardItem] : []);
         }
-    }, [userPermissions, updateMenuItemsState]);
+    }, [userPermissions, updateMenuItemsState, filterMenuItems]);
 
-    useEffect(() => {
-        // Mô phỏng có thông báo trong hệ thống
-        const fakeDemoNotifications = [
-            {
-                title: 'Đơn hàng mới',
-                description: 'Có đơn hàng mới cần xử lý'
-            },
-            {
-                title: 'Người dùng mới đăng ký',
-                description: 'Có người dùng mới đăng ký vào hệ thống'
-            },
-            {
-                title: 'Cảnh báo hệ thống',
-                description: 'Dung lượng lưu trữ sắp đầy'
-            }
-        ];
+    // Function to get current selected menu keys based on pathname
+    const getSelectedKeys = () => {
+        if (!pathname) return ['home'];
 
-        // Lưu thông báo demo vào state để hiển thị
-        setNotifications(fakeDemoNotifications);
-    }, []);
+        if (pathname === '/applications/me') return ['myApplications'];
+        if (pathname === '/applications') return ['manageApplications'];
+        if (pathname.startsWith('/applications')) return ['applications_parent'];
+
+        if (pathname === '/user') return ['users'];
+        if (pathname === '/roles') return ['roles'];
+
+        const pathSegment = pathname.split('/')[1];
+        return [pathSegment || 'home'];
+    };
 
     const handleMenuClick = (e: { key: string }) => {
-        // Sử dụng router để chuyển trang
         switch (e.key) {
             case 'users':
                 router.push('/user');
@@ -239,8 +348,14 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
             case 'settings':
                 router.push('/settings');
                 break;
-            case 'applications':
+            case 'manageApplications':
                 router.push('/applications');
+                break;
+            case 'myApplications':
+                router.push('/applications/me');
+                break;
+            case 'account_management_parent':
+            case 'applications_parent':
                 break;
             default:
                 break;
@@ -259,11 +374,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
 
     const changePasswordHandler = async () => {
         setIsPasswordModalVisible(false);
-        // Giả sử điều hướng đến trang đổi mật khẩu
         router.push('/change-password');
     };
 
-    // Hiển thị menu dropdown cho người dùng
     const userMenuItems: MenuProps['items'] = [
         {
             key: '1',
@@ -295,31 +408,14 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
         },
     ];
 
-    // Hiển thị dropdown thông báo
-    const notificationItems = notifications.map((notification, index) => ({
-        key: index.toString(),
-        label: (
-            <div>
-                <div style={{ fontWeight: 'bold' }}>{notification.title}</div>
-                <div>{notification.description}</div>
-            </div>
-        )
-    }));
-
-    const notificationMenu: MenuProps = {
-        items: notificationItems,
-    };
-
-    // Lấy initials từ tên người dùng
     const getUserInitials = (name: any) => {
         if (!name) return 'U';
         return name.split(' ').map((word: any) => word[0]).join('').toUpperCase();
     };
 
-    // Convert our custom ExtendedMenuItem items to standard MenuItem type that Ant Design expects
     const convertToAntMenuItems = (items: ExtendedMenuItem[]): MenuProps['items'] => {
         return items.map(item => {
-            const { permission, ...restItem } = item;
+            const { permission, permissions, requireAllPermissions, requirePermission, ...restItem } = item;
             const menuItem: any = {
                 ...restItem,
                 children: item.children ? convertToAntMenuItems(item.children) : undefined
@@ -332,12 +428,13 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
         <Layout style={{ minHeight: '100vh' }}>
             <LoadingProgress>
                 <Sider
+                    width={220}
                     style={{
                         backgroundColor: "white",
                         position: isMobile ? 'fixed' : 'relative',
                         height: isMobile ? '100vh' : 'auto',
                         zIndex: 1000,
-                        left: isMobile && collapsed ? -200 : 0,
+                        left: isMobile && collapsed ? -220 : 0,
                         transition: 'left 0.2s'
                     }}
                     collapsible={!isMobile}
@@ -353,11 +450,11 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                     </div>
                     <Menu
                         theme="light"
-                        defaultSelectedKeys={['1']}
                         mode="inline"
                         items={convertToAntMenuItems(menuItems)}
                         onClick={handleMenuClick}
-                        selectedKeys={[pathname?.split('/')[1] || 'home']}
+                        selectedKeys={getSelectedKeys()}
+                        defaultOpenKeys={['applications_parent', 'account_management_parent']}
                     />
                 </Sider>
 
@@ -402,7 +499,6 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                     </Header>
 
                     <Content style={{ flex: 1 }}>
-                        {/* Dynamic Breadcrumb */}
                         <div
                             style={{
                                 background: "linear-gradient(to right, #e6f7ff, rgb(106, 218, 255))",
@@ -415,8 +511,8 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                                 style={{
                                     display: "flex",
                                     flexDirection: "row",
-                                    justifyContent:"space-between",
-                                    alignItems:"center",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
                                     flexWrap: 'wrap'
                                 }}
                             >
@@ -440,13 +536,13 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                                     </p>
                                 </div>
 
-                                <Breadcrumb 
-                                    style={{ 
-                                        padding: isMobile ? "8px 16px" : "16px 28px", 
-                                        backgroundColor: "white", 
-                                        borderRadius: "25px", 
-                                        fontWeight: "bold", 
-                                        opacity: 0.6, 
+                                <Breadcrumb
+                                    style={{
+                                        padding: isMobile ? "8px 16px" : "16px 28px",
+                                        backgroundColor: "white",
+                                        borderRadius: "25px",
+                                        fontWeight: "bold",
+                                        opacity: 0.6,
                                         color: "#595959",
                                         fontSize: isMobile ? "12px" : "14px",
                                         marginTop: isMobile ? "12px" : "0"
@@ -488,7 +584,6 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                     </Footer>
                 </Layout>
 
-                {/* Overlay for mobile menu */}
                 {isMobile && !collapsed && (
                     <div
                         style={{
@@ -505,7 +600,6 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                 )}
             </LoadingProgress>
 
-            {/* Modal hiển thị thông tin người dùng */}
             <Modal
                 title="Thông tin tài khoản"
                 open={isUserModalVisible}
@@ -520,13 +614,12 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ children, userData, b
                     <Descriptions.Item label="Tên đăng nhập">{userData?.user?.username || 'N/A'}</Descriptions.Item>
                     <Descriptions.Item label="Họ và tên">{userData?.user?.lastName || 'N/A'} {userData?.user?.firstName || 'N/A'}</Descriptions.Item>
                     <Descriptions.Item label="Email">{userData?.user?.email || 'N/A'}</Descriptions.Item>
-                    <Descriptions.Item label="Ngày tạo">{userData?.user?.birthday ? new Date(userData.user.createdAt).toLocaleDateString() : 'N/A'}</Descriptions.Item>
+                    <Descriptions.Item label="Ngày tạo">{userData?.user?.createdAt ? new Date(userData.user.createdAt).toLocaleDateString() : 'N/A'}</Descriptions.Item>
                     <Descriptions.Item label="Số điện thoại">{userData?.user?.phone || 'N/A'}</Descriptions.Item>
                     <Descriptions.Item label="Vai trò">{userData?.user?.role || 'N/A'}</Descriptions.Item>
                 </Descriptions>
             </Modal>
 
-            {/* Modal xác nhận đổi mật khẩu */}
             <Modal
                 title="Đổi mật khẩu"
                 open={isPasswordModalVisible}

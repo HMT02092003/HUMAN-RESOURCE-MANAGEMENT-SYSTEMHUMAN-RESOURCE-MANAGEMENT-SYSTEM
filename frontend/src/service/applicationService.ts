@@ -1,173 +1,178 @@
+import { get } from 'lodash';
 import api from './apiService';
 
-// Base application interface
+
+// Base interface cho Application
 export interface BaseApplication {
   id?: number;
-  employeeId?: number;
-  applicationType: string;
-  status: 'pending' | 'approved' | 'rejected';
-  reason: string;
-  applicationDate: string;
+  type: string;
+  status: string;
+  data: any; // JSONB: dữ liệu cụ thể cho từng loại đơn
+  userId: number;
   approvedBy?: number;
+  applicationDate?: string;
   approvedDate?: string;
-  rejectedReason?: string;
-  createdAt?: string;
-  updatedAt?: string;
+  reason?: string;
+  rejectionReason?: string;
+  note?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
-// Specific application types
-export interface LeaveApplication extends BaseApplication {
-  applicationType: 'leave';
-  startDate: string;
-  endDate: string;
-  leaveType: 'sick' | 'personal' | 'vacation' | 'maternity' | 'emergency';
-  reason: string; // Lý do nghỉ
+// Shift Registration specific interfaces
+export interface ShiftDay {
+  date: string; // YYYY-MM-DD format
+  shifts: string[]; // array of shift values: 'morning', 'afternoon', 'night', 'overtime'
+  note?: string;
 }
 
 export interface ShiftRegistrationApplication extends BaseApplication {
-  applicationType: 'shift_registration';
-  requestedDates: string[]; // Nhiều ngày đăng ký ca
-  shiftType: 'morning' | 'afternoon' | 'night';
-  reason: string; // Lý do đăng ký ca
+  type: 'shift-registration';
+  data: {
+    requestedDates: ShiftDay[];
+  };
 }
 
-export interface ForgotCheckInApplication extends BaseApplication {
-  applicationType: 'forgot_checkin';
-  forgotDate: string; // Hôm nào quên check
-  forgotTime: string; // Quên check lúc mấy giờ
-  reason: string; // Lý do quên check
+// Request types
+export interface CreateApplicationRequest {
+  type: string;
+  data: any;
+  note?: string;
 }
 
-export interface OvertimeApplication extends BaseApplication {
-  applicationType: 'overtime';
-  overtimeDate: string; // Hôm nào tăng ca
-  overtimeHours: 2 | 4 | 6; // Chọn 2/4/6 giờ
-  reason: string; // Lý do tăng ca
-  startTime: string; // Giờ bắt đầu tăng ca
+export interface ApproveApplicationRequest {
+  note?: string;
 }
 
-export interface BusinessTripApplication extends BaseApplication {
-  applicationType: 'business_trip';
-  startDate: string; // Từ hôm nào
-  endDate: string; // Tới hôm nào
-  destination: string; // Đi đâu
-  purpose: string; // Lý do công tác
-  evidenceImages?: string[]; // Ảnh chứng minh (nếu có)
+export interface RejectApplicationRequest {
+  rejectionReason: string;
 }
 
-export interface ResignationApplication extends BaseApplication {
-  applicationType: 'resignation';
-  lastWorkingDate: string; // Nghỉ từ hôm nào
-  resignationReason: string; // Lý do thôi việc
-  handoverTo: string; // Bàn giao công việc với ai
-  handoverNotes?: string; // Ghi chú bàn giao
-  handoverCompleted: boolean; // Đã bàn giao xong chưa
-}
-
-export type ApplicationTypes = 
-  | LeaveApplication 
-  | ShiftRegistrationApplication 
-  | ForgotCheckInApplication
-  | OvertimeApplication 
-  | BusinessTripApplication 
-  | ResignationApplication;
-
-// API Service
-class ApplicationService {
-  private endpoint = '/applications';
-
-  // Get all applications with filters
-  async getApplications(params?: {
+const ApplicationService = {
+  // Lấy danh sách applications (có filter, pagination)
+  getAllApplications: async (params?: {
     page?: number;
-    limit?: number;
-    applicationType?: string;
-    status?: string;
-    employeeId?: number;
-    startDate?: string;
-    endDate?: string;
-    search?: string;
-  }) {
-    const response = await api.get(this.endpoint, { params });
-    return response.data;
-  }
+    pageSize?: number;
+  }) => {
+    try {
+      const response = await api.get("/api/applications", { params });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
 
-  // Get application by ID
-  async getApplicationById(id: number) {
-    const response = await api.get(`${this.endpoint}/${id}`);
-    return response.data;
-  }
+  // Lấy chi tiết application theo ID
+  getApplicationById: async (id: number) => {
+    try {
+      const response = await api.get(`/api/applications/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
 
-  // Create new application
-  async createApplication(applicationData: Partial<ApplicationTypes>) {
-    const response = await api.post(this.endpoint, applicationData);
-    return response.data;
-  }
+  // Tạo application mới
+  createApplication: async (data: CreateApplicationRequest) => {
+    try {
+      const response = await api.post("/api/applications", data);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
 
-  // Update application
-  async updateApplication(id: number, applicationData: Partial<ApplicationTypes>) {
-    const response = await api.put(`${this.endpoint}/${id}`, applicationData);
-    return response.data;
-  }
+  // Cập nhật application (chỉ khi status = PENDING)
+  updateApplication: async (id: number, data: any) => {
+    try {
+      const response = await api.put(`/api/applications/${id}`, { id, ...data });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
 
-  // Delete application
-  async deleteApplication(id: number) {
-    const response = await api.delete(`${this.endpoint}/${id}`);
-    return response.data;
-  }
+  // Xóa / Hủy application
+  deleteApplication: async (id: number) => {
+    try {
+      const response = await api.delete(`/api/applications/${id}`, { data: { id } });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
 
-  // Approve application
-  async approveApplication(id: number, approvalData: {
-    approvedBy: number;
-    approvalNotes?: string;
-  }) {
-    const response = await api.post(`${this.endpoint}/${id}/approve`, approvalData);
-    return response.data;
-  }
+  // Duyệt application
+  approveApplication: async (id: number, approvalData: ApproveApplicationRequest) => {
+    try {
+      const response = await api.put(`/api/applications/${id}/approve`, approvalData);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
 
-  // Reject application
-  async rejectApplication(id: number, rejectionData: {
-    rejectedBy: number;
-    rejectionReason: string;
-  }) {
-    const response = await api.post(`${this.endpoint}/${id}/reject`, rejectionData);
-    return response.data;
-  }
+  // Từ chối application
+  rejectApplication: async (id: number, rejectionData: RejectApplicationRequest) => {
+    try {
+      const response = await api.put(`/api/applications/${id}/reject`, rejectionData);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
 
-  // Get application statistics
-  async getApplicationStatistics(params?: {
-    employeeId?: number;
-    startDate?: string;
-    endDate?: string;
-  }) {
-    const response = await api.get(`${this.endpoint}/statistics`, { params });
-    return response.data;
-  }
+  // Lấy applications của user hiện tại
+  getMyApplications: async (params?: { 
+    page?: number; 
+    pageSize?: number; 
+  }) => {
+    try {
+      const response = await api.get("/api/applications/my-applications", { params });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
 
-  // Upload attachments for application
-  async uploadAttachment(applicationId: number, file: File) {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('applicationId', applicationId.toString());
-    
-    const response = await api.post(`${this.endpoint}/${applicationId}/attachments`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response.data;
-  }
+  // Lấy applications pending (cho manager)
+  getPendingApplications: async (params?: { 
+    page?: number; 
+    pageSize?: number; 
+    type?: string; 
+  }) => {
+    try {
+      const response = await api.get("/api/applications/pending", { params });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
 
-  // Get my applications (for current user)
-  async getMyApplications(params?: {
-    page?: number;
-    limit?: number;
-    applicationType?: string;
-    status?: string;
-  }) {
-    const response = await api.get(`${this.endpoint}/my-applications`, { params });
-    return response.data;
-  }
-}
+  // Tạo đơn đăng ký ca làm việc
+  createShiftRegistration: async (data: {
+    requestedDates: ShiftDay[];
+    reason?: string;
+    note?: string;
+  }) => {
+    try {
+      const payload: CreateApplicationRequest = {
+        type: 'shift-registration',
+        data: {
+          requestedDates: data.requestedDates
+        },
+        note: data.note || data.reason
+      };
+      
+      const response = await api.post("/api/applications", payload);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+};
 
-export const applicationService = new ApplicationService();
-export default applicationService;
+export default ApplicationService;
+
+// Re-export types và enums từ constants
+export { APPLICATION_TYPE_LABELS, APPLICATION_STATUS_LABELS } from '@/config/constant';

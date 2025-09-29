@@ -7,6 +7,7 @@ const getServices = () => ({
   auth: process.env.AUTH_SERVICE_URL,
   employee: process.env.EMPLOYEE_SERVICE_URL,
   attendance: process.env.ATTENDANCE_SERVICE_URL,
+  application: process.env.APPLICATION_SERVICE_URL,
   ai: process.env.AI_FACE_RECOGNITION_SERVICE_URL,
 });
 
@@ -36,6 +37,11 @@ const ROUTE_CONFIG = [
     path: '/api/attendance',
     target: 'attendance',
     pathRewrite: { '^/api/attendance': '/api' }
+  },
+  {
+    path: '/api/applications',
+    target: 'application',
+    pathRewrite: { '^/api/applications': '/api/applications' }
   },
   {
     path: '/api/settings',

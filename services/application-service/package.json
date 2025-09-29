@@ -10,13 +10,14 @@
     "seed": "knex seed:run"
   },
   "dependencies": {
-    "express": "^4.21.1",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "dayjs": "^1.11.13",
     "dotenv": "^16.5.0",
+    "express": "^4.21.1",
     "knex": "^3.1.0",
     "objection": "^3.1.5",
-    "pg": "^8.13.1",
-    "dayjs": "^1.11.13"
+    "pg": "^8.13.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.7",

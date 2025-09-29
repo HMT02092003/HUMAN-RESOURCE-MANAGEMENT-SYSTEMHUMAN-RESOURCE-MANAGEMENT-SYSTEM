@@ -68,6 +68,17 @@
 			}
 		},
 		{
+			"label": "Application Service",
+			"type": "shell",
+			"command": "yarn dev",
+			"options": {
+				"cwd": "services/application-service"
+			},
+			"presentation": {
+				"panel": "new"
+			}
+		},
+		{
 			"label": "Mobile App (Face Recognition)",
 			"type": "shell",
 			"command": "yarn start",
@@ -86,6 +97,7 @@
 				"Auth Service",
 				"Employee Service",
 				"Attendance Service",
+				"Application Service",
 				"AI Face Recognition Service",
 				"Mobile App (Face Recognition)"
 			],
@@ -142,13 +154,6 @@
 				"focus": false,
 				"panel": "new"
 			},
-			"problemMatcher": []
-		},
-		{
-			"label": "Application Service",
-			"type": "shell",
-			"command": "yarn dev",
-			"isBackground": true,
 			"problemMatcher": []
 		}
 	],

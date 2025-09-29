@@ -1,120 +1,121 @@
+// constants/index.ts
 
 const roleKey = {
-    root: "Admin",
+  root: "Admin",
 };
 
 const numberInMonth = {
-    "01": 31,
-    "02": 28,
-    "03": 31,
-    "04": 30,
-    "05": 31,
-    "06": 30,
-    "07": 31,
-    "08": 31,
-    "09": 30,
-    "10": 31,
-    "11": 30,
-    "12": 31,
+  "01": 31,
+  "02": 28,
+  "03": 31,
+  "04": 30,
+  "05": 31,
+  "06": 30,
+  "07": 31,
+  "08": 31,
+  "09": 30,
+  "10": 31,
+  "11": 30,
+  "12": 31,
 };
 
 const numberInMonthProfit = {
-    "01": 31,
-    "02": 29,
-    "03": 31,
-    "04": 30,
-    "05": 31,
-    "06": 30,
-    "07": 31,
-    "08": 31,
-    "09": 30,
-    "10": 31,
-    "11": 30,
-    "12": 31,
+  "01": 31,
+  "02": 29,
+  "03": 31,
+  "04": 30,
+  "05": 31,
+  "06": 30,
+  "07": 31,
+  "08": 31,
+  "09": 30,
+  "10": 31,
+  "11": 30,
+  "12": 31,
 };
 
 const TypeOfSetting = {
-    officeHours: "Giờ hành chính",
-    MoneyPenalty: "Tiền phạt",
-    absent: "Đi muộn/về sớm",
-    vacation: "Xin nghỉ phép",
-    overtime: "Làm thêm giờ",
-    check: "Check in/out",
+  officeHours: "Giờ hành chính",
+  MoneyPenalty: "Tiền phạt",
+  absent: "Đi muộn/về sớm",
+  vacation: "Xin nghỉ phép",
+  overtime: "Làm thêm giờ",
+  check: "Check in/out",
 };
 
 const TypeOfApplication = {
-    1: "Đi muộn/về sớm",
-    2: "Xin nghỉ phép",
-    3: "Làm thêm giờ",
-    4: "Check in/out",
+  1: "Đi muộn/về sớm",
+  2: "Xin nghỉ phép",
+  3: "Làm thêm giờ",
+  4: "Check in/out",
 };
 
 const TypeOfStatusApplication = {
-    1: "Chờ duyệt",
-    2: "Đã duyệt",
-    3: "Từ chối",
+  1: "Chờ duyệt",
+  2: "Đã duyệt",
+  3: "Từ chối",
 };
 
 const permissionScope = {
-    global: 1,
-    department: 2,
-    personal: 3,
+  global: 1,
+  department: 2,
+  personal: 3,
 };
 
 const Gender = [
-    { key: 1, value: "Nam" },
-    { key: 2, value: "Nữ" },
-    { key: 3, value: "Khác" },
+  { key: 1, value: "Nam" },
+  { key: 2, value: "Nữ" },
+  { key: 3, value: "Khác" },
 ];
 
 const statusOptions = [
-    { value: 1, label: "Đang hoạt động" },
-    { value: 2, label: "Nghỉ thai sản" },
-    { value: 3, label: "Đã nghỉ việc" },
+  { value: 1, label: "Đang hoạt động" },
+  { value: 2, label: "Nghỉ thai sản" },
+  { value: 3, label: "Đã nghỉ việc" },
 ];
 
 const Relationship = [
-    { value: 1, label: "Bố" },
-    { value: 2, label: "Mẹ" },
-    { value: 3, label: "Anh" },
-    { value: 4, label: "Chị" },
-    { value: 5, label: "Em" },
-    { value: 6, label: "Ông" },
-    { value: 7, label: "Bà" },
-    { value: 8, label: "Con" },
-    { value: 9, label: "Vợ" },
+  { value: 1, label: "Bố" },
+  { value: 2, label: "Mẹ" },
+  { value: 3, label: "Anh" },
+  { value: 4, label: "Chị" },
+  { value: 5, label: "Em" },
+  { value: 6, label: "Ông" },
+  { value: 7, label: "Bà" },
+  { value: 8, label: "Con" },
+  { value: 9, label: "Vợ" },
 ];
 
 const importanceOptions = [
-    { value: 1, label: "Thấp" },
-    { value: 2, label: "Cao" },
+  { value: 1, label: "Thấp" },
+  { value: 2, label: "Cao" },
 ];
 
 const settingKey = [
-    { value: 1, label: "officeHours" },
-    { value: 2, label: "MoneyPenalty" },
-    { value: 3, label: "absent" },
-    { value: 4, label: "vacation" },
-    { value: 5, label: "overtime" },
-    { value: 6, label: "check" },
+  { value: 1, label: "officeHours" },
+  { value: 2, label: "MoneyPenalty" },
+  { value: 3, label: "absent" },
+  { value: 4, label: "vacation" },
+  { value: 5, label: "overtime" },
+  { value: 6, label: "check" },
 ];
 
 const settingKeyVal = {
-    officeHours: 1,
-    MoneyPenalty: 2,
+  officeHours: 1,
+  MoneyPenalty: 2,
 };
 
 const typeToSettingKey = {
-    1: "absent",
-    2: "vacation",
-    3: "overtime",
-    4: "check",
+  1: "absent",
+  2: "vacation",
+  3: "overtime",
+  4: "check",
 };
 
 const scopeValues = {
-    1: "Toàn cục",
-    2: "Phòng ban",
-    3: "Cá nhân",
+  1: "Toàn cục",
+  2: "Phòng ban",
+  3: "Cá nhân",
 };
 
 const roles = [
@@ -135,23 +136,63 @@ const departments = [
   { value: 'marketing', label: 'Phòng Marketing' },
 ];
 
+
+
+export const SHIFT_OPTIONS = [
+  { value: 'morning', label: 'Ca sáng (6:00 - 14:00)' },
+  { value: 'afternoon', label: 'Ca chiều (14:00 - 22:00)' },
+  { value: 'night', label: 'Ca đêm (22:00 - 6:00)' },
+  { value: 'overtime', label: 'Ca tăng ca' },
+] as const;
+
+
+export const APPLICATION_TYPE_LABELS = {
+  'business_trip': 'Công tác', 
+  'leave': 'Xin nghỉ phép',
+  'overtime': 'Làm thêm giờ',
+  'remote-work': 'Làm việc từ xa',
+  'sick-leave': 'Nghỉ ốm',
+  'shift-registration': 'Đăng ký ca làm việc',
+  'forgot_checkin': 'Quên check in/out',
+  'resignation': 'Thôi việc'
+} as const;
+
+export const APPLICATION_STATUS_LABELS = {
+  0: 'Chờ duyệt',
+  1: 'Đã duyệt',
+  2: 'Từ chối'
+};
+
+export const APPLICATION_STATUS_COLORS = {
+  0: 'orange',
+  1: 'green',
+  2: 'red'
+};
+
+export const VALIDATION_RULES = {
+  REASON_MAX_LENGTH: 500,
+  NOTE_MAX_LENGTH: 200,
+  REJECTION_REASON_MAX_LENGTH: 300,
+  MIN_DAYS_ADVANCE: 1,
+} as const;
+
 export default {
-    roleKey,
-    numberInMonth,
-    numberInMonthProfit,
-    TypeOfSetting,
-    permissionScope,
-    TypeOfApplication,
-    TypeOfStatusApplication,
-    Gender,
-    statusOptions,
-    Relationship,
-    importanceOptions,
-    settingKey,
-    settingKeyVal,
-    typeToSettingKey,
-    scopeValues,
-    roles,
-    chevrons,
-    departments,
+  roleKey,
+  numberInMonth,
+  numberInMonthProfit,
+  TypeOfSetting,
+  permissionScope,
+  TypeOfApplication,
+  TypeOfStatusApplication,
+  Gender,
+  statusOptions,
+  Relationship,
+  importanceOptions,
+  settingKey,
+  settingKeyVal,
+  typeToSettingKey,
+  scopeValues,
+  roles,
+  chevrons,
+  departments,
 };

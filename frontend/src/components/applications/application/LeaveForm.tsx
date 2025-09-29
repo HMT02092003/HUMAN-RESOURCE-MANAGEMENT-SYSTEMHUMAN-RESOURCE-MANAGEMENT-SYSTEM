@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { use, useEffect, useState } from "react";
 import {
   Card,
   Form,
@@ -13,65 +13,111 @@ import {
   Col,
   Statistic,
   Divider,
-} from 'antd';
-import { RollbackOutlined, SaveOutlined } from '@ant-design/icons';
-import type { GetProps, DatePickerProps } from 'antd';
-import dayjs from 'dayjs';
-import { LeaveApplication } from '@/service/applicationService';
-import ApplicationGuide from '../ApplicationGuide';
+  message,
+} from "antd";
+import { RollbackOutlined, SaveOutlined } from "@ant-design/icons";
+import type { GetProps, DatePickerProps } from "antd";
+import dayjs from "dayjs";
+import ApplicationService from "@/service/applicationService";
+import ApplicationGuide from "../ApplicationGuide";
+import UserService from "@/service/userService";
+import Cookies from "js-cookie";
+import { getDecodedToken } from "@/utils/decode-token";
+import { useRouter } from 'next/navigation';
 
 type RangePickerProps = GetProps<typeof DatePicker.RangePicker>;
-type DatePickerValue = DatePickerProps['value'];
+type DatePickerValue = DatePickerProps["value"];
 
 const { Text } = Typography;
 const { TextArea } = Input;
 const { RangePicker } = DatePicker;
 
 interface LeaveApplicationFormProps {
-  onSubmit: (data: Omit<LeaveApplication, 'id' | 'status' | 'applicationDate'>) => void;
   onCancel: () => void;
-  totalLeaveDays?: number; // tổng số ngày phép ban đầu (lấy từ API)
 }
 
-const LeaveForm: React.FC<LeaveApplicationFormProps> = ({
-  onSubmit,
-  onCancel,
-  totalLeaveDays = 12,
-}) => {
+const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
   const [form] = Form.useForm();
   const [startDate, setStartDate] = useState<DatePickerValue>(null);
   const [endDate, setEndDate] = useState<DatePickerValue>(null);
+  const [messageApi, contextHolder] = message.useMessage();
+  const [totalDaysOff, setTotalDaysOff] = useState<number>(0);
+  const router = useRouter();
 
+  // Tính số ngày đã chọn
   const calculateDays = () => {
     if (startDate && endDate) {
-      return endDate.diff(startDate, 'day') + 1;
+      return endDate.diff(startDate, "day") + 1;
     }
     return 0;
   };
 
   const usedDays = calculateDays();
-  const remainingDays = Math.max(totalLeaveDays - usedDays, 0);
+  const remainingDays = totalDaysOff - usedDays;
 
-  const handleSubmit = (values: any) => {
-    const [start, end] = values.dateRange;
-    onSubmit({
-      applicationType: values.applicationCategory,
-      startDate: start.format('YYYY-MM-DD'),
-      endDate: end.format('YYYY-MM-DD'),
-      leaveType: values.leaveType,
-      reason: values.reason,
-    });
+  // Lấy số ngày phép còn lại từ API
+  const getNumberOfDaysOff = async () => {
+    try {
+      let token = Cookies.get("token") || "";
+      let decoded = token ? getDecodedToken(token) : null;
+      if (decoded) {
+        let daysOff = await UserService.getNumberOfDaysOff(decoded.user.id);
+        setTotalDaysOff(daysOff.monthly_leave_balance || 0);
+      }
+    } catch (error: any) {
+      messageApi.error(error.message || "Đã có lỗi xảy ra!");
+    }
   };
 
-  const disabledDate: RangePickerProps['disabledDate'] = (current) => {
-    return current && current < dayjs().startOf('day'); // không cho chọn ngày quá khứ
+  useEffect(() => {
+    getNumberOfDaysOff();
+  }, []);
+
+  // Submit form
+  const handleSubmit = async (values: any) => {
+    try {
+      if (!startDate || !endDate) {
+        messageApi.error("Vui lòng chọn khoảng thời gian nghỉ!");
+        return;
+      }
+
+      const usedDays = endDate.diff(startDate, "day") + 1;
+      const remaining = totalDaysOff - usedDays;
+
+      if (remaining < 0 && values.applicationCategory === "leave") {
+        messageApi.error("Số ngày phép còn lại không đủ!");
+        return;
+      }
+
+      delete values.dateRange; 
+
+      await ApplicationService.createApplication({
+        type: "leave",
+        data: {
+          ...values,
+          startDate: startDate?.toISOString(),
+          endDate: endDate?.toISOString(),
+        },
+      });
+
+      messageApi.success("Tạo đơn nghỉ phép thành công!");
+      router.push("/applications");
+    } catch (error: any) {
+      messageApi.error(error.message || "Đã có lỗi xảy ra khi tạo đơn!");
+    }
+  };
+
+  // Không cho chọn ngày trong quá khứ
+  const disabledDate: RangePickerProps["disabledDate"] = (current) => {
+    return current && current < dayjs().startOf("day");
   };
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ maxWidth: 900, margin: "0 auto" }}>
+      {contextHolder}
       {/* Hướng dẫn */}
       <ApplicationGuide type="leave" />
-      
+
       <Form
         form={form}
         layout="vertical"
@@ -84,14 +130,13 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({
             <Form.Item
               name="applicationCategory"
               label={<Text strong>Loại đơn</Text>}
-              rules={[{ required: true, message: 'Vui lòng chọn loại đơn!' }]}
+              rules={[{ required: true, message: "Vui lòng chọn loại đơn!" }]}
             >
               <Select
                 placeholder="Chọn loại đơn"
                 options={[
-                  { value: 'leave', label: '📝 Nghỉ phép' },
-                  { value: 'regular', label: '📌 Nghỉ thường' },
-                  { value: 'maternity', label: '👶 Nghỉ thai sản' },
+                  { value: "leave", label: "📝 Nghỉ phép" },
+                  { value: "regular", label: "📌 Nghỉ thường" },
                 ]}
               />
             </Form.Item>
@@ -100,15 +145,19 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({
             <Card
               style={{
                 borderRadius: 8,
-                background: '#f6f9ff',
-                textAlign: 'center',
+                background: "#f6f9ff",
+                textAlign: "center",
               }}
             >
               <Statistic
                 title="Số ngày phép còn lại"
-                value={remainingDays}
-                suffix={`/ ${totalLeaveDays}`}
-                valueStyle={{ fontSize: '20px', fontWeight: 'bold', color: '#1677ff' }}
+                value={remainingDays >= 0 ? remainingDays : 0}
+                suffix={`/ ${totalDaysOff}`}
+                valueStyle={{
+                  fontSize: "20px",
+                  fontWeight: "bold",
+                  color: remainingDays < 0 ? "red" : "#1677ff",
+                }}
               />
             </Card>
           </Col>
@@ -120,15 +169,15 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({
             <Form.Item
               name="leaveType"
               label={<Text strong>Hình thức nghỉ</Text>}
-              rules={[{ required: true, message: 'Vui lòng chọn hình thức nghỉ!' }]}
+              rules={[{ required: true, message: "Vui lòng chọn hình thức nghỉ!" }]}
             >
               <Select
                 placeholder="Chọn hình thức nghỉ"
                 options={[
-                  { value: 'personal', label: '🏠 Nghỉ cá nhân' },
-                  { value: 'sick', label: '🤒 Nghỉ ốm' },
-                  { value: 'vacation', label: '🎉 Nghỉ lễ/tết' },
-                  { value: 'other', label: '🔖 Khác' },
+                  { value: "personal", label: "🏠 Nghỉ cá nhân" },
+                  { value: "sick", label: "🤒 Nghỉ ốm" },
+                  { value: "vacation", label: "🎉 Nghỉ lễ/tết" },
+                  { value: "other", label: "🔖 Khác" },
                 ]}
               />
             </Form.Item>
@@ -137,7 +186,9 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({
             <Form.Item
               name="dateRange"
               label={<Text strong>Thời gian nghỉ</Text>}
-              rules={[{ required: true, message: 'Vui lòng chọn khoảng thời gian nghỉ!' }]}
+              rules={[
+                { required: true, message: "Vui lòng chọn khoảng thời gian nghỉ!" },
+              ]}
             >
               <RangePicker
                 disabledDate={disabledDate}
@@ -145,7 +196,7 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({
                   setStartDate(dates ? dates[0] : null);
                   setEndDate(dates ? dates[1] : null);
                 }}
-                style={{ width: '100%' }}
+                style={{ width: "100%" }}
                 format="DD/MM/YYYY"
               />
             </Form.Item>
@@ -154,7 +205,7 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({
 
         {/* Tổng số ngày nghỉ đã chọn */}
         {usedDays > 0 && (
-          <Row style={{ marginBottom: '24px' }}>
+          <Row style={{ marginBottom: "24px" }}>
             <Col span={24}>
               <Alert
                 message={`Tổng số ngày nghỉ đã chọn: ${usedDays} ngày`}
@@ -170,17 +221,12 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({
         <Form.Item
           name="reason"
           label={<Text strong>Lý do nghỉ</Text>}
-          rules={[
-            { required: true, message: 'Vui lòng nhập lý do nghỉ!' },
-            { min: 10, message: 'Lý do phải có ít nhất 10 ký tự!' },
-          ]}
+          rules={[{ required: true, message: "Vui lòng nhập lý do nghỉ!" }]}
         >
           <TextArea
             placeholder="Mô tả chi tiết lý do nghỉ..."
             showCount
-            maxLength={500}
-            autoSize={{ minRows: 4, maxRows: 6 }}
-            style={{ borderRadius: 8, fontSize: 16 }}
+            rows={4}
           />
         </Form.Item>
 

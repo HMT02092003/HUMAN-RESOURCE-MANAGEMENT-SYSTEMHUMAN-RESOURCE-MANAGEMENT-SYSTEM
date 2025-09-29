@@ -1,6 +1,6 @@
 import dayjs from 'dayjs';
-import { ApplicationService } from '../services/ApplicationService.js';
-import { ApplicationType, ApplicationStatus } from '../Models/ApplicationModel.js';
+import { ApplicationModel } from '../Models/ApplicationModel.js';
+import AuthService from '../service/AuthService.js';
 
 export class ApplicationController {
   /**
@@ -10,7 +10,7 @@ export class ApplicationController {
   static async create(req, res) {
     try {
       const { type, data, note } = req.body;
-      const userId = req.user?.id; // Assuming user info is available in req.user
+      const userId = req.user?.id;
 
       if (!userId) {
         return res.status(401).json({
@@ -19,11 +19,10 @@ export class ApplicationController {
         });
       }
 
-      const application = await ApplicationService.createApplication({
+      const application = await ApplicationModel.createApplication({
         type,
         data,
         userId,
-        note
       });
 
       res.status(201).json({
@@ -47,29 +46,96 @@ export class ApplicationController {
    */
   static async getAll(req, res) {
     try {
-      const { status, type, userId, startDate, endDate } = req.query;
+      const { page = 1, pageSize = 10 } = req.query;
+      const currentUserId = req.user?.id;
+
+      if (!currentUserId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Người dùng không được xác thực'
+        });
+      }
+
+      // Lấy token từ request để gọi sang Auth Service
+      const token = req.cookies.token || 
+                   (req.headers.authorization && req.headers.authorization.split(' ')[1]);
+
+      if (!token) {
+        return res.status(401).json({
+          success: false,
+          message: 'Access token required'
+        });
+      }
+
+      // Check scope quyền quản lý đơn từ từ Auth Service
+      const scopeResult = await AuthService.checkUserScope('applications', token);
+      console.log('DEBUG - User scope result:', scopeResult);
+
+      // Nếu không có quyền hoặc scope không trả về userIds, chỉ trả về đơn từ của bản thân
+      let allowedUserIds = [];
+      if (!scopeResult.hasAccess || !scopeResult.userIds || scopeResult.userIds.length === 0) {
+        allowedUserIds = [currentUserId];
+        console.log('User has no scope access, showing only personal applications for user:', currentUserId);
+      } else {
+        allowedUserIds = scopeResult.userIds;
+        console.log(`User has ${scopeResult.scope} scope access to ${allowedUserIds.length} users:`, allowedUserIds);
+      }
+
+      const pageNum = parseInt(page);
+      const pageSizeNum = parseInt(pageSize);
+      const offset = (pageNum - 1) * pageSizeNum;
 
       let applications;
+      let totalCount;
 
-      if (startDate && endDate) {
-        applications = await ApplicationService.getApplicationsByDateRange(
-          startDate, endDate, userId ? parseInt(userId) : null
-        );
-      } else if (type) {
-        applications = await ApplicationService.getApplicationsByType(
-          type, userId ? parseInt(userId) : null, status ? parseInt(status) : null
-        );
-      } else if (status === 'pending') {
-        applications = await ApplicationService.getPendingApplications(type);
-      } else {
-        applications = await ApplicationService.getUserApplications(
-          userId ? parseInt(userId) : null, status ? parseInt(status) : null
-        );
-      }
+      const filters = { 
+        allowedUserIds,
+        userId: currentUserId 
+      };
+
+      applications = await ApplicationModel.getAllApplicationsPaginated(filters, offset, pageSizeNum);
+      totalCount = await ApplicationModel.getAllApplicationsCount(filters);
+
+      // Lấy danh sách unique user IDs từ applications
+      const uniqueUserIds = [...new Set(applications.map(app => app.userId))];
+      
+      // Gọi Auth Service để lấy thông tin users
+      const usersInfo = await AuthService.getUsersByIds(uniqueUserIds);
+      
+      // Tạo map để dễ dàng lookup user info
+      const usersMap = {};
+      usersInfo.forEach(user => {
+        usersMap[user.id] = {
+          id: user.id,
+          username: user.username,
+          fullName: `${user.lastName || ''} ${user.firstName || ''}`.trim(),
+          email: user.email,
+          identificationPhoto: user.identificationPhoto
+        };
+      });
+
+      // Map applications với user info
+      const applicationsWithUserInfo = applications.map(application => ({
+        ...application,
+        userInfo: usersMap[application.userId] || {
+          id: application.userId,
+          username: 'Unknown',
+          fullName: 'Unknown User',
+          email: '',
+          identificationPhoto: null
+        }
+      }));
 
       res.json({
         success: true,
-        data: applications,
+        data: applicationsWithUserInfo,
+        pagination: {
+          page: pageNum,
+          pageSize: pageSizeNum,
+          total: totalCount,
+          totalPages: Math.ceil(totalCount / pageSizeNum)
+        },
+        total: totalCount,
         timestamp: dayjs().format()
       });
     } catch (error) {
@@ -87,8 +153,8 @@ export class ApplicationController {
    */
   static async getMyApplications(req, res) {
     try {
+      const { page = 1, pageSize = 10 } = req.query;
       const userId = req.user?.id;
-      const { status } = req.query;
 
       if (!userId) {
         return res.status(401).json({
@@ -97,13 +163,35 @@ export class ApplicationController {
         });
       }
 
-      const applications = await ApplicationService.getUserApplications(
-        userId, status ? parseInt(status) : null
+      const pageNum = parseInt(page);
+      const pageSizeNum = parseInt(pageSize);
+      const offset = (pageNum - 1) * pageSizeNum;
+
+      const applications = await ApplicationModel.getUserApplicationsPaginated(
+        userId, 
+        null, // status
+        null, // type
+        offset,
+        pageSizeNum
+      );
+
+      // Đếm tổng số record
+      const totalCount = await ApplicationModel.getUserApplicationsCount(
+        userId,
+        null, // status
+        null  // type
       );
 
       res.json({
         success: true,
         data: applications,
+        pagination: {
+          page: pageNum,
+          pageSize: pageSizeNum,
+          total: totalCount,
+          totalPages: Math.ceil(totalCount / pageSizeNum)
+        },
+        total: totalCount,
         timestamp: dayjs().format()
       });
     } catch (error) {
@@ -121,12 +209,87 @@ export class ApplicationController {
    */
   static async getPendingApplications(req, res) {
     try {
-      const { type } = req.query;
-      const applications = await ApplicationService.getPendingApplications(type);
+      // Chỉ lấy page và pageSize từ query parameters
+      const { page = 1, pageSize = 10 } = req.query;
+      const currentUserId = req.user?.id;
+
+      if (!currentUserId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Người dùng không được xác thực'
+        });
+      }
+
+      // Lấy token từ request để gọi sang Auth Service
+      const token = req.cookies.token || 
+                   (req.headers.authorization && req.headers.authorization.split(' ')[1]);
+
+      if (!token) {
+        return res.status(401).json({
+          success: false,
+          message: 'Access token required'
+        });
+      }
+
+      // Check scope quyền quản lý đơn từ từ Auth Service
+      const { allowedUserIds } = await AuthService.checkUserScope(token);
+
+      const pageNum = parseInt(page);
+      const pageSizeNum = parseInt(pageSize);
+      const offset = (pageNum - 1) * pageSizeNum;
+
+      const applications = await ApplicationModel.getPendingApplicationsPaginated(
+        null, // removed type parameter 
+        offset, 
+        pageSizeNum,
+        allowedUserIds
+      );
+
+      const totalCount = await ApplicationModel.getPendingApplicationsCount(
+        null, // removed type parameter
+        allowedUserIds
+      );
+
+      // Lấy danh sách unique user IDs từ applications
+      const uniqueUserIds = [...new Set(applications.map(app => app.userId))];
+      
+      // Gọi Auth Service để lấy thông tin users
+      const usersInfo = await AuthService.getUsersByIds(uniqueUserIds);
+      
+      // Tạo map để dễ dàng lookup user info
+      const usersMap = {};
+      usersInfo.forEach(user => {
+        usersMap[user.id] = {
+          id: user.id,
+          username: user.username,
+          fullName: `${user.lastName || ''} ${user.firstName || ''}`.trim(),
+          email: user.email,
+          identificationPhoto: user.identificationPhoto
+        };
+      });
+
+      // Map applications với user info
+      const applicationsWithUserInfo = applications.map(application => ({
+        ...application,
+        userInfo: usersMap[application.userId] || {
+          id: application.userId,
+          username: 'Unknown',
+          fullName: 'Unknown User',
+          email: '',
+          identificationPhoto: null
+        }
+      }));
 
       res.json({
         success: true,
-        data: applications,
+        data: applicationsWithUserInfo,
+        pagination: {
+          page: pageNum,
+          pageSize: pageSizeNum,
+          total: totalCount,
+          totalPages: Math.ceil(totalCount / pageSizeNum)
+        },
+        total: totalCount,
         timestamp: dayjs().format()
       });
     } catch (error) {
@@ -145,14 +308,7 @@ export class ApplicationController {
   static async getById(req, res) {
     try {
       const { id } = req.params;
-      const application = await ApplicationService.getApplicationById(parseInt(id));
-
-      if (!application) {
-        return res.status(404).json({
-          success: false,
-          message: 'Không tìm thấy đơn từ'
-        });
-      }
+      const application = await ApplicationModel.getApplicationById(parseInt(id));
 
       res.json({
         success: true,
@@ -160,7 +316,7 @@ export class ApplicationController {
         timestamp: dayjs().format()
       });
     } catch (error) {
-      res.status(500).json({
+      res.status(error.message.includes('Không tìm thấy') ? 404 : 500).json({
         success: false,
         message: error.message || 'Có lỗi xảy ra khi lấy chi tiết đơn từ',
         timestamp: dayjs().format()
@@ -185,7 +341,7 @@ export class ApplicationController {
         });
       }
 
-      const application = await ApplicationService.updateApplication(
+      const application = await ApplicationModel.updateApplication(
         parseInt(id), userId, data
       );
 
@@ -220,11 +376,11 @@ export class ApplicationController {
         });
       }
 
-      await ApplicationService.cancelApplication(parseInt(id), userId);
+      const result = await ApplicationModel.cancelApplication(parseInt(id), userId);
 
       res.json({
         success: true,
-        message: 'Hủy đơn từ thành công',
+        message: result.message,
         timestamp: dayjs().format()
       });
     } catch (error) {
@@ -253,7 +409,7 @@ export class ApplicationController {
         });
       }
 
-      const application = await ApplicationService.approveApplication(
+      const application = await ApplicationModel.approveApplication(
         parseInt(id), approvedBy, note
       );
 
@@ -289,7 +445,7 @@ export class ApplicationController {
         });
       }
 
-      const application = await ApplicationService.rejectApplication(
+      const application = await ApplicationModel.rejectApplication(
         parseInt(id), approvedBy, rejectionReason
       );
 
@@ -324,7 +480,8 @@ export class ApplicationController {
         targetUserId = currentUserId;
       }
 
-      const stats = await ApplicationService.getApplicationStats(targetUserId);
+      // Only aggregate by user; remove date/type filters as requested
+      const stats = await ApplicationModel.getApplicationStats(targetUserId, {});
 
       res.json({
         success: true,
@@ -346,22 +503,30 @@ export class ApplicationController {
    */
   static async getByDateRange(req, res) {
     try {
-      const { startDate, endDate, userId } = req.query;
+      // Deprecated: previous implementation filtered by date/status.
+      // Now only support paginated listing by optional userId.
+      const { page = 1, pageSize = 10, userId } = req.query;
+      const pageNum = parseInt(page);
+      const pageSizeNum = parseInt(pageSize);
+      const offset = (pageNum - 1) * pageSizeNum;
 
-      if (!startDate || !endDate) {
-        return res.status(400).json({
-          success: false,
-          message: 'Vui lòng cung cấp khoảng thời gian'
-        });
-      }
+      const filters = {
+        userId: userId ? parseInt(userId) : null
+      };
 
-      const applications = await ApplicationService.getApplicationsByDateRange(
-        startDate, endDate, userId ? parseInt(userId) : null
-      );
+      const applications = await ApplicationModel.getAllApplicationsPaginated(filters, offset, pageSizeNum);
+      const totalCount = await ApplicationModel.getAllApplicationsCount(filters);
 
       res.json({
         success: true,
         data: applications,
+        pagination: {
+          page: pageNum,
+          pageSize: pageSizeNum,
+          total: totalCount,
+          totalPages: Math.ceil(totalCount / pageSizeNum)
+        },
+        total: totalCount,
         timestamp: dayjs().format()
       });
     } catch (error) {

@@ -22,7 +22,7 @@ import {
   UploadOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { BusinessTripApplication } from '@/service/applicationService';
+// import { BusinessTripApplication } from '@/service/applicationService';
 import ApplicationGuide from '../ApplicationGuide';
 
 const { Text } = Typography;
@@ -30,15 +30,15 @@ const { TextArea } = Input;
 const { RangePicker } = DatePicker;
 
 interface BusinessTripFormProps {
-  onSubmit: (
-    data: Omit<BusinessTripApplication, 'id' | 'status' | 'applicationDate'>
-  ) => void;
-  onCancel: () => void;
+  // onSubmit: (
+  //   data: Omit<BusinessTripApplication, 'id' | 'status' | 'applicationDate'>
+  // ) => void;
+  // onCancel: () => void;
 }
 
 const BusinessTripForm: React.FC<BusinessTripFormProps> = ({
-  onSubmit,
-  onCancel
+  // onSubmit,
+  // onCancel
 }) => {
   const [form] = Form.useForm();
   const [fileList, setFileList] = useState<any[]>([]);
@@ -225,7 +225,7 @@ const BusinessTripForm: React.FC<BusinessTripFormProps> = ({
         {/* Buttons */}
         <Form.Item style={{ textAlign: 'center', marginBottom: 0 }}>
           <Space size="middle">
-            <Button size="large" onClick={onCancel} icon={<CloseOutlined />}>
+            <Button size="large"  icon={<CloseOutlined />}>
               Hủy
             </Button>
             <Button type="primary" htmlType="submit" size="large" icon={<CheckOutlined />}>

@@ -2,11 +2,58 @@
 
 import React from 'react';
 import { Row, Col, Button, Typography, Space } from 'antd';
-import { ArrowLeftOutlined, FormOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
-import { applicationTypes } from './utils';
 
 const { Title, Text } = Typography;
+
+// Define application type interface
+interface ApplicationType {
+    type: string;
+    name: string;
+    description: string;
+    icon: string;
+}
+
+// Application types data
+const applicationTypes: ApplicationType[] = [
+    {
+        type: 'leave',
+        name: 'Xin nghỉ phép',
+        description: 'Đăng ký nghỉ phép có lý do',
+        icon: '🏖️'
+    },
+    {
+        type: 'shift_registration',
+        name: 'Đăng ký ca làm việc',
+        description: 'Đăng ký ca sáng, chiều, đêm hoặc tăng ca',
+        icon: '⏰'
+    },
+    {
+        type: 'forgot_checkin',
+        name: 'Quên check in/out',
+        description: 'Báo cáo quên chấm công vào/ra',
+        icon: '📝'
+    },
+    {
+        type: 'overtime',
+        name: 'Làm thêm giờ',
+        description: 'Đăng ký làm ngoài giờ',
+        icon: '⏱️'
+    },
+    {
+        type: 'business_trip',
+        name: 'Công tác',
+        description: 'Đăng ký đi công tác',
+        icon: '✈️'
+    },
+    {
+        type: 'resignation',
+        name: 'Thôi việc',
+        description: 'Đơn xin thôi việc',
+        icon: '👋'
+    }
+];
 
 const SelectApplicationType = () => {
     const router = useRouter();
@@ -47,7 +94,7 @@ const SelectApplicationType = () => {
                 {/* Application Types Grid */}
                 <Col span={24}>
                     <Row gutter={[24, 24]} justify="center">
-                        {applicationTypes.map((appType) => (
+                        {applicationTypes.map((appType: ApplicationType) => (
                             <Col xs={24} sm={12} md={8} lg={8} xl={8} key={appType.type}>
                                 <div
                                     onClick={() => handleSelectType(appType.type)}

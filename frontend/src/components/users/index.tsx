@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Table, Button, Space, Tooltip, ConfigProvider, Modal, message, Tag, Row, Col, Grid } from 'antd';
+import { Table, Button, Tooltip, ConfigProvider, Modal, message, Tag, Row, Col, Grid } from 'antd';
 import {
   PlusCircleOutlined,
   DeleteOutlined,
@@ -24,6 +24,12 @@ const formatDate = (date: string | Date | null): string => {
   return dayjs(date).format('DD/MM/YYYY');
 };
 
+// Kiểu dữ liệu cho trạng thái sắp xếp
+interface SorterState {
+  field: string;
+  order: 'ascend' | 'descend' | undefined;
+}
+
 // Main component
 const UserTable = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
@@ -34,6 +40,13 @@ const UserTable = () => {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [salaryInfo, setSalaryInfo] = useState<any>(null);
   const [salaryLoading, setSalaryLoading] = useState(false);
+  
+  // 💡 KHỞI TẠO SẮP XẾP MẶC ĐỊNH: ID giảm dần (mới nhất lên đầu)
+  const [sorter, setSorter] = useState<SorterState>({
+    field: 'id', // Hoặc 'createdAt' nếu muốn sắp xếp theo ngày tạo
+    order: 'descend' // Mới nhất (giảm dần)
+  });
+
   const [pagination, setPagination] = useState({
     current: 1,
     pageSize: 10,
@@ -44,33 +57,31 @@ const UserTable = () => {
 
   console.log("userData", userData);
 
-  // Simulate permissions (replace with actual permission logic if available)
   const createPer = true;
   const updatePer = true;
   const deletePer = true;
   const viewPer = true;
 
-  // useEffect to load data when pagination changes
   useEffect(() => {
     loadData();
-  }, [pagination.current, pagination.pageSize]); // Dependencies ensure re-fetch on page/size change
+  }, [pagination.current, pagination.pageSize, sorter.field, sorter.order]); 
 
   const loadData = async () => {
     setLoading(true);
     try {
-      // API call to fetch users for the current page and page size
+      const sortOrderApi = sorter.order === 'ascend' ? 'asc' : sorter.order === 'descend' ? 'desc' : undefined;
+      
       const response = await UserService.getAllUsers({
-        page: pagination.current - 1, // Ant Design's `current` is 1-indexed, backend likely 0-indexed
-        pageSize: pagination.pageSize
-      });
+        page: pagination.current - 1,
+        pageSize: pagination.pageSize,
+        sortField: sorter.field, 
+        sortOrder: sortOrderApi
+      } as any);
 
-      // Assuming UserService.getAllUsers returns an Axios response,
-      // where the actual data is under `response.data`.
-      // Based on your provided backend structure: { results: [...], total: N }
       setUserData(response.results);
       setPagination(prev => ({
         ...prev,
-        total: response.total // Update total from the API response
+        total: response.total
       }));
     } catch (error: any) {
       const data = error?.response?.data;
@@ -85,8 +96,8 @@ const UserTable = () => {
     setLoading(true);
     try {
       await UserService.deleteMultipleUsers(selectedRowKeys as number[]);
-      setSelectedRowKeys([]); // Clear selection after deletion
-      setIsDeleteModalVisible(false); // Close the modal
+      setSelectedRowKeys([]);
+      setIsDeleteModalVisible(false);
       loadData(); // Reload data to reflect changes
     } catch (error: any) {
       console.error('Error deleting users:', error);
@@ -106,21 +117,28 @@ const UserTable = () => {
     setIsDeleteModalVisible(false);
   };
 
-  // Placeholder for redirection logic
-  const redirect = (route: string, params?: { id: number }) => {
-    console.log(`Redirecting to: ${route}${params ? ' with ID: ' + params.id : ''}`);
-    // In a real application, you would use a router here, e.g., Next.js's useRouter or React Router's useNavigate
-    alert(`Đang chuyển hướng đến: ${route} ${params ? 'với ID: ' + params.id : ''}`);
-  };
-
   const onSelectChange = (newSelectedRowKeys: React.Key[]) => {
     setSelectedRowKeys(newSelectedRowKeys);
   };
 
-  // This handler is crucial for Ant Design's pagination to work
-  const handleTableChange = (newPagination: any) => {
+  // 💡 CẬP NHẬT handleTableChange để lưu trạng thái sắp xếp
+  const handleTableChange = (
+    newPagination: any, 
+    filters: any, 
+    newSorter: any
+  ) => {
     setPagination(newPagination);
-    // The useEffect hook will automatically call loadData with the new pagination state
+    
+    // Cập nhật trạng thái sắp xếp
+    if (newSorter.field) {
+      setSorter({
+        field: newSorter.field,
+        order: newSorter.order as 'ascend' | 'descend' | undefined,
+      });
+    } else {
+      // Nếu không có sắp xếp, trở về mặc định
+      setSorter({ field: 'id', order: 'descend' });
+    }
   };
 
   // Xử lý mở modal lương
@@ -128,7 +146,7 @@ const UserTable = () => {
     setSelectedUserId(userId);
     setIsSalaryModalVisible(true);
     setSalaryLoading(true);
-    
+
     try {
       const response = await UserService.getSalaryInfo(userId);
       setSalaryInfo(response.data);
@@ -150,7 +168,7 @@ const UserTable = () => {
   // Xử lý cập nhật lương
   const handleUpdateSalary = async (values: any) => {
     if (!selectedUserId) return;
-    
+
     setSalaryLoading(true);
     try {
       await UserService.updateSalaryInfo(selectedUserId, values);
@@ -169,16 +187,26 @@ const UserTable = () => {
     selectedRowKeys,
     onChange: onSelectChange,
     getCheckboxProps: (record: any) => ({
-      disabled: record.id === 1, // Example: disable checkbox for user with ID 1
+      disabled: record.id === 1,
     }),
   };
 
   const columns = [
     {
+      title: "ID",
+      dataIndex: "id",
+      key: "id",
+      // 💡 Thêm sắp xếp mặc định cho cột ID (dùng cho việc load lần đầu và reload)
+      sorter: true, // Cho phép sắp xếp trên cột này (thực hiện ở backend)
+      defaultSortOrder: sorter.field === 'id' ? sorter.order : undefined,
+      width: 80,
+    },
+    {
       title: "Tên đăng nhập",
       dataIndex: "username",
       key: "username",
-      sorter: (a: any, b: any) => a.username?.localeCompare(b.username || '') || 0,
+      sorter: true, // Cho phép sắp xếp trên cột này
+      defaultSortOrder: sorter.field === 'username' ? sorter.order : undefined,
       width: 150,
     },
     {
@@ -199,7 +227,8 @@ const UserTable = () => {
       title: "Họ và tên",
       dataIndex: "fullName",
       key: "fullName",
-      sorter: (a: any, b: any) => `${a.lastName || ''} ${a.firstName || ''}`.localeCompare(`${b.lastName || ''} ${b.firstName || ''}`),
+      sorter: true,
+      defaultSortOrder: sorter.field === 'fullName' ? sorter.order : undefined,
       width: 200,
       render: (_: any, record: any) => `${record.lastName || ''} ${record.firstName || ''}`.trim()
     },
@@ -207,7 +236,8 @@ const UserTable = () => {
       title: "Ngày sinh",
       dataIndex: "birthday",
       key: "birthday",
-      sorter: (a: any, b: any) => (dayjs(a.birthday).isValid() ? dayjs(a.birthday).unix() : 0) - (dayjs(b.birthday).isValid() ? dayjs(b.birthday).unix() : 0),
+      sorter: true,
+      defaultSortOrder: sorter.field === 'birthday' ? sorter.order : undefined,
       render: (text: Date) => formatDate(text),
       width: 150,
     },
@@ -215,7 +245,8 @@ const UserTable = () => {
       title: "Email",
       dataIndex: "email",
       key: "email",
-      sorter: (a: any, b: any) => a.email?.localeCompare(b.email || '') || 0,
+      sorter: true,
+      defaultSortOrder: sorter.field === 'email' ? sorter.order : undefined,
       width: 250,
       render: (text: string) => text || '-'
     },
@@ -223,7 +254,8 @@ const UserTable = () => {
       title: "Số điện thoại",
       dataIndex: "phone",
       key: "phone",
-      sorter: (a: any, b: any) => a.phone?.localeCompare(b.phone || '') || 0,
+      sorter: true,
+      defaultSortOrder: sorter.field === 'phone' ? sorter.order : undefined,
       width: 150,
       render: (text: string) => text || '-'
     },
@@ -231,7 +263,8 @@ const UserTable = () => {
       title: "Giới tính",
       dataIndex: "gender",
       key: "gender",
-      sorter: (a: any, b: any) => (a.gender || 0) - (b.gender || 0),
+      sorter: true,
+      defaultSortOrder: sorter.field === 'gender' ? sorter.order : undefined,
       render: (gender: number) => {
         return Gender.find((g) => g.key === gender)?.value || "-";
       },
@@ -241,7 +274,8 @@ const UserTable = () => {
       title: "Trạng thái",
       dataIndex: "status",
       key: "status",
-      sorter: (a: any, b: any) => (parseInt(a.status) || 0) - (parseInt(b.status) || 0),
+      sorter: true,
+      defaultSortOrder: sorter.field === 'status' ? sorter.order : undefined,
       render: (status: string | number) => {
         const statusNum = typeof status === 'string' ? parseInt(status, 10) : status;
         const label = statusOptions.find((s) => s.value === statusNum)?.label || "-";
@@ -253,10 +287,20 @@ const UserTable = () => {
       width: 150,
     },
     {
+      title: "Vai trò",
+      dataIndex: "role.name",
+      key: "role.name",
+      sorter: true,
+      defaultSortOrder: sorter.field === 'role.name' ? sorter.order : undefined,
+      width: 200,
+      render: (_: any, record: any) => `${record.role?.name || ''}`.trim()
+    },
+    {
       title: "Phòng ban",
       dataIndex: ["department", "name"],
       key: "department",
-      sorter: (a: any, b: any) => a.department?.name?.localeCompare(b.department?.name || '') || 0,
+      sorter: true,
+      defaultSortOrder: sorter.field === 'department' ? sorter.order : undefined,
       width: 200,
       render: (text: string) => text || '-'
     },
@@ -264,7 +308,8 @@ const UserTable = () => {
       title: "Chức vụ",
       dataIndex: ["chevron", "name"],
       key: "chevron",
-      sorter: (a: any, b: any) => a.chevron?.name?.localeCompare(b.chevron?.name || '') || 0,
+      sorter: true,
+      defaultSortOrder: sorter.field === 'chevron' ? sorter.order : undefined,
       width: 200,
       render: (text: string) => text || '-'
     },
@@ -272,7 +317,8 @@ const UserTable = () => {
       title: "Ngày vào làm",
       dataIndex: "startDate",
       key: "startDate",
-      sorter: (a: any, b: any) => (dayjs(a.startDate).isValid() ? dayjs(a.startDate).unix() : 0) - (dayjs(b.startDate).isValid() ? dayjs(b.startDate).unix() : 0),
+      sorter: true,
+      defaultSortOrder: sorter.field === 'startDate' ? sorter.order : undefined,
       render: (text: Date) => formatDate(text),
       width: 180,
     },
@@ -280,7 +326,8 @@ const UserTable = () => {
       title: "Ngày tạo",
       dataIndex: "createdAt",
       key: "createdAt",
-      sorter: (a: any, b: any) => (dayjs(a.createdAt).isValid() ? dayjs(a.createdAt).unix() : 0) - (dayjs(b.createdAt).isValid() ? dayjs(b.createdAt).unix() : 0),
+      sorter: true,
+      defaultSortOrder: sorter.field === 'createdAt' ? sorter.order : undefined,
       render: (text: Date) => formatDate(text),
       width: 180,
     },
@@ -303,65 +350,65 @@ const UserTable = () => {
             },
           }}
         >
-            <Tooltip title="Xem">
-              <Button
-                type="text"
-                icon={<EyeOutlined />}
-                size="small"
-                onClick={() => router.push(`/user/view/${record.id}`)}
-                hidden={!viewPer}
-                style={{ 
-                  padding: '4px 6px',
-                  minWidth: 'auto',
-                  height: '26px',
-                  color: '#1677ff'
-                }}
-              />
-            </Tooltip>
-            <Tooltip title="Sửa">
-              <Button
-                type="text"
-                icon={<EditOutlined />}
-                size="small"
-                onClick={() => router.push(`/user/edit/${record.id}`)}
-                hidden={!updatePer}
-                style={{ 
-                  padding: '4px 6px',
-                  minWidth: 'auto',
-                  height: '26px',
-                  color: '#52c41a'
-                }}
-              />
-            </Tooltip>
-            <Tooltip title="Tạo hợp đồng">
-              <Button
-                type="text"
-                icon={<FormOutlined />}
-                size="small"
-                onClick={() => router.push(`/user/createContract/${record.id}`)}
-                style={{ 
-                  padding: '4px 6px',
-                  minWidth: 'auto',
-                  height: '26px',
-                  color: '#722ed1'
-                }}
-              />
-            </Tooltip>
-            <Tooltip title="Thông tin lương">
-              <Button
-                type="text"
-                icon={<DollarOutlined />}
-                size="small"
-                onClick={() => handleOpenSalaryModal(record.id)}
-                hidden={!updatePer}
-                style={{ 
-                  padding: '4px 6px',
-                  minWidth: 'auto',
-                  height: '26px',
-                  color: '#fa8c16'
-                }}
-              />
-            </Tooltip>
+          <Tooltip title="Xem">
+            <Button
+              type="text"
+              icon={<EyeOutlined />}
+              size="small"
+              onClick={() => router.push(`/user/view/${record.id}`)}
+              hidden={!viewPer}
+              style={{
+                padding: '4px 6px',
+                minWidth: 'auto',
+                height: '26px',
+                color: '#1677ff'
+              }}
+            />
+          </Tooltip>
+          <Tooltip title="Sửa">
+            <Button
+              type="text"
+              icon={<EditOutlined />}
+              size="small"
+              onClick={() => router.push(`/user/edit/${record.id}`)}
+              hidden={!updatePer}
+              style={{
+                padding: '4px 6px',
+                minWidth: 'auto',
+                height: '26px',
+                color: '#52c41a'
+              }}
+            />
+          </Tooltip>
+          <Tooltip title="Tạo hợp đồng">
+            <Button
+              type="text"
+              icon={<FormOutlined />}
+              size="small"
+              onClick={() => router.push(`/user/createContract/${record.id}`)}
+              style={{
+                padding: '4px 6px',
+                minWidth: 'auto',
+                height: '26px',
+                color: '#722ed1'
+              }}
+            />
+          </Tooltip>
+          <Tooltip title="Thông tin lương">
+            <Button
+              type="text"
+              icon={<DollarOutlined />}
+              size="small"
+              onClick={() => handleOpenSalaryModal(record.id)}
+              hidden={!updatePer}
+              style={{
+                padding: '4px 6px',
+                minWidth: 'auto',
+                height: '26px',
+                color: '#fa8c16'
+              }}
+            />
+          </Tooltip>
         </ConfigProvider>
       ),
     },
@@ -427,6 +474,7 @@ const UserTable = () => {
       <Row>
         <Col xs={24}>
           <div style={{ overflowX: 'auto' }}>
+            {/* 💡 TRUYỀN `columns` VÀ `onChange` ĐÃ CẬP NHẬT */}
             <Table
               rowSelection={rowSelection}
               columns={columns}
