@@ -95,7 +95,17 @@ const ApplicationService = {
   // Xóa / Hủy application
   deleteApplication: async (id: number) => {
     try {
-      const response = await api.delete(`/api/applications/${id}`, { data: { id } });
+      const response = await api.delete(`/api/applications/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Xóa nhiều applications
+  bulkDeleteApplications: async (ids: number[]) => {
+    try {
+      const response = await api.post('/api/applications/bulk-delete', { ids });
       return response.data;
     } catch (error) {
       throw error;
@@ -105,7 +115,7 @@ const ApplicationService = {
   // Duyệt application
   approveApplication: async (id: number, approvalData: ApproveApplicationRequest) => {
     try {
-      const response = await api.put(`/api/applications/${id}/approve`, approvalData);
+      const response = await api.post(`/api/applications/${id}/approve`, approvalData);
       return response.data;
     } catch (error) {
       throw error;
@@ -115,7 +125,7 @@ const ApplicationService = {
   // Từ chối application
   rejectApplication: async (id: number, rejectionData: RejectApplicationRequest) => {
     try {
-      const response = await api.put(`/api/applications/${id}/reject`, rejectionData);
+      const response = await api.post(`/api/applications/${id}/reject`, rejectionData);
       return response.data;
     } catch (error) {
       throw error;

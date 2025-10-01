@@ -131,7 +131,7 @@ export class ApplicationController {
         usersMap[user.id] = {
           id: user.id,
           username: user.username,
-          fullName: `${user.lastName || ''} ${user.firstName || ''}`.trim(),
+          fullName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
           email: user.email,
           identificationPhoto: user.identificationPhoto
         };
@@ -377,7 +377,7 @@ export class ApplicationController {
         userInfo = {
           id: user.id,
           username: user.username,
-          fullName: `${user.lastName || ''} ${user.firstName || ''}`.trim(),
+          fullName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
           email: user.email,
           identificationPhoto: user.identificationPhoto
         };
@@ -609,6 +609,126 @@ export class ApplicationController {
       res.status(500).json({
         success: false,
         message: error.message || 'Có lỗi xảy ra khi lấy danh sách đơn từ',
+        timestamp: dayjs().format()
+      });
+    }
+  }
+
+  /**
+   * Xóa đơn từ
+   * DELETE /applications/:id
+   */
+  static async delete(req, res) {
+    try {
+      const { id } = req.params;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Người dùng không được xác thực'
+        });
+      }
+
+      // Lấy thông tin đơn từ để xóa files
+      const application = await ApplicationModel.getApplicationById(parseInt(id));
+
+      // Kiểm tra quyền xóa (chỉ người tạo hoặc admin mới được xóa)
+      if (application.userId !== userId) {
+        // TODO: Check if user is admin
+        // For now, only creator can delete
+        return res.status(403).json({
+          success: false,
+          message: 'Bạn không có quyền xóa đơn từ này'
+        });
+      }
+
+      // Xóa files nếu có
+      if (application.data?.evidence && Array.isArray(application.data.evidence)) {
+        const { deleteFiles } = await import('../middleware/upload.js');
+        deleteFiles(application.data.evidence.map(file => file.filename));
+      }
+
+      // Xóa đơn từ trong database
+      await ApplicationModel.query().deleteById(parseInt(id));
+
+      res.json({
+        success: true,
+        message: 'Xóa đơn từ thành công',
+        timestamp: dayjs().format()
+      });
+    } catch (error) {
+      res.status(error.message.includes('Không tìm thấy') ? 404 : 500).json({
+        success: false,
+        message: error.message || 'Có lỗi xảy ra khi xóa đơn từ',
+        timestamp: dayjs().format()
+      });
+    }
+  }
+
+  /**
+   * Xóa nhiều đơn từ
+   * POST /applications/bulk-delete
+   */
+  static async bulkDelete(req, res) {
+    try {
+      const { ids } = req.body;
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Người dùng không được xác thực'
+        });
+      }
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Danh sách ID không hợp lệ'
+        });
+      }
+
+      const deletedCount = [];
+      const errors = [];
+
+      for (const id of ids) {
+        try {
+          const application = await ApplicationModel.getApplicationById(parseInt(id));
+
+          // Kiểm tra quyền xóa
+          if (application.userId !== userId) {
+            errors.push({ id, message: 'Không có quyền xóa' });
+            continue;
+          }
+
+          // Xóa files nếu có
+          if (application.data?.evidence && Array.isArray(application.data.evidence)) {
+            const { deleteFiles } = await import('../middleware/upload.js');
+            deleteFiles(application.data.evidence.map(file => file.filename));
+          }
+
+          // Xóa đơn từ
+          await ApplicationModel.query().deleteById(parseInt(id));
+          deletedCount.push(id);
+        } catch (error) {
+          errors.push({ id, message: error.message });
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Đã xóa ${deletedCount.length}/${ids.length} đơn từ`,
+        data: {
+          deleted: deletedCount,
+          errors: errors
+        },
+        timestamp: dayjs().format()
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Có lỗi xảy ra khi xóa đơn từ',
         timestamp: dayjs().format()
       });
     }

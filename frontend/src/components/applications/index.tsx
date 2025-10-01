@@ -3,8 +3,10 @@ import { Card, Table, Button, Space, Typography, Empty, message, Tooltip, DatePi
 import { PlusOutlined, EyeOutlined, DeleteOutlined, SearchOutlined, EditOutlined, ExclamationCircleOutlined, CheckOutlined } from '@ant-design/icons';
 import type { FilterConfirmProps, FilterDropdownProps } from 'antd/es/table/interface';
 import dayjs from 'dayjs';
+import { useRouter } from 'next/navigation';
 import applicationService from '@/service/applicationService';
 import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS } from '@/config/constant';
+import ApplicationDetailModal from './ApplicationDetailModal';
 import { render } from 'react-dom';
 
 const { Title, Text } = Typography;
@@ -19,6 +21,7 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
     onCreateClick,
     onEditClick
 }) => {
+    const router = useRouter();
     const [applications, setApplications] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchText, setSearchText] = useState('');
@@ -28,6 +31,8 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
     const [total, setTotal] = useState(0);
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [selectedRows, setSelectedRows] = useState<any[]>([]);
+    const [detailModalVisible, setDetailModalVisible] = useState(false);
+    const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(null);
     const searchInput = useRef<any>(null);
 
     const fetchMyApplications = useCallback(async (page = 1, size = 10) => {
@@ -72,13 +77,12 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
             cancelText: 'Hủy',
             onOk: async () => {
                 try {
-                    // For now, just remove from local state until API method is available
-                    const selectedIds = selectedRowKeys;
-                    setApplications(prev => prev.filter(app => !selectedIds.includes(app.id)));
-                    setTotal(prev => prev - selectedRows.length);
+                    const selectedIds = selectedRowKeys.map(key => Number(key));
+                    await applicationService.bulkDeleteApplications(selectedIds);
                     setSelectedRowKeys([]);
                     setSelectedRows([]);
                     message.success(`Đã xóa ${selectedRows.length} đơn từ thành công`);
+                    fetchMyApplications(currentPage, pageSize);
                 } catch (error) {
                     message.error('Xóa đơn từ thất bại');
                 }
@@ -102,32 +106,43 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
     };
 
     const handleView = (record: any) => {
-        console.log('Viewing application:', record);
-        // Implement view logic
+        setSelectedApplicationId(record.id);
+        setDetailModalVisible(true);
     };
 
     const handleEdit = (record: any) => {
-        if (onEditClick) {
-            onEditClick(record);
+        const typeRouteMap: Record<string, string> = {
+            'leave': '/applications/leave',
+            'overtime': '/applications/overtime',
+            'business-trip': '/applications/business-trip',
+            'forgot-check': '/applications/forgot-check',
+            'resignation': '/applications/resignation',
+            'shift-registration': '/applications/shift-registration'
+        };
+
+        const route = typeRouteMap[record.type];
+        if (route) {
+            router.push(`${route}?id=${record.id}`);
+        } else {
+            message.error('Loại đơn không hợp lệ');
         }
     };
 
     const handleCancel = async (record: any) => {
         Modal.confirm({
-            title: 'Xác nhận hủy đơn từ',
+            title: 'Xác nhận xóa đơn từ',
             icon: <ExclamationCircleOutlined />,
-            content: `Bạn có chắc chắn muốn hủy đơn từ này? Hành động này không thể hoàn tác.`,
-            okText: 'Hủy đơn',
+            content: `Bạn có chắc chắn muốn xóa đơn từ này? Hành động này không thể hoàn tác.`,
+            okText: 'Xóa',
             okType: 'danger',
             cancelText: 'Không',
             onOk: async () => {
                 try {
-                    // For now, just remove from local state until API method is available
-                    setApplications(prev => prev.filter(app => app.id !== record.id));
-                    setTotal(prev => prev - 1);
-                    message.success('Hủy đơn thành công');
+                    await applicationService.deleteApplication(record.id);
+                    message.success('Xóa đơn thành công');
+                    fetchMyApplications(currentPage, pageSize);
                 } catch (error) {
-                    message.error('Hủy đơn thất bại');
+                    message.error('Xóa đơn thất bại');
                 }
             }
         });
@@ -319,6 +334,17 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
                             onClick={() => handleView(record)}
                         />
                     </Tooltip>
+                    <Tooltip title="Xem chi tiết">
+                        <Button
+                            type="text"
+                            size="small"
+                            icon={<EyeOutlined />}
+                            onClick={() => {
+                                setDetailModalVisible(true);
+                                setSelectedApplicationId(record.id);
+                            }}
+                        />
+                    </Tooltip>
                 </>
             )
         }
@@ -421,6 +447,15 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
                 size="middle"
                 scroll={{ x: 'auto' }}
                 bordered
+            />
+
+            <ApplicationDetailModal
+                applicationId={selectedApplicationId}
+                visible={detailModalVisible}
+                onClose={() => {
+                    setDetailModalVisible(false);
+                    setSelectedApplicationId(null);
+                }}
             />
         </div>
     );

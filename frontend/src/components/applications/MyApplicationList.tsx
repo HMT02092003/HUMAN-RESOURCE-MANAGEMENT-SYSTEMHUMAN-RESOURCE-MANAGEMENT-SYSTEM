@@ -3,6 +3,7 @@ import { Card, Table, Button, Space, Typography, Empty, message, Tooltip, DatePi
 import { PlusOutlined, EyeOutlined, DeleteOutlined, SearchOutlined, EditOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import type { FilterConfirmProps, FilterDropdownProps } from 'antd/es/table/interface';
 import dayjs from 'dayjs';
+import { useRouter } from 'next/navigation';
 import applicationService from '@/service/applicationService';
 import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS } from '@/config/constant';
 import ApplicationDetailModal from './ApplicationDetailModal';
@@ -19,6 +20,7 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
     onCreateClick,
     onEditClick
 }) => {
+    const router = useRouter();
     const [applications, setApplications] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);
@@ -91,26 +93,41 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
     };
 
     const handleEdit = (record: any) => {
-        if (onEditClick) {
-            onEditClick(record);
+        // Chuyển đến trang edit tương ứng với loại đơn
+        const typeRouteMap: { [key: string]: string } = {
+            'leave': '/applications/leave',
+            'overtime': '/applications/overtime',
+            'business-trip': '/applications/business-trip',
+            'forgot-check': '/applications/forgot-check',
+            'resignation': '/applications/resignation',
+            'shift-registration': '/applications/shift',
+        };
+
+        const route = typeRouteMap[record.type];
+        if (route) {
+            router.push(`${route}?id=${record.id}`);
+        } else {
+            message.error('Loại đơn không hợp lệ');
         }
     };
 
     const handleCancel = async (record: any) => {
         Modal.confirm({
-            title: 'Xác nhận hủy đơn từ',
+            title: 'Xác nhận xóa đơn từ',
             icon: <ExclamationCircleOutlined />,
-            content: `Bạn có chắc chắn muốn hủy đơn từ này? Hành động này không thể hoàn tác.`,
-            okText: 'Hủy đơn',
+            content: `Bạn có chắc chắn muốn xóa đơn từ này? Hành động này không thể hoàn tác.`,
+            okText: 'Xóa',
             okType: 'danger',
-            cancelText: 'Không',
+            cancelText: 'Hủy',
             onOk: async () => {
                 try {
-                    setApplications(prev => prev.filter(app => app.id !== record.id));
-                    setTotal(prev => prev - 1);
-                    message.success('Hủy đơn thành công');
-                } catch (error) {
-                    message.error('Hủy đơn thất bại');
+                    const response = await applicationService.deleteApplication(record.id);
+                    if (response.success) {
+                        message.success('Xóa đơn từ thành công');
+                        fetchMyApplications(currentPage, pageSize);
+                    }
+                } catch (error: any) {
+                    message.error(error.response?.data?.message || 'Xóa đơn từ thất bại');
                 }
             }
         });

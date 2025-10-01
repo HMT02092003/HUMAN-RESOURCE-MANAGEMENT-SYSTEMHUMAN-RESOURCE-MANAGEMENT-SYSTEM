@@ -66,7 +66,10 @@ router.post('/applications/:id/approve', authenticateToken, ApplicationControlle
 // Từ chối đơn từ
 router.post('/applications/:id/reject', authenticateToken, ApplicationController.reject);
 
-// Hủy đơn từ
+// Xóa nhiều đơn từ (đặt trước route xóa đơn lẻ để tránh conflict)
+router.post('/applications/bulk-delete', authenticateToken, ApplicationController.bulkDelete);
+
+// Xóa đơn từ
 router.delete('/applications/:id', authenticateToken, ApplicationController.delete);
 
 // Lấy tất cả đơn từ (cho admin) - đặt cuối để tránh conflict với các route khác

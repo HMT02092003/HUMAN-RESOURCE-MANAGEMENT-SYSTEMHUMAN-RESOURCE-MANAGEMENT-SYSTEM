@@ -324,7 +324,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                         CHI TIẾT ĐỀ NGHỊ
                     </Title>
                     <Text type="secondary">
-                         ----- {application && APPLICATION_TYPE_LABELS[application.type as keyof typeof APPLICATION_TYPE_LABELS]} -----
+                        ----- {application && APPLICATION_TYPE_LABELS[application.type as keyof typeof APPLICATION_TYPE_LABELS]} -----
                     </Text>
                 </div>
             }
@@ -363,20 +363,28 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                                         </Tag>
                                     </Space>
                                 </Col>
+                                {application.approvedDate && (
+                                    <>
+                                        <Col xs={24} sm={12}>
+                                            <Space direction="vertical" size={0}>
+                                                <Text type="secondary">Người duyệt</Text>
+                                                <Text>{dayjs(application.approvedBy).format('DD/MM/YYYY HH:mm')}</Text>
+                                            </Space>
+                                        </Col>
+                                        <Col xs={24} sm={12}>
+                                            <Space direction="vertical" size={0}>
+                                                <Text type="secondary">Ngày duyệt</Text>
+                                                <Text>{dayjs(application.approvedDate).format('DD/MM/YYYY HH:mm')}</Text>
+                                            </Space>
+                                        </Col>
+                                    </>
+                                )}
                                 <Col xs={24} sm={12}>
                                     <Space direction="vertical" size={0}>
                                         <Text type="secondary">Ngày tạo</Text>
                                         <Text>{dayjs(application.created_at).format('DD/MM/YYYY HH:mm')}</Text>
                                     </Space>
                                 </Col>
-                                {application.approvedDate && (
-                                    <Col xs={24} sm={12}>
-                                        <Space direction="vertical" size={0}>
-                                            <Text type="secondary">Ngày duyệt</Text>
-                                            <Text>{dayjs(application.approvedDate).format('DD/MM/YYYY HH:mm')}</Text>
-                                        </Space>
-                                    </Col>
-                                )}
                             </Row>
                         </Card>
 

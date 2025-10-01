@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Form,
   Input,
@@ -12,6 +12,7 @@ import {
   Col,
   InputNumber,
   message,
+  Spin,
 } from 'antd';
 import type { UploadFile, UploadProps } from 'antd';
 import {
@@ -23,7 +24,7 @@ import {
   InboxOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ApplicationService from '@/service/applicationService';
 import ApplicationGuide from '../ApplicationGuide';
 
@@ -39,18 +40,64 @@ interface BusinessTripFormProps {
 const BusinessTripForm: React.FC<BusinessTripFormProps> = ({ onCancel }) => {
   const [form] = Form.useForm();
   const [fileList, setFileList] = useState<UploadFile[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [applicationId, setApplicationId] = useState<number | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Load dữ liệu khi edit
+  useEffect(() => {
+    const id = searchParams.get('id');
+    if (id) {
+      setIsEditMode(true);
+      setApplicationId(Number(id));
+      loadApplicationData(Number(id));
+    }
+  }, [searchParams]);
+
+  const loadApplicationData = async (id: number) => {
+    try {
+      setLoading(true);
+      const response = await ApplicationService.getApplicationById(id);
+      const data = response.data.data;
+
+      // Set form values
+      form.setFieldsValue({
+        dateRange: [dayjs(data.startDate), dayjs(data.endDate)],
+        destination: data.destination,
+        estimatedCost: data.estimatedCost,
+        purpose: data.purpose,
+      });
+
+      // Set evidence files if exists
+      if (data.evidence && Array.isArray(data.evidence)) {
+        const existingFiles: UploadFile[] = data.evidence.map((file: any, index: number) => ({
+          uid: `-${index}`,
+          name: file.originalName || file.filename,
+          status: 'done',
+          url: `http://localhost:4000${file.path}`,
+        }));
+        setFileList(existingFiles);
+      }
+    } catch (error: any) {
+      message.error('Không thể tải thông tin đơn từ: ' + error.message);
+      router.push('/applications/me');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (values: any) => {
     try {
       const [startDate, endDate] = values.dateRange;
 
-      // Chuyển files từ fileList thành File objects
+      // Chuyển files từ fileList thành File objects (chỉ files mới upload)
       const evidenceFiles = fileList
         .map(file => file.originFileObj)
         .filter(Boolean) as File[];
 
-      await ApplicationService.createApplication({
+      const requestData = {
         type: 'business-trip',
         data: {
           startDate: startDate.format('YYYY-MM-DD'),
@@ -60,9 +107,18 @@ const BusinessTripForm: React.FC<BusinessTripFormProps> = ({ onCancel }) => {
           purpose: values.purpose,
         },
         evidenceFiles, // Gửi files riêng
-      });
+      };
 
-      message.success('Đơn công tác đã được gửi thành công!');
+      if (isEditMode && applicationId) {
+        // Cập nhật đơn từ
+        await ApplicationService.updateApplication(applicationId, requestData);
+        message.success('Cập nhật đơn công tác thành công!');
+      } else {
+        // Tạo mới đơn từ
+        await ApplicationService.createApplication(requestData);
+        message.success('Đơn công tác đã được gửi thành công!');
+      }
+
       router.push('/applications/me');
     } catch (error: any) {
       message.error('Đã có lỗi xảy ra khi gửi đơn. Lỗi: ' + error.message);
@@ -78,10 +134,14 @@ const BusinessTripForm: React.FC<BusinessTripFormProps> = ({ onCancel }) => {
         file.type === 'image/jpeg' ||
         file.type === 'image/png' ||
         file.type === 'image/jpg' ||
-        file.type === 'application/pdf';
+        file.type === 'application/pdf' ||
+        file.type === 'application/msword' ||
+        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        file.type === 'application/vnd.ms-excel' ||
+        file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
       if (!isValidType) {
-        message.error('Chỉ được upload file ảnh (JPG, PNG) hoặc PDF!');
+        message.error('Chỉ được upload file ảnh (JPG, PNG), PDF, DOC, DOCX, XLS, XLSX!');
         return Upload.LIST_IGNORE;
       }
 
@@ -102,10 +162,18 @@ const BusinessTripForm: React.FC<BusinessTripFormProps> = ({ onCancel }) => {
     },
   };
 
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '50px' }}>
+        <Spin size="large" tip="Đang tải dữ liệu..." />
+      </div>
+    );
+  }
+
   return (
-    <div title="Đơn công tác" style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div title={isEditMode ? "Chỉnh sửa đơn công tác" : "Đơn công tác"} style={{ maxWidth: 900, margin: '0 auto' }}>
       {/* Hướng dẫn */}
-      <ApplicationGuide type="business-trip" />
+      {!isEditMode && <ApplicationGuide type="business-trip" />}
 
       <Form form={form} layout="vertical" onFinish={handleSubmit}>
         <Row gutter={16}>
@@ -229,7 +297,6 @@ const BusinessTripForm: React.FC<BusinessTripFormProps> = ({ onCancel }) => {
               name="purpose"
               rules={[
                 { required: true, message: 'Vui lòng nhập mục đích công tác!' },
-                { min: 20, message: 'Mục đích phải có ít nhất 20 ký tự để mô tả rõ ràng!' }
               ]}
             >
               <TextArea
@@ -267,7 +334,7 @@ const BusinessTripForm: React.FC<BusinessTripFormProps> = ({ onCancel }) => {
               Hủy
             </Button>
             <Button type="primary" htmlType="submit" size="large" icon={<CheckOutlined />}>
-              Gửi đơn công tác
+              {isEditMode ? 'Cập nhật đơn công tác' : 'Gửi đơn công tác'}
             </Button>
           </Space>
         </Form.Item>

@@ -11,11 +11,20 @@ const __dirname = path.dirname(__filename);
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+  const allowedTypes = [
+    'image/jpeg', 
+    'image/png', 
+    'image/jpg',
+    'application/pdf',
+    'application/msword', // .doc
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+    'application/vnd.ms-excel', // .xls
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' // .xlsx
+  ];
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Chỉ chấp nhận file ảnh (JPG, PNG) hoặc PDF!'), false);
+    cb(new Error('Chỉ chấp nhận file ảnh (JPG, PNG), PDF, DOC, DOCX, XLS, XLSX!'), false);
   }
 };
 
@@ -141,7 +150,7 @@ export const processAndSaveFiles = async (req, res, next) => {
           size: fs.statSync(outputPath).size
         });
       } else {
-        // Giữ nguyên file PDF
+        // Giữ nguyên file PDF, DOC, DOCX, XLS, XLSX
         const ext = path.extname(file.originalname);
         filename = `${type}_${userId}_${Math.floor(timestamp)}${ext}`;
         outputPath = path.join(frontendPublicDir, filename);
