@@ -35,7 +35,7 @@ const handleSubmit = async (values: any) => {
       .filter(Boolean);
 
     await ApplicationService.createApplication({
-      type: 'forgot-checkin',
+      type: 'forgot-check',
       data: {
         forgotDate: values.forgotDate.format('YYYY-MM-DD'),
         forgotTime: values.forgotTime.format('HH:mm'),

@@ -101,7 +101,7 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
       });
 
       messageApi.success("Tạo đơn nghỉ phép thành công!");
-      router.push("/applications");
+      router.push("/applications/me");
     } catch (error: any) {
       messageApi.error(error.message || "Đã có lỗi xảy ra khi tạo đơn!");
     }

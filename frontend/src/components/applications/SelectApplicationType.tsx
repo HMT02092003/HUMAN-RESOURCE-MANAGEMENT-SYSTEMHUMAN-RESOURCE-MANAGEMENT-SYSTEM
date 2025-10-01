@@ -30,7 +30,7 @@ const applicationTypes: ApplicationType[] = [
     //     icon: '⏰'
     // },
     {
-        type: 'forgot_checkin',
+        type: 'forgot_check',
         name: 'Quên check in/out',
         description: 'Báo cáo quên chấm công vào/ra',
         icon: '📝'
@@ -62,7 +62,7 @@ const SelectApplicationType = () => {
         const typeMap: { [key: string]: string } = {
             'leave': 'leave',
             'shift_registration': 'shift',
-            'forgot_checkin': 'forgot-checkin',
+            'forgot_check': 'forgot-check',
             'overtime': 'overtime',
             'business_trip': 'business-trip',
             'resignation': 'resignation'

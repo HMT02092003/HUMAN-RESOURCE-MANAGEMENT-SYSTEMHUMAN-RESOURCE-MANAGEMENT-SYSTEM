@@ -31,7 +31,7 @@ const MyApplicationsPage = () => {
       leave: '/applications/leave/edit',
       overtime: '/applications/overtime/edit',
       business_trip: '/applications/business-trip/edit',
-      forgot_checkin: '/applications/forgot-checkin/edit',
+      forgot_check: '/applications/forgot-check/edit',
       shift_registration: '/applications/shift/edit',
       resignation: '/applications/resignation/edit'
     };

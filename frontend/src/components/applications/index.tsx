@@ -252,7 +252,7 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
                 { text: '🏖️ Nghỉ phép', value: 'leave' },
                 { text: '⏰ Tăng ca', value: 'overtime' },
                 { text: '✈️ Công tác', value: 'business_trip' },
-                { text: '⏰ Quên check', value: 'forgot_checkin' },
+                { text: '⏰ Quên check', value: 'forgot_check' },
                 { text: '🕒 Đăng ký ca', value: 'shift_registration' },
                 { text: '📄 Thôi việc', value: 'resignation' }
             ],

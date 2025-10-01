@@ -5,6 +5,7 @@ import type { FilterConfirmProps, FilterDropdownProps } from 'antd/es/table/inte
 import dayjs from 'dayjs';
 import applicationService from '@/service/applicationService';
 import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS } from '@/config/constant';
+import ApplicationDetailModal from './ApplicationDetailModal';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -25,6 +26,8 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
     const [total, setTotal] = useState(0);
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [selectedRows, setSelectedRows] = useState<any[]>([]);
+    const [detailModalVisible, setDetailModalVisible] = useState(false);
+    const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(null);
     const searchInput = useRef<any>(null);
 
     const fetchMyApplications = useCallback(async (page = 1, size = 10) => {
@@ -83,8 +86,8 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
     };
 
     const handleView = (record: any) => {
-        console.log('Viewing application:', record);
-        // Implement view logic
+        setSelectedApplicationId(record.id);
+        setDetailModalVisible(true);
     };
 
     const handleEdit = (record: any) => {
@@ -230,7 +233,7 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
                 { text: '🏖️ Nghỉ phép', value: 'leave' },
                 { text: '⏰ Tăng ca', value: 'overtime' },
                 { text: '✈️ Công tác', value: 'business_trip' },
-                { text: '⏰ Quên check', value: 'forgot_checkin' },
+                { text: '⏰ Quên check', value: 'forgot_check' },
                 { text: '🕒 Đăng ký ca', value: 'shift_registration' },
                 { text: '📄 Thôi việc', value: 'resignation' }
             ],
@@ -428,6 +431,16 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
                 size="middle"
                 scroll={{ x: 'auto' }}
                 bordered
+            />
+
+            {/* Detail Modal */}
+            <ApplicationDetailModal
+                applicationId={selectedApplicationId}
+                visible={detailModalVisible}
+                onClose={() => {
+                    setDetailModalVisible(false);
+                    setSelectedApplicationId(null);
+                }}
             />
         </div>
     );

@@ -147,13 +147,13 @@ export const SHIFT_OPTIONS = [
 
 
 export const APPLICATION_TYPE_LABELS = {
-  'business_trip': 'Công tác', 
+  'business-trip': 'Công tác', 
   'leave': 'Xin nghỉ phép',
   'overtime': 'Làm thêm giờ',
   'remote-work': 'Làm việc từ xa',
   'sick-leave': 'Nghỉ ốm',
   'shift-registration': 'Đăng ký ca làm việc',
-  'forgot-checkin': 'Quên check in/out',
+  'forgot-check': 'Quên check in/out',
   'resignation': 'Thôi việc'
 } as const;
 

@@ -205,9 +205,37 @@ export class ApplicationController {
         null  // type
       );
 
+      // Lấy thông tin user từ Auth Service
+      const usersInfo = await AuthService.getUsersByIds([userId]);
+      
+      let userInfo = {
+        id: userId,
+        username: 'Unknown',
+        fullName: 'Unknown User',
+        email: '',
+        identificationPhoto: null
+      };
+
+      if (usersInfo && usersInfo.length > 0) {
+        const user = usersInfo[0];
+        userInfo = {
+          id: user.id,
+          username: user.username,
+          fullName: `${user.lastName || ''} ${user.firstName || ''}`.trim(),
+          email: user.email,
+          identificationPhoto: user.identificationPhoto
+        };
+      }
+
+      // Map applications với user info
+      const applicationsWithUserInfo = applications.map(application => ({
+        ...application,
+        userInfo
+      }));
+
       res.json({
         success: true,
-        data: applications,
+        data: applicationsWithUserInfo,
         pagination: {
           page: pageNum,
           pageSize: pageSizeNum,
@@ -333,9 +361,34 @@ export class ApplicationController {
       const { id } = req.params;
       const application = await ApplicationModel.getApplicationById(parseInt(id));
 
+      // Lấy thông tin user từ Auth Service
+      const usersInfo = await AuthService.getUsersByIds([application.userId]);
+      
+      let userInfo = {
+        id: application.userId,
+        username: 'Unknown',
+        fullName: 'Unknown User',
+        email: '',
+        identificationPhoto: null
+      };
+
+      if (usersInfo && usersInfo.length > 0) {
+        const user = usersInfo[0];
+        userInfo = {
+          id: user.id,
+          username: user.username,
+          fullName: `${user.lastName || ''} ${user.firstName || ''}`.trim(),
+          email: user.email,
+          identificationPhoto: user.identificationPhoto
+        };
+      }
+
       res.json({
         success: true,
-        data: application,
+        data: {
+          ...application,
+          userInfo
+        },
         timestamp: dayjs().format()
       });
     } catch (error) {

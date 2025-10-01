@@ -2,41 +2,13 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import sharp from 'sharp';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Cấu hình multer để upload file
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    // Lưu vào frontend/public/applications/
-    const frontendPublicDir = path.join(__dirname, '../../../../frontend/public/applications');
-    
-    // Tạo thư mục nếu chưa tồn tại
-    if (!fs.existsSync(frontendPublicDir)) {
-      fs.mkdirSync(frontendPublicDir, { recursive: true });
-    }
-    cb(null, frontendPublicDir);
-  },
-  filename: (req, file, cb) => {
-    // Lấy thông tin từ request body
-    let parsedData = {};
-    try {
-      parsedData = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body;
-    } catch (error) {
-      parsedData = req.body;
-    }
-    
-    const type = parsedData.type || 'unknown';
-    const userId = parsedData.userId || 'user';
-    const timestamp = Date.now();
-    const ext = path.extname(file.originalname);
-    
-    // Format: {type}_{userId}_{timestamp}{ext}
-    const filename = `${type}_${userId}_${timestamp}${ext}`;
-    cb(null, filename);
-  }
-});
+// Cấu hình multer để upload file (tạm thời lưu vào memory)
+const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
   const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
@@ -114,4 +86,87 @@ export const deleteFiles = (files) => {
       deleteFile(filename);
     }
   });
+};
+
+// Middleware convert ảnh sang PNG và lưu file
+export const processAndSaveFiles = async (req, res, next) => {
+  if (!req.files || req.files.length === 0) {
+    return next();
+  }
+
+  try {
+    const frontendPublicDir = path.join(__dirname, '../../../../frontend/public/applications');
+    
+    // Tạo thư mục nếu chưa tồn tại
+    if (!fs.existsSync(frontendPublicDir)) {
+      fs.mkdirSync(frontendPublicDir, { recursive: true });
+    }
+
+    // Lấy thông tin từ request body
+    let parsedData = {};
+    try {
+      parsedData = typeof req.body.data === 'string' ? JSON.parse(req.body.data) : req.body;
+    } catch (error) {
+      parsedData = req.body;
+    }
+    
+    const type = parsedData.type || 'unknown';
+    const userId = parsedData.userId || 'user';
+
+    // Process từng file
+    const processedFiles = [];
+    
+    for (const file of req.files) {
+      const timestamp = Date.now() + Math.random(); // Đảm bảo unique
+      const isImage = file.mimetype.startsWith('image/');
+      
+      let filename;
+      let outputPath;
+
+      if (isImage) {
+        // Convert ảnh sang PNG
+        filename = `${type}_${userId}_${Math.floor(timestamp)}.png`;
+        outputPath = path.join(frontendPublicDir, filename);
+        
+        await sharp(file.buffer)
+          .png({ quality: 90 }) // Convert sang PNG với quality 90%
+          .toFile(outputPath);
+        
+        processedFiles.push({
+          fieldname: file.fieldname,
+          originalname: file.originalname,
+          filename: filename,
+          path: `/applications/${filename}`,
+          mimetype: 'image/png',
+          size: fs.statSync(outputPath).size
+        });
+      } else {
+        // Giữ nguyên file PDF
+        const ext = path.extname(file.originalname);
+        filename = `${type}_${userId}_${Math.floor(timestamp)}${ext}`;
+        outputPath = path.join(frontendPublicDir, filename);
+        
+        fs.writeFileSync(outputPath, file.buffer);
+        
+        processedFiles.push({
+          fieldname: file.fieldname,
+          originalname: file.originalname,
+          filename: filename,
+          path: `/applications/${filename}`,
+          mimetype: file.mimetype,
+          size: file.size
+        });
+      }
+    }
+
+    // Replace req.files với processed files
+    req.files = processedFiles;
+    next();
+  } catch (error) {
+    console.error('Error processing files:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi xử lý file: ' + error.message
+    });
+  }
 };

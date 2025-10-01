@@ -3,7 +3,7 @@ export const ApplicationType = {
   BUSINESS_TRIP: 'business-trip',
   LEAVE: 'leave',
   OVERTIME: 'overtime',
-  FORGOT_CHECKIN: 'forgot-checkin',
+  FORGOT_CHECK: 'forgot-check',
   SICK_LEAVE: 'sick-leave',
   SHIFT_REGISTRATION: 'shift-registration',
   RESIGNATION: 'resignation'

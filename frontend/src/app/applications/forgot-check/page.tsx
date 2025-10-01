@@ -3,7 +3,7 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import MainLayout from '@/components/main-layout';
-import ForgotCheckInForm from '@/components/applications/application/ForgotCheckInForm';
+import ForgotCheckInForm from '@/components/applications/application/ForgotCheckForm';
 import { HomeOutlined } from '@ant-design/icons';
 
 const ForgotCheckinPage = () => {

@@ -1,7 +1,7 @@
 import express from 'express';
 import { ApplicationController } from '../src/controller/application-controller.js';
 import { authenticateToken } from '../src/middleware/auth.js';
-import { uploadEvidence } from '../src/middleware/upload.js';
+import { uploadEvidence, processAndSaveFiles } from '../src/middleware/upload.js';
 
 const router = express.Router();
 
@@ -23,6 +23,7 @@ router.post('/applications',
       next();
     });
   },
+  processAndSaveFiles, // Convert ảnh sang PNG và lưu file
   ApplicationController.create
 );
 
@@ -40,6 +41,7 @@ router.put('/applications/:id',
       next();
     });
   },
+  processAndSaveFiles, // Convert ảnh sang PNG và lưu file
   ApplicationController.update
 );
 
