@@ -3,9 +3,10 @@ export const ApplicationType = {
   BUSINESS_TRIP: 'business-trip',
   LEAVE: 'leave',
   OVERTIME: 'overtime',
-  REMOTE_WORK: 'remote-work',
+  FORGOT_CHECKIN: 'forgot-checkin',
   SICK_LEAVE: 'sick-leave',
-  SHIFT_REGISTRATION: 'shift-registration'
+  SHIFT_REGISTRATION: 'shift-registration',
+  RESIGNATION: 'resignation'
 };
 
 export const ApplicationStatus = {

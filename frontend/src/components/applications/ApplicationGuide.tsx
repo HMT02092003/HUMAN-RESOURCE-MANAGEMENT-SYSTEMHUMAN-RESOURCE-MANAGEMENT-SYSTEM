@@ -158,7 +158,6 @@ const ApplicationGuide: React.FC<GuideProps> = ({ type }) => {
                     ],
                     tips: [
                         'Đơn giải trình cần được gửi trong vòng 48 giờ kể từ khi quên chấm công',
-                        'Cung cấp bằng chứng nếu có (email, tin nhắn, ảnh...)',
                         'Liên hệ với đồng nghiệp để làm chứng nếu cần thiết',
                         'Lý do cần rõ ràng và trung thực',
                     ],

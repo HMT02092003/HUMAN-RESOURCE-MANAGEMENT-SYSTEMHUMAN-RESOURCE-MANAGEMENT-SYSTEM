@@ -113,7 +113,18 @@ const UserService = {
     } catch (error) {
       throw error;
     }
+  },
+
+  // Lấy danh sách users theo department
+  getUsersByDepartment: async (departmentId: number) => {
+    try {
+      const response = await api.get('/api/auth/users/by-department', {
+        params: { departmentId }
+      });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 };
-
 export default UserService; 

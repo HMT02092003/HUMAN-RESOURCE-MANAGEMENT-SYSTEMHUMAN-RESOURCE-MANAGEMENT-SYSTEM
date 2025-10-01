@@ -9,7 +9,8 @@ import {
 } from '../src/controller/AttendanceController';
 import {
   getSettings,
-  updateSettings
+  updateSettings,
+  getSettingsByKey,
 }  from '@/controller/SettingsController';
 
 const router = Router();
@@ -48,6 +49,7 @@ const routeGroups = [
     routes: [
       { method: 'get', path: '/settings', handler: getSettings, auth: false },
       { method: 'post', path: '/settings', handler: updateSettings, auth: false },
+      { method: 'get', path: '/settings/:key', handler: getSettingsByKey, auth: false },
     ]
   }
 ];

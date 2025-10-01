@@ -41,7 +41,8 @@ const ROUTE_CONFIG = [
   {
     path: '/api/applications',
     target: 'application',
-    pathRewrite: { '^/api/applications': '/api/applications' }
+    pathRewrite: { '^/api/applications': '/api/applications' },
+    handleMultipart: true  // Enable multipart handling cho file upload
   },
   {
     path: '/api/settings',
@@ -58,6 +59,11 @@ const ROUTE_CONFIG = [
     target: 'ai',
     pathRewrite: { '^/api/ai': '/api/face-recognition' },
     handleMultipart: true
+  },
+  {
+    path: '/applications',
+    target: 'application',
+    pathRewrite: false
   },
   {
     path: '/uploads',

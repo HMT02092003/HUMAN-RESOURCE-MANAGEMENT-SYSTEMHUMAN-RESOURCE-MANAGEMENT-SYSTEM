@@ -139,10 +139,6 @@ export class ApplicationModel extends Model {
       status: ApplicationStatus.PENDING,
     };
 
-    if (validatedData.note) {
-      insertData.note = validatedData.note;
-    }
-
     const application = await this.query().insert(insertData);
     return application;
   }

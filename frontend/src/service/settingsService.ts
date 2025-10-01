@@ -1,3 +1,4 @@
+import { get } from 'lodash';
 import api from './apiService';
 
 const SettingsService = {
@@ -36,6 +37,15 @@ const SettingsService = {
       throw error;
     }
   },
+
+  getWorkingDays: async (key: any) => {
+    try {
+      const response = await api.get(`/api/attendance/settings/${key}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error getting working days:', error);
+    }
+  }
 
 };
 

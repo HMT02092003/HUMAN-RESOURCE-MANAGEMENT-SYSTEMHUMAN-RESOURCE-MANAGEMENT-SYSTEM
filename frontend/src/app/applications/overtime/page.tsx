@@ -40,7 +40,6 @@ const OvertimePage = () => {
         permissionType={permissionType}
       >
         <OvertimeForm 
-          onSubmit={handleSubmit}
           onCancel={handleCancel}
         />
       </MainLayout>

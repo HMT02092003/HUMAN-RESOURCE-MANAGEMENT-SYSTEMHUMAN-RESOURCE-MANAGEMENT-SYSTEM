@@ -29,6 +29,7 @@ import dayjs from 'dayjs';
 import ApplicationService, { ShiftRegistrationApplication, ShiftDay } from '@/service/applicationService';
 import { SHIFT_OPTIONS, VALIDATION_RULES } from '@/config/constant';
 import ApplicationGuide from '../ApplicationGuide';
+import { useRouter } from 'next/navigation';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -46,6 +47,7 @@ const ShiftForm: React.FC<ShiftRegistrationFormProps> = ({
 }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
   const handleSubmit = async (values: any) => {
     setLoading(true);
@@ -55,30 +57,18 @@ const ShiftForm: React.FC<ShiftRegistrationFormProps> = ({
       const requestedDates: ShiftDay[] = values.days.map((item: any) => ({
         date: item.date.format('YYYY-MM-DD'),
         shifts: item.shifts,
-        note: item.note || '',
       }));
 
       const payload = {
-        requestedDates,
-        reason: values.reason,
-        note: values.generalNote,
+        type: 'shift-registration',
+        data: { requestedDates },
       };
 
       // Gọi API tạo đơn đăng ký ca
-      // const result = await ApplicationService.createShiftRegistration(payload);
+      await ApplicationService.createApplication(payload);
       
       message.success('Đăng ký ca làm việc thành công! Đơn đã được gửi để chờ duyệt.');
-      
-      // Reset form sau khi thành công
-      form.resetFields();
-      
-      // Callback functions
-      if (onSuccess) {
-        // onSuccess(result);
-      } else if (onSubmit) {
-        // onSubmit(result);
-      }
-      
+      router.push('/applications/me'); // Chuyển hướng về trang danh sách đơn  
     } catch (error: any) {
       console.error('Lỗi khi tạo đơn đăng ký ca:', error);
       message.error(

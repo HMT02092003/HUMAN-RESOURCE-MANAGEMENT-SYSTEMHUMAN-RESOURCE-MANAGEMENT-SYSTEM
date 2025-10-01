@@ -23,12 +23,12 @@ const applicationTypes: ApplicationType[] = [
         description: 'Đăng ký nghỉ phép có lý do',
         icon: '🏖️'
     },
-    {
-        type: 'shift_registration',
-        name: 'Đăng ký ca làm việc',
-        description: 'Đăng ký ca sáng, chiều, đêm hoặc tăng ca',
-        icon: '⏰'
-    },
+    // {
+    //     type: 'shift_registration',
+    //     name: 'Đăng ký ca làm việc',
+    //     description: 'Đăng ký ca sáng, chiều, đêm hoặc tăng ca',
+    //     icon: '⏰'
+    // },
     {
         type: 'forgot_checkin',
         name: 'Quên check in/out',

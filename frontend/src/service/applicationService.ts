@@ -37,7 +37,7 @@ export interface ShiftRegistrationApplication extends BaseApplication {
 export interface CreateApplicationRequest {
   type: string;
   data: any;
-  note?: string;
+  evidenceFiles?: File[]; // Mảng file upload
 }
 
 export interface ApproveApplicationRequest {
@@ -129,42 +129,6 @@ const ApplicationService = {
   }) => {
     try {
       const response = await api.get("/api/applications/my-applications", { params });
-      return response.data;
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  // Lấy applications pending (cho manager)
-  getPendingApplications: async (params?: { 
-    page?: number; 
-    pageSize?: number; 
-    type?: string; 
-  }) => {
-    try {
-      const response = await api.get("/api/applications/pending", { params });
-      return response.data;
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  // Tạo đơn đăng ký ca làm việc
-  createShiftRegistration: async (data: {
-    requestedDates: ShiftDay[];
-    reason?: string;
-    note?: string;
-  }) => {
-    try {
-      const payload: CreateApplicationRequest = {
-        type: 'shift-registration',
-        data: {
-          requestedDates: data.requestedDates
-        },
-        note: data.note || data.reason
-      };
-      
-      const response = await api.post("/api/applications", payload);
       return response.data;
     } catch (error) {
       throw error;

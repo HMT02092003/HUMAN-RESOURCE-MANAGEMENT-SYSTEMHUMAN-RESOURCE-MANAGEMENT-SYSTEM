@@ -11,55 +11,95 @@ import {
   Row,
   Col,
   InputNumber,
+  message,
 } from 'antd';
+import type { UploadFile, UploadProps } from 'antd';
 import {
   CalendarOutlined,
   EnvironmentOutlined,
   FileTextOutlined,
   CheckOutlined,
   CloseOutlined,
-  PictureOutlined,
-  UploadOutlined
+  InboxOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-// import { BusinessTripApplication } from '@/service/applicationService';
+import { useRouter } from 'next/navigation';
+import ApplicationService from '@/service/applicationService';
 import ApplicationGuide from '../ApplicationGuide';
 
 const { Text } = Typography;
 const { TextArea } = Input;
 const { RangePicker } = DatePicker;
+const { Dragger } = Upload;
 
 interface BusinessTripFormProps {
-  // onSubmit: (
-  //   data: Omit<BusinessTripApplication, 'id' | 'status' | 'applicationDate'>
-  // ) => void;
-  // onCancel: () => void;
+  onCancel: () => void;
 }
 
-const BusinessTripForm: React.FC<BusinessTripFormProps> = ({
-  // onSubmit,
-  // onCancel
-}) => {
+const BusinessTripForm: React.FC<BusinessTripFormProps> = ({ onCancel }) => {
   const [form] = Form.useForm();
-  const [fileList, setFileList] = useState<any[]>([]);
+  const [fileList, setFileList] = useState<UploadFile[]>([]);
+  const router = useRouter();
 
-  const handleSubmit = (values: any) => {
-    const [startDate, endDate] = values.dateRange;
+  const handleSubmit = async (values: any) => {
+    try {
+      const [startDate, endDate] = values.dateRange;
 
+      // Chuyển files từ fileList thành File objects
+      const evidenceFiles = fileList
+        .map(file => file.originFileObj)
+        .filter(Boolean) as File[];
+
+      await ApplicationService.createApplication({
+        type: 'business-trip',
+        data: {
+          startDate: startDate.format('YYYY-MM-DD'),
+          endDate: endDate.format('YYYY-MM-DD'),
+          destination: values.destination,
+          estimatedCost: values.estimatedCost,
+          purpose: values.purpose,
+        },
+        evidenceFiles, // Gửi files riêng
+      });
+
+      message.success('Đơn công tác đã được gửi thành công!');
+      router.push('/applications/me');
+    } catch (error: any) {
+      message.error('Đã có lỗi xảy ra khi gửi đơn. Lỗi: ' + error.message);
+    }
   };
 
-  const handleUploadChange = ({ fileList: newFileList }: any) => {
-    setFileList(newFileList);
-  };
-
-  const uploadProps = {
-    fileList,
-    onChange: handleUploadChange,
-    beforeUpload: () => false, // Ngăn upload tự động
-    listType: 'picture-card' as const,
+  const uploadProps: UploadProps = {
+    name: 'evidence',
     multiple: true,
-    accept: 'image/*',
-    maxCount: 5
+    fileList: fileList,
+    beforeUpload: (file) => {
+      const isValidType =
+        file.type === 'image/jpeg' ||
+        file.type === 'image/png' ||
+        file.type === 'image/jpg' ||
+        file.type === 'application/pdf';
+
+      if (!isValidType) {
+        message.error('Chỉ được upload file ảnh (JPG, PNG) hoặc PDF!');
+        return Upload.LIST_IGNORE;
+      }
+
+      const isLt5M = file.size / 1024 / 1024 < 5;
+      if (!isLt5M) {
+        message.error('File phải nhỏ hơn 5MB!');
+        return Upload.LIST_IGNORE;
+      }
+
+      setFileList(prev => [...prev, file as UploadFile]);
+      return false;
+    },
+    onRemove: (file) => {
+      setFileList(prev => prev.filter(item => item.uid !== file.uid));
+    },
+    onChange: (info) => {
+      setFileList(info.fileList);
+    },
   };
 
   return (
@@ -158,24 +198,22 @@ const BusinessTripForm: React.FC<BusinessTripFormProps> = ({
           </Col>
 
           {/* Evidence Images */}
-          <Col xs={24} md={12}>
+          <Col xs={24}>
             <Form.Item
-              label={
-                <Text strong>
-                  <PictureOutlined style={{ marginRight: 6 }} />
-                  Bằng chứng công tác (tùy chọn)
-                </Text>
-              }
-              extra="Tải lên vé máy bay, booking khách sạn, lịch họp... (Tối đa 5 ảnh)"
+              label={<Text strong>📎 Bằng chứng công tác (Lịch họp, email, thông báo...)</Text>}
+              extra="Chấp nhận file ảnh (JPG, PNG) hoặc PDF. Tối đa 5MB/file"
             >
-              <Upload {...uploadProps}>
-                {fileList.length >= 5 ? null : (
-                  <div style={{ textAlign: 'center' }}>
-                    <UploadOutlined style={{ fontSize: 18, marginBottom: 4 }} />
-                    <div>Tải ảnh lên</div>
-                  </div>
-                )}
-              </Upload>
+              <Dragger {...uploadProps}>
+                <p className="ant-upload-drag-icon">
+                  <InboxOutlined />
+                </p>
+                <p className="ant-upload-text">
+                  Click hoặc kéo thả file vào đây để upload
+                </p>
+                <p className="ant-upload-hint">
+                  Hỗ trợ upload nhiều file. File ảnh hoặc PDF, tối đa 5MB
+                </p>
+              </Dragger>
             </Form.Item>
           </Col>
 
@@ -225,7 +263,7 @@ const BusinessTripForm: React.FC<BusinessTripFormProps> = ({
         {/* Buttons */}
         <Form.Item style={{ textAlign: 'center', marginBottom: 0 }}>
           <Space size="middle">
-            <Button size="large"  icon={<CloseOutlined />}>
+            <Button size="large" onClick={onCancel} icon={<CloseOutlined />}>
               Hủy
             </Button>
             <Button type="primary" htmlType="submit" size="large" icon={<CheckOutlined />}>

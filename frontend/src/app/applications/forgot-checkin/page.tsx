@@ -40,7 +40,6 @@ const ForgotCheckinPage = () => {
         permissionType={permissionType}
       >
         <ForgotCheckInForm 
-          onSubmit={handleSubmit}
           onCancel={handleCancel}
         />
       </MainLayout>

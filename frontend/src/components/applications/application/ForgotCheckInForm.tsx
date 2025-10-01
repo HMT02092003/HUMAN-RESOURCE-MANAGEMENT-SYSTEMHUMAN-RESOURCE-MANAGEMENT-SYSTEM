@@ -1,28 +1,87 @@
-import React from 'react';
-import { Card, Form, Input, DatePicker, TimePicker, Button, Space, Typography, Alert, Row, Col } from 'antd';
-import { ClockCircleOutlined, CalendarOutlined, CheckOutlined, CloseOutlined, ExclamationCircleOutlined, RollbackOutlined, SaveOutlined } from '@ant-design/icons';
+import React, { useState } from 'react';
+import { Card, Form, Input, DatePicker, TimePicker, Button, Space, Typography, Alert, Row, Col, message, Upload } from 'antd';
+import type { UploadFile, UploadProps } from 'antd';
+import { ClockCircleOutlined, CalendarOutlined, CheckOutlined, CloseOutlined, ExclamationCircleOutlined, RollbackOutlined, SaveOutlined, InboxOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { ForgotCheckInApplication } from '@/service/applicationService';
 import ApplicationGuide from '../ApplicationGuide';
+import ApplicationService from '@/service/applicationService';
+import {useRouter} from 'next/navigation';
 
 const { Text } = Typography;
 const { TextArea } = Input;
+const { Dragger } = Upload;
 
 interface ForgotCheckInFormProps {
-  onSubmit: (data: Omit<ForgotCheckInApplication, 'id' | 'status' | 'applicationDate'>) => void;
   onCancel: () => void;
 }
 
-const ForgotCheckInForm: React.FC<ForgotCheckInFormProps> = ({ onSubmit, onCancel }) => {
+const ForgotCheckInForm: React.FC<ForgotCheckInFormProps> = ({ onCancel }) => {
   const [form] = Form.useForm();
+  const [fileList, setFileList] = useState<UploadFile[]>([]);
+  const router = useRouter();
 
-  const handleSubmit = (values: any) => {
-    onSubmit({
-      applicationType: 'forgot_checkin',
-      forgotDate: values.forgotDate.format('YYYY-MM-DD'),
-      forgotTime: values.forgotTime.format('HH:mm'),
-      reason: values.reason,
-    } as Omit<ForgotCheckInApplication, 'id' | 'status' | 'applicationDate'>);
+const handleSubmit = async (values: any) => {
+  try {
+    let threeDaysAgo = dayjs().subtract(3, 'day');
+
+    if (values.forgotDate.isBefore(threeDaysAgo, 'day')) {
+      message.error('Đã quá thời hạn làm đơn quên check!');
+      return;
+    }
+
+    // Chuyển files từ fileList thành File objects
+    const evidenceFiles = fileList
+      .map(file => file.originFileObj)
+      .filter(Boolean);
+
+    await ApplicationService.createApplication({
+      type: 'forgot-checkin',
+      data: {
+        forgotDate: values.forgotDate.format('YYYY-MM-DD'),
+        forgotTime: values.forgotTime.format('HH:mm'),
+        reason: values.reason,
+        evidence: evidenceFiles, // Gửi files
+      },
+    });
+
+    message.success('Đơn quên chấm công đã được gửi thành công!');
+    router.push('/applications/me');
+  } catch (error: any) {
+    message.error('Đã có lỗi xảy ra khi gửi đơn. Lỗi: ' + error.message);
+  }
+};
+
+  const uploadProps: UploadProps = {
+    name: 'evidence',
+    multiple: true,
+    fileList: fileList,
+    beforeUpload: (file) => {
+      const isValidType =
+        file.type === 'image/jpeg' ||
+        file.type === 'image/png' ||
+        file.type === 'image/jpg' ||
+        file.type === 'application/pdf';
+
+      if (!isValidType) {
+        message.error('Chỉ được upload file ảnh (JPG, PNG) hoặc PDF!');
+        return Upload.LIST_IGNORE;
+      }
+
+      const isLt5M = file.size / 1024 / 1024 < 5;
+      if (!isLt5M) {
+        message.error('File phải nhỏ hơn 5MB!');
+        return Upload.LIST_IGNORE;
+      }
+
+      setFileList(prev => [...prev, file as UploadFile]);
+      return false;
+    },
+    onRemove: (file) => {
+      setFileList(prev => prev.filter(item => item.uid !== file.uid));
+    },
+    onChange: (info) => {
+      setFileList(info.fileList);
+    },
   };
 
   return (
@@ -82,22 +141,48 @@ const ForgotCheckInForm: React.FC<ForgotCheckInFormProps> = ({ onSubmit, onCance
         </Row>
 
         {/* Reason */}
-        <Form.Item
-          label={<Text strong>📝 Lý do quên check và giải trình</Text>}
-          name="reason"
-          rules={[
-            { required: true, message: 'Vui lòng nhập lý do quên check!' },
-            { min: 20, message: 'Lý do phải có ít nhất 20 ký tự để giải trình rõ ràng!' }
-          ]}
-        >
-          <TextArea
-            placeholder="Ví dụ: Quên check do phải xử lý tình huống khẩn cấp, họp gấp hoặc sự cố kỹ thuật..."
-            rows={4}
-            showCount
-            maxLength={500}
-            size="large"
-          />
-        </Form.Item>
+        <Row gutter={16}>
+          <Col span={24}>
+            <Form.Item
+              label={<Text strong>📝 Lý do quên check và giải trình</Text>}
+              name="reason"
+              rules={[
+                { required: true, message: 'Vui lòng nhập lý do quên check!' },
+                { max: 500, message: 'Lý do không được quá 500 ký tự!' }
+              ]}
+            >
+              <TextArea
+                placeholder="Ví dụ: Quên check do phải xử lý tình huống khẩn cấp, họp gấp hoặc sự cố kỹ thuật..."
+                rows={4}
+                showCount
+                maxLength={500}
+                size="large"
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        {/* Evidence Upload */}
+        <Row gutter={16}>
+          <Col span={24}>
+            <Form.Item
+              label={<Text strong>📎 Bằng chứng (Ảnh chụp màn hình, email, tin nhắn...)</Text>}
+              extra="Chấp nhận file ảnh (JPG, PNG) hoặc PDF. Tối đa 5MB/file"
+            >
+              <Dragger {...uploadProps}>
+                <p className="ant-upload-drag-icon">
+                  <InboxOutlined />
+                </p>
+                <p className="ant-upload-text">
+                  Click hoặc kéo thả file vào đây để upload
+                </p>
+                <p className="ant-upload-hint">
+                  Hỗ trợ upload nhiều file. File ảnh hoặc PDF, tối đa 5MB
+                </p>
+              </Dragger>
+            </Form.Item>
+          </Col>
+        </Row>
 
         {/* Alert policies */}
         <Alert
@@ -107,7 +192,6 @@ const ForgotCheckInForm: React.FC<ForgotCheckInFormProps> = ({ onSubmit, onCance
               <ul style={{ paddingLeft: 20, margin: 0 }}>
                 <li>Chỉ được phép quên chấm công tối đa 2 lần/tháng</li>
                 <li>Đơn phải được gửi trong vòng 3 ngày kể từ ngày quên check</li>
-                <li>Cần có bằng chứng minh họa (email, tin nhắn, ảnh...) nếu có thể</li>
               </ul>
             </div>
           }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   Form,
@@ -13,6 +13,7 @@ import {
   Checkbox,
   Select,
   Divider,
+  message,
 } from 'antd';
 import {
   CalendarOutlined,
@@ -26,7 +27,11 @@ import {
   SaveOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { ResignationApplication } from '@/service/applicationService';
+import { useRouter } from 'next/navigation';
+import ApplicationService from '@/service/applicationService';
+import UserService from '@/service/userService';
+import Cookies from 'js-cookie';
+import { getDecodedToken } from '@/utils/decode-token';
 import ApplicationGuide from '../ApplicationGuide';
 
 const { Title, Text } = Typography;
@@ -34,30 +39,68 @@ const { TextArea } = Input;
 const { Option } = Select;
 
 interface ResignationFormProps {
-  onSubmit: (
-    data: Omit<ResignationApplication, 'id' | 'status' | 'applicationDate'>
-  ) => void;
   onCancel: () => void;
 }
 
-const ResignationForm: React.FC<ResignationFormProps> = ({
-  onSubmit,
-  onCancel,
-}) => {
+const ResignationForm: React.FC<ResignationFormProps> = ({ onCancel }) => {
   const [form] = Form.useForm();
-  const [lastWorkingDate, setLastWorkingDate] = useState<dayjs.Dayjs | null>(
-    null
-  );
+  const [lastWorkingDate, setLastWorkingDate] = useState<dayjs.Dayjs | null>(null);
+  const [departmentEmployees, setDepartmentEmployees] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
-  const handleSubmit = (values: any) => {
-    onSubmit({
-      applicationType: 'resignation',
-      lastWorkingDate: values.lastWorkingDate.format('YYYY-MM-DD'),
-      resignationReason: values.resignationReason,
-      handoverTo: values.handoverTo,
-      handoverNotes: values.handoverNotes,
-      handoverCompleted: values.handoverCompleted || false,
-    } as Omit<ResignationApplication, 'id' | 'status' | 'applicationDate'>);
+  // Lấy danh sách nhân viên cùng phòng ban
+  useEffect(() => {
+    const fetchDepartmentEmployees = async () => {
+      try {
+        const token = Cookies.get('token') || '';
+        const decoded = token ? getDecodedToken(token) : null;
+        
+        if (decoded) {
+          const currentUser = await UserService.getUserDetail(decoded.user.id);
+          const currentDepartmentId = currentUser.departmentId;
+          
+          // Gọi API lấy users cùng phòng ban
+          const employees = await UserService.getUsersByDepartment(currentDepartmentId);
+          
+          // Lọc bỏ chính mình
+          const filteredEmployees = employees.filter(
+            (emp: any) => emp.id !== decoded.user.id
+          );
+          
+          setDepartmentEmployees(filteredEmployees);
+        }
+      } catch (error: any) {
+        message.error('Không thể tải danh sách nhân viên!');
+      }
+    };
+
+    fetchDepartmentEmployees();
+  }, []);
+
+  const handleSubmit = async (values: any) => {
+    try {
+      setLoading(true);
+      
+      await ApplicationService.createApplication({
+        type: 'resignation',
+        data: {
+          lastWorkingDate: values.lastWorkingDate.format('YYYY-MM-DD'),
+          resignationReason: values.resignationReason,
+          additionalDetails: values.additionalDetails,
+          handoverTo: values.handoverTo,
+          handoverNotes: values.handoverNotes,
+          handoverCompleted: values.handoverCompleted || false,
+        },
+      });
+
+      message.success('Đơn thôi việc đã được gửi thành công!');
+      router.push('/applications/me');
+    } catch (error: any) {
+      message.error('Đã có lỗi xảy ra khi gửi đơn. Lỗi: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const calculateNoticeDays = () => {
@@ -216,14 +259,21 @@ const ResignationForm: React.FC<ResignationFormProps> = ({
               }
               name="handoverTo"
               rules={[
-                { required: true, message: 'Vui lòng nhập người nhận bàn giao!' },
-                { min: 2, message: 'Tên người nhận phải có ít nhất 2 ký tự!' },
+                { required: true, message: 'Vui lòng chọn người nhận bàn giao!' },
               ]}
             >
-              <Input
+              <Select
                 size="large"
-                placeholder="Tên đồng nghiệp hoặc người thay thế"
-                prefix={<UserOutlined />}
+                placeholder="Chọn đồng nghiệp cùng phòng ban"
+                showSearch
+                filterOption={(input, option: any) =>
+                  (option?.label || '').toLowerCase().includes(input.toLowerCase())
+                }
+                loading={departmentEmployees.length === 0}
+                options={departmentEmployees.map((emp: any) => ({
+                  label: `${emp.username} - ${emp.email}`,
+                  value: emp.id,
+                }))}
               />
             </Form.Item>
           </Col>
@@ -292,11 +342,12 @@ const ResignationForm: React.FC<ResignationFormProps> = ({
               size="large"
               onClick={onCancel}
               icon={<RollbackOutlined />}
+              disabled={loading}
               style={{
                 borderRadius: 8,
               }}
             >
-              Trở lại
+              Trở lại
             </Button>
             <Button
               type="primary"
@@ -304,13 +355,14 @@ const ResignationForm: React.FC<ResignationFormProps> = ({
               size="large"
               icon={<SaveOutlined />}
               danger
+              loading={loading}
               style={{
                 borderRadius: 8,
                 backgroundColor: '#dc2626',
                 borderColor: '#dc2626',
               }}
             >
-              Lưu
+              Gửi đơn thôi việc
             </Button>
           </Space>
         </Form.Item>

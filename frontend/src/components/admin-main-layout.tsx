@@ -102,7 +102,7 @@ TopBarProgress.config({
 // Menu items với cú pháp gọn gàng
 const baseMenuItemsList: ExtendedMenuItem[] = [
     // Dashboard
-    getItem('Dashboard', 'home', <DashboardOutlined />, 'home'),
+    getItem('Dashboard', 'home', <DashboardOutlined />),
 
     // Quản lí tài khoản (menu cha với điều kiện OR cho 2 quyền con)
     getItem(
@@ -139,7 +139,7 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
     ),
 
     // Chấm công
-    getItem('Chấm công', 'attendance', <CalendarOutlined />, 'attendance'),
+    getItem('Chấm công', 'attendance', <CalendarOutlined />, 'timeAttendance'),
 
     // Cài đặt hệ thống
     getItem('Cài đặt hệ thống', 'settings', <SettingOutlined />, 'settings'),

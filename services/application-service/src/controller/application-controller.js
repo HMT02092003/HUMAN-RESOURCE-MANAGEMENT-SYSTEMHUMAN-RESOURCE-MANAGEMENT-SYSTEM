@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 import { ApplicationModel } from '../Models/ApplicationModel.js';
 import AuthService from '../service/AuthService.js';
+import { deleteFiles } from '../middleware/upload.js';
 
 export class ApplicationController {
   /**
@@ -9,7 +10,7 @@ export class ApplicationController {
    */
   static async create(req, res) {
     try {
-      const { type, data, note } = req.body;
+      const { type, data } = req.body;
       const userId = req.user?.id;
 
       if (!userId) {
@@ -19,9 +20,25 @@ export class ApplicationController {
         });
       }
 
+      // Parse data nếu là string (từ FormData)
+      let parsedData = typeof data === 'string' ? JSON.parse(data) : data;
+
+      // Xử lý file upload nếu có
+      if (req.files && req.files.length > 0) {
+        const evidenceFiles = req.files.map(file => ({
+          filename: file.filename,
+          originalName: file.originalname,
+          path: `/applications/${file.filename}`, // Đường dẫn tương đối từ public
+          size: file.size,
+          mimetype: file.mimetype
+        }));
+        
+        parsedData.evidence = evidenceFiles;
+      }
+
       const application = await ApplicationModel.createApplication({
         type,
-        data,
+        data: parsedData,
         userId,
       });
 
@@ -32,6 +49,12 @@ export class ApplicationController {
         timestamp: dayjs().format()
       });
     } catch (error) {
+      // Xóa files đã upload nếu có lỗi
+      if (req.files && req.files.length > 0) {
+        const filenames = req.files.map(file => file.filename);
+        deleteFiles(filenames);
+      }
+      
       res.status(400).json({
         success: false,
         message: error.message || 'Có lỗi xảy ra khi tạo đơn từ',
@@ -57,8 +80,8 @@ export class ApplicationController {
       }
 
       // Lấy token từ request để gọi sang Auth Service
-      const token = req.cookies.token || 
-                   (req.headers.authorization && req.headers.authorization.split(' ')[1]);
+      const token = req.cookies.token ||
+        (req.headers.authorization && req.headers.authorization.split(' ')[1]);
 
       if (!token) {
         return res.status(401).json({
@@ -88,9 +111,9 @@ export class ApplicationController {
       let applications;
       let totalCount;
 
-      const filters = { 
+      const filters = {
         allowedUserIds,
-        userId: currentUserId 
+        userId: currentUserId
       };
 
       applications = await ApplicationModel.getAllApplicationsPaginated(filters, offset, pageSizeNum);
@@ -98,10 +121,10 @@ export class ApplicationController {
 
       // Lấy danh sách unique user IDs từ applications
       const uniqueUserIds = [...new Set(applications.map(app => app.userId))];
-      
+
       // Gọi Auth Service để lấy thông tin users
       const usersInfo = await AuthService.getUsersByIds(uniqueUserIds);
-      
+
       // Tạo map để dễ dàng lookup user info
       const usersMap = {};
       usersInfo.forEach(user => {
@@ -168,7 +191,7 @@ export class ApplicationController {
       const offset = (pageNum - 1) * pageSizeNum;
 
       const applications = await ApplicationModel.getUserApplicationsPaginated(
-        userId, 
+        userId,
         null, // status
         null, // type
         offset,
@@ -221,8 +244,8 @@ export class ApplicationController {
       }
 
       // Lấy token từ request để gọi sang Auth Service
-      const token = req.cookies.token || 
-                   (req.headers.authorization && req.headers.authorization.split(' ')[1]);
+      const token = req.cookies.token ||
+        (req.headers.authorization && req.headers.authorization.split(' ')[1]);
 
       if (!token) {
         return res.status(401).json({
@@ -240,7 +263,7 @@ export class ApplicationController {
 
       const applications = await ApplicationModel.getPendingApplicationsPaginated(
         null, // removed type parameter 
-        offset, 
+        offset,
         pageSizeNum,
         allowedUserIds
       );
@@ -252,10 +275,10 @@ export class ApplicationController {
 
       // Lấy danh sách unique user IDs từ applications
       const uniqueUserIds = [...new Set(applications.map(app => app.userId))];
-      
+
       // Gọi Auth Service để lấy thông tin users
       const usersInfo = await AuthService.getUsersByIds(uniqueUserIds);
-      
+
       // Tạo map để dễ dàng lookup user info
       const usersMap = {};
       usersInfo.forEach(user => {

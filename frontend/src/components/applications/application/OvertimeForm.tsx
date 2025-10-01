@@ -1,33 +1,80 @@
-import React, { useState } from 'react';
-import { Card, Form, Input, Select, DatePicker, TimePicker, Button, Space, Typography, Alert, Row, Col, Divider } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { Card, Form, Input, Select, DatePicker, TimePicker, Button, Space, Typography, Alert, Row, Col, Divider, message } from 'antd';
 import { CalendarOutlined, ClockCircleOutlined, CheckOutlined, CloseOutlined, FileTextOutlined, HourglassOutlined, SaveOutlined, RollbackOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { OvertimeApplication } from '@/service/applicationService';
 import ApplicationGuide from '../ApplicationGuide';
+import ApplicationService from '@/service/applicationService';
+import SettingsService from '@/service/settingsService';
+import isBetween from 'dayjs/plugin/isBetween';
+import {useRouter} from 'next/navigation';
+
+dayjs.extend(isBetween);
 
 const { Title, Text } = Typography;
 const { TextArea } = Input;
 const { RangePicker } = DatePicker;
 
 interface OvertimeFormProps {
-  onSubmit: (data: Omit<OvertimeApplication, 'id' | 'status' | 'applicationDate'>) => void;
   onCancel: () => void;
 }
 
-const OvertimeForm: React.FC<OvertimeFormProps> = ({ onSubmit, onCancel }) => {
+const OvertimeForm: React.FC<OvertimeFormProps> = ({ onCancel }) => {
   const [form] = Form.useForm();
   const [overtimeHours, setOvertimeHours] = useState<number>(2);
+  const [workingDays, setWorkingDays] = useState<any>(null);
+  const [workingHours, setWorkingHours] = useState<any>(null);
+  const router = useRouter();
 
-  const handleSubmit = (values: any) => {
-    const [startDate, endDate] = values.dateRange || [values.overtimeDate, values.overtimeDate];
-    
-    onSubmit({
-      applicationType: 'overtime',
-      overtimeDate: startDate.format('YYYY-MM-DD'),
-      overtimeHours: values.overtimeHours,
-      startTime: values.startTime.format('HH:mm'),
-      reason: values.reason,
-    } as Omit<OvertimeApplication, 'id' | 'status' | 'applicationDate'>);
+  useEffect(() => {
+    const fetchWorkingDays = async () => {
+      try {
+        const workingDays = await SettingsService.getWorkingDays("WorkingDays");
+        const workingHours = await SettingsService.getWorkingDays("WorkingHours");
+        setWorkingDays(workingDays.value);
+        setWorkingHours(workingHours.value);
+      } catch (error) {
+        console.error('Error fetching working days:', error);
+      }
+    };
+
+    fetchWorkingDays();
+  }, [form]);
+
+const handleSubmit = async (values: any) => {
+    try{
+      const dayOfWeek = values.overtimeDate.format('dddd').toLowerCase();
+      const startTime = (values.startTime).format('HH:mm');
+
+      const isWorkingDay = workingDays && workingDays[dayOfWeek] === true;
+
+      console.log('isWorkingDay:', isWorkingDay);
+      console.log('startTime:', startTime);
+      console.log('workingHourStart:', workingHours?.start );
+      console.log('workingHourEnd:', workingHours?.end );
+
+      if (isWorkingDay && workingHours?.start && workingHours?.end) {
+        const startTime = values.startTime.format('HH:mm');
+        const workStart = workingHours.start; 
+        const workEnd = workingHours.end; 
+        
+        if (startTime >= workStart && startTime < workEnd) {
+          message.error("Giờ bạn chọn nằm trong giờ hành chính của ngày làm việc. Vui lòng chọn lại giờ ngoài hành chính!");
+          return;
+        }
+      }
+      
+      await ApplicationService.createApplication({
+        type: 'overtime',
+        data: { 
+          ...values,
+        },
+      });
+      message.success('Gửi đơn tăng ca thành công!');
+      router.push('/applications/me');
+
+    }catch(error:any){  
+      message.error('Đã có lỗi xảy ra khi gửi đơn. Lỗi: ' + error.message);
+    }
   };
 
   const calculateEndTime = (start: dayjs.Dayjs | null, hours: number) => {
@@ -62,12 +109,11 @@ const OvertimeForm: React.FC<OvertimeFormProps> = ({ onSubmit, onCancel }) => {
                     <Text strong>Ngày tăng ca</Text>
                   </Space>
                 }
-                name="dateRange"
+                name="overtimeDate"
                 rules={[{ required: true, message: 'Vui lòng chọn ngày tăng ca!' }]}
               >
-                <RangePicker 
+                <DatePicker 
                   style={{ width: '100%' }}
-                  placeholder={['Ngày bắt đầu', 'Ngày kết thúc']}
                   disabledDate={(current) => current && current < dayjs().startOf('day')}
                   format="DD/MM/YYYY"
                 />
@@ -90,7 +136,6 @@ const OvertimeForm: React.FC<OvertimeFormProps> = ({ onSubmit, onCancel }) => {
                   style={{ width: '100%' }}
                   format="HH:mm"
                   placeholder="Chọn giờ bắt đầu"
-                  minuteStep={15}
                 />
               </Form.Item>
             </Col>
@@ -117,11 +162,7 @@ const OvertimeForm: React.FC<OvertimeFormProps> = ({ onSubmit, onCancel }) => {
                   placeholder="Chọn số giờ"
                   onChange={setOvertimeHours}
                   options={[
-                    { value: 0.5, label: '0.5 giờ' },
-                    { value: 1, label: '1 giờ' },
-                    { value: 1.5, label: '1.5 giờ' },
                     { value: 2, label: '2 giờ' },
-                    { value: 2.5, label: '2.5 giờ' },
                     { value: 3, label: '3 giờ' },
                     { value: 4, label: '4 giờ' },
                   ]}
@@ -189,17 +230,12 @@ const OvertimeForm: React.FC<OvertimeFormProps> = ({ onSubmit, onCancel }) => {
                 name="reason"
                 rules={[
                   { required: true, message: 'Vui lòng nhập lý do tăng ca!' },
-                  { min: 10, message: 'Lý do phải có ít nhất 10 ký tự!' }
                 ]}
               >
                 <TextArea
                   placeholder="Mô tả chi tiết lý do cần tăng ca, công việc cần hoàn thành..."
                   showCount
-                  maxLength={500}
-                  autoSize={{ minRows: 4, maxRows: 6 }}
-                  style={{
-                    borderRadius: '8px',
-                  }}
+                  rows={4}
                 />
               </Form.Item>
             </Col>

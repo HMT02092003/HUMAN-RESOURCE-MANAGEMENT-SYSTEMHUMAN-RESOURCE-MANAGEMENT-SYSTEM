@@ -153,7 +153,7 @@ export const APPLICATION_TYPE_LABELS = {
   'remote-work': 'Làm việc từ xa',
   'sick-leave': 'Nghỉ ốm',
   'shift-registration': 'Đăng ký ca làm việc',
-  'forgot_checkin': 'Quên check in/out',
+  'forgot-checkin': 'Quên check in/out',
   'resignation': 'Thôi việc'
 } as const;
 

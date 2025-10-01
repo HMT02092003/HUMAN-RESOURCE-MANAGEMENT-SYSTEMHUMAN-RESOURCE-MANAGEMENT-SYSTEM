@@ -4,9 +4,14 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import routes from './routes/api.ts';
 import knex from './src/lib/database.js';
 import { Model } from 'objection';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Kết nối Objection với Knex
 Model.knex(knex);
@@ -19,6 +24,9 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Serve static files cho applications từ frontend/public
+app.use('/applications', express.static(path.join(__dirname, '../../frontend/public/applications')));
 
 // Logging middleware
 app.use((req, res, next) => {

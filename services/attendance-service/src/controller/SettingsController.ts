@@ -13,6 +13,29 @@ export const getSettings = async (_req: Request, res: Response) => {
     }
 };
 
+export const getSettingsByKey = async (req: Request, res: Response) => {
+    try {
+        const inputs = req.params;
+
+        const allowFields = {
+            key: "string!",
+        };
+
+        let params = validate(inputs, allowFields, { removeNotAllow: true });
+
+        const result = await SettingModel.query().findOne('key', params['key']);
+
+        if (!result) {
+            return res.status(404).json({ error: 'Setting not found' });
+        }
+
+        return res.status(200).json(result);
+    } catch (error: any) {
+        console.error('Get settings error:', error);
+        return res.status(500).json({ error: error.message || 'Internal Server Error' });
+    }
+};
+
 export const updateSettings = async (req: Request, res: Response) => {
     try {
         const inputs = req.body;
@@ -77,7 +100,7 @@ export const updateSettings = async (req: Request, res: Response) => {
         // Xử lý từng setting riêng biệt để tránh duplicate key
         for (const setting of convertData) {
             const existing = await SettingModel.query().findOne('key', setting.key);
-            
+
             if (existing) {
                 // Cập nhật nếu đã tồn tại
                 await SettingModel.query()
