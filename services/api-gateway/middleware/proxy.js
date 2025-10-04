@@ -25,8 +25,8 @@ const createOptimizedProxy = (target, pathRewrite = false, handleMultipart = fal
         return;
       }
       
-      // Xử lý JSON data
-      if (contentType.includes('application/json') && req.body && Object.keys(req.body).length > 0) {
+      // Xử lý JSON data (bao gồm cả empty object {})
+      if (contentType.includes('application/json') && req.body !== undefined) {
         const bodyData = JSON.stringify(req.body);
         proxyReq.setHeader('Content-Type', 'application/json');
         proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));

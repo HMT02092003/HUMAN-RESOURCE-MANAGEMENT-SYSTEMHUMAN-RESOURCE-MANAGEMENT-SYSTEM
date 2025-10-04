@@ -5,7 +5,7 @@ import type { FilterConfirmProps, FilterDropdownProps } from 'antd/es/table/inte
 import dayjs from 'dayjs';
 import { useRouter } from 'next/navigation';
 import applicationService from '@/service/applicationService';
-import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS } from '@/config/constant';
+import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS, FORGOT_CHECK_TYPE_LABELS } from '@/config/constant';
 import ApplicationDetailModal from './ApplicationDetailModal';
 
 const { Title, Text } = Typography;
@@ -277,15 +277,15 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
         },
         {
             title: 'Người duyệt',
-            dataIndex: 'approvedBy',
-            key: 'approvedBy',
-            ...getColumnSearchProps('approvedBy', 'Tìm người duyệt...'),
+            dataIndex: ['approvedByInfo', 'fullName'],
+            key: 'approvedByInfo.fullName',
+            ...getColumnSearchProps('approvedByInfo.fullName', 'Tìm người duyệt...'),
         },
         {
             title: 'Ngày duyệt',
             dataIndex: 'approvedDate',
             key: 'approvedDate',
-            render: (date: string) => date ? dayjs(date).format('DD/MM/YYYY') : '-',
+            render: (date: string) => date ? dayjs(date).format('DD/MM/YYYY') : null,
         },
         {
             title: 'Ngày tạo',
@@ -294,14 +294,14 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
             render: (date: string) => (
                 <Text>{dayjs(date).format('DD/MM/YYYY')}</Text>
             ),
-            sorter: (a: any, b: any) =>
+            sorter: (a: any, b: any) =>     
                 dayjs(a.applicationDate).unix() - dayjs(b.applicationDate).unix(),
             ...getDateRangeFilter(),
         },
         {
             title: 'Thao tác',
             key: 'actions',
-            fixed: 'right' as const,
+            fixed: 'right' as const,     
             width: 150,
             render: (record: any) => (
                 <>

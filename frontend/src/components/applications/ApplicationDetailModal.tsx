@@ -13,7 +13,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import applicationService from '@/service/applicationService';
-import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS } from '@/config/constant';
+import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS, FORGOT_CHECK_TYPE_LABELS } from '@/config/constant';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -195,6 +195,11 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                     <Descriptions.Item label={<Text><ClockCircleOutlined /> Giờ quên check</Text>}>
                         <Text strong>{data.forgotTime || 'N/A'}</Text>
                     </Descriptions.Item>
+                    <Descriptions.Item label={<Text><CheckCircleOutlined /> Loại quên check</Text>}>
+                        <Tag color={data.forgotType === 'check-in' ? 'blue' : 'orange'}>
+                            {FORGOT_CHECK_TYPE_LABELS[data.forgotType as keyof typeof FORGOT_CHECK_TYPE_LABELS] || data.forgotType || 'N/A'}
+                        </Tag>
+                    </Descriptions.Item>
                     <Descriptions.Item label={<Text><FileTextOutlined /> Lý do</Text>}>
                         <Paragraph style={{ marginBottom: 0 }}>{data.reason || '-'}</Paragraph>
                     </Descriptions.Item>
@@ -368,7 +373,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                                         <Col xs={24} sm={12}>
                                             <Space direction="vertical" size={0}>
                                                 <Text type="secondary">Người duyệt</Text>
-                                                <Text>{dayjs(application.approvedBy).format('DD/MM/YYYY HH:mm')}</Text>
+                                                <Text>{(application.approvedByInfo.fullName).trim()}</Text>
                                             </Space>
                                         </Col>
                                         <Col xs={24} sm={12}>

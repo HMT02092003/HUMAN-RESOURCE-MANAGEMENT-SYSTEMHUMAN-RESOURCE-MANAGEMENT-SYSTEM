@@ -30,6 +30,10 @@ app.use('/applications', express.static(path.join(__dirname, '../../frontend/pub
 
 // Logging middleware
 app.use((req, res, next) => {
+  console.log(`🌐 ${req.method} ${req.url}`);
+  console.log(`🌐 Body:`, req.body);
+  console.log(`🌐 Params:`, req.params);
+  console.log(`🌐 Query:`, req.query);
   next();
 });
 
@@ -46,12 +50,23 @@ app.get('/health', (req, res) => {
 app.use('/api', routes);
 
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  console.error('❌❌❌ SERVER ERROR:', err);
+  console.error('❌ Stack:', err.stack);
   res.status(500).json({ 
     success: false, 
     error: err.message,
     timestamp: new Date().toISOString()
   });
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌❌❌ Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('❌❌❌ Uncaught Exception:', error);
 });
 
 app.listen(PORT, () => {

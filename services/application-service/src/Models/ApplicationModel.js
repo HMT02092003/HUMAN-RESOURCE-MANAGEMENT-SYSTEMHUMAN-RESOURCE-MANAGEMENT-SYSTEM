@@ -1,6 +1,7 @@
 import { Model } from 'objection';
 import { ApplicationType, ApplicationStatus, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_LABELS } from '../config/application-constants.js';
 import { validate } from '../utils/validation-utility.js';
+import dayjs from 'dayjs';
 
 export class ApplicationModel extends Model {
   static get tableName() {
@@ -596,6 +597,28 @@ export class ApplicationModel extends Model {
       if (existingApplication) {
         throw new Error('Bạn đã có đơn nghỉ trong khoảng thời gian này');
       }
+    }
+  }
+
+  /**
+   * Kiểm tra số lượng đơn quên chấm công trong tháng
+   * Giới hạn tối đa 2 đơn đã được duyệt/tháng
+   */
+  static async checkRequiredApplication(userId) {
+    const application = await ApplicationModel.query()
+      .where('userId', userId)
+      .where('type', "forgot-check")
+      .where('status', ApplicationStatus.APPROVED)
+      .whereBetween('created_at', [
+        dayjs().startOf('month').toISOString(),
+        dayjs().endOf('month').toISOString()
+      ]);
+
+    console.log(`✅ Checking forgot-check applications for user ${userId} in current month:`, application.length);
+
+    // Kiểm tra nếu đã có 2 đơn được duyệt trong tháng
+    if (application.length >= 2) {
+      throw new Error('Bạn đã hết lượt tạo đơn quên chấm công trong tháng này (tối đa 2 đơn/tháng)');
     }
   }
 }

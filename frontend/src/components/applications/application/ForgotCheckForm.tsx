@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { Card, Form, Input, DatePicker, TimePicker, Button, Space, Typography, Alert, Row, Col, message, Upload } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Card, Form, Input, DatePicker, TimePicker, Button, Space, Typography, Alert, Row, Col, message, Upload, Select, Spin } from 'antd';
 import type { UploadFile, UploadProps } from 'antd';
 import { ClockCircleOutlined, CalendarOutlined, CheckOutlined, CloseOutlined, ExclamationCircleOutlined, RollbackOutlined, SaveOutlined, InboxOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import ApplicationGuide from '../ApplicationGuide';
 import ApplicationService from '@/service/applicationService';
-import {useRouter} from 'next/navigation';
+import {useRouter, useSearchParams} from 'next/navigation';
+import { FORGOT_CHECK_TYPE_LABELS } from '@/config/constant';
 
 const { Text } = Typography;
 const { TextArea } = Input;
@@ -18,7 +19,99 @@ interface ForgotCheckInFormProps {
 const ForgotCheckInForm: React.FC<ForgotCheckInFormProps> = ({ onCancel }) => {
   const [form] = Form.useForm();
   const [fileList, setFileList] = useState<UploadFile[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [applicationId, setApplicationId] = useState<number | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Load dữ liệu khi edit
+  useEffect(() => {
+    const id = searchParams.get('id');
+    if (id) {
+      setIsEditMode(true);
+      setApplicationId(Number(id));
+      loadApplicationData(Number(id));
+    }
+  }, [searchParams]);
+
+  const loadApplicationData = async (id: number) => {
+    try {
+      setLoading(true);
+      const response = await ApplicationService.getApplicationById(id);
+      const data = response.data.data;
+
+      console.log('📥 Loaded application data:', data);
+
+      // Parse forgotDate với nhiều format
+      let parsedDate = null;
+      if (data.forgotDate) {
+        const dateFormats = ['YYYY-MM-DD', 'DD/MM/YYYY', 'MM/DD/YYYY'];
+        for (const format of dateFormats) {
+          const temp = dayjs(data.forgotDate, format);
+          if (temp.isValid()) {
+            parsedDate = temp;
+            console.log(`✅ Parsed date with format ${format}:`, parsedDate.format('YYYY-MM-DD'));
+            break;
+          }
+        }
+        if (!parsedDate || !parsedDate.isValid()) {
+          console.error('❌ Invalid forgotDate:', data.forgotDate);
+        }
+      }
+
+      // Parse forgotTime với nhiều format
+      let parsedTime = null;
+      if (data.forgotTime) {
+        const timeFormats = ['HH:mm:ss', 'HH:mm', 'hh:mm A', 'hh:mm:ss A'];
+        for (const format of timeFormats) {
+          const temp = dayjs(data.forgotTime, format);
+          if (temp.isValid()) {
+            parsedTime = temp;
+            console.log(`✅ Parsed time with format ${format}:`, parsedTime.format('HH:mm'));
+            break;
+          }
+        }
+        if (!parsedTime || !parsedTime.isValid()) {
+          console.error('❌ Invalid forgotTime:', data.forgotTime);
+        }
+      }
+
+      // Set form values
+      const formValues = {
+        forgotDate: parsedDate,
+        forgotTime: parsedTime,
+        reason: data.reason,
+        forgotType: data.forgotType,
+      };
+
+      console.log('✅ Setting form values:', {
+        forgotDate: parsedDate?.format('YYYY-MM-DD'),
+        forgotTime: parsedTime?.format('HH:mm'),
+        reason: data.reason,
+        forgotType: data.forgotType,
+      });
+
+      form.setFieldsValue(formValues);
+
+      // Set evidence files if exists
+      if (data.evidence && Array.isArray(data.evidence)) {
+        const existingFiles: UploadFile[] = data.evidence.map((file: any, index: number) => ({
+          uid: `-${index}`,
+          name: file.originalName || file.filename,
+          status: 'done' as const,
+          url: `http://localhost:4000${file.path}`,
+        }));
+        setFileList(existingFiles);
+      }
+    } catch (error: any) {
+      console.error('❌ Load application error:', error);
+      message.error('Không thể tải thông tin đơn từ: ' + error.message);
+      router.push('/applications/me');
+    } finally {
+      setLoading(false);
+    }
+  };
 
 const handleSubmit = async (values: any) => {
   try {
@@ -29,25 +122,44 @@ const handleSubmit = async (values: any) => {
       return;
     }
 
-    // Chuyển files từ fileList thành File objects
+    // Chuyển files từ fileList thành File objects (chỉ lấy file mới upload)
     const evidenceFiles = fileList
+      .filter(file => file.originFileObj) // Chỉ lấy file mới upload
       .map(file => file.originFileObj)
       .filter(Boolean);
 
-    await ApplicationService.createApplication({
-      type: 'forgot-check',
-      data: {
-        forgotDate: values.forgotDate.format('YYYY-MM-DD'),
-        forgotTime: values.forgotTime.format('HH:mm'),
-        reason: values.reason,
-        evidence: evidenceFiles, // Gửi files
-      },
+    const applicationData = {
+      forgotDate: values.forgotDate.format('YYYY-MM-DD'),
+      forgotTime: values.forgotTime.format('HH:mm'),
+      reason: values.reason,
+      evidence: evidenceFiles, // Gửi files
+      forgotType: values.forgotType, // Thêm loại quên check
+    };
+
+    console.log('📤 Submitting application data:', {
+      ...applicationData,
+      evidence: `${evidenceFiles.length} files`,
     });
 
-    message.success('Đơn quên chấm công đã được gửi thành công!');
+    if (isEditMode && applicationId) {
+      // Update existing application
+      await ApplicationService.updateApplication(applicationId, {
+        type: 'forgot-check',
+        data: applicationData,
+      });
+      message.success('Cập nhật đơn quên chấm công thành công!');
+    } else {
+      // Create new application
+      await ApplicationService.createApplication({
+        type: 'forgot-check',
+        data: applicationData,
+      });
+      message.success('Đơn quên chấm công đã được gửi thành công!');
+    }
+
     router.push('/applications/me');
   } catch (error: any) {
-    message.error('Đã có lỗi xảy ra khi gửi đơn. Lỗi: ' + error.message);
+    console.error('❌ Submit error:', error);
   }
 };
 
@@ -85,20 +197,29 @@ const handleSubmit = async (values: any) => {
   };
 
   return (
-    <div
-      title="Đơn giải trình quên chấm công"
-      style={{ maxWidth: 900, margin: '0 auto' }}
-    >
-      {/* Hướng dẫn */}
-      <ApplicationGuide type="forgot-checkin" />
-      <Form
-        form={form}
-        layout="vertical"
-        onFinish={handleSubmit}
+    <Spin spinning={loading} tip="Đang tải dữ liệu...">
+      <div
+        style={{ maxWidth: 900, margin: '0 auto' }}
       >
+        <Card 
+          title={
+            <Text strong style={{ fontSize: 18 }}>
+              <ClockCircleOutlined style={{ marginRight: 8 }} />
+              {isEditMode ? 'Sửa đơn giải trình quên chấm công' : 'Đơn giải trình quên chấm công'}
+            </Text>
+          }
+          bordered={false}
+        >
+          {/* Hướng dẫn */}
+          {!isEditMode && <ApplicationGuide type="forgot-checkin" />}
+          <Form
+            form={form}
+            layout="vertical"
+            onFinish={handleSubmit}
+          >
         <Row gutter={16}>
           {/* Forgot Date */}
-          <Col xs={24} md={12}>
+          <Col xs={24} md={8}>
             <Form.Item
               label={
                 <Text strong>
@@ -119,7 +240,7 @@ const handleSubmit = async (values: any) => {
           </Col>
 
           {/* Forgot Time */}
-          <Col xs={24} md={12}>
+          <Col xs={24} md={8}>
             <Form.Item
               label={
                 <Text strong>
@@ -135,6 +256,28 @@ const handleSubmit = async (values: any) => {
                 format="HH:mm"
                 showSecond={false}
                 style={{ width: '100%' }}
+              />
+            </Form.Item>
+          </Col>
+
+          {/* Forgot Type */}
+          <Col xs={24} md={8}>
+            <Form.Item
+              label={
+                <Text strong>
+                  <CheckOutlined style={{ marginRight: 6 }} />
+                  Loại quên check
+                </Text>
+              }
+              name="forgotType"
+              rules={[{ required: true, message: 'Vui lòng chọn loại quên check!' }]}
+            >
+              <Select
+                placeholder="Chọn loại"
+                options={Object.entries(FORGOT_CHECK_TYPE_LABELS).map(([value, label]) => ({
+                  value,
+                  label
+                }))}
               />
             </Form.Item>
           </Col>
@@ -225,12 +368,14 @@ const handleSubmit = async (values: any) => {
               size="large"
               icon={<SaveOutlined />}
             >
-              Lưu
+              {isEditMode ? 'Cập nhật' : 'Lưu'}
             </Button>
           </Space>
         </Form.Item>
       </Form>
-    </div>
+        </Card>
+      </div>
+    </Spin>
   );
 };
 

@@ -45,7 +45,7 @@ export interface ApproveApplicationRequest {
 }
 
 export interface RejectApplicationRequest {
-  rejectionReason: string;
+  rejectionReason?: string; // Optional
 }
 
 const ApplicationService = {

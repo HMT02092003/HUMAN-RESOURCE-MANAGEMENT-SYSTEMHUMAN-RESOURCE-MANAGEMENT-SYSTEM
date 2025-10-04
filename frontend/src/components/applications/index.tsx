@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Card, Table, Button, Space, Typography, Empty, message, Tooltip, DatePicker, Input, Row, Col, Tag, Modal } from 'antd';
-import { PlusOutlined, EyeOutlined, DeleteOutlined, SearchOutlined, EditOutlined, ExclamationCircleOutlined, CheckOutlined } from '@ant-design/icons';
+import { Card, Table, Button, Space, Typography, Empty, message, Tooltip, DatePicker, Input, Row, Col, Tag, Modal, Form } from 'antd';
+import { PlusOutlined, EyeOutlined, DeleteOutlined, SearchOutlined, EditOutlined, ExclamationCircleOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
 import type { FilterConfirmProps, FilterDropdownProps } from 'antd/es/table/interface';
 import dayjs from 'dayjs';
 import { useRouter } from 'next/navigation';
 import applicationService from '@/service/applicationService';
-import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS } from '@/config/constant';
+import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS, FORGOT_CHECK_TYPE_LABELS } from '@/config/constant';
 import ApplicationDetailModal from './ApplicationDetailModal';
 import { render } from 'react-dom';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
+const { TextArea } = Input;
 
 interface MyApplicationListProps {
     onCreateClick?: () => void;
@@ -33,6 +34,9 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
     const [selectedRows, setSelectedRows] = useState<any[]>([]);
     const [detailModalVisible, setDetailModalVisible] = useState(false);
     const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(null);
+    const [approveModalVisible, setApproveModalVisible] = useState(false);
+    const [selectedApplication, setSelectedApplication] = useState<any>(null);
+    const [approveForm] = Form.useForm();
     const searchInput = useRef<any>(null);
 
     const fetchMyApplications = useCallback(async (page = 1, size = 10) => {
@@ -146,6 +150,81 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
                 }
             }
         });
+    };
+
+    // Xử lý mở modal duyệt đơn
+    const handleOpenApproveModal = (record: any) => {
+        setSelectedApplication(record);
+        setApproveModalVisible(true);
+        approveForm.resetFields();
+    };
+
+    // Xử lý mở modal từ chối đơn
+    const handleOpenRejectModal = (record: any) => {
+        Modal.confirm({
+            title: 'Xác nhận không duyệt đơn từ',
+            icon: <CloseOutlined style={{ color: '#ff4d4f' }} />,
+            content: (
+                <div>
+                    <div style={{ marginBottom: 16 }}>
+                        <Text>Bạn có chắc chắn muốn <Text strong style={{ color: '#ff4d4f' }}>không duyệt</Text> đơn từ này?</Text>
+                    </div>
+                    <div style={{ padding: '12px', backgroundColor: '#f0f0f0', borderRadius: '4px' }}>
+                        <Text strong>Thông tin đơn từ:</Text>
+                        <div style={{ marginTop: 8 }}>
+                            <Text>Loại đơn: {APPLICATION_TYPE_LABELS[record.type as keyof typeof APPLICATION_TYPE_LABELS]}</Text>
+                        </div>
+                        <div style={{ marginTop: 4 }}>
+                            <Text>Người tạo: {record?.userInfo?.fullName}</Text>
+                        </div>
+                    </div>
+                    <div style={{ marginTop: 16, padding: '12px', backgroundColor: '#fff2e8', borderRadius: '4px', border: '1px solid #ffbb96' }}>
+                        <Text strong style={{ color: '#ff4d4f' }}>⚠️ Lưu ý:</Text>
+                        <div style={{ marginTop: 8 }}>
+                            <Text>• Sau khi không duyệt, đơn sẽ không thể chỉnh sửa hoặc xóa</Text>
+                        </div>
+                        <div style={{ marginTop: 4 }}>
+                            <Text>• Trạng thái đơn sẽ chuyển sang "Không duyệt"</Text>
+                        </div>
+                    </div>
+                </div>
+            ),
+            okText: 'Không duyệt',
+            cancelText: 'Hủy',
+            okButtonProps: { danger: true },
+            onOk: async () => {
+                try {
+                    const response = await applicationService.rejectApplication(record.id, {});
+                    if (response.success) {
+                        message.success('Không duyệt đơn thành công');
+                        fetchMyApplications(currentPage, pageSize);
+                    }
+                } catch (error: any) {
+                    message.error(error?.response?.data?.message || 'Không duyệt đơn thất bại');
+                }
+            }
+        });
+    };
+
+    // Xử lý duyệt đơn
+    const handleApprove = async () => {
+        try {
+            const values = await approveForm.validateFields();
+            await applicationService.approveApplication(selectedApplication.id, {
+                note: values.note || ''
+            });
+            message.success('Duyệt đơn thành công');
+            setApproveModalVisible(false);
+            setSelectedApplication(null);
+            approveForm.resetFields();
+            fetchMyApplications(currentPage, pageSize);
+        } catch (error: any) {
+            if (error?.errorFields) {
+                // Validation error from form
+                return;
+            }
+            message.error(error?.response?.data?.message || 'Duyệt đơn thất bại');
+        }
     };
 
     const getColumnSearchProps = (dataIndex: string, placeholder: string = 'Tìm kiếm...'): any => ({
@@ -272,7 +351,7 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
                 { text: '📄 Thôi việc', value: 'resignation' }
             ],
             onFilter: (value: any, record: any) => record.applicationType === value,
-        },
+        },  
         {
             title: 'Trạng thái',
             dataIndex: 'status',
@@ -299,15 +378,14 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
         },
         {
             title: 'Người duyệt',
-            dataIndex: 'approvedBy',
-            key: 'approvedBy',
-            render: (approvedBy: any) => approvedBy || '-',
+            dataIndex: ['approvedByInfo', 'fullName'],
+            key: 'approvedByInfo.fullName',
         },
         {
             title: 'Ngày duyệt',
             dataIndex: 'approvedDate',
             key: 'approvedDate',
-            render: (date: string) => date ? dayjs(date).format('DD/MM/YYYY') : '-',
+            render: (date: string) => date ? dayjs(date).format('DD/MM/YYYY') : null,
         },
         {
             title: 'Ngày tạo',
@@ -324,16 +402,33 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
             title: 'Thao tác',
             key: 'actions',
             fixed: 'right' as const,
+            width: 150,
             render: (record: any) => (
                 <>
-                    <Tooltip title="Duyệt">
-                        <Button
-                            type="text"
-                            size="small"
-                            icon={<CheckOutlined />}
-                            onClick={() => handleView(record)}
-                        />
-                    </Tooltip>
+                    {record.status === 0 && (
+                        <>
+                            <Tooltip title="Duyệt">
+                                <Button
+                                    type="text"
+                                    size="small"
+                                    icon={<CheckOutlined />}
+                                    onClick={() => handleOpenApproveModal(record)}
+                                    style={{ 
+                                        color: '#52c41a'
+                                    }}
+                                />
+                            </Tooltip>
+                            <Tooltip title="Không duyệt">
+                                <Button
+                                    type="text"
+                                    danger
+                                    size="small"
+                                    icon={<CloseOutlined />}
+                                    onClick={() => handleOpenRejectModal(record)}
+                                />
+                            </Tooltip>
+                        </>
+                    )}
                     <Tooltip title="Xem chi tiết">
                         <Button
                             type="text"
@@ -448,6 +543,41 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
                 scroll={{ x: 'auto' }}
                 bordered
             />
+
+            {/* Modal Duyệt đơn */}
+            <Modal
+                title={
+                    <Space>
+                        <CheckOutlined style={{ color: '#52c41a' }} />
+                        <span>Duyệt đơn từ</span>
+                    </Space>
+                }
+                open={approveModalVisible}
+                onOk={handleApprove}
+                onCancel={() => {
+                    setApproveModalVisible(false);
+                    setSelectedApplication(null);
+                    approveForm.resetFields();
+                }}
+                okText="Duyệt"
+                cancelText="Hủy"
+                okButtonProps={{ 
+                    style: { 
+                        backgroundColor: '#52c41a',
+                        borderColor: '#52c41a'
+                    } 
+                }}
+            >
+                <div style={{ marginTop: 16, padding: '12px', backgroundColor: '#f0f0f0', borderRadius: '4px' }}>
+                    <Text strong>Thông tin đơn từ:</Text>
+                    <div style={{ marginTop: 8 }}>
+                        <Text>Loại đơn: {selectedApplication && APPLICATION_TYPE_LABELS[selectedApplication.type as keyof typeof APPLICATION_TYPE_LABELS]}</Text>
+                    </div>
+                    <div style={{ marginTop: 4 }}>
+                        <Text>Người tạo: {selectedApplication?.userInfo?.fullName}</Text>
+                    </div>
+                </div>
+            </Modal>
 
             <ApplicationDetailModal
                 applicationId={selectedApplicationId}

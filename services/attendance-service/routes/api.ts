@@ -12,6 +12,7 @@ import {
   updateSettings,
   getSettingsByKey,
 }  from '@/controller/SettingsController';
+import { updateForgotCheck } from '@/controller/ForgotCheckController';
 
 const router = Router();
 
@@ -24,6 +25,7 @@ const routeGroups = [
     group: 'attendance',
     routes: [
       { method: 'post', path: '/confirm', handler: confirmAttendance, auth: false },
+      { method: 'post', path: '/update-forgot-check', handler: updateForgotCheck, auth: false },
       { method: 'get', path: '/user/:userId/month', handler: getUserAttendanceByMonth, auth: false },
       { method: 'get', path: '/user/:userId/stats/monthly', handler: getMonthlyStats, auth: false },
       { 

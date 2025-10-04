@@ -146,6 +146,16 @@ export const SHIFT_OPTIONS = [
 ] as const;
 
 
+export const FORGOT_CHECK_TYPES = {
+  'check-in': 'Quên check in',
+  'check-out': 'Quên check out',
+} as const;
+
+export const FORGOT_CHECK_TYPE_LABELS = {
+  'check-in': 'Quên check in',
+  'check-out': 'Quên check out',
+} as const;
+
 export const APPLICATION_TYPE_LABELS = {
   'business-trip': 'Công tác', 
   'leave': 'Xin nghỉ phép',

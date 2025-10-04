@@ -57,14 +57,14 @@ router.get('/applications/stats', authenticateToken, ApplicationController.getSt
 // Lấy đơn từ theo khoảng thời gian
 router.get('/applications/date-range', authenticateToken, ApplicationController.getByDateRange);
 
-// Lấy chi tiết đơn từ theo ID
-router.get('/applications/:id', authenticateToken, ApplicationController.getById);
-
-// Duyệt đơn từ
+// Duyệt đơn từ - ĐẶT TRƯỚC :id route
 router.post('/applications/:id/approve', authenticateToken, ApplicationController.approve);
 
-// Từ chối đơn từ
+// Từ chối đơn từ - ĐẶT TRƯỚC :id route
 router.post('/applications/:id/reject', authenticateToken, ApplicationController.reject);
+
+// Lấy chi tiết đơn từ theo ID
+router.get('/applications/:id', authenticateToken, ApplicationController.getById);
 
 // Xóa nhiều đơn từ (đặt trước route xóa đơn lẻ để tránh conflict)
 router.post('/applications/bulk-delete', authenticateToken, ApplicationController.bulkDelete);
