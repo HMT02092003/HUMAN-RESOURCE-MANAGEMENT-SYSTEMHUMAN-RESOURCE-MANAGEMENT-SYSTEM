@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
 import { ApplicationModel } from '../Models/ApplicationModel.js';
+import { ApplicationStatus } from '../config/application-constants.js';
 import AuthService from '../service/AuthService.js';
 import { deleteFiles } from '../middleware/upload.js';
 import axios from 'axios';
@@ -199,8 +200,10 @@ export class ApplicationController {
    */
   static async getMyApplications(req, res) {
     try {
-      const { page = 1, pageSize = 10 } = req.query;
-      const userId = req.user?.id;
+      const { page = 1, pageSize = 10, status, userId: queryUserId, year, month } = req.query;
+      
+      // Ưu tiên userId từ query (cho inter-service call), fallback về req.user.id
+      const userId = queryUserId ? parseInt(queryUserId) : req.user?.id;
 
       if (!userId) {
         return res.status(401).json({
@@ -215,7 +218,7 @@ export class ApplicationController {
 
       const applications = await ApplicationModel.getUserApplicationsPaginated(
         userId,
-        null, // status
+        status || null, // Filter theo status nếu có
         null, // type
         offset,
         pageSizeNum
@@ -224,16 +227,26 @@ export class ApplicationController {
       // Đếm tổng số record
       const totalCount = await ApplicationModel.getUserApplicationsCount(
         userId,
-        null, // status
+        status || null, // Filter theo status nếu có
         null  // type
       );
+
+      // Filter theo year/month nếu có
+      let filteredApplications = applications;
+      if (year && month) {
+        filteredApplications = applications.filter(app => {
+          const appDate = new Date(app.applicationDate || app.createdAt);
+          return appDate.getFullYear() === parseInt(year) && 
+                 appDate.getMonth() + 1 === parseInt(month);
+        });
+      }
 
       // Lấy thông tin user từ Auth Service
       const usersInfo = await AuthService.getUsersByIds([userId]);
 
       // Lấy danh sách unique approvedBy IDs
       let uniqueApprovedIds = [];
-      applications.forEach(app => {
+      filteredApplications.forEach(app => {
         if (app.approvedBy != null) uniqueApprovedIds.push(app.approvedBy);
       });
 
@@ -274,7 +287,7 @@ export class ApplicationController {
       });
 
       // Map applications với user info và approvedBy info
-      const applicationsWithUserInfo = applications.map(application => ({
+      const applicationsWithUserInfo = filteredApplications.map(application => ({
         ...application,
         userInfo,
         approvedByInfo: approvedUsersMap[application.approvedBy] || null
@@ -286,13 +299,101 @@ export class ApplicationController {
         pagination: {
           page: pageNum,
           pageSize: pageSizeNum,
-          total: totalCount,
-          totalPages: Math.ceil(totalCount / pageSizeNum)
+          total: filteredApplications.length,
+          totalPages: Math.ceil(filteredApplications.length / pageSizeNum)
         },
-        total: totalCount,
+        total: filteredApplications.length,
         timestamp: dayjs().format()
       });
     } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Có lỗi xảy ra khi lấy danh sách đơn từ',
+        timestamp: dayjs().format()
+      });
+    }
+  }
+
+  /**
+   * Lấy danh sách đơn APPROVED của user (cho inter-service calls)
+   * GET /applications/user/:userId/approved?year=2025&month=10
+   */
+  static async getUserApprovedApplications(req, res) {
+    try {
+      const { userId } = req.params;
+      const { year, month } = req.query;
+
+      console.log(`📋 getUserApprovedApplications called: userId=${userId}, year=${year}, month=${month}`);
+
+      if (!userId) {
+        console.log('❌ Missing userId');
+        return res.status(400).json({
+          success: false,
+          message: 'Thiếu userId'
+        });
+      }
+
+      // Lấy tất cả đơn APPROVED của user
+      console.log(`🔍 Fetching APPROVED applications for user ${userId}...`);
+      const applications = await ApplicationModel.getUserApplicationsPaginated(
+        parseInt(userId),
+        ApplicationStatus.APPROVED, // Dùng số 1 thay vì 'APPROVED'
+        null, // type
+        0, // offset
+        1000 // limit lớn để lấy hết
+      );
+
+      console.log(`✅ Found ${applications.length} APPROVED applications`);
+
+      // Filter theo year/month nếu có
+      let filteredApplications = applications;
+      if (year && month) {
+        const targetYear = parseInt(year);
+        const targetMonth = parseInt(month);
+        
+        filteredApplications = applications.filter(app => {
+          // Đối với đơn leave, kiểm tra startDate và endDate
+          if (app.type === 'leave' && app.data) {
+            const startDate = new Date(app.data.startDate);
+            const endDate = new Date(app.data.endDate);
+            
+            // Kiểm tra xem khoảng thời gian nghỉ có giao với tháng đang xem không
+            const startYear = startDate.getFullYear();
+            const startMonth = startDate.getMonth() + 1;
+            const endYear = endDate.getFullYear();
+            const endMonth = endDate.getMonth() + 1;
+            
+            // Đơn nghỉ thuộc tháng nếu:
+            // - startDate trong tháng, HOẶC
+            // - endDate trong tháng, HOẶC  
+            // - startDate trước tháng và endDate sau tháng (nghỉ dài hạn)
+            const isInMonth = (
+              (startYear === targetYear && startMonth === targetMonth) ||
+              (endYear === targetYear && endMonth === targetMonth) ||
+              (startDate <= new Date(targetYear, targetMonth - 1, 1) && 
+               endDate >= new Date(targetYear, targetMonth, 0))
+            );
+            
+            return isInMonth;
+          }
+          
+          // Đối với các loại đơn khác, dùng applicationDate hoặc createdAt
+          const appDate = new Date(app.applicationDate || app.createdAt);
+          return appDate.getFullYear() === targetYear && 
+                 appDate.getMonth() + 1 === targetMonth;
+        });
+        
+        console.log(`📅 Filtered to ${filteredApplications.length} applications for ${year}-${month}`);
+      }
+
+      res.json({
+        success: true,
+        data: filteredApplications,
+        total: filteredApplications.length,
+        timestamp: dayjs().format()
+      });
+    } catch (error) {
+      console.error('❌ Error in getUserApprovedApplications:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Có lỗi xảy ra khi lấy danh sách đơn từ',

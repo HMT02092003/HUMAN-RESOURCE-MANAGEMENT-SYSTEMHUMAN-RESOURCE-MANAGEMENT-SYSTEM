@@ -45,6 +45,7 @@ export const updateSettings = async (req: Request, res: Response) => {
             OvertimeRate: { rate: 'number' },
             HolidayRate: { rate: 'number' },
             PenaltyRate: { rate: 'number' },
+            UnauthorizedAbsencePenaltyRate: { rate: 'number' },
             WorkingDays: {
                 monday: 'boolean',
                 tuesday: 'boolean',
@@ -89,6 +90,11 @@ export const updateSettings = async (req: Request, res: Response) => {
                 value: JSON.stringify(params['PenaltyRate'])
             },
             {
+                key: 'UnauthorizedAbsencePenaltyRate',
+                name: "Tỷ lệ phạt nghỉ không phép (% tổng lương tháng/ngày)",
+                value: JSON.stringify(params['UnauthorizedAbsencePenaltyRate'])
+            },
+            {
                 key: 'WorkingDays',
                 name: "Ngày làm việc trong tuần",
                 value: JSON.stringify(params['WorkingDays'])
@@ -122,6 +128,7 @@ export const updateSettings = async (req: Request, res: Response) => {
             OvertimeRate: params['OvertimeRate'],
             HolidayRate: params['HolidayRate'],
             PenaltyRate: params['PenaltyRate'],
+            UnauthorizedAbsencePenaltyRate: params['UnauthorizedAbsencePenaltyRate'],
             WorkingDays: params['WorkingDays']
         };
 

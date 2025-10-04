@@ -107,9 +107,11 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
     }
   };
 
-  // Không cho chọn ngày trong quá khứ
+  // Không cho chọn ngày trước 3 ngày so với ngày hiện tại
   const disabledDate: RangePickerProps["disabledDate"] = (current) => {
-    return current && current < dayjs().startOf("day");
+    if (!current) return false;
+    const minAllowed = dayjs().subtract(3, "day").startOf("day");
+    return current < minAllowed;
   };
 
   return (

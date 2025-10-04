@@ -48,6 +48,9 @@ router.put('/applications/:id',
 // Lấy danh sách đơn từ của user hiện tại
 router.get('/applications/my-applications', authenticateToken, ApplicationController.getMyApplications);
 
+// Inter-service route: Lấy đơn của user theo userId (không cần auth token)
+router.get('/applications/user/:userId/approved', ApplicationController.getUserApprovedApplications);
+
 // Lấy danh sách đơn cần duyệt (cho manager)
 router.get('/applications/pending', authenticateToken, ApplicationController.getPendingApplications);
 

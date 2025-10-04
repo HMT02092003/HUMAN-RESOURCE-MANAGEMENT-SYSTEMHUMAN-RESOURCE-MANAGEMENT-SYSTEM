@@ -33,6 +33,44 @@ export interface MonthlyStats {
   totalOvertimePay?: number;     // Tổng tiền overtime (VND)
 }
 
+export interface DailyAttendanceDetail {
+  date: string;
+  dayOfWeek: number;
+  dayName: string;
+  isWorkingDay: boolean;
+  hasAttendance: boolean;
+  attendanceData?: AttendanceData;
+  hasApprovedLeave: boolean;
+  leaveType?: string;
+  status: 'working' | 'absent' | 'approved_leave' | 'weekend' | 'holiday';
+  statusText: string;
+  unauthorizedAbsencePenalty: number;
+  isOnTime: boolean;
+  lateMinutes?: number;
+  earlyLeaveMinutes?: number;
+}
+
+export interface MonthlyAttendanceDetailResponse {
+  userId: number;
+  year: number;
+  month: number;
+  monthlySalary: number;
+  penaltyRate: number;
+  dailyDetails: DailyAttendanceDetail[];
+  summary: {
+    totalDays: number;
+    workingDays: number;
+    attendedDays: number;
+    approvedLeaveDays: number;
+    unauthorizedAbsenceDays: number;
+    totalUnauthorizedAbsencePenalty: number;
+    weekendDays: number;
+    totalLateMinutes: number;
+    totalEarlyLeaveMinutes: number;
+    onTimeDays: number;
+  };
+}
+
 class AttendanceService {
   // Lấy dữ liệu chấm công của user trong tháng
   async getUserAttendanceByMonth(userId: number, year: number, month: number): Promise<AttendanceData[]> {
@@ -51,6 +89,21 @@ class AttendanceService {
     } catch (error) {
       console.error('❌ Error fetching user attendance:', error);
       return [];
+    }
+  }
+
+  // Lấy chi tiết chấm công theo tháng (bao gồm nghỉ không phép + penalty)
+  async getUserMonthlyAttendanceDetail(userId: number, year: number, month: number): Promise<MonthlyAttendanceDetailResponse | null> {
+    try {
+      const response = await apiService.get(`/api/attendance/user/${userId}/monthly-detail`, {
+        params: { year, month }
+      });
+      
+      const detailData = response.data.success ? response.data.data : null;
+      
+      return detailData;
+    } catch (error) {
+      return null;
     }
   }
 

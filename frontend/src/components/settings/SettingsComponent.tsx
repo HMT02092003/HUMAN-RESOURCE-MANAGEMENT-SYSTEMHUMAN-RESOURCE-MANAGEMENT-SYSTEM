@@ -48,6 +48,10 @@ interface PenaltyRateConfig {
   rate: number;
 }
 
+interface UnauthorizedAbsencePenaltyRateConfig {
+  rate: number;
+}
+
 interface WorkingDaysConfig {
   monday: boolean;
   tuesday: boolean;
@@ -64,6 +68,7 @@ interface SettingsData {
   OvertimeRate: OvertimeRateConfig;
   HolidayRate: HolidayRateConfig;
   PenaltyRate: PenaltyRateConfig;
+  UnauthorizedAbsencePenaltyRate: UnauthorizedAbsencePenaltyRateConfig;
   WorkingDays: WorkingDaysConfig;
 }
 
@@ -84,6 +89,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
     OvertimeRate: { rate: 1.5 },
     HolidayRate: { rate: 3.0 },
     PenaltyRate: { rate: 0.001 },
+    UnauthorizedAbsencePenaltyRate: { rate: 5 },
     WorkingDays: {
       monday: true,
       tuesday: true,
@@ -131,6 +137,9 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       },
       PenaltyRate: {
         rate: transformedData?.PenaltyRate?.rate || defaultSettings.PenaltyRate.rate
+      },
+      UnauthorizedAbsencePenaltyRate: {
+        rate: transformedData?.UnauthorizedAbsencePenaltyRate?.rate || defaultSettings.UnauthorizedAbsencePenaltyRate.rate
       },
       WorkingDays: {
         monday: transformedData?.WorkingDays?.monday ?? defaultSettings.WorkingDays.monday,
@@ -226,6 +235,9 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       PenaltyRate: {
         rate: data?.PenaltyRate?.rate || defaultSettings.PenaltyRate.rate
       },
+      UnauthorizedAbsencePenaltyRate: {
+        rate: data?.UnauthorizedAbsencePenaltyRate?.rate || defaultSettings.UnauthorizedAbsencePenaltyRate.rate
+      },
       WorkingDays: {
         monday: data?.WorkingDays?.monday ?? defaultSettings.WorkingDays.monday,
         tuesday: data?.WorkingDays?.tuesday ?? defaultSettings.WorkingDays.tuesday,
@@ -254,6 +266,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
         overtimeRate: data.OvertimeRate.rate,
         holidayRate: data.HolidayRate.rate,
         penaltyRate: data.PenaltyRate.rate,
+        unauthorizedAbsencePenaltyRate: data.UnauthorizedAbsencePenaltyRate.rate,
         workingDays: {
           monday: data.WorkingDays.monday,
           tuesday: data.WorkingDays.tuesday,
@@ -264,6 +277,13 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
           sunday: data.WorkingDays.sunday,
         }
       });
+      
+      // Clear validation errors sau khi set values
+      setTimeout(() => {
+        form.validateFields().catch(() => {
+          // Ignore validation errors on initial load
+        });
+      }, 100);
     } catch (error) {
       console.error('Error updating form fields:', error);
       // Nếu có lỗi, sử dụng cấu hình mặc định
@@ -281,6 +301,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
         overtimeRate: defaultSettings.OvertimeRate.rate,
         holidayRate: defaultSettings.HolidayRate.rate,
         penaltyRate: defaultSettings.PenaltyRate.rate,
+        unauthorizedAbsencePenaltyRate: defaultSettings.UnauthorizedAbsencePenaltyRate.rate,
         workingDays: {
           monday: defaultSettings.WorkingDays.monday,
           tuesday: defaultSettings.WorkingDays.tuesday,
@@ -291,31 +312,39 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
           sunday: defaultSettings.WorkingDays.sunday,
         }
       });
+      
+      // Clear validation errors sau khi set default values
+      setTimeout(() => {
+        form.validateFields().catch(() => {
+          // Ignore validation errors on initial load
+        });
+      }, 100);
     }
   };
 
   const validateTimeLogic = (values: any) => {
-    const workStart = dayjs(values.workingHoursStart);
-    const workEnd = dayjs(values.workingHoursEnd);
-    const lunchStart = dayjs(values.lunchBreakStart);
-    const lunchEnd = dayjs(values.lunchBreakEnd);
+    // Lấy giá trị thời gian và chuyển về format HH:mm để so sánh
+    const workStartTime = dayjs(values.workingHoursStart).format('HH:mm');
+    const workEndTime = dayjs(values.workingHoursEnd).format('HH:mm');
+    const lunchStartTime = dayjs(values.lunchBreakStart).format('HH:mm');
+    const lunchEndTime = dayjs(values.lunchBreakEnd).format('HH:mm');
 
     // Kiểm tra thời gian làm việc
-    if (workEnd.isBefore(workStart) || workEnd.isSame(workStart)) {
+    if (workEndTime <= workStartTime) {
       throw new Error('Giờ kết thúc làm việc phải sau giờ bắt đầu');
     }
 
     // Kiểm tra thời gian nghỉ trưa
-    if (lunchEnd.isBefore(lunchStart) || lunchEnd.isSame(lunchStart)) {
+    if (lunchEndTime <= lunchStartTime) {
       throw new Error('Giờ kết thúc nghỉ trưa phải sau giờ bắt đầu nghỉ trưa');
     }
 
     // Kiểm tra thời gian nghỉ trưa phải nằm trong giờ hành chính
-    if (lunchStart.isBefore(workStart) || lunchStart.isAfter(workEnd)) {
+    if (lunchStartTime < workStartTime || lunchStartTime > workEndTime) {
       throw new Error('Giờ bắt đầu nghỉ trưa phải nằm trong giờ hành chính');
     }
 
-    if (lunchEnd.isBefore(workStart) || lunchEnd.isAfter(workEnd)) {
+    if (lunchEndTime < workStartTime || lunchEndTime > workEndTime) {
       throw new Error('Giờ kết thúc nghỉ trưa phải nằm trong giờ hành chính');
     }
 
@@ -340,6 +369,15 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
 
     if (values.penaltyRate > 1) {
       throw new Error('Tỷ lệ phạt đi muộn/về sớm không được vượt quá 1.0');
+    }
+
+    // Kiểm tra tỷ lệ phạt nghỉ không phép
+    if (values.unauthorizedAbsencePenaltyRate < 0) {
+      throw new Error('Tỷ lệ phạt nghỉ không phép không được âm');
+    }
+
+    if (values.unauthorizedAbsencePenaltyRate > 100) {
+      throw new Error('Tỷ lệ phạt nghỉ không phép không được vượt quá 100% tổng lương tháng');
     }
 
     // Kiểm tra ngày làm việc - phải có ít nhất 1 ngày
@@ -379,6 +417,9 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
         },
         PenaltyRate: {
           rate: parseFloat(values.penaltyRate) || defaultSettings.PenaltyRate.rate
+        },
+        UnauthorizedAbsencePenaltyRate: {
+          rate: parseFloat(values.unauthorizedAbsencePenaltyRate) || defaultSettings.UnauthorizedAbsencePenaltyRate.rate
         },
         WorkingDays: {
           monday: values.workingDays?.monday ?? defaultSettings.WorkingDays.monday,
@@ -557,6 +598,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
           <Form.Item
             label="Giờ bắt đầu nghỉ trưa"
             name="lunchBreakStart"
+            validateTrigger={['onBlur', 'onSubmit']}
             rules={[
               { required: true, message: 'Vui lòng chọn giờ bắt đầu nghỉ trưa!' },
               ({ getFieldValue }) => ({
@@ -567,16 +609,28 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
                   const workEnd = getFieldValue('workingHoursEnd');
                   const lunchEnd = getFieldValue('lunchBreakEnd');
                   
-                  if (workStart && dayjs(value).isBefore(workStart)) {
-                    return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
+                  // Chỉ validate nếu có đủ dữ liệu
+                  if (workStart && workEnd) {
+                    const valueTime = dayjs(value).format('HH:mm');
+                    const workStartTime = dayjs(workStart).format('HH:mm');
+                    const workEndTime = dayjs(workEnd).format('HH:mm');
+                    
+                    if (valueTime < workStartTime) {
+                      return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
+                    }
+                    
+                    if (valueTime > workEndTime) {
+                      return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
+                    }
                   }
                   
-                  if (workEnd && dayjs(value).isAfter(workEnd)) {
-                    return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
-                  }
-                  
-                  if (lunchEnd && (dayjs(value).isAfter(lunchEnd) || dayjs(value).isSame(lunchEnd))) {
-                    return Promise.reject(new Error('Giờ bắt đầu nghỉ trưa phải trước giờ kết thúc!'));
+                  if (lunchEnd) {
+                    const valueTime = dayjs(value).format('HH:mm');
+                    const lunchEndTime = dayjs(lunchEnd).format('HH:mm');
+                    
+                    if (valueTime >= lunchEndTime) {
+                      return Promise.reject(new Error('Giờ bắt đầu nghỉ trưa phải trước giờ kết thúc!'));
+                    }
                   }
                   
                   return Promise.resolve();
@@ -598,6 +652,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
           <Form.Item
             label="Giờ kết thúc nghỉ trưa"
             name="lunchBreakEnd"
+            validateTrigger={['onBlur', 'onSubmit']}
             rules={[
               { required: true, message: 'Vui lòng chọn giờ kết thúc nghỉ trưa!' },
               ({ getFieldValue }) => ({
@@ -608,16 +663,28 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
                   const workEnd = getFieldValue('workingHoursEnd');
                   const lunchStart = getFieldValue('lunchBreakStart');
                   
-                  if (workStart && dayjs(value).isBefore(workStart)) {
-                    return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
+                  // Chỉ validate nếu có đủ dữ liệu
+                  if (workStart && workEnd) {
+                    const valueTime = dayjs(value).format('HH:mm');
+                    const workStartTime = dayjs(workStart).format('HH:mm');
+                    const workEndTime = dayjs(workEnd).format('HH:mm');
+                    
+                    if (valueTime < workStartTime) {
+                      return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
+                    }
+                    
+                    if (valueTime > workEndTime) {
+                      return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
+                    }
                   }
                   
-                  if (workEnd && dayjs(value).isAfter(workEnd)) {
-                    return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
-                  }
-                  
-                  if (lunchStart && (dayjs(value).isBefore(lunchStart) || dayjs(value).isSame(lunchStart))) {
-                    return Promise.reject(new Error('Giờ kết thúc nghỉ trưa phải sau giờ bắt đầu!'));
+                  if (lunchStart) {
+                    const valueTime = dayjs(value).format('HH:mm');
+                    const lunchStartTime = dayjs(lunchStart).format('HH:mm');
+                    
+                    if (valueTime <= lunchStartTime) {
+                      return Promise.reject(new Error('Giờ kết thúc nghỉ trưa phải sau giờ bắt đầu!'));
+                    }
                   }
                   
                   return Promise.resolve();
@@ -929,6 +996,132 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
     </Card>
   );
 
+  const renderUnauthorizedAbsencePenaltyTab = () => (
+    <Card
+      title={
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />
+          <span>Cấu hình tỉ lệ phạt nghỉ không phép</span>
+        </div>
+      }
+      style={{ marginBottom: 0 }}
+    >
+      <Row gutter={24}>
+        <Col xs={24} md={12}>
+          <Form.Item
+            label="Tỉ lệ phạt (% tổng lương tháng trên mỗi ngày nghỉ không phép)"
+            name="unauthorizedAbsencePenaltyRate"
+            rules={[
+              { required: true, message: 'Vui lòng nhập tỉ lệ phạt nghỉ không phép!' },
+              { type: 'number', min: 0, message: 'Tỉ lệ phạt không được âm' },
+              { type: 'number', max: 100, message: 'Tỉ lệ phạt không được vượt quá 100%' },
+            ]}
+          >
+            <InputNumber
+              min={0}
+              max={100}
+              step={1}
+              precision={0}
+              placeholder="Nhập tỉ lệ phạt"
+              style={{ width: '100%' }}
+              size="large"
+              formatter={(value) => `${value}%`}
+              parser={(value) => value!.replace('%', '') as any}
+            />
+          </Form.Item>
+        </Col>
+        <Col xs={24} md={12}>
+          <div style={{
+            background: '#fff1f0',
+            border: '1px solid #ffccc7',
+            borderRadius: '6px',
+            padding: '16px',
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center'
+          }}>
+            <div>
+              <p style={{ margin: '0 0 4px 0', fontWeight: 600, color: '#ff4d4f' }}>
+                Tỉ lệ hiện tại
+              </p>
+              <p style={{ margin: 0, fontSize: '24px', fontWeight: 'bold', color: '#ff4d4f' }}>
+                {settingsData?.UnauthorizedAbsencePenaltyRate?.rate || defaultSettings.UnauthorizedAbsencePenaltyRate.rate}%
+              </p>
+            </div>
+          </div>
+        </Col>
+      </Row>
+
+      <div style={{
+        background: '#fffbe6',
+        border: '1px solid #ffe58f',
+        borderRadius: '6px',
+        padding: '16px',
+        marginTop: '16px'
+      }}>
+        <p style={{ margin: '0 0 8px 0', color: '#faad14', fontWeight: 600 }}>
+          <strong>💡 Ví dụ minh họa:</strong>
+        </p>
+        <div style={{ 
+          background: 'white',
+          padding: '12px',
+          borderRadius: '4px',
+          marginBottom: '12px'
+        }}>
+          <p style={{ margin: '0 0 8px 0', color: '#262626', fontWeight: 600 }}>
+            Tỉ lệ phạt: 5% | Tổng lương tháng: 10,000,000 VND
+          </p>
+          <ul style={{ margin: '0', paddingLeft: '20px', color: '#595959' }}>
+            <li style={{ marginBottom: '4px' }}>
+              Nghỉ không phép <strong>1 ngày</strong> → Phạt: <span style={{ color: '#ff4d4f', fontWeight: 600 }}>5% × 10,000,000 = 500,000 VND</span>
+            </li>
+            <li style={{ marginBottom: '4px' }}>
+              Nghỉ không phép <strong>2 ngày</strong> → Phạt: <span style={{ color: '#ff4d4f', fontWeight: 600 }}>10% × 10,000,000 = 1,000,000 VND</span>
+            </li>
+            <li>
+              Nghỉ không phép <strong>3 ngày</strong> → Phạt: <span style={{ color: '#ff4d4f', fontWeight: 600 }}>15% × 10,000,000 = 1,500,000 VND</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div style={{
+        background: '#fff7e6',
+        border: '1px solid #ffd591',
+        borderRadius: '6px',
+        padding: '16px',
+        marginTop: '16px'
+      }}>
+        <p style={{ margin: '0 0 8px 0', color: '#fa8c16', fontWeight: 600 }}>
+          <strong>📋 Lưu ý quan trọng:</strong>
+        </p>
+        <ul style={{ margin: 0, paddingLeft: '20px' }}>
+          <li style={{ color: '#666', marginBottom: '4px' }}>
+            <strong>Cách tính:</strong> Tiền phạt = (Số ngày nghỉ không phép) × (Tỉ lệ % cấu hình) × (Tổng lương tháng)
+          </li>
+          <li style={{ color: '#666', marginBottom: '4px' }}>
+            <strong>Đơn vị:</strong> % trên tổng lương tháng cho mỗi 1 ngày nghỉ không phép
+          </li>
+          <li style={{ color: '#666', marginBottom: '4px' }}>
+            <strong>Phạm vi:</strong> Từ 0% (không phạt) đến 100% (phạt toàn bộ lương tháng cho 1 ngày)
+          </li>
+          <li style={{ color: '#666', marginBottom: '4px' }}>
+            <strong>Áp dụng:</strong> Chỉ áp dụng cho ngày nghỉ không phép (không có đơn hoặc đơn bị từ chối)
+          </li>
+          <li style={{ color: '#666', marginBottom: '4px' }}>
+            <strong>Không áp dụng:</strong> Ngày nghỉ có phép (đơn đã được duyệt), ngày lễ, chủ nhật
+          </li>
+          <li style={{ color: '#666', marginBottom: '4px' }}>
+            <strong>Khuyến nghị:</strong> Nên đặt từ 3-10% để hợp lý và không quá nặng (5% là phổ biến)
+          </li>
+          <li style={{ color: '#666', marginBottom: '4px' }}>
+            <strong>Lưu ý:</strong> Nếu tổng tiền phạt nhiều ngày vượt 100% lương tháng, hệ thống sẽ giới hạn tối đa = 100%
+          </li>
+        </ul>
+      </div>
+    </Card>
+  );
+
   const renderWorkingDaysTab = () => {
     const weekDays = [
       { key: 'monday', label: 'THỨ HAI', english: 'Monday', color: '#1890ff' },
@@ -1117,6 +1310,18 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
             key="penaltyRate"
           >
             {renderPenaltyRateTab()}
+          </TabPane>
+
+          <TabPane
+            tab={
+              <span>
+                <ExclamationCircleOutlined />
+                Phạt nghỉ không phép
+              </span>
+            }
+            key="unauthorizedAbsencePenaltyRate"
+          >
+            {renderUnauthorizedAbsencePenaltyTab()}
           </TabPane>
 
           <TabPane

@@ -15,6 +15,8 @@ const SettingsService = {
         LunchBreak: { start: '12:00', end: '13:00' },
         OvertimeRate: { rate: 1.5 },
         HolidayRate: { rate: 3.0 },
+        PenaltyRate: { rate: 0.001 },
+        UnauthorizedAbsencePenaltyRate: { rate: 5 },
         WorkingDays: {
           monday: true,
           tuesday: true,
