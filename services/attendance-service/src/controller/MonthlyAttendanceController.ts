@@ -82,7 +82,7 @@ async function getApprovedLeaveApplications(
 /**
  * Check xem ngày cụ thể có nằm trong đơn nghỉ phép được duyệt không
  */
-function checkDateHasApprovedLeave(
+function checkDateHasApprovedLeave( 
     date: string,
     applications: ApprovedLeaveApplication[]
 ): { hasLeave: boolean; leaveType?: string } {
