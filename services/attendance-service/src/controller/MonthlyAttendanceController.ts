@@ -46,7 +46,7 @@ interface DailyAttendanceDetail {
     isOnTime: boolean; // Chấm công đúng giờ (không muộn, không về sớm)
     lateMinutes?: number; // Số phút đi muộn
     earlyLeaveMinutes?: number; // Số phút về sớm
-    businessTripInfo?: string; // Thông tin công tác
+    businessTripInfo?: string; // Thông tin công tác (tripInfo)
     businessTripDestination?: string; // Địa điểm công tác
     leaveInfo?: string; // Lý do nghỉ phép
 }
@@ -535,6 +535,268 @@ export const getMonthlyAttendanceDetail = async (req: Request, res: Response) =>
 
     } catch (error: any) {
         console.error('❌ Error in getMonthlyAttendanceDetail:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+            error: error.message
+        });
+    }
+}
+
+/**
+ * 🚀 API TỔNG HỢP: Lấy thống kê tháng + chi tiết từng ngày trong 1 request
+ * GET /api/attendance/user/:userId/monthly-full?year=YYYY&month=MM
+ * 
+ * Kết hợp dữ liệu từ 2 API:
+ * - getMonthlyStats: Thống kê tổng quan (totalDays, presentDays, totalHours, penalties, overtime)
+ * - getMonthlyAttendanceDetail: Chi tiết từng ngày (dailyDetails, summary, penalty breakdown)
+ * 
+ * Lợi ích:
+ * - Giảm 66% số lượng API calls (từ 3 xuống 1)
+ * - Tăng tốc độ load trang
+ * - Đảm bảo tính nhất quán dữ liệu (1 transaction)
+ */
+export const getMonthlyAttendanceFull = async (req: Request, res: Response) => {
+    try {
+        console.log('🔥🔥🔥 ===== GET MONTHLY ATTENDANCE FULL API CALLED =====');
+        
+        const { userId } = req.params;
+        const { year, month } = req.query;
+
+        if (!userId || !year || !month) {
+            return res.status(400).json({
+                success: false,
+                message: 'Missing required parameters: userId, year, month'
+            });
+        }
+
+        const userIdNum = parseInt(userId as string);
+        const yearNum = parseInt(year as string);
+        const monthNum = parseInt(month as string);
+
+        console.log(`📊 Fetching FULL monthly data for user ${userIdNum}, ${yearNum}-${monthNum}`);
+
+        // 1. Get working days config from settings
+        const workingDaysConfig = await getWorkingDaysConfig();
+        const penaltyRate = await getUnauthorizedAbsencePenaltyRate();
+        const monthlySalary = await getUserMonthlySalary(
+            userIdNum,
+            req.headers.authorization?.replace('Bearer ', '')
+        );
+
+        console.log('⚙️ Config loaded:', { workingDaysConfig, penaltyRate, monthlySalary });
+
+        // 2. Get approved applications (leave, business trip) from application service
+        const approvedApplications = await getApprovedLeaveApplications(userIdNum, yearNum, monthNum);
+        console.log(`📋 Found ${approvedApplications.length} approved applications`);
+
+        // 3. Get attendance records
+        const startDate = dayjs(`${yearNum}-${String(monthNum).padStart(2, '0')}-01`).format('YYYY-MM-DD');
+        const endDate = dayjs(`${yearNum}-${String(monthNum).padStart(2, '0')}-01`).endOf('month').format('YYYY-MM-DD');
+
+        console.log(`🔍 Querying attendance records:`, {
+            userId: userIdNum,
+            startDate,
+            endDate,
+            table: TimeAttendanceModel.tableName
+        });
+
+        const attendanceRecords = await TimeAttendanceModel.query()
+            .where('userId', userIdNum)
+            .whereBetween('date', [startDate, endDate])
+            .orderBy('date', 'asc');
+
+        console.log(`📅 Found ${attendanceRecords.length} attendance records for September`);
+        if (attendanceRecords.length > 0) {
+            console.log(`📌 First 3 records with dates:`, attendanceRecords.slice(0, 3).map(r => ({
+                id: r.id,
+                date: r.date,
+                dateType: typeof r.date,
+                checkInTime: r.checkInTime,
+                checkOutTime: r.checkOutTime
+            })));
+        } else {
+            console.log(`⚠️ No attendance records found! Checking database...`);
+            // Try to find ANY records for this user
+            const anyRecords = await TimeAttendanceModel.query()
+                .where('userId', userIdNum)
+                .limit(5);
+            console.log(`🔍 Any records for userId ${userIdNum}:`, anyRecords.length, anyRecords);
+        }
+
+        // 4. Build daily details array
+        const daysInMonth = dayjs(`${yearNum}-${String(monthNum).padStart(2, '0')}-01`).daysInMonth();
+        const dailyDetails: DailyAttendanceDetail[] = [];
+        
+        let totalUnauthorizedAbsencePenalty = 0;
+        let unauthorizedAbsenceDays = 0;
+        let totalLateMinutes = 0;
+        let totalEarlyLeaveMinutes = 0;
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const currentDate = dayjs(`${yearNum}-${String(monthNum).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+            const dateStr = currentDate.format('YYYY-MM-DD');
+            const dayOfWeek = currentDate.day();
+            const dayName = getDayName(dayOfWeek);
+
+            const dayKey = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayOfWeek] as keyof WorkingDaysConfig;
+            const isWorkingDay = workingDaysConfig[dayKey] || false;
+
+            // IMPORTANT: So sánh date - Convert record.date (Date object) to YYYY-MM-DD string
+            const attendanceData = attendanceRecords.find(record => {
+                // Convert Date object to YYYY-MM-DD string for comparison
+                const recordDateStr = dayjs(record.date).format('YYYY-MM-DD');
+                return recordDateStr === dateStr;
+            });
+            const hasAttendance = !!attendanceData?.checkInTime;
+
+            // Check for approved leave
+            const leaveCheck = checkDateHasApprovedLeave(dateStr, approvedApplications);
+            const hasApprovedLeave = leaveCheck.hasLeave;
+
+            // Check for business trip
+            const businessTripCheck = checkDateHasBusinessTrip(dateStr, approvedApplications);
+            const hasBusinessTrip = businessTripCheck.hasBusinessTrip;
+
+            // Debug log for this date
+            if (day <= 3 || hasAttendance || hasApprovedLeave || hasBusinessTrip) {
+                console.log(`🔍 Date ${dateStr}:`, {
+                    isWorkingDay,
+                    hasAttendance,
+                    hasApprovedLeave,
+                    hasBusinessTrip,
+                    checkInTime: attendanceData?.checkInTime,
+                    checkOutTime: attendanceData?.checkOutTime
+                });
+            }
+
+            let status: 'working' | 'absent' | 'approved_leave' | 'business_trip' | 'weekend' | 'holiday' = 'working';
+            let statusText = 'Đi làm';
+            let dailyPenalty = 0;
+
+            if (!isWorkingDay) {
+                status = 'weekend';
+                statusText = 'Cuối tuần';
+            } else if (hasBusinessTrip) {
+                status = 'business_trip';
+                statusText = 'Công tác';
+            } else if (hasApprovedLeave) {
+                status = 'approved_leave';
+                statusText = 'Nghỉ phép (Đã duyệt)';
+            } else if (!hasAttendance) {
+                status = 'absent';
+                statusText = 'Vắng không phép';
+                dailyPenalty = (monthlySalary * penaltyRate / 100);
+                totalUnauthorizedAbsencePenalty += dailyPenalty;
+                unauthorizedAbsenceDays++;
+            }
+
+            // Calculate late and early leave
+            const lateMinutes = parseFloat(attendanceData?.lateMinutes?.toString() || '0');
+            const earlyLeaveMinutes = parseFloat(attendanceData?.earlyDepartureMinutes?.toString() || '0');
+            const isOnTime = hasAttendance && lateMinutes === 0 && earlyLeaveMinutes === 0;
+
+            if (hasAttendance) {
+                totalLateMinutes += lateMinutes;
+                totalEarlyLeaveMinutes += earlyLeaveMinutes;
+            }
+
+            const dailyDetail: DailyAttendanceDetail = {
+                date: dateStr,
+                dayOfWeek,
+                dayName,
+                isWorkingDay,
+                hasAttendance,
+                attendanceData: hasAttendance ? attendanceData : undefined, // Luôn thêm attendanceData nếu có
+                hasApprovedLeave,
+                status,
+                statusText,
+                unauthorizedAbsencePenalty: dailyPenalty,
+                isOnTime
+            };
+
+            // Add optional fields if they exist
+            if (leaveCheck.leaveType) dailyDetail.leaveType = leaveCheck.leaveType;
+            if (leaveCheck.leaveInfo) dailyDetail.leaveInfo = leaveCheck.leaveInfo;
+            if (businessTripCheck.tripInfo) dailyDetail.businessTripInfo = businessTripCheck.tripInfo;
+            if (businessTripCheck.destination) dailyDetail.businessTripDestination = businessTripCheck.destination;
+            if (hasAttendance) {
+                dailyDetail.lateMinutes = lateMinutes;
+                dailyDetail.earlyLeaveMinutes = earlyLeaveMinutes;
+            }
+
+            dailyDetails.push(dailyDetail);
+        }
+
+        console.log(`📊 Created ${dailyDetails.length} daily details for month ${monthNum}/${yearNum}`);
+        console.log(`📌 Sample dates:`, dailyDetails.slice(0, 5).map(d => `${d.date} (${d.status})`));
+
+        // 5. Calculate monthly statistics (from attendance records)
+        const monthlyStats = {
+            totalDays: attendanceRecords.length,
+            presentDays: attendanceRecords.filter(record => record.checkInTime).length,
+            absentDays: attendanceRecords.filter(record => !record.checkInTime).length,
+            lateDays: attendanceRecords.filter(record => parseFloat(record.lateMinutes?.toString() || '0') > 0).length,
+            earlyLeaveDays: attendanceRecords.filter(record => parseFloat(record.earlyDepartureMinutes?.toString() || '0') > 0).length,
+            totalHours: attendanceRecords.reduce((sum, record) => sum + parseFloat(record.dailyTotalWorkHours?.toString() || '0'), 0),
+            averageHours: 0,
+            overtimeHours: attendanceRecords.reduce((sum, record) => sum + (parseFloat(record.otMinutes?.toString() || '0') / 60), 0),
+            totalLatePenalty: attendanceRecords.reduce((sum, record) => sum + parseFloat(record.lateArrivalPenalty?.toString() || '0'), 0),
+            totalEarlyLeavePenalty: attendanceRecords.reduce((sum, record) => sum + parseFloat(record.earlyLeavePenalty?.toString() || '0'), 0),
+            totalPenalty: 0,
+            totalOvertimePay: attendanceRecords.reduce((sum, record) => sum + parseFloat(record.otSalary?.toString() || '0'), 0)
+        };
+
+        // Calculate average hours
+        monthlyStats.averageHours = monthlyStats.presentDays > 0 ? monthlyStats.totalHours / monthlyStats.presentDays : 0;
+        
+        // Calculate total penalty
+        monthlyStats.totalPenalty = monthlyStats.totalLatePenalty + monthlyStats.totalEarlyLeavePenalty + totalUnauthorizedAbsencePenalty;
+
+        console.log('✅ Monthly stats calculated:', monthlyStats);
+        console.log(`💰 Total unauthorized absence penalty: ${totalUnauthorizedAbsencePenalty} VND for ${unauthorizedAbsenceDays} days`);
+        console.log(`✅ Final response - dailyDetails count: ${dailyDetails.length}`);
+        console.log(`📋 Status breakdown:`, {
+            working: dailyDetails.filter(d => d.status === 'working').length,
+            absent: dailyDetails.filter(d => d.status === 'absent').length,
+            leave: dailyDetails.filter(d => d.status === 'approved_leave').length,
+            businessTrip: dailyDetails.filter(d => d.status === 'business_trip').length,
+            weekend: dailyDetails.filter(d => d.status === 'weekend').length
+        });
+
+        // 6. Return unified response
+        return res.status(200).json({
+            success: true,
+            data: {
+                // Monthly overview statistics
+                monthlyStats,
+                
+                // Daily details for calendar display
+                dailyData: {
+                    userId: userIdNum,
+                    year: yearNum,
+                    month: monthNum,
+                    monthlySalary,
+                    penaltyRate,
+                    dailyDetails,
+                    summary: {
+                        totalDays: daysInMonth,
+                        workingDays: dailyDetails.filter(d => d.isWorkingDay).length,
+                        attendedDays: dailyDetails.filter(d => d.hasAttendance).length,
+                        approvedLeaveDays: dailyDetails.filter(d => d.hasApprovedLeave).length,
+                        unauthorizedAbsenceDays,
+                        totalUnauthorizedAbsencePenalty,
+                        weekendDays: dailyDetails.filter(d => d.status === 'weekend').length,
+                        totalLateMinutes: Math.round(totalLateMinutes),
+                        totalEarlyLeaveMinutes: Math.round(totalEarlyLeaveMinutes),
+                        onTimeDays: dailyDetails.filter(d => d.isOnTime).length
+                    }
+                }
+            }
+        });
+
+    } catch (error: any) {
+        console.error('❌ Error in getMonthlyAttendanceFull:', error);
         return res.status(500).json({
             success: false,
             message: 'Internal server error',

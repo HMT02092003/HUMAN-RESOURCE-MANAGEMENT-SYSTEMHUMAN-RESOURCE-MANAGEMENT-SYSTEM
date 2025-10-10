@@ -9,7 +9,8 @@ import {
   processOvertimeApplication
 } from '../src/controller/AttendanceController';
 import {
-  getMonthlyAttendanceDetail
+  getMonthlyAttendanceDetail,
+  getMonthlyAttendanceFull
 } from '../src/controller/MonthlyAttendanceController';
 import {
   getSettings,
@@ -39,6 +40,7 @@ const routeGroups = [
       { method: 'post', path: '/process-overtime', handler: processOvertimeApplication, auth: false },
       { method: 'get', path: '/user/:userId/month', handler: getUserAttendanceByMonth, auth: false },
       { method: 'get', path: '/user/:userId/monthly-detail', handler: getMonthlyAttendanceDetail, auth: false },
+      { method: 'get', path: '/user/:userId/monthly-full', handler: getMonthlyAttendanceFull, auth: false },
       { method: 'get', path: '/user/:userId/stats/monthly', handler: getMonthlyStats, auth: false },
       { 
         method: 'get', 

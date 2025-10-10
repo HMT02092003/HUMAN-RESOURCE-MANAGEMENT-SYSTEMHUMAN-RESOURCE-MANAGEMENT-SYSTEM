@@ -154,6 +154,29 @@ class AttendanceService {
     }
   }
 
+  // 🚀 API TỔNG HỢP: Lấy thống kê tháng + chi tiết từng ngày trong 1 request
+  // Thay thế cho getUserMonthlyStats() + getUserMonthlyAttendanceDetail()
+  async getUserMonthlyAttendanceFull(userId: number, year: number, month: number): Promise<{
+    monthlyStats: MonthlyStats;
+    dailyData: MonthlyAttendanceDetailResponse;
+  } | null> {
+    try {
+      console.log('📊 Calling monthly-full API:', `/api/attendance/user/${userId}/monthly-full?year=${year}&month=${month}`);
+      const response = await apiService.get(`/api/attendance/user/${userId}/monthly-full`, {
+        params: { year, month }
+      });
+      console.log('📥 Raw monthly-full response:', response.data);
+      
+      const fullData = response.data.success ? response.data.data : null;
+      console.log('✅ Parsed monthly-full data:', fullData);
+      
+      return fullData;
+    } catch (error) {
+      console.error('❌ Error fetching user monthly attendance full:', error);
+      return null;
+    }
+  }
+
   // Tính tổng penalty từ attendance data
   calculatePenaltyFromAttendanceData(attendanceData: AttendanceData[]): {
     totalLatePenalty: number;
