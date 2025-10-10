@@ -40,12 +40,15 @@ interface DailyAttendanceDetail {
     attendanceData?: any; // Dữ liệu chấm công nếu có
     hasApprovedLeave: boolean; // Có đơn nghỉ phép được duyệt
     leaveType?: string; // Loại đơn nghỉ
-    status: 'working' | 'absent' | 'approved_leave' | 'weekend' | 'holiday';
+    status: 'working' | 'absent' | 'approved_leave' | 'business_trip' | 'weekend' | 'holiday';
     statusText: string;
     unauthorizedAbsencePenalty: number; // Tiền phạt nghỉ không phép
     isOnTime: boolean; // Chấm công đúng giờ (không muộn, không về sớm)
     lateMinutes?: number; // Số phút đi muộn
     earlyLeaveMinutes?: number; // Số phút về sớm
+    businessTripInfo?: string; // Thông tin công tác
+    businessTripDestination?: string; // Địa điểm công tác
+    leaveInfo?: string; // Lý do nghỉ phép
 }
 
 /**
@@ -85,34 +88,49 @@ async function getApprovedLeaveApplications(
 function checkDateHasApprovedLeave( 
     date: string,
     applications: ApprovedLeaveApplication[]
-): { hasLeave: boolean; leaveType?: string } {
+): { hasLeave: boolean; leaveType?: string; leaveInfo?: string } {
     for (const app of applications) {
-        // Check các loại đơn nghỉ
-        if (app.type === 'leave' || app.type === 'forgot-check') {
+        // Check các loại đơn nghỉ phép (leave, sick-leave) - KHÔNG bao gồm business-trip và forgot-check
+        if (app.type === 'leave' || app.type === 'sick-leave') {
             const appData = app.data;
 
-            // Trường hợp nghỉ nhiều ngày
+            // Trường hợp nghỉ nhiều ngày (có startDate và endDate)
             if (appData.startDate && appData.endDate) {
                 const checkDate = dayjs(date);
                 const startDate = dayjs(appData.startDate);
                 const endDate = dayjs(appData.endDate);
 
-                if (checkDate.isSame(startDate) || checkDate.isSame(endDate) ||
-                    (checkDate.isAfter(startDate) && checkDate.isBefore(endDate))) {
-                    return { hasLeave: true, leaveType: app.type };
+                if (checkDate.isSame(startDate, 'day') || checkDate.isSame(endDate, 'day') ||
+                    (checkDate.isAfter(startDate, 'day') && checkDate.isBefore(endDate, 'day'))) {
+                    console.log(`✅ Date ${date} is within approved leave: ${app.type}`);
+                    return { 
+                        hasLeave: true, 
+                        leaveType: app.type, // 'leave' hoặc 'sick-leave'
+                        leaveInfo: appData.reason || appData.description || 'Nghỉ phép'
+                    };
                 }
             }
 
-            // Trường hợp nghỉ 1 ngày
+            // Trường hợp nghỉ 1 ngày (có date)
             if (appData.date && dayjs(appData.date).isSame(dayjs(date), 'day')) {
-                return { hasLeave: true, leaveType: app.type };
+                console.log(`✅ Date ${date} matches approved leave date: ${app.type}`);
+                return { 
+                    hasLeave: true, 
+                    leaveType: app.type,
+                    leaveInfo: appData.reason || appData.description || 'Nghỉ phép'
+                };
             }
 
             // Trường hợp có requestedDates array
             if (appData.requestedDates && Array.isArray(appData.requestedDates)) {
                 for (const reqDate of appData.requestedDates) {
                     if (dayjs(reqDate.date || reqDate).isSame(dayjs(date), 'day')) {
-                        return { hasLeave: true, leaveType: app.type };
+                        console.log(`✅ Date ${date} found in requestedDates: ${app.type}`);
+                        return { 
+                            hasLeave: true, 
+                            leaveType: app.type,
+                            leaveInfo: appData.reason || appData.description || 'Nghỉ phép'
+                        };
                     }
                 }
             }
@@ -120,6 +138,55 @@ function checkDateHasApprovedLeave(
     }
 
     return { hasLeave: false };
+}
+
+/**
+ * Check xem ngày cụ thể có nằm trong đơn công tác được duyệt không
+ */
+function checkDateHasBusinessTrip(
+    date: string,
+    applications: ApprovedLeaveApplication[]
+): { hasBusinessTrip: boolean; tripInfo?: string; destination?: string } {
+    for (const app of applications) {
+        // Chỉ check đơn công tác
+        if (app.type === 'business-trip') {
+            const appData = app.data;
+
+            // Trường hợp công tác nhiều ngày
+            if (appData.startDate && appData.endDate) {
+                const checkDate = dayjs(date);
+                const startDate = dayjs(appData.startDate);
+                const endDate = dayjs(appData.endDate);
+
+                // Sử dụng isSameOrBefore và isSameOrAfter thay vì isBetween
+                if ((checkDate.isSame(startDate, 'day') || checkDate.isAfter(startDate, 'day')) &&
+                    (checkDate.isSame(endDate, 'day') || checkDate.isBefore(endDate, 'day'))) {
+                    console.log(`✅ Found business trip for ${date}:`, {
+                        startDate: appData.startDate,
+                        endDate: appData.endDate,
+                        destination: appData.destination || appData.location
+                    });
+                    return {
+                        hasBusinessTrip: true,
+                        tripInfo: appData.reason || 'Công tác',
+                        destination: appData.destination || appData.location || 'Chưa rõ địa điểm'
+                    };
+                }
+            }
+
+            // Trường hợp công tác 1 ngày
+            if (appData.date && dayjs(appData.date).isSame(dayjs(date), 'day')) {
+                console.log(`✅ Found single-day business trip for ${date}`);
+                return {
+                    hasBusinessTrip: true,
+                    tripInfo: appData.reason || 'Công tác',
+                    destination: appData.destination || appData.location || 'Chưa rõ địa điểm'
+                };
+            }
+        }
+    }
+
+    return { hasBusinessTrip: false };
 }
 
 /**
@@ -285,6 +352,21 @@ export const getMonthlyAttendanceDetail = async (req: Request, res: Response) =>
         );
 
         console.log(`📋 Found ${approvedApplications.length} approved applications`);
+        console.log('📋 Applications detail:', JSON.stringify(approvedApplications, null, 2));
+        
+        // Debug: Check business trip applications specifically
+        const businessTripApps = approvedApplications.filter(app => app.type === 'business-trip');
+        console.log(`🚀 Business trip applications: ${businessTripApps.length}`);
+        businessTripApps.forEach(app => {
+            console.log(`   - Type: ${app.type}, Start: ${app.data.startDate}, End: ${app.data.endDate}, Destination: ${app.data.destination || app.data.location}`);
+        });
+
+        // Debug: Check leave applications specifically
+        const leaveApps = approvedApplications.filter(app => app.type === 'leave' || app.type === 'sick-leave');
+        console.log(`🏖️ Leave applications: ${leaveApps.length}`);
+        leaveApps.forEach(app => {
+            console.log(`   - Type: ${app.type}, Date: ${app.data.date}, Start: ${app.data.startDate}, End: ${app.data.endDate}, Reason: ${app.data.reason}`);
+        });
 
         // 4. Generate daily details
         const daysInMonth = dayjs(startDate).daysInMonth();
@@ -308,6 +390,18 @@ export const getMonthlyAttendanceDetail = async (req: Request, res: Response) =>
             );
 
             const leaveCheck = checkDateHasApprovedLeave(currentDate, approvedApplications);
+            const businessTripCheck = checkDateHasBusinessTrip(currentDate, approvedApplications);
+            
+            // Debug logging for specific dates
+            if (currentDate === '2025-10-08' || currentDate === '2025-10-09') {
+                console.log(`🔍 DEBUG ${currentDate}:`, {
+                    hasBusinessTrip: businessTripCheck.hasBusinessTrip,
+                    tripInfo: businessTripCheck.tripInfo,
+                    destination: businessTripCheck.destination,
+                    totalApps: approvedApplications.length,
+                    businessTripApps: approvedApplications.filter(a => a.type === 'business-trip').length
+                });
+            }
 
             let dailyDetail: DailyAttendanceDetail;
 
@@ -325,8 +419,40 @@ export const getMonthlyAttendanceDetail = async (req: Request, res: Response) =>
                     unauthorizedAbsencePenalty: 0,
                     isOnTime: false
                 };
+            } else if (businessTripCheck.hasBusinessTrip) {
+                // ƯU TIÊN 1: Có đơn công tác đã duyệt - TÍNH CÔNG như đi làm bình thường
+                dailyDetail = {
+                    date: currentDate,
+                    dayOfWeek,
+                    dayName,
+                    isWorkingDay: true,
+                    hasAttendance: false,
+                    hasApprovedLeave: false,
+                    status: 'business_trip',
+                    statusText: `Công tác - ${businessTripCheck.destination || ''}`,
+                    unauthorizedAbsencePenalty: 0,
+                    isOnTime: true, // Công tác được tính là đúng giờ
+                    businessTripInfo: businessTripCheck.tripInfo || '',
+                    businessTripDestination: businessTripCheck.destination || ''
+                };
+            } else if (leaveCheck.hasLeave) {
+                // ƯU TIÊN 2: Nghỉ phép (có đơn nghỉ đã duyệt)
+                dailyDetail = {
+                    date: currentDate,
+                    dayOfWeek,
+                    dayName,
+                    isWorkingDay: true,
+                    hasAttendance: false,
+                    hasApprovedLeave: true,
+                    leaveType: leaveCheck.leaveType || 'leave',
+                    leaveInfo: leaveCheck.leaveInfo || 'Nghỉ phép',
+                    status: 'approved_leave',
+                    statusText: 'Nghỉ phép',
+                    unauthorizedAbsencePenalty: 0,
+                    isOnTime: false
+                };
             } else if (attendance) {
-                // Có chấm công - kiểm tra đúng giờ hay không
+                // ƯU TIÊN 3: Có chấm công - kiểm tra đúng giờ hay không
                 
                 // 🛠️ SỬA LỖI: Ép kiểu sang số để đảm bảo tính toán chính xác
                 const lateMinutes = Number(attendance.lateMinutes) || 0; 
@@ -352,23 +478,8 @@ export const getMonthlyAttendanceDetail = async (req: Request, res: Response) =>
                     lateMinutes,
                     earlyLeaveMinutes
                 };
-            } else if (leaveCheck.hasLeave) {
-                // Nghỉ phép (có đơn)
-                dailyDetail = {
-                    date: currentDate,
-                    dayOfWeek,
-                    dayName,
-                    isWorkingDay: true,
-                    hasAttendance: false,
-                    hasApprovedLeave: true,
-                    leaveType: leaveCheck.leaveType || 'leave',
-                    status: 'approved_leave',
-                    statusText: 'Nghỉ phép',
-                    unauthorizedAbsencePenalty: 0,
-                    isOnTime: false
-                };
             } else {
-                // Nghỉ không phép - tính phạt nếu <= today
+                // ƯU TIÊN 4: Nghỉ không phép - tính phạt nếu <= today
                 const penalty = isPastOrToday ? (monthlySalary * penaltyRate) / 100 : 0;
 
                 dailyDetail = {

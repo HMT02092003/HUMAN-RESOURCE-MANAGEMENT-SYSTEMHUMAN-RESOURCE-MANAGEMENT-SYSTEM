@@ -39,9 +39,13 @@ const ForgotCheckInForm: React.FC<ForgotCheckInFormProps> = ({ onCancel }) => {
     try {
       setLoading(true);
       const response = await ApplicationService.getApplicationById(id);
-      const data = response.data.data;
-
-      console.log('📥 Loaded application data:', data);
+      console.log('📥 Full response:', response);
+      
+      const applicationData = response.data;
+      console.log('📥 Application data:', applicationData);
+      
+      const data = applicationData.data; // Dữ liệu JSONB trong field 'data'
+      console.log('📥 Form data from JSONB:', data);
 
       // Parse forgotDate với nhiều format
       let parsedDate = null;

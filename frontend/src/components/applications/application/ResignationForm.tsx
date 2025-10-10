@@ -296,7 +296,6 @@ const ResignationForm: React.FC<ResignationFormProps> = ({ onCancel }) => {
           name="handoverNotes"
           rules={[
             { required: true, message: 'Vui lòng mô tả nội dung bàn giao!' },
-            { min: 50, message: 'Nội dung bàn giao phải có ít nhất 50 ký tự!' },
           ]}
         >
           <TextArea

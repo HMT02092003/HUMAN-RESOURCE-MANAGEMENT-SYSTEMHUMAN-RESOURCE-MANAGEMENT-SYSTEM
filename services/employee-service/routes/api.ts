@@ -41,7 +41,7 @@ const routeGroups = [
     routes: [
       { method: 'get', path: '/getAllChevrons', handler: getAllChevrons, auth: true },
       { method: 'post', path: '/createChevrons', handler: createChevron, auth: true },
-      { method: 'post', path: '/getChevronDetail', handler: getChevronDetail, auth: true },
+      { method: 'post', path: '/getChevronDetail', handler: getChevronDetail, auth: false }, // Internal call
       { method: 'put', path: '/updateChevron', handler: updateChevron, auth: true },
       { method: 'delete', path: '/deleteChevron', handler: deleteChevron, auth: true },
       { method: 'delete', path: '/deleteMultipleChevrons', handler: deleteMultipleChevrons, auth: true },
@@ -54,7 +54,7 @@ const routeGroups = [
     routes: [
       { method: 'get', path: '/departments', handler: getAllDepartments, auth: true },
       { method: 'post', path: '/createDepartments', handler: createDepartment, auth: true },
-      { method: 'get', path: '/departments/:id', handler: getDepartmentDetail, auth: true },
+      { method: 'get', path: '/departments/:id', handler: getDepartmentDetail, auth: false }, // Internal call
       { method: 'put', path: '/departments', handler: updateDepartment, auth: true },
       { method: 'delete', path: '/deleteMultipleDepartments', handler: deleteMultipleDepartments, auth: true },
       { method: 'delete', path: '/deleteDepartment', handler: deleteDepartment, auth: true },

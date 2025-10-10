@@ -200,12 +200,19 @@ export class ApplicationController {
    */
   static async getMyApplications(req, res) {
     try {
+      console.log('🔍 getMyApplications called');
+      console.log('🔍 req.user:', req.user);
+      console.log('🔍 req.query:', req.query);
+      
       const { page = 1, pageSize = 10, status, userId: queryUserId, year, month } = req.query;
       
       // Ưu tiên userId từ query (cho inter-service call), fallback về req.user.id
       const userId = queryUserId ? parseInt(queryUserId) : req.user?.id;
 
+      console.log('🔍 userId:', userId);
+
       if (!userId) {
+        console.log('❌ No userId found');
         return res.status(401).json({
           success: false,
           message: 'Người dùng không được xác thực'
@@ -352,27 +359,36 @@ export class ApplicationController {
         const targetMonth = parseInt(month);
         
         filteredApplications = applications.filter(app => {
-          // Đối với đơn leave, kiểm tra startDate và endDate
-          if (app.type === 'leave' && app.data) {
+          // Đối với đơn leave và business-trip, kiểm tra startDate và endDate
+          if ((app.type === 'leave' || app.type === 'business-trip') && app.data) {
             const startDate = new Date(app.data.startDate);
             const endDate = new Date(app.data.endDate);
             
-            // Kiểm tra xem khoảng thời gian nghỉ có giao với tháng đang xem không
+            // Kiểm tra xem khoảng thời gian có giao với tháng đang xem không
             const startYear = startDate.getFullYear();
             const startMonth = startDate.getMonth() + 1;
             const endYear = endDate.getFullYear();
             const endMonth = endDate.getMonth() + 1;
             
-            // Đơn nghỉ thuộc tháng nếu:
+            // Đơn thuộc tháng nếu:
             // - startDate trong tháng, HOẶC
             // - endDate trong tháng, HOẶC  
-            // - startDate trước tháng và endDate sau tháng (nghỉ dài hạn)
+            // - startDate trước tháng và endDate sau tháng (dài hạn)
             const isInMonth = (
               (startYear === targetYear && startMonth === targetMonth) ||
               (endYear === targetYear && endMonth === targetMonth) ||
               (startDate <= new Date(targetYear, targetMonth - 1, 1) && 
                endDate >= new Date(targetYear, targetMonth, 0))
             );
+            
+            if (isInMonth) {
+              console.log(`✅ ${app.type} application in month ${targetYear}-${targetMonth}:`, {
+                id: app.id,
+                startDate: app.data.startDate,
+                endDate: app.data.endDate,
+                destination: app.data.destination || app.data.location
+              });
+            }
             
             return isInMonth;
           }
@@ -384,6 +400,13 @@ export class ApplicationController {
         });
         
         console.log(`📅 Filtered to ${filteredApplications.length} applications for ${year}-${month}`);
+        console.log(`🚀 Business trips: ${filteredApplications.filter(a => a.type === 'business-trip').length}`);
+        console.log(`📄 Application types breakdown:`, {
+          leave: filteredApplications.filter(a => a.type === 'leave').length,
+          'business-trip': filteredApplications.filter(a => a.type === 'business-trip').length,
+          overtime: filteredApplications.filter(a => a.type === 'overtime').length,
+          'forgot-check': filteredApplications.filter(a => a.type === 'forgot-check').length,
+        });
       }
 
       res.json({
@@ -529,7 +552,16 @@ export class ApplicationController {
   static async getById(req, res) {
     try {
       const { id } = req.params;
+      console.log(`📋 getById called for application ID: ${id}`);
+      
       const application = await ApplicationModel.getApplicationById(parseInt(id));
+      console.log(`✅ Found application:`, {
+        id: application.id,
+        type: application.type,
+        status: application.status,
+        userId: application.userId,
+        data: application.data
+      });
 
       // Lấy thông tin user từ Auth Service
       const usersInfo = await AuthService.getUsersByIds([application.userId]);
@@ -565,7 +597,7 @@ export class ApplicationController {
         };
       }
 
-      res.json({
+      const responseData = {
         success: true,
         data: {
           ...application,
@@ -573,8 +605,12 @@ export class ApplicationController {
           approvedByInfo: application.approvedByInfo
         },
         timestamp: dayjs().format()
-      });
+      };
+      
+      console.log(`📤 Sending response:`, responseData);
+      res.json(responseData);
     } catch (error) {
+      console.error(`❌ Error in getById:`, error);
       res.status(error.message.includes('Không tìm thấy') ? 404 : 500).json({
         success: false,
         message: error.message || 'Có lỗi xảy ra khi lấy chi tiết đơn từ',
@@ -693,6 +729,17 @@ export class ApplicationController {
             });
           }
 
+          // Lấy token từ request để truyền sang attendance-service
+          const token = req.cookies.token ||
+            (req.headers.authorization && req.headers.authorization.split(' ')[1]);
+
+          if (!token) {
+            return res.status(401).json({
+              success: false,
+              message: 'Không tìm thấy token để xác thực'
+            });
+          }
+
           // Gọi sang attendance-service QUA API GATEWAY để cập nhật bảng chấm công
           console.log(`🌐 Calling attendance service via API Gateway: ${API_GATEWAY_URL}/api/attendance/update-forgot-check`);
 
@@ -706,7 +753,9 @@ export class ApplicationController {
             },
             {
               headers: {
-                'Content-Type': 'application/json'
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'Cookie': `token=${token}`
               },
               timeout: 10000 // 10 seconds timeout
             }
@@ -738,6 +787,60 @@ export class ApplicationController {
             timestamp: dayjs().format()
           });
         }
+      }
+
+      // Đơn tăng ca: chỉ approve đơn, việc tính lương sẽ xử lý khi tính lương tháng
+      if (applicationBeforeApprove.type === 'overtime') {
+        console.log('📝 Approving overtime application (calculation will be done during salary processing)...');
+        console.log('Application data:', applicationBeforeApprove.data);
+
+        // Validate dữ liệu cơ bản
+        const { overtimeDate, startTime, overtimeHours } = applicationBeforeApprove.data;
+        if (!overtimeDate || !startTime || !overtimeHours) {
+          return res.status(400).json({
+            success: false,
+            message: 'Dữ liệu đơn tăng ca không đầy đủ (thiếu overtimeDate, startTime, hoặc overtimeHours)'
+          });
+        }
+
+        // Chỉ approve đơn, không xử lý tăng ca ngay
+        const application = await ApplicationModel.approveApplication(
+          parseInt(id), approvedBy, note
+        );
+
+        return res.json({
+          success: true,
+          message: 'Duyệt đơn tăng ca thành công. Lương tăng ca sẽ được tính khi xử lý lương tháng.',
+          data: application,
+          timestamp: dayjs().format()
+        });
+      }
+
+      // Đơn thôi việc: chỉ approve đơn, việc cập nhật trạng thái user sẽ xử lý cuối tháng
+      if (applicationBeforeApprove.type === 'resignation') {
+        console.log('📝 Approving resignation application (user status will be updated during month-end processing)...');
+        console.log('Application data:', applicationBeforeApprove.data);
+
+        // Validate dữ liệu cơ bản
+        const { resignationDate, resignationReason } = applicationBeforeApprove.data;
+        if (!resignationDate || !resignationReason) {
+          return res.status(400).json({
+            success: false,
+            message: 'Dữ liệu đơn thôi việc không đầy đủ (thiếu resignationDate hoặc resignationReason)'
+          });
+        }
+
+        // Chỉ approve đơn, không cập nhật trạng thái user ngay
+        const application = await ApplicationModel.approveApplication(
+          parseInt(id), approvedBy, note
+        );
+
+        return res.json({
+          success: true,
+          message: 'Duyệt đơn thôi việc thành công. Trạng thái người dùng sẽ được cập nhật khi xử lý cuối tháng.',
+          data: application,
+          timestamp: dayjs().format()
+        });
       }
 
       // Với các loại đơn khác, approve bình thường

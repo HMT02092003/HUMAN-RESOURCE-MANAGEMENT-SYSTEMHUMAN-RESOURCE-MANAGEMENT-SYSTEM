@@ -191,7 +191,7 @@ const BusinessTripForm: React.FC<BusinessTripFormProps> = ({ onCancel }) => {
             >
               <RangePicker
                 placeholder={['Ngày bắt đầu', 'Ngày kết thúc']}
-                disabledDate={(current) => current && current < dayjs().startOf('day')}
+                disabledDate={(current) => current && current < dayjs().startOf('day').subtract(7, 'day')}
                 format="DD/MM/YYYY"
                 style={{ width: '100%' }}
               />

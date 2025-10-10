@@ -43,11 +43,35 @@ const TypeOfSetting = {
   check: "Check in/out",
 };
 
+// Application types mapping
+const ApplicationTypes = {
+  LEAVE: 'leave',
+  BUSINESS_TRIP: 'business-trip',
+  OVERTIME: 'overtime',
+  FORGOT_CHECK: 'forgot-check'
+} as const;
+
+// Attendance status types
+const AttendanceStatus = {
+  WORKING: 'working',
+  WEEKEND: 'weekend',
+  ABSENT: 'absent',
+  APPROVED_LEAVE: 'approved_leave',
+  BUSINESS_TRIP: 'business_trip'
+} as const;
+
+// Leave type configuration with salary info
+const LeaveTypeConfig = {
+  leave: { label: 'Nghỉ phép (có lương)', hasSalary: true, icon: '📝' },
+  regular: { label: 'Nghỉ không phép (không lương)', hasSalary: false, icon: '📌' },
+} as const;
+
 const TypeOfApplication = {
   1: "Đi muộn/về sớm",
   2: "Xin nghỉ phép",
   3: "Làm thêm giờ",
   4: "Check in/out",
+  5: "Công tác", // Business trip
 };
 
 const TypeOfStatusApplication = {
@@ -205,4 +229,7 @@ export default {
   roles,
   chevrons,
   departments,
+  ApplicationTypes,
+  AttendanceStatus,
+  LeaveTypeConfig,
 };

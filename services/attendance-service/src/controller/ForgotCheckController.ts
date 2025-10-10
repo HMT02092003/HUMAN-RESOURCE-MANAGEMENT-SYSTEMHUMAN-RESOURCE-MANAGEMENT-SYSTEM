@@ -67,7 +67,7 @@ export const updateForgotCheck = async (req: Request, res: Response) => {
     let attendanceRecord;
 
     if (existingRecord) {
-      // ========== XỬ LÝ LOGIC PHỨC TẠP ==========
+      // ========== CẬP NHẬT CHÍNH XÁC THEO forgotType ==========
       console.log(`📝 Found existing attendance record #${existingRecord.id}`);
       console.log(`   Current checkInTime: ${existingRecord.checkInTime}`);
       console.log(`   Current checkOutTime: ${existingRecord.checkOutTime}`);
@@ -75,29 +75,21 @@ export const updateForgotCheck = async (req: Request, res: Response) => {
       const updateData: any = {};
       
       if (forgotType === 'check-in') {
+        // CHỈ cập nhật checkInTime, GIỮ NGUYÊN checkOutTime
+        console.log(`✅ Updating check-in time to: ${forgotDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
+        updateData.checkInTime = forgotDateTime.format('YYYY-MM-DD HH:mm:ss');
+        
         if (existingRecord.checkInTime) {
-          // Đã có check-in -> Giờ đơn thành check-in mới, giờ cũ thành check-out
-          console.log(`⚠️ Already has check-in time. Converting old check-in to check-out`);
-          updateData.checkInTime = forgotDateTime.format('YYYY-MM-DD HH:mm:ss');
-          // Convert old check-in time to string format
-          updateData.checkOutTime = dayjs(existingRecord.checkInTime).format('YYYY-MM-DD HH:mm:ss');
-        } else {
-          // Chưa có check-in -> Cập nhật bình thường
-          console.log(`✅ Setting new check-in time`);
-          updateData.checkInTime = forgotDateTime.format('YYYY-MM-DD HH:mm:ss');
+          console.log(`⚠️ Overwriting existing check-in time: ${existingRecord.checkInTime}`);
         }
       } else {
         // forgotType === 'check-out'
+        // CHỈ cập nhật checkOutTime, GIỮ NGUYÊN checkInTime
+        console.log(`✅ Updating check-out time to: ${forgotDateTime.format('YYYY-MM-DD HH:mm:ss')}`);
+        updateData.checkOutTime = forgotDateTime.format('YYYY-MM-DD HH:mm:ss');
+        
         if (existingRecord.checkOutTime) {
-          // Đã có check-out -> Giờ đơn thành check-out mới, giờ cũ thành check-in
-          console.log(`⚠️ Already has check-out time. Converting old check-out to check-in`);
-          updateData.checkOutTime = forgotDateTime.format('YYYY-MM-DD HH:mm:ss');
-          // Convert old check-out time to string format
-          updateData.checkInTime = dayjs(existingRecord.checkOutTime).format('YYYY-MM-DD HH:mm:ss');
-        } else {
-          // Chưa có check-out -> Cập nhật bình thường
-          console.log(`✅ Setting new check-out time`);
-          updateData.checkOutTime = forgotDateTime.format('YYYY-MM-DD HH:mm:ss');
+          console.log(`⚠️ Overwriting existing check-out time: ${existingRecord.checkOutTime}`);
         }
       }
 
@@ -135,11 +127,17 @@ export const updateForgotCheck = async (req: Request, res: Response) => {
       userId: userId
     });
     
+    // Lấy token từ request để tính lương chính xác
+    const token = req.cookies?.['token'] || 
+                  req.headers.authorization?.replace('Bearer ', '') ||
+                  req.headers.authorization?.split(' ')[1];
+    
     const calculatedData = await AttendanceCalculationService.calculateAttendance(
       attendanceRecord.checkInTime,
       attendanceRecord.checkOutTime,
       forgotDate,  // date parameter
-      userId       // userId parameter
+      userId,      // userId parameter
+      token        // token để lấy thông tin lương
     );
 
     console.log(`📊 Calculated data:`, calculatedData);

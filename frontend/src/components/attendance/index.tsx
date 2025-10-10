@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, Row, Col, Typography, Tag, Divider, Button, Space, Calendar, ConfigProvider, Select, message, Grid } from 'antd';
-import viVN from 'antd/locale/vi_VN';
-import type { Locale } from 'antd/es/locale';
+import { Card, Row, Col, Typography, Tag, Divider, Button, Space, ConfigProvider, Select, message, Grid, Modal } from 'antd';
+import Calendar from 'react-calendar';
+import 'react-calendar/dist/Calendar.css';
+import './react-calendar-custom.css';
 import dayjs, { Dayjs } from 'dayjs';
 import localeData from 'dayjs/plugin/localeData';
 import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
@@ -26,11 +27,16 @@ import {
   MinusCircleOutlined,
   FieldTimeOutlined,
   TrophyOutlined,
-  WarningOutlined
+  WarningOutlined,
+  EnvironmentOutlined,
+  FileTextOutlined
 } from '@ant-design/icons';
 import { attendanceService, AttendanceData, MonthlyStats, MonthlyAttendanceDetailResponse, DailyAttendanceDetail } from '@/service/attendanceService';
+import attendanceApprovalService from '@/service/attendanceApprovalService';
 import Cookies from 'js-cookie';
 import { getDecodedToken } from '@/utils/decode-token';
+import { useSearchParams } from 'next/navigation';
+import constants from '@/config/constant';
 import './penalty-styles.css';
 
 // Configure dayjs plugins once
@@ -40,27 +46,19 @@ dayjs.extend(isBetween);
 dayjs.extend(weekday);
 dayjs.extend(customParseFormat);
 dayjs.extend(updateLocale);
-dayjs.locale('vi');
 
-// Custom locale để lịch bắt đầu từ T2
-const customViVN: Locale = {
-  ...viVN,
-  Calendar: {
-    ...viVN.Calendar,
-    lang: {
-      ...viVN.Calendar?.lang,
-      // Đặt T2 là ngày đầu tuần (index 1)
-      week: {
-        dow: 1, // Monday is the first day of the week
-        doy: 4, // The week that contains Jan 4th is the first week of the year
-      },
-    },
-  },
-};
+// Set Vietnamese locale and configure week to start on Monday
+dayjs.locale('vi');
+dayjs.updateLocale('vi', {
+  weekStart: 1, // Monday is the first day of the week (0 = Sunday, 1 = Monday)
+});
 
 const AttendanceSimplePage = () => {
   const screens = Grid.useBreakpoint();
   const isMobile = !screens.lg;
+  const searchParams = useSearchParams();
+  const userIdFromUrl = searchParams.get('userId'); // Lấy userId từ URL params
+  
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarValue, setCalendarValue] = useState<Dayjs>(dayjs());
   const [attendanceData, setAttendanceData] = useState<AttendanceData[]>([]);
@@ -79,21 +77,81 @@ const AttendanceSimplePage = () => {
     totalPenalty: 0
   });
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  
+  // Kiểm tra xem có phải quản lý đang xem chấm công của nhân viên không
+  const isManagerViewing = !!userIdFromUrl; // Có userId trong URL = quản lý đang xem
+  
+  // Handler cho nút duyệt bảng chấm công
+  const handleApproveAttendance = async () => {
+    if (!userIdFromUrl) return;
+    
+    const currentYear = currentDate.getFullYear();
+    const currentMonth = currentDate.getMonth() + 1;
+    const monthStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+    
+    Modal.confirm({
+      title: 'Xác nhận duyệt bảng chấm công',
+      content: `Bạn có chắc chắn muốn duyệt bảng chấm công của nhân viên này cho tháng ${currentMonth}/${currentYear}?`,
+      okText: 'Duyệt',
+      cancelText: 'Hủy',
+      okButtonProps: { 
+        style: { background: '#52c41a', borderColor: '#52c41a' } 
+      },
+      onOk: async () => {
+        try {
+          // Lấy thông tin user để biết departmentId
+          const token = Cookies.get('token');
+          const decoded = token ? getDecodedToken(token) : null;
+          
+          if (!decoded) {
+            message.error('Không thể xác thực người dùng');
+            return;
+          }
+          
+          // TODO: Cần lấy departmentId của user được duyệt
+          // Tạm thời dùng departmentId từ monthlyDetail nếu có
+          const departmentId = 1; // Placeholder - cần lấy từ API hoặc state
+          
+          await attendanceApprovalService.approveAttendance({
+            userId: parseInt(userIdFromUrl),
+            month: monthStr,
+            departmentId: departmentId,
+            notes: `Duyệt bởi ${decoded.username || 'Quản lý'}`
+          });
+          
+          message.success('Duyệt bảng chấm công thành công!');
+        } catch (error: any) {
+          message.error(error.message || 'Có lỗi xảy ra khi duyệt bảng chấm công');
+          console.error('Error approving attendance:', error);
+        }
+      }
+    });
+  };
 
   // Lấy dữ liệu chấm công từ API
   useEffect(() => {
     const fetchAttendanceData = async () => {
       try {
-        // Lấy userId từ token
-        const token = Cookies.get('token');
-        const decoded = token ? getDecodedToken(token) : null;
+        let userId: number;
         
-        if (!decoded || !decoded.sub) {
-          console.error('No valid token found');
-          return;
+        // Nếu có userId trong URL, dùng nó. Nếu không, lấy từ token
+        if (userIdFromUrl) {
+          userId = parseInt(userIdFromUrl);
+          console.log('Using userId from URL:', userId);
+        } else {
+          // Lấy userId từ token
+          const token = Cookies.get('token');
+          const decoded = token ? getDecodedToken(token) : null;
+          
+          if (!decoded || !decoded.sub) {
+            console.error('No valid token found');
+            return;
+          }
+          
+          userId = parseInt(decoded.sub); // decoded.sub chứa user ID
+          console.log('Using userId from token:', userId);
         }
         
-        const userId = parseInt(decoded.sub); // decoded.sub chứa user ID
         const currentYear = currentDate.getFullYear();
         const currentMonth = currentDate.getMonth() + 1;
         
@@ -105,6 +163,15 @@ const AttendanceSimplePage = () => {
           attendanceService.getUserMonthlyStats(userId, currentYear, currentMonth),
           attendanceService.getUserMonthlyAttendanceDetail(userId, currentYear, currentMonth)
         ]);
+        
+        console.log('📊 Attendance fetched for userId:', userId);
+        console.log('📅 Monthly detail data:', monthlyDetailData);
+        
+        // Debug business trip days
+        if (monthlyDetailData?.dailyDetails) {
+          const businessTripDays = monthlyDetailData.dailyDetails.filter((d: any) => d.status === 'business_trip');
+          console.log(`🚀 Found ${businessTripDays.length} business trip days:`, businessTripDays);
+        }
         
         setAttendanceData(attendanceData);
         setMonthlyStats(monthlyStatsData);
@@ -132,7 +199,7 @@ const AttendanceSimplePage = () => {
     };
 
     fetchAttendanceData();
-  }, [currentDate]);
+  }, [currentDate, userIdFromUrl]); // Thêm userIdFromUrl vào dependency array
 
   // Tính tổng số ngày bị phạt
   const getPenaltyDays = useMemo(() => {
@@ -174,6 +241,11 @@ const AttendanceSimplePage = () => {
     // Nghỉ không phép (đỏ nhạt) - KHÔNG hiển thị đỏ nếu có chấm công đúng giờ hoặc có đơn
     if (dailyDetail.status === 'absent' && dailyDetail.statusText === 'Nghỉ') {
       return { bgColor: '#fff1f0', borderColor: '#ffccc7' };
+    }
+    
+    // Công tác (tím nhạt)
+    if (dailyDetail.status === 'business_trip') {
+      return { bgColor: '#f9f0ff', borderColor: '#d3adf7' };
     }
     
     // Nghỉ phép (vàng nhạt)
@@ -235,6 +307,24 @@ const AttendanceSimplePage = () => {
 
   return (
     <div style={{ padding: isMobile ? 16 : 24 }}>
+      {/* Nút duyệt bảng chấm công - Chỉ hiển thị khi quản lý xem */}
+      {isManagerViewing && (
+        <div style={{ marginBottom: 16, textAlign: 'right' }}>
+          <Button 
+            type="primary" 
+            size="large"
+            icon={<CheckCircleOutlined />}
+            onClick={handleApproveAttendance}
+            style={{ 
+              background: '#52c41a',
+              borderColor: '#52c41a'
+            }}
+          >
+            Duyệt bảng chấm công
+          </Button>
+        </div>
+      )}
+      
       <Row gutter={[16, 16]}>
         {/* Calendar Section - 70% */}
         <Col xs={24} lg={17}>
@@ -276,7 +366,6 @@ const AttendanceSimplePage = () => {
                     <Select
                       size="small"
                       value={calendarValue.month()}
-                      style={{ width: '100%' }}
                       onChange={(m) => {
                         const v = calendarValue.month(m);
                         setCalendarValue(v);
@@ -289,75 +378,121 @@ const AttendanceSimplePage = () => {
               </Space>
             }
           >
-            <ConfigProvider locale={customViVN}>
-              <Calendar
-                className="attendance-calendar-improved"
-                value={calendarValue}
-                onChange={(v) => setCalendarValue(v as Dayjs)}
-                onPanelChange={(v) => {
-                  setCalendarValue(v as Dayjs);
-                  setCurrentDate(v.toDate());
-                }}
-                fullscreen={!isMobile}
-                headerRender={() => null}
-                cellRender={(value, info) => {
-                  if (info.type !== 'date') return info.originNode;
-                  
-                  const dateStr = value.format('YYYY-MM-DD');
-                  const attendance = attendanceMap.get(dateStr);
-                  const dailyDetail = dailyDetailMap.get(dateStr);
-                  const isCurrentMonth = value.month() === calendarValue.month();
-                  const hasTimePenalty = hasPenalty(attendance);
-                  
-                  // Xác định background color dựa trên trạng thái (tối ưu code)
-                  const { bgColor, borderColor } = getCellStyle(dailyDetail, isCurrentMonth);
-                  
-                  return (
-                    <div
-                      className={`calendar-cell ${!isCurrentMonth ? 'other-month' : ''}`}
-                      onClick={() => setSelectedDate(value.toDate())}
-                    >
-                      {attendance && (
-                        <div className="attendance-content">
-                          <div className="time-info" style={{ color: hasTimePenalty ? '#ff4d4f' : '#666' , fontSize: isMobile ? 10 : 14}}>
-                            <div className="check">{attendance.checkIn || '--:--'} - {attendance.checkOut || '--:--'}</div>
+            {/* React Calendar với tuần bắt đầu từ Thứ 2 - Chuẩn ISO 8601 */}
+            <Calendar
+              value={calendarValue.toDate()}
+              onChange={(date) => {
+                if (date) {
+                  const dayjsDate = dayjs(date as Date);
+                  setCalendarValue(dayjsDate);
+                  setCurrentDate(date as Date);
+                }
+              }}
+              locale="vi-VN"
+              calendarType="iso8601"
+              showNeighboringMonth={true}
+              formatShortWeekday={(locale, date) => {
+                // ISO 8601: Monday=1, Tuesday=2, ..., Sunday=7
+                // getDay(): Sunday=0, Monday=1, ..., Saturday=6
+                const dayIndex = date.getDay();
+                const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+                return days[dayIndex];
+              }}
+              tileClassName={({ date, view }) => {
+                if (view !== 'month') return '';
+                
+                const dateStr = dayjs(date).format('YYYY-MM-DD');
+                const attendance = attendanceMap.get(dateStr);
+                const dailyDetail = dailyDetailMap.get(dateStr);
+                const isCurrentMonth = dayjs(date).month() === calendarValue.month();
+                
+                if (!isCurrentMonth) return 'other-month';
+                
+                // Kiểm tra ngày có phạt chấm công (đi muộn hoặc về sớm)
+                const hasPenaltyTime = attendance && (attendance.lateMinutes > 0 || attendance.earlyDepartureMinutes > 0);
+                
+                // Ngày bị phạt chấm công -> background đỏ
+                if (hasPenaltyTime) return 'status-penalty';
+                
+                // Ngày chấm công đúng giờ -> background xanh
+                if (dailyDetail?.status === 'working' && dailyDetail.isOnTime) return 'status-working';
+                
+                // Nghỉ phép -> background vàng
+                if (dailyDetail?.status === 'approved_leave') return 'status-leave';
+                
+                // Công tác -> background tím
+                if (dailyDetail?.status === 'business_trip') return 'status-business-trip';
+                
+                // Nghỉ không phép -> KHÔNG có background (chỉ chữ đỏ)
+                // if (dailyDetail?.status === 'absent' && dailyDetail.statusText === 'Nghỉ') return '';
+                
+                // Weekend -> background xám
+                if (dailyDetail?.status === 'weekend') return 'status-weekend';
+                
+                return '';
+              }}
+              tileContent={({ date, view }) => {
+                if (view !== 'month') return null;
+                
+                const dateStr = dayjs(date).format('YYYY-MM-DD');
+                const attendance = attendanceMap.get(dateStr);
+                const dailyDetail = dailyDetailMap.get(dateStr);
+                const isCurrentMonth = dayjs(date).month() === calendarValue.month();
+                const hasTimePenalty = hasPenalty(attendance);
+                
+                if (!isCurrentMonth) return null;
+                
+                return (
+                  <div className="calendar-cell-content" onClick={() => setSelectedDate(date)}>
+                    {/* Ưu tiên: Công tác > Nghỉ phép > Nghỉ không phép > Chấm công */}
+                    {dailyDetail && dailyDetail.status === 'business_trip' ? (
+                      <div style={{ 
+                        textAlign: 'center', 
+                        padding: '2px', 
+                        fontSize: isMobile ? 9 : 11,
+                        color: '#722ed1',
+                        fontWeight: 500
+                      }}>
+                        <CalendarOutlined style={{ marginRight: 2, fontSize: isMobile ? 10 : 12 }} />
+                        Công tác
+                      </div>
+                    ) : dailyDetail && dailyDetail.status === 'approved_leave' ? (
+                      <div style={{ 
+                        textAlign: 'center', 
+                        padding: '2px', 
+                        fontSize: isMobile ? 9 : 11,
+                        color: '#faad14',
+                        fontWeight: 500
+                      }}>
+                        <CheckCircleOutlined style={{ marginRight: 2, fontSize: isMobile ? 10 : 12 }} />
+                        Nghỉ phép
+                      </div>
+                    ) : dailyDetail && dailyDetail.status === 'absent' && dailyDetail.statusText === 'Nghỉ' ? (
+                      <div style={{ 
+                        textAlign: 'center', 
+                        padding: '2px', 
+                        fontSize: isMobile ? 9 : 11,
+                        color: '#ff4d4f',
+                        fontWeight: 500
+                      }}>
+                        Nghỉ
+                        {dailyDetail.unauthorizedAbsencePenalty > 0 && (
+                          <div style={{ fontSize: isMobile ? 8 : 10 }}>
+                            -{dailyDetail.unauthorizedAbsencePenalty.toLocaleString('vi-VN')}đ
                           </div>
+                        )}
+                      </div>
+                    ) : attendance ? (
+                      <div className="calendar-cell-info">
+                        <div style={{ color: hasTimePenalty ? '#ff4d4f' : '#666', fontSize: isMobile ? 9 : 11 }}>
+                          {attendance.checkIn || '--:--'} - {attendance.checkOut || '--:--'}
                         </div>
-                      )}
-                      {/* Hiển thị "Nghỉ" nếu status = absent và statusText = "Nghỉ" (bao gồm cả khi không có lương) */}
-                      {dailyDetail && dailyDetail.status === 'absent' && dailyDetail.statusText === 'Nghỉ' && (
-                        <div style={{ 
-                          textAlign: 'center', 
-                          padding: '4px', 
-                          fontSize: isMobile ? 10 : 12,
-                          color: '#ff4d4f',
-                          fontWeight: 500
-                        }}>
-                          Nghỉ
-                          {dailyDetail.unauthorizedAbsencePenalty > 0 && (
-                            <div style={{ fontSize: isMobile ? 9 : 11 }}>
-                              -{dailyDetail.unauthorizedAbsencePenalty.toLocaleString('vi-VN')}đ
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {dailyDetail && dailyDetail.status === 'approved_leave' && (
-                        <div style={{ 
-                          textAlign: 'center', 
-                          padding: '4px', 
-                          fontSize: isMobile ? 10 : 12,
-                          color: '#faad14',
-                          fontWeight: 500
-                        }}>
-                          <CheckCircleOutlined style={{ marginRight: 4 }} />
-                          Nghỉ phép
-                        </div>
-                      )}
-                    </div>
-                  );
-                }}
-              />
-            </ConfigProvider>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              }}
+            />
             
             {/* Legend cho các màu sắc */}
             <div style={{ 
@@ -381,7 +516,20 @@ const AttendanceSimplePage = () => {
                       borderRadius: 4,
                       marginRight: 8 
                     }} />
-                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Đã chấm công</Text>
+                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Chấm công đúng giờ</Text>
+                  </div>
+                </Col>
+                <Col xs={12} sm={6}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <div style={{ 
+                      width: 16, 
+                      height: 16, 
+                      background: '#fff1f0', 
+                      border: '1px solid #ffccc7', 
+                      borderRadius: 4,
+                      marginRight: 8 
+                    }} />
+                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Bị phạt (muộn/sớm)</Text>
                   </div>
                 </Col>
                 <Col xs={12} sm={6}>
@@ -402,12 +550,36 @@ const AttendanceSimplePage = () => {
                     <div style={{ 
                       width: 16, 
                       height: 16, 
-                      background: '#fff1f0', 
-                      border: '1px solid #ffccc7', 
+                      background: '#f9f0ff', 
+                      border: '1px solid #d3adf7', 
                       borderRadius: 4,
                       marginRight: 8 
                     }} />
-                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Nghỉ</Text>
+                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Công tác</Text>
+                  </div>
+                </Col>
+                <Col xs={12} sm={6}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <div style={{ 
+                      width: 16, 
+                      height: 16, 
+                      background: 'white', 
+                      border: '1px solid #f0f0f0', 
+                      borderRadius: 4,
+                      marginRight: 8,
+                      position: 'relative'
+                    }}>
+                      <Text style={{ 
+                        position: 'absolute', 
+                        top: '50%', 
+                        left: '50%', 
+                        transform: 'translate(-50%, -50%)',
+                        color: '#ff4d4f',
+                        fontSize: 10,
+                        fontWeight: 'bold'
+                      }}>X</Text>
+                    </div>
+                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Nghỉ không phép</Text>
                   </div>
                 </Col>
                 <Col xs={12} sm={6}>
@@ -716,6 +888,183 @@ const AttendanceSimplePage = () => {
               (() => {
                 const dateStr = selectedDate.toISOString().split('T')[0];
                 const selectedDateData = attendanceData.find(item => item.date === dateStr);
+                const dailyDetail = dailyDetailMap.get(dateStr);
+                
+                // Hiển thị thông tin dựa trên status
+                if (dailyDetail) {
+                  // Case 1: Nghỉ phép
+                  if (dailyDetail.status === 'approved_leave') {
+                    // Lấy thông tin loại nghỉ từ config
+                    const leaveTypeKey = dailyDetail.leaveType || 'leave';
+                    const leaveConfig = constants.LeaveTypeConfig[leaveTypeKey as keyof typeof constants.LeaveTypeConfig]
+                    return (
+                      <div>
+                        <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#fffbe6', borderRadius: 8 }}>
+                          <CheckCircleOutlined style={{ fontSize: 18, color: '#faad14', marginRight: 8 }} />
+                          <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline', color: '#faad14' }}>
+                            {formatDate(dateStr)}
+                          </Title>
+                        </div>
+                        
+                        <div style={{ 
+                          padding: 16, 
+                          background: '#fffbe6', 
+                          borderRadius: 8, 
+                          border: '1px solid #ffe58f',
+                          marginBottom: 16 
+                        }}>
+                          <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                            <CheckCircleOutlined style={{ fontSize: 32, color: '#faad14' }} />
+                          </div>
+                          <Title level={5} style={{ textAlign: 'center', color: '#faad14', margin: 0 }}>
+                            Nghỉ phép
+                          </Title>
+                          <Paragraph style={{ textAlign: 'center', margin: '8px 0 0 0', color: '#8c8c8c' }}>
+                            {dailyDetail.statusText || 'Nghỉ phép'}
+                          </Paragraph>
+                          
+                          {/* Hiển thị loại nghỉ phép */}
+                          <div style={{ 
+                            marginTop: 12, 
+                            padding: 12, 
+                            background: leaveConfig.hasSalary ? '#f6ffed' : '#fff2e8', 
+                            borderRadius: 6,
+                            border: leaveConfig.hasSalary ? '1px solid #b7eb8f' : '1px solid #ffd591'
+                          }}>
+                            <div style={{ textAlign: 'center' }}>
+                              <Text strong style={{ 
+                                fontSize: 14, 
+                                color: leaveConfig.hasSalary ? '#52c41a' : '#fa8c16' 
+                              }}>
+                                {leaveConfig.label}
+                              </Text>
+                            </div>
+                            <div style={{ textAlign: 'center', marginTop: 8 }}>
+                              <Tag color={leaveConfig.hasSalary ? 'success' : 'warning'} style={{ fontSize: 12 }}>
+                                {leaveConfig.hasSalary ? '✓ Có lương' : '✗ Không lương'}
+                              </Tag>
+                            </div>
+                          </div>
+                          
+                          {/* Lý do nghỉ */}
+                          {dailyDetail.leaveInfo && (
+                            <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 6 }}>
+                              <Text strong style={{ display: 'block', marginBottom: 8, color: '#faad14' }}>
+                                <FileTextOutlined style={{ marginRight: 6 }} />
+                                Lý do:
+                              </Text>
+                              <Text style={{ fontSize: 13, color: '#595959' }}>{dailyDetail.leaveInfo}</Text>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // Case 2: Công tác
+                  if (dailyDetail.status === 'business_trip') {
+                    return (
+                      <div>
+                        <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#f9f0ff', borderRadius: 8 }}>
+                          <CalendarOutlined style={{ fontSize: 18, color: '#722ed1', marginRight: 8 }} />
+                          <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline', color: '#722ed1' }}>
+                            {formatDate(dateStr)}
+                          </Title>
+                        </div>
+                        
+                        <div style={{ 
+                          padding: 16, 
+                          background: '#f9f0ff', 
+                          borderRadius: 8, 
+                          border: '1px solid #d3adf7',
+                          marginBottom: 16 
+                        }}>
+                          <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                            <CalendarOutlined style={{ fontSize: 32, color: '#722ed1' }} />
+                          </div>
+                          <Title level={5} style={{ textAlign: 'center', color: '#722ed1', margin: 0 }}>
+                            Công tác
+                          </Title>
+                          
+                          {/* Địa điểm công tác */}
+                          {dailyDetail.businessTripDestination && (
+                            <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 6 }}>
+                              <Text strong style={{ display: 'block', marginBottom: 8, color: '#722ed1' }}>
+                                <EnvironmentOutlined style={{ marginRight: 6 }} />
+                                Địa điểm:
+                              </Text>
+                              <Text style={{ fontSize: 14, color: '#262626' }}>{dailyDetail.businessTripDestination}</Text>
+                            </div>
+                          )}
+                          
+                          {/* Lý do công tác */}
+                          {dailyDetail.businessTripInfo && (
+                            <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 6 }}>
+                              <Text strong style={{ display: 'block', marginBottom: 8, color: '#722ed1' }}>
+                                <FileTextOutlined style={{ marginRight: 6 }} />
+                                Lý do:
+                              </Text>
+                              <Text style={{ fontSize: 13, color: '#595959' }}>{dailyDetail.businessTripInfo}</Text>
+                            </div>
+                          )}
+                          
+                          <div style={{ marginTop: 16, padding: 12, background: '#f6ffed', borderRadius: 6, border: '1px solid #b7eb8f' }}>
+                            <Text style={{ fontSize: 12, color: '#52c41a', display: 'block', textAlign: 'center' }}>
+                              <CheckCircleOutlined style={{ marginRight: 6 }} />
+                              Ngày công tác được tính công
+                            </Text>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // Case 3: Nghỉ không phép
+                  if (dailyDetail.status === 'absent') {
+                    return (
+                      <div>
+                        <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#fff1f0', borderRadius: 8 }}>
+                          <CloseCircleOutlined style={{ fontSize: 18, color: '#ff4d4f', marginRight: 8 }} />
+                          <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline', color: '#ff4d4f' }}>
+                            {formatDate(dateStr)}
+                          </Title>
+                        </div>
+                        
+                        <div style={{ 
+                          padding: 16, 
+                          background: '#fff1f0', 
+                          borderRadius: 8, 
+                          border: '1px solid #ffccc7',
+                          marginBottom: 16 
+                        }}>
+                          <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                            <CloseCircleOutlined style={{ fontSize: 32, color: '#ff4d4f' }} />
+                          </div>
+                          <Title level={5} style={{ textAlign: 'center', color: '#ff4d4f', margin: 0 }}>
+                            Vắng mặt
+                          </Title>
+                          <Paragraph style={{ textAlign: 'center', margin: '8px 0 0 0', color: '#8c8c8c' }}>
+                            {dailyDetail.statusText || 'Nghỉ không phép'}
+                          </Paragraph>
+                          
+                          {dailyDetail.unauthorizedAbsencePenalty > 0 && (
+                            <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 6, border: '1px solid #ffa39e' }}>
+                              <Text strong style={{ display: 'block', marginBottom: 8, color: '#ff4d4f' }}>
+                                <ExclamationCircleOutlined style={{ marginRight: 6 }} />
+                                Phạt:
+                              </Text>
+                              <Text style={{ fontSize: 16, color: '#ff4d4f', fontWeight: 600 }}>
+                                {dailyDetail.unauthorizedAbsencePenalty.toLocaleString('vi-VN')}đ
+                              </Text>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                }
+                
+                // Case 4: Có chấm công bình thường
                 return selectedDateData ? (
                   <div>
                     <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#fafafa', borderRadius: 8 }}>

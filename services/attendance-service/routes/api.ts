@@ -5,7 +5,8 @@ import { Router, Request, Response } from 'express';
 import { 
   confirmAttendance,
   getUserAttendanceByMonth,
-  getMonthlyStats
+  getMonthlyStats,
+  processOvertimeApplication
 } from '../src/controller/AttendanceController';
 import {
   getMonthlyAttendanceDetail
@@ -16,6 +17,12 @@ import {
   getSettingsByKey,
 }  from '@/controller/SettingsController';
 import { updateForgotCheck } from '@/controller/ForgotCheckController';
+import {
+  getAttendanceForApproval,
+  approveAttendance,
+  getApprovedAttendance,
+  getApprovalStatus
+} from '@/controller/AttendanceApprovalController';
 
 const router = Router();
 
@@ -29,6 +36,7 @@ const routeGroups = [
     routes: [
       { method: 'post', path: '/confirm', handler: confirmAttendance, auth: false },
       { method: 'post', path: '/update-forgot-check', handler: updateForgotCheck, auth: false },
+      { method: 'post', path: '/process-overtime', handler: processOvertimeApplication, auth: false },
       { method: 'get', path: '/user/:userId/month', handler: getUserAttendanceByMonth, auth: false },
       { method: 'get', path: '/user/:userId/monthly-detail', handler: getMonthlyAttendanceDetail, auth: false },
       { method: 'get', path: '/user/:userId/stats/monthly', handler: getMonthlyStats, auth: false },
@@ -47,6 +55,16 @@ const routeGroups = [
         }, 
         auth: false 
       },
+    ]
+  },
+  // ATTENDANCE APPROVAL ROUTES
+  {
+    group: 'approval',
+    routes: [
+      { method: 'get', path: '/approval', handler: getAttendanceForApproval, auth: false },
+      { method: 'post', path: '/approve', handler: approveAttendance, auth: false },
+      { method: 'get', path: '/approved', handler: getApprovedAttendance, auth: false },
+      { method: 'get', path: '/approval-status', handler: getApprovalStatus, auth: false },
     ]
   },
   // SETTINGS ROUTES

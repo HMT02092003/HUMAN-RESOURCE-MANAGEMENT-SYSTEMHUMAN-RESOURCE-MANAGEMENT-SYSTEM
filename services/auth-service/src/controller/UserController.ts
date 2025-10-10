@@ -25,7 +25,7 @@ function getLocalIpAddress(): string {
   return '127.0.0.1';
 }
 
-const API_GATEWAY_URL = `http://${getLocalIpAddress()}:${process.env.API_GATEWAY_PORT || 3000}`;
+const API_GATEWAY_URL = `http://localhost:${process.env.API_GATEWAY_PORT || 4000}`;
 const { Gender, statusOptions, Relationship } = constantConfig;
 
 // Resolve absolute path for frontend public directory
@@ -151,8 +151,8 @@ export const getAllUsers = async (req: any, res: Response) => {
           // console.log("depRes", depRes);
           department = depRes.data || null;
         }
-      } catch (e) {
-        console.error('Error fetching department from gateway', e);
+      } catch (e: any) {
+        console.error(`Error fetching department ${user.departmentId}:`, e.message || 'Unknown error');
       }
       try {
         if (user.chevronId) {
@@ -161,8 +161,8 @@ export const getAllUsers = async (req: any, res: Response) => {
           // console.log("chvRes", chvRes);
           chevron = chvRes.data || null;
         }
-      } catch (e) {
-        console.error('Error fetching chevron from gateway', e);
+      } catch (e: any) {
+        console.error(`Error fetching chevron ${user.chevronId}:`, e.message || 'Unknown error');
       }
       return {
         ...user,
@@ -1756,6 +1756,102 @@ export const getUsersByIds = async (req: Request, res: Response) => {
     return res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : "Internal Server Error",
+    });
+  }
+};
+
+/**
+ * Update user status for resignation processing
+ * This function specifically handles updating user status to "resigned" (status: "2")
+ * when a resignation application is approved
+ */
+export const updateUserStatusForResignation = async (req: Request, res: Response) => {
+  try {
+    const { auth } = req as any;
+    const { userId } = req.body;
+
+    console.log("=== updateUserStatusForResignation Debug ===");
+    console.log("userId:", userId);
+    console.log("approvedBy:", auth?.id);
+
+    if (!userId) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Thiếu ID người dùng!", 
+        code: 9996 
+      });
+    }
+
+    // Check if user exists
+    const existingUser = await UserModel.query().findById(userId);
+    if (!existingUser) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Người dùng không tồn tại!", 
+        code: 6006 
+      });
+    }
+
+    // Check if user is already resigned
+    if (existingUser.status === "2") {
+      return res.status(400).json({
+        success: false,
+        message: "Người dùng đã có trạng thái nghỉ việc!",
+        code: 6023
+      });
+    }
+
+    // Update user status to "resigned" (status: "2")
+    const updateData = {
+      status: "2", // "Đã nghỉ việc" - Resigned
+      updatedBy: auth?.id || 1, // Default to admin if no auth
+      updatedAt: new Date(),
+    };
+
+    console.log("Updating user status to resigned:", updateData);
+
+    await UserModel.query().findById(userId).patch(updateData);
+    
+    // Get updated user data (without password)
+    const updatedUser = await UserModel.query().findById(userId);
+    if (updatedUser) {
+      const { password, ...userWithoutPassword } = updatedUser;
+      
+      console.log("✅ User status updated successfully:", {
+        userId: updatedUser.id,
+        username: updatedUser.username,
+        oldStatus: existingUser.status,
+        newStatus: updatedUser.status,
+        updatedBy: auth?.id || 1
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Cập nhật trạng thái người dùng thành công - Đã nghỉ việc",
+        data: {
+          updated: userWithoutPassword,
+          old: { ...existingUser, password: undefined },
+          statusChange: {
+            from: existingUser.status,
+            to: "2",
+            meaning: "Đã nghỉ việc"
+          }
+        }
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Không thể lấy thông tin người dùng sau khi cập nhật",
+      code: 500
+    });
+
+  } catch (error) {
+    console.error("Error updating user status for resignation:", error);
+    return res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : "Lỗi máy chủ nội bộ",
+      code: 500
     });
   }
 };

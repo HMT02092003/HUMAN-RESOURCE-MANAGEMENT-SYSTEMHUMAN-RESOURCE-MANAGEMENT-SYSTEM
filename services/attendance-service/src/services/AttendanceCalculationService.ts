@@ -338,6 +338,16 @@ export class AttendanceCalculationService {
       earlyLeavePenaltyAmount: 0
     };
 
+    // Tính toán tiền phạt đi muộn ngay cả khi chưa có check-out
+    if (salaryInfo && lateMinutes > 0) {
+      result.latePenaltyAmount = this.calculatePenaltyAmount(
+        lateMinutes, 
+        salaryInfo, 
+        penaltyRate
+      );
+      console.log('💰 Late penalty calculated (at check-in):', result.latePenaltyAmount);
+    }
+
     // Nếu có check-out thì tính toán chi tiết
     if (checkOutTime) {
       const checkOut = dayjs(checkOutTime).tz('Asia/Ho_Chi_Minh');
@@ -377,17 +387,23 @@ export class AttendanceCalculationService {
 
     // Tính toán tiền phạt dựa trên lương thực tế
     if (salaryInfo) {
-      result.latePenaltyAmount = this.calculatePenaltyAmount(
-        result.lateMinutes, 
-        salaryInfo, 
-        penaltyRate
-      );
+      // Nếu chưa tính late penalty (chưa có check-in trước đó), tính bây giờ
+      if (result.latePenaltyAmount === 0 && result.lateMinutes > 0) {
+        result.latePenaltyAmount = this.calculatePenaltyAmount(
+          result.lateMinutes, 
+          salaryInfo, 
+          penaltyRate
+        );
+      }
       
-      result.earlyLeavePenaltyAmount = this.calculatePenaltyAmount(
-        result.earlyDepartureMinutes, 
-        salaryInfo, 
-        penaltyRate
-      );
+      // Tính early leave penalty (chỉ khi có check-out)
+      if (checkOutTime && result.earlyDepartureMinutes > 0) {
+        result.earlyLeavePenaltyAmount = this.calculatePenaltyAmount(
+          result.earlyDepartureMinutes, 
+          salaryInfo, 
+          penaltyRate
+        );
+      }
       
       console.log('💰 Penalty amounts calculated:');
       console.log('- Late penalty:', result.latePenaltyAmount);
@@ -451,5 +467,92 @@ export class AttendanceCalculationService {
   static validateWorkingHours(workingHours: WorkingHours): boolean {
     const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
     return timeRegex.test(workingHours.start) && timeRegex.test(workingHours.end);
+  }
+
+  /**
+   * Tính lương tăng ca dựa trên số giờ và lương cơ bản của nhân viên
+   * @param userId ID của nhân viên
+   * @param overtimeHours Số giờ tăng ca
+   * @returns Lương tăng ca
+   */
+  static async calculateOvertimeSalary(userId: number, overtimeHours: number): Promise<number> {
+    try {
+      console.log(`💰 Calculating overtime salary for user ${userId}, hours: ${overtimeHours}`);
+
+      // Lấy thông tin lương của nhân viên từ Employee Service
+      const employeeResponse = await axios.get(
+        `${API_GATEWAY_URL}/api/employee/users/${userId}/salary`,
+        {
+          timeout: 10000
+        }
+      );
+
+      const salaryInfo: UserSalaryInfo = employeeResponse.data.data;
+      console.log('👤 Employee salary info:', salaryInfo);
+
+      if (!salaryInfo || !salaryInfo.baseSalary) {
+        console.log('⚠️ No salary info found, using default calculation');
+        return 0;
+      }
+
+      // Lấy cấu hình tỷ lệ lương tăng ca từ bảng settings
+      let overtimeRate = 1.5; // Mặc định 150% lương cơ bản
+      try {
+        const overtimeRateSetting = await SettingModel.query()
+          .where('key', 'OvertimeRate')
+          .first();
+        
+        if (overtimeRateSetting && overtimeRateSetting.value) {
+          // Parse value từ JSON object hoặc string number
+          const value = overtimeRateSetting.value;
+          
+          if (typeof value === 'object' && value !== null) {
+            // Trường hợp value là object JSON: {"rate": 1.5}
+            const valueObj = value as any;
+            overtimeRate = parseFloat(valueObj.rate || valueObj.value || 1.5);
+          } else if (typeof value === 'string') {
+            try {
+              // Thử parse JSON trước
+              const parsedValue = JSON.parse(value);
+              overtimeRate = parseFloat(parsedValue.rate || parsedValue.value || parsedValue);
+            } catch {
+              // Nếu không phải JSON, parse trực tiếp là number
+              overtimeRate = parseFloat(value);
+            }
+          } else if (typeof value === 'number') {
+            overtimeRate = value;
+          }
+          console.log(`✅ Loaded overtime rate from settings: ${overtimeRate}`);
+        } else {
+          console.log('⚠️ OvertimeRate setting not found, using default: 1.5');
+        }
+      } catch (error) {
+        console.log('⚠️ Error loading overtime rate from settings, using default: 1.5', error);
+      }
+
+      // Tính lương theo giờ = (lương cơ bản + phụ cấp) / (22 ngày * 8 giờ)
+      const totalMonthlySalary = salaryInfo.baseSalary + (salaryInfo.allowance || 0);
+      const hourlyRate = totalMonthlySalary / (22 * 8); // 22 ngày làm việc, 8 giờ/ngày
+      
+      // Lương tăng ca = hourlyRate * overtimeRate * overtimeHours
+      const overtimeSalary = hourlyRate * overtimeRate * overtimeHours;
+
+      console.log(`💰 Overtime salary calculation:`, {
+        baseSalary: salaryInfo.baseSalary,
+        allowance: salaryInfo.allowance || 0,
+        totalMonthlySalary,
+        hourlyRate: hourlyRate.toFixed(2),
+        overtimeRate,
+        overtimeHours,
+        overtimeSalary: overtimeSalary.toFixed(2)
+      });
+
+      return Math.round(overtimeSalary);
+
+    } catch (error) {
+      console.error('❌ Error calculating overtime salary:', error);
+      // Trả về 0 nếu có lỗi, không throw để không ảnh hưởng đến việc duyệt đơn
+      return 0;
+    }
   }
 }

@@ -43,6 +43,7 @@ import {
   getNumberOfDaysOff,
   checkUserScope,
   getUsersByIds,
+  updateUserStatusForResignation,
 } from '@/src/controller/UserController';
 
 const router = Router();
@@ -141,6 +142,7 @@ const userRoutes = [
   { method: 'get', path: '/internal/users/:id/salary', handler: getSalaryInfo, auth: false }, // Internal
   { method: 'get', path: '/users/:id/number-of-days-off', handler: getNumberOfDaysOff, auth: false }, // Internal
   { method: 'post', path: '/users/check-scope', handler: checkUserScope, auth: true }, // Internal scope check
+  // { method: 'post', path: '/users/update-status-resignation', handler: updateUserStatusForResignation, auth: false }, // Internal resignation status update
 ];
 
 // Routes with file upload

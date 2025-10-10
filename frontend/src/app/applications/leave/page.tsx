@@ -27,7 +27,7 @@ const LeavePage = () => {
   };
 
   const handleCancel = () => {
-    router.push('/applications/select-type');
+    router.push('/applications/me');
   };
 
   return (

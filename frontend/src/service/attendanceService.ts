@@ -42,12 +42,15 @@ export interface DailyAttendanceDetail {
   attendanceData?: AttendanceData;
   hasApprovedLeave: boolean;
   leaveType?: string;
-  status: 'working' | 'absent' | 'approved_leave' | 'weekend' | 'holiday';
+  status: 'working' | 'absent' | 'approved_leave' | 'business_trip' | 'weekend' | 'holiday';
   statusText: string;
   unauthorizedAbsencePenalty: number;
   isOnTime: boolean;
   lateMinutes?: number;
   earlyLeaveMinutes?: number;
+  businessTripInfo?: string;
+  businessTripDestination?: string;
+  leaveInfo?: string; // Thông tin lý do nghỉ phép
 }
 
 export interface MonthlyAttendanceDetailResponse {

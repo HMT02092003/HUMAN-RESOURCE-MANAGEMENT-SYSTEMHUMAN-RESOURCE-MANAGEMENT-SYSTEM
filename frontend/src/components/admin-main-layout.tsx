@@ -15,7 +15,8 @@ import {
     SafetyOutlined,
     ProfileOutlined,
     ReadOutlined,
-    DashboardOutlined
+    DashboardOutlined,
+    CheckCircleOutlined
 } from '@ant-design/icons';
 
 import type { MenuProps } from 'antd';
@@ -138,8 +139,17 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         ['applications']
     ),
 
-    // Chấm công
-    getItem('Chấm công', 'attendance', <CalendarOutlined />, 'timeAttendance'),
+    // Chấm công - menu cha với các submenu
+    getItem(
+        'Chấm công',
+        'attendance_parent',
+        <CalendarOutlined />,
+        [
+            getItem('Chấm công cá nhân', 'attendance', <CalendarOutlined />, 'timeAttendance'),
+            getItem('Duyệt chấm công', 'attendanceApproval', <CheckCircleOutlined />, 'timeAttendance', 'approve'), 
+        ],
+        ['timeAttendance']
+    ),
 
     // Cài đặt hệ thống
     getItem('Cài đặt hệ thống', 'settings', <SettingOutlined />, 'settings'),
@@ -315,6 +325,10 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
         if (pathname === '/applications') return ['manageApplications'];
         if (pathname.startsWith('/applications')) return ['applications_parent'];
 
+        if (pathname === '/attendance/approval') return ['attendanceApproval'];
+        if (pathname === '/attendance') return ['attendance'];
+        if (pathname.startsWith('/attendance')) return ['attendance_parent'];
+
         if (pathname === '/user') return ['users'];
         if (pathname === '/roles') return ['roles'];
 
@@ -332,6 +346,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                 break;
             case 'attendance':
                 router.push('/attendance');
+                break;
+            case 'attendanceApproval':
+                router.push('/attendance/approval');
                 break;
             case 'departments':
                 router.push('/departments');
@@ -356,6 +373,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                 break;
             case 'account_management_parent':
             case 'applications_parent':
+            case 'attendance_parent':
                 break;
             default:
                 break;
@@ -454,7 +472,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                         items={convertToAntMenuItems(menuItems)}
                         onClick={handleMenuClick}
                         selectedKeys={getSelectedKeys()}
-                        defaultOpenKeys={['applications_parent', 'account_management_parent']}
+                        defaultOpenKeys={['applications_parent', 'account_management_parent', 'attendance_parent']}
                     />
                 </Sider>
 

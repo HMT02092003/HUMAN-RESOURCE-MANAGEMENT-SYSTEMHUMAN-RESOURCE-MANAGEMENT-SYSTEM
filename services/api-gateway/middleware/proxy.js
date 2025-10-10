@@ -14,6 +14,15 @@ const createOptimizedProxy = (target, pathRewrite = false, handleMultipart = fal
     pathRewrite: pathRewrite || undefined,
     
     onProxyReq: (proxyReq, req, res) => {
+      // 🔥 LOG REQUEST QUA GATEWAY
+      console.log('\n🌐🌐🌐 ===== API GATEWAY PROXY ===== 🌐🌐🌐');
+      console.log('📍 Original URL:', req.originalUrl);
+      console.log('📍 Target:', target);
+      console.log('📍 Method:', req.method);
+      console.log('📍 Path Rewrite:', pathRewrite);
+      console.log('📍 Body:', JSON.stringify(req.body, null, 2));
+      console.log('🌐🌐🌐 ================================ 🌐🌐🌐\n');
+      
       const contentType = req.headers['content-type'] || '';
       
       // Xử lý multipart form data (cho upload file)
@@ -35,7 +44,7 @@ const createOptimizedProxy = (target, pathRewrite = false, handleMultipart = fal
     },
     
     onError: (err, req, res) => {
-      console.error(`Proxy error for ${req.url}:`, err.message);
+      console.error(`❌ Proxy error for ${req.url}:`, err.message);
       res.status(502).json({ 
         error: 'Bad gateway', 
         message: 'Service temporarily unavailable',

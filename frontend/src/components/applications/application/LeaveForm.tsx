@@ -14,6 +14,7 @@ import {
   Statistic,
   Divider,
   message,
+  Spin,
 } from "antd";
 import { RollbackOutlined, SaveOutlined } from "@ant-design/icons";
 import type { GetProps, DatePickerProps } from "antd";
@@ -23,7 +24,7 @@ import ApplicationGuide from "../ApplicationGuide";
 import UserService from "@/service/userService";
 import Cookies from "js-cookie";
 import { getDecodedToken } from "@/utils/decode-token";
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 type RangePickerProps = GetProps<typeof DatePicker.RangePicker>;
 type DatePickerValue = DatePickerProps["value"];
@@ -42,7 +43,11 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
   const [endDate, setEndDate] = useState<DatePickerValue>(null);
   const [messageApi, contextHolder] = message.useMessage();
   const [totalDaysOff, setTotalDaysOff] = useState<number>(0);
+  const [loading, setLoading] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [applicationId, setApplicationId] = useState<number | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // Tính số ngày đã chọn
   const calculateDays = () => {
@@ -69,9 +74,65 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
     }
   };
 
+  // Load dữ liệu khi edit
   useEffect(() => {
+    const id = searchParams.get('id');
+    if (id) {
+      setIsEditMode(true);
+      setApplicationId(Number(id));
+      loadApplicationData(Number(id));
+    }
     getNumberOfDaysOff();
-  }, []);
+  }, [searchParams]);
+
+  const loadApplicationData = async (id: number) => {
+    try {
+      setLoading(true);
+      const response = await ApplicationService.getApplicationById(id);
+      console.log('📥 Full response:', response);
+      
+      const applicationData = response.data;
+      console.log('📥 Application data:', applicationData);
+      
+      const data = applicationData.data; // Dữ liệu JSONB trong field 'data'
+      console.log('📥 Form data from JSONB:', data);
+
+      // Parse dates
+      let parsedStartDate = null;
+      let parsedEndDate = null;
+      
+      if (data.startDate) {
+        parsedStartDate = dayjs(data.startDate);
+        if (parsedStartDate.isValid()) {
+          setStartDate(parsedStartDate);
+        }
+      }
+      
+      if (data.endDate) {
+        parsedEndDate = dayjs(data.endDate);
+        if (parsedEndDate.isValid()) {
+          setEndDate(parsedEndDate);
+        }
+      }
+
+      // Set form values
+      const formValues = {
+        applicationCategory: data.applicationCategory,
+        leaveType: data.leaveType,
+        reason: data.reason,
+        dateRange: parsedStartDate && parsedEndDate ? [parsedStartDate, parsedEndDate] : null,
+      };
+
+      console.log('✅ Setting form values:', formValues);
+      form.setFieldsValue(formValues);
+
+    } catch (error: any) {
+      console.error('❌ Error loading application data:', error);
+      messageApi.error(error.response?.data?.message || 'Lỗi khi tải thông tin đơn từ');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Submit form
   const handleSubmit = async (values: any) => {
@@ -89,21 +150,34 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
         return;
       }
 
-      delete values.dateRange; 
+      delete values.dateRange;
 
-      await ApplicationService.createApplication({
-        type: "leave",
-        data: {
-          ...values,
-          startDate: startDate?.toISOString(),
-          endDate: endDate?.toISOString(),
-        },
-      });
-
-      messageApi.success("Tạo đơn nghỉ phép thành công!");
+      if (isEditMode && applicationId) {
+        // Update existing application
+        await ApplicationService.updateApplication(applicationId, {
+          data: {
+            ...values,
+            startDate: startDate.toISOString(),
+            endDate: endDate.toISOString(),
+          }
+        });
+        messageApi.success("Cập nhật đơn nghỉ phép thành công!");
+      } else {
+        // Create new application
+        await ApplicationService.createApplication({
+          type: "leave",
+          data: {
+            ...values,
+            startDate: startDate?.toISOString(),
+            endDate: endDate?.toISOString(),
+          },
+        });
+        messageApi.success("Tạo đơn nghỉ phép thành công!");
+      }
+      
       router.push("/applications/me");
     } catch (error: any) {
-      messageApi.error(error.message || "Đã có lỗi xảy ra khi tạo đơn!");
+      messageApi.error(error.message || "Đã có lỗi xảy ra khi tạo/cập nhật đơn!");
     }
   };
 
@@ -119,6 +193,8 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
       {contextHolder}
       {/* Hướng dẫn */}
       <ApplicationGuide type="leave" />
+      
+      <Spin spinning={loading} tip="Đang tải thông tin đơn từ...">
 
       <Form
         form={form}
@@ -133,12 +209,13 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
               name="applicationCategory"
               label={<Text strong>Loại đơn</Text>}
               rules={[{ required: true, message: "Vui lòng chọn loại đơn!" }]}
+              tooltip="Nghỉ phép: Trừ số ngày phép, có lương. Nghỉ không phép: Không trừ phép, không lương"
             >
               <Select
                 placeholder="Chọn loại đơn"
                 options={[
-                  { value: "leave", label: "📝 Nghỉ phép" },
-                  { value: "regular", label: "📌 Nghỉ thường" },
+                  { value: "leave", label: "📝 Nghỉ phép (có lương, trừ số ngày phép)" },
+                  { value: "regular", label: "📌 Nghỉ không phép (không lương)" },
                 ]}
               />
             </Form.Item>
@@ -269,6 +346,7 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
           </Space>
         </Row>
       </Form>
+      </Spin>
     </div>
   );
 };

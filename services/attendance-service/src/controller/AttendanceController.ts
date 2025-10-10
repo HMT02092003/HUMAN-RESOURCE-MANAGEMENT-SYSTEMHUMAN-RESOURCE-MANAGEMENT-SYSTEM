@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import { validate } from '@/utils/validation-utility';
+import axios from 'axios';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -71,7 +72,7 @@ export const confirmAttendance = async (req: Request, res: Response) => {
       // Lần đầu tiên trong ngày - CHECK-IN
       attendanceType = 'check_in';
       
-      // Tính toán dựa vào settings cho check-in
+      // Tính toán dựa vào settings cho check-in (bao gồm cả penalty nếu đi muộn)
       const calculation = await AttendanceCalculationService.calculateAttendance(
         currentTime,
         null,
@@ -92,7 +93,7 @@ export const confirmAttendance = async (req: Request, res: Response) => {
         earlyDepartureMinutes: 0.0,
         dailyWorkingUnit: 0.0,
         earlyLeavePenalty: 0.0,
-        lateArrivalPenalty: 0.0,
+        lateArrivalPenalty: calculation.latePenaltyAmount, // Lưu penalty đi muộn ngay khi check-in
         otWorkingUnit: 0.0,
         otMinutes: 0.0, // Không tính OT ở đây
         otSalary: 0.0,   // Không tính lương OT ở đây
@@ -102,6 +103,8 @@ export const confirmAttendance = async (req: Request, res: Response) => {
 
       result = await TimeAttendanceModel.query().insert(updateData);
       console.log('📝 CHECK-IN: Creating new attendance record');
+      console.log('- Late minutes:', calculation.lateMinutes);
+      console.log('- Late penalty amount (VND):', calculation.latePenaltyAmount);
       
     } else {
       if (!existingAttendance.checkOutTime) {
@@ -260,7 +263,111 @@ export const confirmAttendance = async (req: Request, res: Response) => {
   }
 };
 
-// API lấy dữ liệu chấm công theo tháng
+// Helper: Lấy danh sách đơn đã được duyệt
+async function getApprovedApplications(
+  userId: number,
+  year: number,
+  month: number
+): Promise<any[]> {
+  try {
+    const APPLICATION_SERVICE_URL = process.env['APPLICATION_SERVICE_URL'] || 'http://localhost:4004';
+    
+    const response = await axios.get(
+      `${APPLICATION_SERVICE_URL}/api/applications/user/${userId}/approved`,
+      { params: { year, month } }
+    );
+    
+    return response.data.data || [];
+  } catch (error: any) {
+    console.error('❌ Error fetching approved applications:', error.message);
+    return [];
+  }
+}
+
+// Helper: Check xem ngày có đơn nghỉ/công tác không
+function checkDateHasApplication(
+  date: string,
+  applications: any[]
+): { type: string | null; info: any } {
+  for (const app of applications) {
+    const appData = app.data;
+    
+    // Check đơn nghỉ phép (leave)
+    if (app.type === 'leave') {
+      if (isDateInRange(date, appData)) {
+        return {
+          type: 'leave',
+          info: {
+            leaveType: appData.applicationCategory || 'leave',
+            leaveTypeName: appData.applicationCategory === 'leave' ? 'Nghỉ phép (có lương)' : 'Nghỉ không phép (không lương)',
+            hasSalary: appData.applicationCategory === 'leave',
+            reason: appData.reason || appData.description || 'Nghỉ phép',
+            applicationId: app.id
+          }
+        };
+      }
+    }
+    
+    // Check đơn công tác (business-trip)
+    if (app.type === 'business-trip') {
+      if (isDateInRange(date, appData)) {
+        return {
+          type: 'business_trip',
+          info: {
+            destination: appData.destination || appData.location || 'Chưa rõ địa điểm',
+            reason: appData.reason || 'Công tác',
+            hasSalary: true, // Công tác luôn có lương
+            applicationId: app.id
+          }
+        };
+      }
+    }
+    
+    // Check đơn quên check-in/out (forgot-check)
+    if (app.type === 'forgot-check') {
+      if (isDateInRange(date, appData)) {
+        return {
+          type: 'forgot_check',
+          info: {
+            reason: appData.reason || 'Quên chấm công',
+            applicationId: app.id
+          }
+        };
+      }
+    }
+  }
+  
+  return { type: null, info: null };
+}
+
+// Helper: Check xem ngày có nằm trong range của đơn không
+function isDateInRange(date: string, appData: any): boolean {
+  const checkDate = dayjs(date);
+  
+  // Trường hợp nhiều ngày
+  if (appData.startDate && appData.endDate) {
+    const startDate = dayjs(appData.startDate);
+    const endDate = dayjs(appData.endDate);
+    return (checkDate.isSame(startDate, 'day') || checkDate.isAfter(startDate, 'day')) &&
+           (checkDate.isSame(endDate, 'day') || checkDate.isBefore(endDate, 'day'));
+  }
+  
+  // Trường hợp 1 ngày
+  if (appData.date && dayjs(appData.date).isSame(checkDate, 'day')) {
+    return true;
+  }
+  
+  // Trường hợp có requestedDates array
+  if (appData.requestedDates && Array.isArray(appData.requestedDates)) {
+    return appData.requestedDates.some((reqDate: any) => 
+      dayjs(reqDate.date || reqDate).isSame(checkDate, 'day')
+    );
+  }
+  
+  return false;
+}
+
+// API lấy dữ liệu chấm công theo tháng (tích hợp đơn xin nghỉ/công tác)
 export const getUserAttendanceByMonth = async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
@@ -307,20 +414,74 @@ export const getUserAttendanceByMonth = async (req: Request, res: Response) => {
       endDate 
     });
 
+    // Lấy dữ liệu chấm công
     const attendanceRecords = await TimeAttendanceModel.query()
       .where('userId', params['userId'])
       .whereBetween('date', [startDate, endDate])
       .orderBy('date', 'asc');
 
+    // Lấy danh sách đơn đã được duyệt
+    const approvedApplications = await getApprovedApplications(
+      params['userId'],
+      params['year'],
+      params['month']
+    );
+
+    console.log(`📋 Found ${approvedApplications.length} approved applications`);
+
     // Format dữ liệu cho frontend
     const formattedData = attendanceRecords.map(record => {
+      const recordDate = dayjs(record.date).format('YYYY-MM-DD');
+      
+      // Check xem ngày này có đơn được duyệt không
+      const appCheck = checkDateHasApplication(recordDate, approvedApplications);
+      
       const checkInTime = record.checkInTime ? dayjs(record.checkInTime) : null;
       const checkOutTime = record.checkOutTime ? dayjs(record.checkOutTime) : null;
       
+      // Nếu có đơn nghỉ phép hoặc công tác -> trả về thông tin đơn thay vì chấm công
+      if (appCheck.type === 'leave') {
+        return {
+          id: record.id,
+          userId: record.userId,
+          date: recordDate,
+          type: 'leave',
+          status: 'approved_leave',
+          ...appCheck.info,
+          // Vẫn giữ thông tin chấm công nếu có (để hiển thị chi tiết)
+          hasAttendance: !!record.checkInTime,
+          attendanceData: record.checkInTime ? {
+            checkIn: checkInTime ? checkInTime.format('HH:mm') : null,
+            checkOut: checkOutTime ? checkOutTime.format('HH:mm') : null,
+            workHours: parseFloat(record.dailyTotalWorkHours?.toString() || '0')
+          } : null
+        };
+      }
+      
+      if (appCheck.type === 'business_trip') {
+        return {
+          id: record.id,
+          userId: record.userId,
+          date: recordDate,
+          type: 'business_trip',
+          status: 'business_trip',
+          ...appCheck.info,
+          // Vẫn giữ thông tin chấm công nếu có
+          hasAttendance: !!record.checkInTime,
+          attendanceData: record.checkInTime ? {
+            checkIn: checkInTime ? checkInTime.format('HH:mm') : null,
+            checkOut: checkOutTime ? checkOutTime.format('HH:mm') : null,
+            workHours: parseFloat(record.dailyTotalWorkHours?.toString() || '0')
+          } : null
+        };
+      }
+      
+      // Không có đơn -> trả về dữ liệu chấm công bình thường
       return {
         id: record.id,
         userId: record.userId,
-        date: dayjs(record.date).format('YYYY-MM-DD'),
+        date: recordDate,
+        type: 'attendance',
         checkIn: checkInTime ? checkInTime.format('HH:mm') : null,
         checkOut: checkOutTime ? checkOutTime.format('HH:mm') : null,
         checkInTime: record.checkInTime,
@@ -423,6 +584,147 @@ export const getMonthlyStats = async (req: Request, res: Response) => {
       success: false,
       message: 'Lỗi khi lấy thống kê tháng',
       error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
+/**
+ * Xử lý đơn tăng ca đã được duyệt
+ * POST /api/attendance/process-overtime
+ * Body: { userId, overtimeDate, startTime, overtimeHours }
+ */
+export const processOvertimeApplication = async (req: Request, res: Response) => {
+  try {
+    console.log('📝 Processing overtime application approval...');
+    console.log('Request body:', req.body);
+
+    const { userId, overtimeDate, startTime, overtimeHours } = req.body;
+
+    if (!userId || !overtimeDate || !startTime || !overtimeHours) {
+      return res.status(400).json({
+        success: false,
+        message: 'Thiếu thông tin bắt buộc (userId, overtimeDate, startTime, overtimeHours)'
+      });
+    }
+
+    // Parse ngày và thời gian
+    const formattedDate = dayjs(overtimeDate).format('YYYY-MM-DD');
+    console.log(`🔍 Checking attendance record for user ${userId} on date ${formattedDate}`);
+
+    // Tìm bản ghi chấm công của ngày đó
+    const attendanceRecord = await TimeAttendanceModel.query()
+      .where('userId', userId)
+      .where('date', formattedDate)
+      .first();
+
+    if (!attendanceRecord) {
+      console.log('❌ No attendance record found for this date');
+      return res.status(400).json({
+        success: false,
+        message: 'Không tìm thấy bản ghi chấm công cho ngày này. Nhân viên phải chấm công trước khi được duyệt tăng ca.'
+      });
+    }
+
+    if (!attendanceRecord.checkOutTime) {
+      console.log('❌ Employee has not checked out yet');
+      return res.status(400).json({
+        success: false,
+        message: 'Nhân viên chưa checkout. Không thể tính tăng ca.'
+      });
+    }
+
+    console.log('✅ Found attendance record:', {
+      checkInTime: attendanceRecord.checkInTime,
+      checkOutTime: attendanceRecord.checkOutTime
+    });
+
+    // Tính toán thời gian tăng ca thực tế
+    const checkOutTime = dayjs(attendanceRecord.checkOutTime);
+    const requestedStartTime = dayjs(`${formattedDate} ${startTime}`);
+    const requestedEndTime = requestedStartTime.add(overtimeHours, 'hour');
+
+    console.log('⏰ Time calculations:', {
+      checkOutTime: checkOutTime.format('YYYY-MM-DD HH:mm:ss'),
+      requestedStartTime: requestedStartTime.format('YYYY-MM-DD HH:mm:ss'),
+      requestedEndTime: requestedEndTime.format('YYYY-MM-DD HH:mm:ss')
+    });
+
+    // Kiểm tra xem thời gian checkout có đủ thời gian tăng ca không
+    // Logic: checkOutTime phải >= requestedEndTime hoặc ít nhất >= requestedStartTime + 80% thời gian đăng ký
+    const minRequiredTime = requestedStartTime.add(overtimeHours * 0.8, 'hour'); // 80% thời gian tăng ca
+    let actualOvertimeHours = 0;
+
+    if (checkOutTime.isBefore(requestedStartTime)) {
+      console.log('❌ Check out time is before overtime start time');
+      return res.status(400).json({
+        success: false,
+        message: 'Thời gian checkout không đủ để được tính tăng ca. Nhân viên checkout trước giờ bắt đầu tăng ca.'
+      });
+    }
+
+    if (checkOutTime.isBefore(minRequiredTime)) {
+      console.log('⚠️ Check out time is less than minimum required time');
+      return res.status(400).json({
+        success: false,
+        message: `Thời gian checkout không đủ để được tính tăng ca. Cần ít nhất ${overtimeHours * 0.8} giờ tăng ca.`
+      });
+    }
+
+    // Tính số giờ tăng ca thực tế
+    if (checkOutTime.isAfter(requestedEndTime) || checkOutTime.isSame(requestedEndTime)) {
+      // Đủ thời gian -> tính full
+      actualOvertimeHours = overtimeHours;
+    } else {
+      // Tính theo thời gian thực tế
+      actualOvertimeHours = checkOutTime.diff(requestedStartTime, 'minute') / 60;
+      actualOvertimeHours = Math.max(0, actualOvertimeHours); // Không âm
+    }
+
+    console.log(`💰 Calculated actual overtime hours: ${actualOvertimeHours}`);
+
+    // Tính lương tăng ca (lấy từ AttendanceCalculationService)
+    const overtimeSalary = await AttendanceCalculationService.calculateOvertimeSalary(
+      userId,
+      actualOvertimeHours
+    );
+
+    console.log(`💰 Calculated overtime salary: ${overtimeSalary}`);
+
+    // Cập nhật bản ghi chấm công
+    await TimeAttendanceModel.query()
+      .where('userId', userId)
+      .where('date', formattedDate)
+      .patch({
+        otWorkingUnit: 1, // Đánh dấu có 1 lần tăng ca
+        otMinutes: actualOvertimeHours * 60, // Convert to minutes
+        otSalary: overtimeSalary,
+        updated_at: dayjs().toISOString()
+      });
+
+    console.log('✅ Updated attendance record with overtime data');
+
+    return res.json({
+      success: true,
+      message: 'Xử lý đơn tăng ca thành công',
+      data: {
+        userId,
+        date: formattedDate,
+        requestedOvertimeHours: overtimeHours,
+        actualOvertimeHours,
+        overtimeSalary,
+        checkOutTime: checkOutTime.format('YYYY-MM-DD HH:mm:ss'),
+        requestedStartTime: requestedStartTime.format('YYYY-MM-DD HH:mm:ss'),
+        requestedEndTime: requestedEndTime.format('YYYY-MM-DD HH:mm:ss')
+      },
+      timestamp: dayjs().format()
+    });
+
+  } catch (error) {
+    console.error('❌ Error processing overtime application:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi khi xử lý đơn tăng ca: ' + (error as Error).message,
+      timestamp: dayjs().format()
     });
   }
 };

@@ -7,7 +7,13 @@ const UserService = {
       const response = await api.get('/api/auth/users', { 
         params: {
           page: params.page,
-          pageSize: params.pageSize
+          pageSize: params.pageSize,
+          _t: Date.now() // Cache buster
+        },
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
         }
       });
       return response.data; // { results: [...], total: N }

@@ -1,4 +1,6 @@
 /* Enhanced attendance calendar styles for penalty display */
+
+/* Force Monday to be first column - Vietnamese standard week (T2-CN) */
 .attendance-calendar-improved .ant-picker-calendar-date-content {
   height: auto !important;
   min-height: 60px !important;

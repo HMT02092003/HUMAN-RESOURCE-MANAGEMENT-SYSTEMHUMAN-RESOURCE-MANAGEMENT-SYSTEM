@@ -27,7 +27,7 @@ const BusinessTripPage = () => {
   };
 
   const handleCancel = () => {
-    router.push('/applications/select-type');
+    router.push('/applications/me');
   };
 
   return (
@@ -40,7 +40,6 @@ const BusinessTripPage = () => {
         permissionType={permissionType}
       >
         <BusinessTripForm 
-          onSubmit={handleSubmit}
           onCancel={handleCancel}
         />
       </MainLayout>

@@ -13,8 +13,10 @@ const AttendancePage = () => {
 
   const pageName = 'Thông tin chấm công';
   const pageDes = 'Theo dõi thời gian làm việc và hiệu suất';
-  const requiredPermission = 'attendance';
-  const permissionType = 'read' as const;
+  
+  // Thử bỏ quyền để kiểm tra
+  // const requiredPermission = 'attendance';
+  // const permissionType = 'read' as const;
 
   return (
     <MainLayout
