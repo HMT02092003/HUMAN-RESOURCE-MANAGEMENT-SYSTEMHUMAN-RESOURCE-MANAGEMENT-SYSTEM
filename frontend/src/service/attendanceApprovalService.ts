@@ -54,7 +54,7 @@ class AttendanceApprovalService {
    */
   async getAttendanceForApproval(departmentId: number, month: string): Promise<AttendanceForApproval[]> {
     try {
-      const response = await api.get('/attendance/attendance/approval', {
+      const response = await api.get('/api/attendance/approval', {
         params: {
           departmentId,
           month
@@ -79,7 +79,7 @@ class AttendanceApprovalService {
    */
   async approveAttendance(approvalData: ApprovalRequest): Promise<any> {
     try {
-      const response = await api.post('/attendance/attendance/approve', approvalData);
+      const response = await api.post('/api/attendance/approve', approvalData);
 
       if (response.data.success) {
         return response.data.data;
@@ -100,7 +100,7 @@ class AttendanceApprovalService {
    */
   async getApprovedAttendance(userId: number, month: string): Promise<ApprovedAttendanceData> {
     try {
-      const response = await api.get('/attendance/attendance/approved', {
+      const response = await api.get('/api/attendance/approved', {
         params: {
           userId,
           month
@@ -126,7 +126,7 @@ class AttendanceApprovalService {
    */
   async getApprovalStatus(userId: number, month: string): Promise<boolean> {
     try {
-      const response = await api.get('/attendance/attendance/approval-status', {
+      const response = await api.get('/api/attendance/approval-status', {
         params: {
           userId,
           month

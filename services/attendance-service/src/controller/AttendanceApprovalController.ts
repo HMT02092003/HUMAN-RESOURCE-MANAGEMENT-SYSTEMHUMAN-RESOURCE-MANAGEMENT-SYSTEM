@@ -63,7 +63,7 @@ export const getAttendanceForApproval = async (req: Request, res: Response) => {
       return res.status(401).json({
         success: false,
         message: 'Token không được cung cấp'
-      });
+      }); 
     }
 
     const decodedToken = getDecodedToken(token);
@@ -302,74 +302,66 @@ export const approveAttendance = async (req: Request, res: Response) => {
     // ==========================================
     console.log(`\n💰 Step 3: Calculating monthly statistics...`);
 
-    // Tính toán thống kê tháng
+    // Khởi tạo các biến thống kê
     let totalWorkDays = 0;
     let totalWorkHours = 0;
     let totalOvertimeHours = 0;
+    let totalOvertimeDays = 0;
     let totalLateDays = 0;
     let totalEarlyLeaveDays = 0;
-    let totalPenalty = 0;
+    let totalLateMinutes = 0;
+    let totalEarlyLeaveMinutes = 0;
+    let totalPaidLeaveDays = 0;
+    let totalUnpaidLeaveDays = 0;
+    let totalLatePenalty = 0;
+    let totalEarlyLeavePenalty = 0;
     let totalOvertimeSalary = 0;
 
-    const approvedRecords = [];
-
+    // Duyệt qua từng record để tính tổng
     for (const record of attendanceData) {
-      // Tính toán thống kê
+      // Đếm ngày làm việc (có check-in và check-out)
       if (record.checkInTime && record.checkOutTime) {
         totalWorkDays++;
-        totalWorkHours += parseFloat(record.dailyTotalWorkHours.toString());
-        
-        // ⚠️ QUAN TRỌNG: Lấy giá trị OT từ time_attendances (đã được cập nhật ở bước 1)
-        const otHours = parseFloat(record.otMinutes.toString()) / 60; // Convert minutes to hours
-        totalOvertimeHours += otHours;
-        
-        if (record.lateMinutes > 0) {
-          totalLateDays++;
-        }
-        if (record.earlyDepartureMinutes > 0) {
-          totalEarlyLeaveDays++;
-        }
-        
-        totalPenalty += parseFloat(record.lateArrivalPenalty.toString()) + parseFloat(record.earlyLeavePenalty.toString());
-        totalOvertimeSalary += parseFloat(record.otSalary.toString());
+        totalWorkHours += parseFloat(record.dailyTotalWorkHours?.toString() || '0');
       }
-
-      // Tạo record để lưu vào bảng approved_attendances
-      approvedRecords.push({
-        userId: record.userId,
-        departmentId: departmentId,
-        month: month,
-        date: record.date,
-        checkInTime: record.checkInTime,
-        checkOutTime: record.checkOutTime,
-        dailyTotalWorkHours: record.dailyTotalWorkHours,
-        lateMinutes: record.lateMinutes,
-        earlyDepartureMinutes: record.earlyDepartureMinutes,
-        dailyWorkingUnit: record.dailyWorkingUnit,
-        earlyLeavePenalty: record.earlyLeavePenalty,
-        lateArrivalPenalty: record.lateArrivalPenalty,
-        otWorkingUnit: record.otWorkingUnit,
-        otMinutes: record.otMinutes,
-        otSalary: record.otSalary,
-        totalWorkDays: totalWorkDays,
-        totalWorkHours: Math.round(totalWorkHours * 100) / 100,
-        totalOvertimeHours: Math.round(totalOvertimeHours * 100) / 100,
-        totalLateDays: totalLateDays,
-        totalEarlyLeaveDays: totalEarlyLeaveDays,
-        totalPenalty: Math.round(totalPenalty * 100) / 100,
-        totalOvertimeSalary: Math.round(totalOvertimeSalary * 100) / 100,
-        approvedBy: approverId,
-        approvedAt: dayjs().tz('Asia/Ho_Chi_Minh').toISOString(),
-        notes: notes || null
-      });
+      
+      // Tính OT
+      const otMinutes = parseFloat(record.otMinutes?.toString() || '0');
+      if (otMinutes > 0) {
+        totalOvertimeDays++;
+        totalOvertimeHours += otMinutes / 60; // Convert minutes to hours
+        totalOvertimeSalary += parseFloat(record.otSalary?.toString() || '0');
+      }
+      
+      // Đếm đi muộn
+      const lateMinutes = parseFloat(record.lateMinutes?.toString() || '0');
+      if (lateMinutes > 0) {
+        totalLateDays++;
+        totalLateMinutes += lateMinutes;
+        totalLatePenalty += parseFloat(record.lateArrivalPenalty?.toString() || '0');
+      }
+      
+      // Đếm về sớm
+      const earlyMinutes = parseFloat(record.earlyDepartureMinutes?.toString() || '0');
+      if (earlyMinutes > 0) {
+        totalEarlyLeaveDays++;
+        totalEarlyLeaveMinutes += earlyMinutes;
+        totalEarlyLeavePenalty += parseFloat(record.earlyLeavePenalty?.toString() || '0');
+      }
+      
+      // TODO: Tính nghỉ phép (cần lấy từ bảng applications)
+      // Hiện tại để mặc định = 0, có thể bổ sung sau
     }
+
+    const totalPenalty = totalLatePenalty + totalEarlyLeavePenalty;
 
     console.log(`✅ Statistics calculated:`);
     console.log(`   - Total work days: ${totalWorkDays}`);
     console.log(`   - Total work hours: ${totalWorkHours.toFixed(2)}`);
     console.log(`   - Total overtime hours: ${totalOvertimeHours.toFixed(2)}`);
-    console.log(`   - Total late days: ${totalLateDays}`);
-    console.log(`   - Total early leave days: ${totalEarlyLeaveDays}`);
+    console.log(`   - Total overtime days: ${totalOvertimeDays}`);
+    console.log(`   - Total late days: ${totalLateDays} (${totalLateMinutes} mins)`);
+    console.log(`   - Total early leave days: ${totalEarlyLeaveDays} (${totalEarlyLeaveMinutes} mins)`);
     console.log(`   - Total penalty: ${totalPenalty.toLocaleString()} VND`);
     console.log(`   - Total overtime salary: ${totalOvertimeSalary.toLocaleString()} VND`);
 
@@ -378,8 +370,51 @@ export const approveAttendance = async (req: Request, res: Response) => {
     // ==========================================
     console.log(`\n💾 Step 4: Saving to approved_attendances table...`);
 
-    // Lưu tất cả records vào bảng approved_attendances
-    await ApprovedAttendanceModel.query().insert(approvedRecords);
+    // Tạo 1 RECORD DUY NHẤT cho tháng này
+    const approvedRecord = {
+      userId: userId,
+      departmentId: departmentId,
+      month: month,
+      
+      // Tổng hợp công
+      totalWorkDays: Math.round(totalWorkDays),
+      totalWorkHours: Math.round(totalWorkHours * 100) / 100,
+      
+      // Tổng hợp đi muộn/về sớm
+      totalLateDays: Math.round(totalLateDays),
+      totalEarlyLeaveDays: Math.round(totalEarlyLeaveDays),
+      totalLateMinutes: Math.round(totalLateMinutes),
+      totalEarlyLeaveMinutes: Math.round(totalEarlyLeaveMinutes),
+      
+      // Tổng hợp OT
+      totalOvertimeHours: Math.round(totalOvertimeHours * 100) / 100,
+      totalOvertimeDays: Math.round(totalOvertimeDays),
+      totalOvertimeSalary: Math.round(totalOvertimeSalary * 100) / 100,
+      
+      // Tổng hợp nghỉ phép (TODO: cần tính từ applications)
+      totalPaidLeaveDays: 0,
+      totalUnpaidLeaveDays: 0,
+      
+      // Tổng hợp phạt
+      totalLatePenalty: Math.round(totalLatePenalty * 100) / 100,
+      totalEarlyLeavePenalty: Math.round(totalEarlyLeavePenalty * 100) / 100,
+      totalPenalty: Math.round(totalPenalty * 100) / 100,
+      
+      // Thông tin lương (optional - có thể thêm sau)
+      baseSalary: null,
+      totalAllowance: 0,
+      finalSalary: null,
+      
+      // Thông tin duyệt
+      approvedBy: approverId,
+      approvedAt: dayjs().tz('Asia/Ho_Chi_Minh').toISOString(),
+      notes: notes || null
+    };
+
+    // Lưu vào DB (chỉ 1 record)
+    await ApprovedAttendanceModel.query().insert(approvedRecord);
+
+    console.log(`✅ Approved attendance saved successfully!`);
 
     res.status(200).json({
       success: true,
@@ -387,7 +422,7 @@ export const approveAttendance = async (req: Request, res: Response) => {
       data: {
         userId,
         month,
-        totalRecords: approvedRecords.length,
+        totalAttendanceRecords: attendanceData.length,
         summary: {
           totalWorkDays,
           totalWorkHours: Math.round(totalWorkHours * 100) / 100,
@@ -410,6 +445,10 @@ export const approveAttendance = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Lấy thông tin chấm công đã được duyệt
+ * @returns 1 record tổng hợp tháng
+ */
 export const getApprovedAttendance = async (req: Request, res: Response) => {
   try {
     const { userId, month } = req.query;
@@ -421,29 +460,34 @@ export const getApprovedAttendance = async (req: Request, res: Response) => {
       });
     }
 
+    // Lấy thông tin tổng hợp đã duyệt (1 record duy nhất)
     const approvedData = await ApprovedAttendanceModel.getByUserAndMonth(
       parseInt(userId as string),
       month as string
     );
 
-    if (approvedData.length === 0) {
+    if (!approvedData) {
       return res.status(404).json({
         success: false,
-        message: 'Không tìm thấy dữ liệu chấm công đã duyệt'
+        message: 'Chưa có dữ liệu chấm công được duyệt cho tháng này'
       });
     }
 
-    const summary = await ApprovedAttendanceModel.getMonthlySummary(
-      parseInt(userId as string),
-      month as string
-    );
+    // Lấy chi tiết từng ngày từ time_attendances (nếu cần)
+    const startDate = dayjs(`${month}-01`).startOf('month').format('YYYY-MM-DD');
+    const endDate = dayjs(`${month}-01`).endOf('month').format('YYYY-MM-DD');
+    
+    const dailyAttendance = await TimeAttendanceModel.query()
+      .where('userId', parseInt(userId as string))
+      .whereBetween('date', [startDate, endDate])
+      .orderBy('date', 'asc');
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: 'Lấy dữ liệu chấm công đã duyệt thành công',
       data: {
-        attendanceData: approvedData,
-        summary: summary
+        monthlySummary: approvedData,  // Tổng hợp tháng
+        dailyDetails: dailyAttendance  // Chi tiết từng ngày
       }
     });
 
@@ -457,6 +501,9 @@ export const getApprovedAttendance = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Kiểm tra trạng thái duyệt chấm công
+ */
 export const getApprovalStatus = async (req: Request, res: Response) => {
   try {
     const { userId, month } = req.query;
@@ -473,7 +520,7 @@ export const getApprovalStatus = async (req: Request, res: Response) => {
       month as string
     );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: 'Kiểm tra trạng thái duyệt thành công',
       data: {
