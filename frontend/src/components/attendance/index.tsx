@@ -263,7 +263,10 @@ const AttendanceSimplePage = () => {
             ? dayjs(attData.checkOutTime).format('HH:mm')
             : null;
           
-          map.set(detail.date, {
+          // ⭐ Format date to YYYY-MM-DD để khớp với tileClassName
+          const dateKey = dayjs(detail.date).format('YYYY-MM-DD');
+          
+          map.set(dateKey, {
             ...attData,
             date: detail.date,
             checkInTime,
@@ -286,7 +289,18 @@ const AttendanceSimplePage = () => {
   const dailyDetailMap = useMemo(() => {
     const map = new Map<string, DailyAttendanceDetail>();
     if (monthlyDetail?.dailyDetails) {
-      monthlyDetail.dailyDetails.forEach((detail) => map.set(detail.date, detail));
+      monthlyDetail.dailyDetails.forEach((detail) => {
+        // ⭐ Format date to YYYY-MM-DD để khớp với tileClassName
+        const dateKey = dayjs(detail.date).format('YYYY-MM-DD');
+        map.set(dateKey, detail);
+      });
+      console.log(`🗺️ dailyDetailMap created with ${map.size} entries`);
+      
+      // Debug: Show business trip and leave days
+      const businessTripDays = Array.from(map.values()).filter(d => d.status === 'business_trip');
+      const leaveDays = Array.from(map.values()).filter(d => d.status === 'approved_leave');
+      console.log(`🟣 Business trip days: ${businessTripDays.length}`, businessTripDays.map(d => dayjs(d.date).format('YYYY-MM-DD')));
+      console.log(`🟡 Leave days: ${leaveDays.length}`, leaveDays.map(d => dayjs(d.date).format('YYYY-MM-DD')));
     }
     return map;
   }, [monthlyDetail]);

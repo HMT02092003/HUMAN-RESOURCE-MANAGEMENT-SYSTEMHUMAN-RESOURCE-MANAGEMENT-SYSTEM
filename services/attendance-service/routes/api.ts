@@ -1,139 +1,147 @@
 /**
- * Attendance Service API Routes v2.0 - Optimized with Dynamic Registration
+ * Attendance Service API Routes - Simplified Version
+ * Chỉ còn 2 API chính cho attendance và settings
+ * + Thêm compatibility routes cho frontend cũ
  */
 import { Router, Request, Response } from 'express';
 import { 
-  confirmAttendance,
-  getUserAttendanceByMonth,
-  getMonthlyStats,
-  processOvertimeApplication
+  getAllAttendance,
+  approveAttendance,
+  getUserMonthlyFull,
+  getUserMonthlyDetail
 } from '../src/controller/AttendanceController';
-import {
-  getMonthlyAttendanceDetail,
-  getMonthlyAttendanceFull
-} from '../src/controller/MonthlyAttendanceController';
 import {
   getSettings,
   updateSettings,
   getSettingsByKey,
 }  from '@/controller/SettingsController';
-import { updateForgotCheck } from '@/controller/ForgotCheckController';
-import {
-  getAttendanceForApproval,
-  approveAttendance,
-  getApprovedAttendance,
-  getApprovalStatus
-} from '@/controller/AttendanceApprovalController';
 
 const router = Router();
 
 // ===================================
-// ROUTE DEFINITIONS
+// ATTENDANCE ROUTES - MAIN
 // ===================================
-const routeGroups = [
-  // ATTENDANCE ROUTES
-  {
-    group: 'attendance',
-    routes: [
-      { method: 'post', path: '/confirm', handler: confirmAttendance, auth: false },
-      { method: 'post', path: '/update-forgot-check', handler: updateForgotCheck, auth: false },
-      { method: 'post', path: '/process-overtime', handler: processOvertimeApplication, auth: false },
-      { method: 'get', path: '/user/:userId/month', handler: getUserAttendanceByMonth, auth: false },
-      { method: 'get', path: '/user/:userId/monthly-detail', handler: getMonthlyAttendanceDetail, auth: false },
-      { method: 'get', path: '/user/:userId/monthly-full', handler: getMonthlyAttendanceFull, auth: false },
-      { method: 'get', path: '/user/:userId/stats/monthly', handler: getMonthlyStats, auth: false },
-      { 
-        method: 'get', 
-        path: '/user/:userId/stats', 
-        handler: (_req: Request, res: Response) => {
-          // Basic stats endpoint - returns mock data for compatibility
-          res.status(200).json({
-            totalHours: 0,
-            totalDays: 0,
-            penalty: 0,
-            onTimeRate: 100,
-            note: 'Mock data for compatibility'
-          });
-        }, 
-        auth: false 
-      },
-    ]
-  },
-  // ATTENDANCE APPROVAL ROUTES
-  {
-    group: 'approval',
-    routes: [
-      { method: 'get', path: '/approval', handler: getAttendanceForApproval, auth: false },
-      { method: 'post', path: '/approve', handler: approveAttendance, auth: false },
-      { method: 'get', path: '/approved', handler: getApprovedAttendance, auth: false },
-      { method: 'get', path: '/approval-status', handler: getApprovalStatus, auth: false },
-    ]
-  },
-  // SETTINGS ROUTES
-  {
-    group: 'settings',
-    routes: [
-      { method: 'get', path: '/settings', handler: getSettings, auth: false },
-      { method: 'post', path: '/settings', handler: updateSettings, auth: false },
-      { method: 'get', path: '/settings/:key', handler: getSettingsByKey, auth: false },
-    ]
-  }
-];
+
+// API 1: Lấy toàn bộ thông tin chấm công theo tháng
+// GET /api/attendance?month=YYYY-MM&departmentId=1
+router.get('/attendance', async (req: Request, res: Response) => {
+  await getAllAttendance(req, res);
+});
+
+// API 2: Duyệt bảng công tháng
+// POST /api/attendance/approve
+// Body: { userId: number, month: "YYYY-MM" }
+router.post('/attendance/approve', async (req: Request, res: Response) => {
+  await approveAttendance(req, res);
+});
 
 // ===================================
-// DYNAMIC ROUTE REGISTRATION
+// BACKWARD COMPATIBILITY ROUTES
 // ===================================
-const registerRoutes = (groups: any[]) => {
-  groups.forEach(({ group, routes }) => {
-    routes.forEach((route: any) => {
-      const middlewares: any[] = [];
-      
-      // Add handler with enhanced error handling
-      middlewares.push(async (req: Request, res: Response) => {
-        try {
-          console.log(`[${route.method.toUpperCase()}] ${route.path} - ${group}`);
-          await route.handler(req, res);
-        } catch (error: any) {
-          console.error(`Error in ${group}.${route.handler.name}:`, error);
-          res.status(500).json({
-            error: 'Internal server error',
-            group,
-            endpoint: `${route.method.toUpperCase()} ${route.path}`,
-            message: error.message || 'Unknown error',
-            timestamp: new Date().toISOString()
-          });
-        }
-      });
-      
-      // Register route
-      (router as any)[route.method](route.path, ...middlewares);
-    });
-  });
-};
 
-// Register all routes
-registerRoutes(routeGroups);
+// GET /api/user/:userId/monthly-full?year=2025&month=10
+router.get('/user/:userId/monthly-full', async (req: Request, res: Response) => {
+  await getUserMonthlyFull(req, res);
+});
+
+// GET /api/user/:userId/monthly-detail?year=2025&month=10
+router.get('/user/:userId/monthly-detail', async (req: Request, res: Response) => {
+  await getUserMonthlyDetail(req, res);
+});
+
+// ===================================
+// SETTINGS ROUTES
+// ===================================
+router.get('/settings', async (req: Request, res: Response) => {
+  await getSettings(req, res);
+});
+
+router.post('/settings', async (req: Request, res: Response) => {
+  await updateSettings(req, res);
+});
+
+router.get('/settings/:key', async (req: Request, res: Response) => {
+  await getSettingsByKey(req, res);
+});
 
 // ===================================
 // API INFO ENDPOINT
 // ===================================
 router.get('/', (_req: Request, res: Response) => {
-  const totalRoutes = routeGroups.reduce((sum, group) => sum + group.routes.length, 0);
-  
   const apiInfo = {
-    service: 'Attendance Service API v2.0',
+    service: 'Attendance Service API - Simplified',
+    version: '3.0',
     status: 'active',
-    totalRoutes,
-    routeGroups: routeGroups.map(({ group, routes }) => ({
-      group,
-      endpoints: routes.length,
-      routes: routes.map(route => ({
-        method: route.method.toUpperCase(),
-        path: route.path,
-        auth: route.auth
-      }))
-    })),
-    features: ['Time Tracking', 'Attendance Confirmation', 'Monthly Statistics', 'Settings Management'],
+    endpoints: [
+      {
+        group: 'Main APIs',
+        routes: [
+          {
+            method: 'GET',
+            path: '/attendance',
+            description: 'Lấy toàn bộ thông tin chấm công theo tháng',
+            params: 'month (YYYY-MM), departmentId (number)'
+          },
+          {
+            method: 'POST',
+            path: '/attendance/approve',
+            description: 'Duyệt bảng công tháng (tự động xử lý overtime)',
+            body: '{ userId: number, month: "YYYY-MM" }'
+          }
+        ]
+      },
+      {
+        group: 'Compatibility APIs (for old frontend)',
+        routes: [
+          {
+            method: 'GET',
+            path: '/user/:userId/monthly-full',
+            description: 'Lấy thông tin chấm công đầy đủ của 1 user',
+            params: 'year, month'
+          },
+          {
+            method: 'GET',
+            path: '/user/:userId/monthly-detail',
+            description: 'Tương tự monthly-full',
+            params: 'year, month'
+          }
+        ]
+      },
+      {
+        group: 'Settings APIs',
+        routes: [
+          {
+            method: 'GET',
+            path: '/settings',
+            description: 'Lấy tất cả settings'
+          },
+          {
+            method: 'POST',
+            path: '/settings',
+            description: 'Cập nhật settings'
+          },
+          {
+            method: 'GET',
+            path: '/settings/:key',
+            description: 'Lấy setting theo key'
+          }
+        ]
+      }
+    ],
+    features: [
+      'Lấy thông tin chấm công tháng theo phòng ban',
+      'Duyệt bảng công và tự động tính overtime',
+      'Tính chính xác số ngày đi muộn/về sớm',
+      'Quản lý settings chấm công',
+      'Backward compatible với frontend cũ'
+    ],
+    notes: [
+      'Tất cả business logic đã được chuyển sang AttendanceService',
+      'Controller chỉ xử lý request/response validation',
+      'Tính năng xử lý overtime tự động khi duyệt bảng công',
+      'Tính số ngày đi muộn chính xác bằng Objection.js query',
+      'Các route /user/:userId/monthly-* để tương thích với frontend cũ'
+    ],
     timestamp: new Date().toISOString()
   };
 
