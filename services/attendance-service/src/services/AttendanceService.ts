@@ -13,6 +13,7 @@ import TimeAttendanceModel from '@/Models/TimeAttendanceModel';
 import ApprovedAttendanceModel from '@/Models/ApprovedAttendanceModel';
 import SettingModel from '@/Models/SettingsModel';
 import { OvertimeProcessingService } from './OvertimeProcessingService';
+import { AttendanceCalculationService } from './AttendanceCalculationService';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -330,6 +331,7 @@ export class AttendanceService {
 
   /**
    * Lấy thông tin chấm công tháng của 1 user (với tất cả thống kê)
+   * ⭐ CẬP NHẬT: Thêm thông tin isWorkingDay và hasApprovedOT
    */
   static async getUserMonthlyAttendance(
     userId: number,
@@ -346,7 +348,11 @@ export class AttendanceService {
         .whereBetween('date', [startDate, endDate])
         .orderBy('date', 'asc');
 
-      // ⭐ 2. Lấy thông tin đơn nghỉ phép/công tác đã được duyệt
+      // ⭐ 2. Lấy cấu hình working days
+      const workingDaysConfig = await this.getWorkingDaysConfig();
+      console.log('⚙️ Working days config:', workingDaysConfig);
+
+      // ⭐ 3. Lấy thông tin đơn nghỉ phép/công tác/OT đã được duyệt
       const [year, monthNum] = month.split('-');
       const approvedApplications = await this.getApprovedApplications(
         userId,
@@ -359,20 +365,23 @@ export class AttendanceService {
         console.log('📝 Application types:', approvedApplications.map(app => ({ id: app.id, type: app.type })));
       }
 
-      // ⭐ 3. Tạo Map từ attendance data để tra cứu nhanh
+      // ⭐ 4. Tạo Map từ attendance data để tra cứu nhanh
       const attendanceMap = new Map<string, any>();
       attendanceData.forEach((record: any) => {
         const dateKey = dayjs(record.date).format('YYYY-MM-DD');
         attendanceMap.set(dateKey, record);
       });
 
-      // ⭐ 4. Generate TẤT CẢ ngày trong tháng
+      // ⭐ 5. Generate TẤT CẢ ngày trong tháng
       const daysInMonth = dayjs(`${month}-01`).daysInMonth();
       const enrichedAttendanceData: any[] = [];
 
       for (let day = 1; day <= daysInMonth; day++) {
         const currentDate = dayjs(`${month}-${String(day).padStart(2, '0')}`);
         const dateKey = currentDate.format('YYYY-MM-DD');
+        
+        // ⭐ Check xem ngày này có phải ngày làm việc không
+        const isWorkingDay = this.isWorkingDay(dateKey, workingDaysConfig);
         
         // Lấy attendance record nếu có
         const attendanceRecord = attendanceMap.get(dateKey);
@@ -383,10 +392,19 @@ export class AttendanceService {
         // Check xem ngày này có đơn công tác không
         const businessTripCheck = this.checkDateHasBusinessTrip(dateKey, approvedApplications);
         
+        // ⭐ Check xem ngày này có đơn OT đã duyệt không
+        const hasApprovedOT = approvedApplications.some(app => {
+          if (app.type !== 'overtime') return false;
+          const appData = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
+          return appData.date === dateKey;
+        });
+        
         // Tạo record cho ngày này
         const dayRecord: any = {
           date: currentDate.toISOString(),
           userId,
+          isWorkingDay,        // ⭐ Thêm thông tin ngày làm việc
+          hasApprovedOT,       // ⭐ Thêm thông tin OT đã duyệt
           // Thông tin nghỉ phép
           hasApprovedLeave: leaveCheck.hasLeave,
           leaveType: leaveCheck.leaveType,
@@ -635,6 +653,149 @@ export class AttendanceService {
     } catch (error) {
       console.error('❌ Error fetching approved attendances:', error);
       return [];
+    }
+  }
+
+  /**
+   * Lấy đơn OT đã duyệt cho user trong ngày
+   */
+  static async getApprovedOvertimeApplication(
+    userId: number,
+    date: string
+  ): Promise<any | null> {
+    try {
+      const response = await axios.get(
+        `${APPLICATION_SERVICE_URL}/api/applications/user/${userId}/approved`,
+        { 
+          params: { 
+            year: dayjs(date).year(), 
+            month: dayjs(date).month() + 1 
+          } 
+        }
+      );
+
+      const applications = response.data.data || [];
+      
+      // Lọc đơn OT (overtime) cho ngày cụ thể
+      const overtimeApp = applications.find((app: any) => {
+        if (app.type !== 'overtime') return false;
+        
+        // Parse data từ JSON string nếu cần
+        const appData = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
+        
+        // Kiểm tra ngày OT có khớp không
+        return appData.date === date;
+      });
+      
+      if (overtimeApp) {
+        console.log(`📋 Found approved OT application for user ${userId} on ${date}`);
+        return overtimeApp;
+      }
+      
+      return null;
+    } catch (error: any) {
+      console.error('❌ Error fetching overtime applications:', error.message);
+      return null;
+    }
+  }
+
+  /**
+   * Chấm công tự động (check-in lần đầu, check-out các lần sau)
+   * Tích hợp kiểm tra đơn OT đã duyệt
+   */
+  static async recordAttendance(
+    userId: number,
+    time: string
+  ): Promise<any> {
+    try {
+      const date = dayjs(time).format('YYYY-MM-DD');
+      
+      // Kiểm tra đã có record hôm nay chưa
+      const existingRecord = await TimeAttendanceModel.query()
+        .where('userId', userId)
+        .where('date', date)
+        .first();
+      
+      let record;
+      let isCheckIn = false;
+      
+      if (!existingRecord || !existingRecord.checkInTime) {
+        // Lần đầu hoặc chưa có check-in -> Check-in
+        isCheckIn = true;
+        const recordData = {
+          userId,
+          date,
+          checkInTime: time
+        };
+        
+        if (existingRecord) {
+          record = await TimeAttendanceModel.query()
+            .patchAndFetchById(existingRecord.id, recordData);
+        } else {
+          record = await TimeAttendanceModel.query().insert(recordData);
+        }
+        
+        console.log(`✅ Check-in recorded for user ${userId} at ${time}`);
+      } else {
+        // Đã có check-in -> Check-out (cập nhật mỗi lần)
+        isCheckIn = false;
+        record = await TimeAttendanceModel.query()
+          .patchAndFetchById(existingRecord.id, {
+            checkOutTime: time
+          });
+        
+        console.log(`✅ Check-out updated for user ${userId} at ${time}`);
+      }
+      
+      // Kiểm tra đơn OT đã duyệt
+      const overtimeApp = await this.getApprovedOvertimeApplication(userId, date);
+      let otEndTime: dayjs.Dayjs | null = null;
+      
+      if (overtimeApp) {
+        const appData = typeof overtimeApp.data === 'string' 
+          ? JSON.parse(overtimeApp.data) 
+          : overtimeApp.data;
+        
+        // Lấy thời gian kết thúc OT từ đơn
+        if (appData.endTime) {
+          otEndTime = dayjs(`${date} ${appData.endTime}`);
+          console.log(`⏰ OT approved until: ${otEndTime.format('HH:mm')}`);
+        }
+      }
+      
+      // Tính toán attendance ngay lập tức (có thể có OT)
+      const calculation = await AttendanceCalculationService.calculateAttendance(
+        record.checkInTime,
+        record.checkOutTime,
+        date,
+        userId,
+        undefined, // token
+        otEndTime ? otEndTime.toISOString() : undefined // Truyền thời gian OT nếu có
+      );
+      
+      // Cập nhật kết quả tính toán đầy đủ
+      const updatedRecord = await TimeAttendanceModel.query()
+        .patchAndFetchById(record.id, {
+          dailyTotalWorkHours: calculation.workHours,
+          dailyWorkingUnit: calculation.workHours, // Số công trong ngày
+          lateMinutes: calculation.lateMinutes,
+          earlyDepartureMinutes: calculation.earlyDepartureMinutes,
+          lateArrivalPenalty: calculation.latePenaltyAmount,
+          earlyLeavePenalty: calculation.earlyLeavePenaltyAmount,
+          otMinutes: calculation.otMinutes,
+          otWorkingUnit: calculation.otWorkingUnit || 0,
+          otSalary: calculation.otSalary || 0
+        });
+      
+      return {
+        type: isCheckIn ? 'check_in' : 'check_out',
+        record: updatedRecord,
+        calculation,
+        hasOvertimeApproval: !!overtimeApp
+      };
+    } catch (error) {
+      console.error('Error in recordAttendance:', error);
+      throw error;
     }
   }
 }

@@ -8,13 +8,15 @@ import {
   getAllAttendance,
   approveAttendance,
   getUserMonthlyFull,
-  getUserMonthlyDetail
+  getUserMonthlyDetail,
+  recordAttendance,
 } from '../src/controller/AttendanceController';
 import {
   getSettings,
   updateSettings,
   getSettingsByKey,
 }  from '@/controller/SettingsController';
+import { AttendanceService } from '@/services/AttendanceService';
 
 const router = Router();
 
@@ -33,6 +35,17 @@ router.get('/attendance', async (req: Request, res: Response) => {
 // Body: { userId: number, month: "YYYY-MM" }
 router.post('/attendance/approve', async (req: Request, res: Response) => {
   await approveAttendance(req, res);
+});
+
+// ===================================
+// ATTENDANCE RECORDING ROUTES - NEW
+// ===================================
+
+// API: Chấm công tự động (check-in lần đầu, check-out các lần sau)
+// POST /api/attendance/record (từ gateway) -> /api/record (trong service)
+// Body: { userId: number, time: string }
+router.post('/record', async (req: Request, res: Response) => {
+  await recordAttendance(req, res);
 });
 
 // ===================================
@@ -62,90 +75,6 @@ router.post('/settings', async (req: Request, res: Response) => {
 
 router.get('/settings/:key', async (req: Request, res: Response) => {
   await getSettingsByKey(req, res);
-});
-
-// ===================================
-// API INFO ENDPOINT
-// ===================================
-router.get('/', (_req: Request, res: Response) => {
-  const apiInfo = {
-    service: 'Attendance Service API - Simplified',
-    version: '3.0',
-    status: 'active',
-    endpoints: [
-      {
-        group: 'Main APIs',
-        routes: [
-          {
-            method: 'GET',
-            path: '/attendance',
-            description: 'Lấy toàn bộ thông tin chấm công theo tháng',
-            params: 'month (YYYY-MM), departmentId (number)'
-          },
-          {
-            method: 'POST',
-            path: '/attendance/approve',
-            description: 'Duyệt bảng công tháng (tự động xử lý overtime)',
-            body: '{ userId: number, month: "YYYY-MM" }'
-          }
-        ]
-      },
-      {
-        group: 'Compatibility APIs (for old frontend)',
-        routes: [
-          {
-            method: 'GET',
-            path: '/user/:userId/monthly-full',
-            description: 'Lấy thông tin chấm công đầy đủ của 1 user',
-            params: 'year, month'
-          },
-          {
-            method: 'GET',
-            path: '/user/:userId/monthly-detail',
-            description: 'Tương tự monthly-full',
-            params: 'year, month'
-          }
-        ]
-      },
-      {
-        group: 'Settings APIs',
-        routes: [
-          {
-            method: 'GET',
-            path: '/settings',
-            description: 'Lấy tất cả settings'
-          },
-          {
-            method: 'POST',
-            path: '/settings',
-            description: 'Cập nhật settings'
-          },
-          {
-            method: 'GET',
-            path: '/settings/:key',
-            description: 'Lấy setting theo key'
-          }
-        ]
-      }
-    ],
-    features: [
-      'Lấy thông tin chấm công tháng theo phòng ban',
-      'Duyệt bảng công và tự động tính overtime',
-      'Tính chính xác số ngày đi muộn/về sớm',
-      'Quản lý settings chấm công',
-      'Backward compatible với frontend cũ'
-    ],
-    notes: [
-      'Tất cả business logic đã được chuyển sang AttendanceService',
-      'Controller chỉ xử lý request/response validation',
-      'Tính năng xử lý overtime tự động khi duyệt bảng công',
-      'Tính số ngày đi muộn chính xác bằng Objection.js query',
-      'Các route /user/:userId/monthly-* để tương thích với frontend cũ'
-    ],
-    timestamp: new Date().toISOString()
-  };
-
-  res.json(apiInfo);
 });
 
 export default router;

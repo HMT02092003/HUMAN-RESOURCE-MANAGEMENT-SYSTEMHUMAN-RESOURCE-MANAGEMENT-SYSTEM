@@ -88,35 +88,23 @@ export async function submitAttendance(payload) {
   try {
     const base = await getBaseUrl();
     
-    // Sử dụng endpoint mới của AI service để xác nhận chấm công
-    // Dựa trên recognition_log_id từ kết quả nhận diện
-    if (!payload.recognition_log_id) {
-      throw new Error('Recognition log ID is required for attendance confirmation');
-    }
-    
-    const form = new FormData();
-    form.append('recognition_log_id', payload.recognition_log_id.toString());
-    
-    console.log('Confirming attendance with recognition_log_id:', payload.recognition_log_id);
-    
-    const res = await fetch(`${base}/api/ai/confirm-attendance`, {
+    // Gọi API record - tự động phát hiện check-in hoặc check-out
+    const res = await fetch(`${base}/api/attendance/record`, {
       method: 'POST',
       headers: { 
-        'Accept': 'application/json' 
-        // Don't set Content-Type for FormData, let fetch handle it
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       },
-      body: form,
+      body: JSON.stringify({
+        userId: payload.userId,
+        time: payload.timestamp || new Date().toISOString()
+      }),
     });
     
-    let data;
-    try {
-      data = await res.json();
-    } catch {
-      data = { success: false, message: 'Invalid JSON response from AI service' };
-    }
+    const data = await res.json();
     
     if (!res.ok) {
-      console.error('Attendance confirmation API error:', data);
+      console.error('Attendance API error:', data);
       return { 
         success: false, 
         message: data?.message || `HTTP ${res.status}: ${res.statusText}`,
@@ -124,7 +112,7 @@ export async function submitAttendance(payload) {
       };
     }
     
-    console.log('Attendance confirmation response:', data);
+    console.log('Attendance API response:', data);
     return data;
     
   } catch (error) {

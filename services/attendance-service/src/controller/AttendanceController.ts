@@ -13,6 +13,7 @@ import { Request, Response } from 'express';
 import { validate } from '@/utils/validation-utility';
 import { getDecodedToken } from '@/utils/decode-token';
 import { AttendanceService } from '@/services/AttendanceService';
+import SettingModel from '@/Models/SettingsModel';
 
 /**
  * API 1: Lấy toàn bộ thông tin chấm công theo tháng
@@ -150,21 +151,21 @@ export const approveAttendance = async (req: Request, res: Response) => {
     const approvedBy = parseInt(decodedToken.sub);
 
     // Validate input
-    const inputs = req.body;
-    const allowFields = {
-      userId: 'number!',
-      month: 'string!'
-    };
+    const { userId, month } = req.body;
 
-    const params = validate(inputs, allowFields, { removeNotAllow: true });
+    if (!userId || !month) {
+      return res.status(400).json({
+        success: false,
+        message: 'userId và month là bắt buộc'
+      });
+    }
 
-    console.log('✅ Validated params:', params);
-    console.log('👤 Approved by:', approvedBy);
+    console.log(`🔍 Approving attendance for user ${userId} in month ${month} by ${approvedBy}`);
 
     // Gọi service để duyệt
     const result = await AttendanceService.approveMonthlyAttendance(
-      params['userId'],
-      params['month'],
+      userId,
+      month,
       approvedBy,
       token
     );
@@ -173,31 +174,22 @@ export const approveAttendance = async (req: Request, res: Response) => {
       return res.status(400).json(result);
     }
 
-    console.log('✅ Attendance approved successfully');
-
     return res.status(200).json(result);
 
   } catch (error: any) {
     console.error('❌ Error in approveAttendance:', error);
     return res.status(500).json({
       success: false,
-      message: 'Lỗi server khi duyệt bảng công',
+      message: 'Lỗi server khi duyệt chấm công',
       error: error.message
     });
   }
 };
 
 /**
- * ========================================
- * BACKWARD COMPATIBILITY ROUTES
- * ========================================
- * Các routes này để tương thích với frontend cũ
- * Redirect hoặc wrap sang API mới
- */
-
-/**
  * GET /api/user/:userId/monthly-full
  * Compatibility route - Lấy thông tin chấm công đầy đủ của 1 user
+ * ⭐ CẬP NHẬT: Tính toán chính xác theo yêu cầu mới
  */
 export const getUserMonthlyFull = async (req: Request, res: Response) => {
   try {
@@ -235,119 +227,200 @@ export const getUserMonthlyFull = async (req: Request, res: Response) => {
       });
     }
 
+    // ⭐ Tính toán lại các thống kê theo yêu cầu mới
+    let presentDays = 0;           // Số ngày có mặt (có check-in)
+    let lateDays = 0;              // Đếm số record có lateArrivalPenalty > 0
+    let earlyLeaveDays = 0;        // Đếm số record có earlyLeavePenalty > 0
+    let approvedLeaveDays = 0;     // Đếm số ngày nghỉ phép đã duyệt
+    let businessTripDays = 0;      // Đếm số ngày công tác
+    let unauthorizedAbsenceDays = 0; // Ngày nghỉ không phép
+    let totalLateMinutes = 0;
+    let totalEarlyLeaveMinutes = 0;
+    let totalLatePenalty = 0;
+    let totalEarlyLeavePenalty = 0;
+    let onTimeDays = 0;
+    let weekendDays = 0;
+
+    // Lấy cấu hình unauthorized absence penalty
+    const unauthorizedAbsencePenaltySetting = await SettingModel.query()
+      .findOne('key', 'unauthorizedAbsencePenaltyPerDay');
+    const unauthorizedAbsencePenaltyPerDay = unauthorizedAbsencePenaltySetting 
+      ? parseFloat(unauthorizedAbsencePenaltySetting.value as string) 
+      : 500000; // Default 500k
+
+    console.log(`💰 Unauthorized absence penalty per day: ${unauthorizedAbsencePenaltyPerDay}`);
+
+    // Lọc và đếm từ dailyData
+    const processedDailyDetails = summary.attendanceData.map((record: any) => {
+      const checkInTime = record.checkInTime ? new Date(record.checkInTime) : null;
+      const isLate = parseFloat(record.lateMinutes || '0') > 0;
+      const isEarlyLeave = parseFloat(record.earlyDepartureMinutes || '0') > 0;
+      const hasLatePenalty = parseFloat(record.lateArrivalPenalty || '0') > 0;
+      const hasEarlyLeavePenalty = parseFloat(record.earlyLeavePenalty || '0') > 0;
+      
+      // ⭐ Đếm theo yêu cầu
+      if (hasLatePenalty) lateDays++;
+      if (hasEarlyLeavePenalty) earlyLeaveDays++;
+      
+      totalLateMinutes += parseFloat(record.lateMinutes || '0');
+      totalEarlyLeaveMinutes += parseFloat(record.earlyDepartureMinutes || '0');
+      totalLatePenalty += parseFloat(record.lateArrivalPenalty || '0');
+      totalEarlyLeavePenalty += parseFloat(record.earlyLeavePenalty || '0');
+      
+      // ⭐ Xác định status theo priority
+      let status: string = 'working';
+      let statusText = 'Đã chấm công';
+      let isOnTime = false;
+      let isWorkingDay = record.isWorkingDay !== false; // Giả định true nếu không có thông tin
+      
+      // Priority 1: Weekend (nếu không phải ngày làm việc và không có OT)
+      if (!isWorkingDay && !record.hasApprovedOT) {
+        status = 'weekend';
+        statusText = 'Cuối tuần';
+        weekendDays++;
+      }
+      // Priority 2: Business trip
+      else if (record.hasBusinessTrip || record.type === 'business_trip') {
+        status = 'business_trip';
+        statusText = 'Công tác';
+        businessTripDays++;
+      }
+      // Priority 3: Approved leave
+      else if (record.hasApprovedLeave || record.type === 'leave' || record.type === 'sick-leave') {
+        status = 'approved_leave';
+        statusText = record.leaveInfo || record.leaveTypeName || 'Nghỉ phép';
+        approvedLeaveDays++;
+      }
+      // Priority 4: Unauthorized absence (ngày làm việc không có chấm công)
+      else if (isWorkingDay && !record.checkInTime) {
+        status = 'absent';
+        statusText = 'Nghỉ không phép';
+        unauthorizedAbsenceDays++;
+      }
+      // Priority 5: Has attendance
+      else if (record.checkInTime) {
+        presentDays++;
+        
+        if (!isLate && !isEarlyLeave) {
+          isOnTime = true;
+          onTimeDays++;
+          statusText = 'Đúng giờ';
+        } else if (isLate && isEarlyLeave) {
+          statusText = 'Đi muộn & về sớm';
+        } else if (isLate) {
+          statusText = 'Đi muộn';
+        } else if (isEarlyLeave) {
+          statusText = 'Về sớm';
+        }
+      }
+
+      return {
+        date: record.date,
+        dayOfWeek: checkInTime ? checkInTime.getDay() : new Date(record.date).getDay(),
+        dayName: checkInTime 
+          ? ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][checkInTime.getDay()] 
+          : ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][new Date(record.date).getDay()],
+        isWorkingDay,
+        hasAttendance: !!record.checkInTime,
+        attendanceData: record.checkInTime ? {
+          id: record.id,
+          userId: record.userId,
+          date: record.date,
+          checkIn: record.checkIn || record.checkInTime,
+          checkOut: record.checkOut || record.checkOutTime,
+          checkInTime: record.checkInTime,
+          checkOutTime: record.checkOutTime,
+          status: status as any,
+          totalHours: parseFloat(record.workHours || record.dailyTotalWorkHours || '0'),
+          workHours: parseFloat(record.workHours || record.dailyTotalWorkHours || '0'),
+          lateMinutes: parseFloat(record.lateMinutes || '0'),
+          earlyDepartureMinutes: parseFloat(record.earlyDepartureMinutes || '0'),
+          lateArrivalPenalty: parseFloat(record.lateArrivalPenalty || '0'),
+          earlyLeavePenalty: parseFloat(record.earlyLeavePenalty || '0'),
+          overtime: parseFloat(record.overtime || record.otWorkingUnit || '0'),
+          dailyTotalWorkHours: parseFloat(record.dailyTotalWorkHours || '0'),
+          otWorkingUnit: parseFloat(record.otWorkingUnit || '0')
+        } : undefined,
+        hasApprovedLeave: status === 'approved_leave',
+        leaveType: record.leaveType || record.type,
+        leaveInfo: record.leaveInfo || record.reason,
+        status: status as any,
+        statusText,
+        unauthorizedAbsencePenalty: status === 'absent' ? unauthorizedAbsencePenaltyPerDay : 0,
+        isOnTime,
+        lateMinutes: parseFloat(record.lateMinutes || '0'),
+        earlyLeaveMinutes: parseFloat(record.earlyDepartureMinutes || '0'),
+        businessTripInfo: record.tripInfo || record.businessTripInfo,
+        businessTripDestination: record.destination || record.businessTripDestination
+      };
+    });
+
+    // ⭐ Tính tổng tiền phạt nghỉ không phép
+    const totalUnauthorizedAbsencePenalty = unauthorizedAbsenceDays * unauthorizedAbsencePenaltyPerDay;
+    
+    // ⭐ Tổng tiền phạt = phạt đi muộn + phạt về sớm + phạt nghỉ không phép
+    const totalPenalty = totalLatePenalty + totalEarlyLeavePenalty + totalUnauthorizedAbsencePenalty;
+
+    // ⭐ Vắng mặt = nghỉ phép + công tác (theo yêu cầu)
+    const absentDays = approvedLeaveDays + businessTripDays;
+
     // ⭐ Format response theo format mà frontend mong đợi
     const response = {
       success: true,
       data: {
         monthlyStats: {
           totalDays: summary.totalWorkDays,
-          presentDays: summary.totalWorkDays,
-          absentDays: 0, // TODO: Tính từ attendanceData
-          lateDays: summary.totalLateDays,  // ⭐ Đã có
-          earlyLeaveDays: summary.totalEarlyLeaveDays,  // ⭐ Đã có
+          presentDays,                    // ⭐ Có mặt - đã tính
+          absentDays,                     // ⭐ Vắng mặt = nghỉ phép + công tác
+          lateDays,                       // ⭐ Đếm theo lateArrivalPenalty > 0
+          earlyLeaveDays,                 // ⭐ Đếm theo earlyLeavePenalty > 0
           totalHours: summary.totalWorkHours,
-          averageHours: summary.totalWorkDays > 0 ? summary.totalWorkHours / summary.totalWorkDays : 0,
+          averageHours: presentDays > 0 ? summary.totalWorkHours / presentDays : 0,
           overtimeHours: summary.totalOvertimeHours,
-          totalLatePenalty: summary.totalPenalty,
-          totalEarlyLeavePenalty: 0, // Có thể tính riêng nếu cần
-          totalPenalty: summary.totalPenalty,
-          totalOvertimePay: summary.totalOvertimeSalary
+          totalLatePenalty,               // ⭐ Tổng tiền phạt đi muộn
+          totalEarlyLeavePenalty,         // ⭐ Tổng tiền phạt về sớm
+          totalPenalty,                   // ⭐ Tổng tiền phạt (bao gồm nghỉ không phép)
+          totalOvertimePay: summary.totalOvertimeSalary,
+          totalLateMinutes,               // ⭐ Tổng phút đi muộn
+          totalEarlyLeaveMinutes,         // ⭐ Tổng phút về sớm
+          unauthorizedAbsenceDays,        // ⭐ Số ngày nghỉ không phép
+          totalUnauthorizedAbsencePenalty, // ⭐ Tiền phạt nghỉ không phép
+          approvedLeaveDays,              // ⭐ Số ngày nghỉ phép
+          businessTripDays                // ⭐ Số ngày công tác
         },
         dailyData: {
           userId: summary.userId,
           year: parseInt(year as string),
           month: parseInt(month as string),
-          monthlySalary: 0, // TODO: Lấy từ user service nếu cần
+          monthlySalary: 0,
           penaltyRate: 0,
-          dailyDetails: summary.attendanceData.map((record: any) => {
-            // ⭐ Format theo DailyAttendanceDetail
-            const checkInTime = record.checkInTime ? new Date(record.checkInTime) : null;
-            const isLate = record.lateMinutes > 0;
-            const isEarlyLeave = record.earlyDepartureMinutes > 0;
-            
-            // ⭐ Xác định status - CHECK LEAVE/BUSINESS TRIP TRƯỚC
-            let status: string = 'working';
-            let statusText = 'Đã chấm công';
-            let isOnTime = false;
-            
-            // Priority 1: Check business trip (có thể không có checkIn)
-            if (record.hasBusinessTrip || record.type === 'business_trip') {
-              status = 'business_trip';
-              statusText = 'Công tác';
-            }
-            // Priority 2: Check approved leave (có thể không có checkIn)
-            else if (record.hasApprovedLeave || record.type === 'leave' || record.type === 'sick-leave') {
-              status = 'approved_leave';
-              statusText = record.leaveInfo || record.leaveTypeName || 'Nghỉ phép';
-            }
-            // Priority 3: Check attendance status
-            else if (!record.checkInTime) {
-              status = 'absent';
-              statusText = 'Vắng mặt';
-            } else if (!isLate && !isEarlyLeave) {
-              isOnTime = true;
-              statusText = 'Đúng giờ';
-            } else if (isLate && isEarlyLeave) {
-              statusText = 'Đi muộn & về sớm';
-            } else if (isLate) {
-              statusText = 'Đi muộn';
-            } else if (isEarlyLeave) {
-              statusText = 'Về sớm';
-            }
-
-            return {
-              date: record.date,
-              dayOfWeek: checkInTime ? checkInTime.getDay() : 0,
-              dayName: checkInTime ? ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][checkInTime.getDay()] : '',
-              isWorkingDay: true, // TODO: Check với working days config
-              hasAttendance: !!record.checkInTime,
-              attendanceData: record.checkInTime ? {
-                id: record.id,
-                userId: record.userId,
-                date: record.date,
-                checkIn: record.checkIn || record.checkInTime,
-                checkOut: record.checkOut || record.checkOutTime,
-                checkInTime: record.checkInTime,
-                checkOutTime: record.checkOutTime,
-                status: status as any,
-                totalHours: parseFloat(record.workHours || record.dailyTotalWorkHours || '0'),
-                workHours: parseFloat(record.workHours || record.dailyTotalWorkHours || '0'),
-                lateMinutes: parseFloat(record.lateMinutes || '0'),
-                earlyDepartureMinutes: parseFloat(record.earlyDepartureMinutes || '0'),
-                lateArrivalPenalty: parseFloat(record.lateArrivalPenalty || '0'),
-                earlyLeavePenalty: parseFloat(record.earlyLeavePenalty || '0'),
-                overtime: parseFloat(record.overtime || record.otWorkingUnit || '0'),
-                dailyTotalWorkHours: parseFloat(record.dailyTotalWorkHours || '0'),
-                otWorkingUnit: parseFloat(record.otWorkingUnit || '0')
-              } : undefined,
-              hasApprovedLeave: status === 'approved_leave',
-              leaveType: record.leaveType || record.type,
-              leaveInfo: record.leaveInfo || record.reason,
-              status: status as any,
-              statusText,
-              unauthorizedAbsencePenalty: 0,
-              isOnTime,
-              lateMinutes: parseFloat(record.lateMinutes || '0'),
-              earlyLeaveMinutes: parseFloat(record.earlyDepartureMinutes || '0'),
-              businessTripInfo: record.tripInfo || record.businessTripInfo,
-              businessTripDestination: record.destination || record.businessTripDestination
-            };
-          }),
+          dailyDetails: processedDailyDetails,
           summary: {
-            totalDays: summary.totalWorkDays,
-            workingDays: summary.totalWorkDays,
-            attendedDays: summary.totalWorkDays,
-            approvedLeaveDays: 0,
-            unauthorizedAbsenceDays: 0,
-            totalUnauthorizedAbsencePenalty: 0,
-            weekendDays: 0,
-            totalLateMinutes: 0, // TODO: Tính tổng
-            totalEarlyLeaveMinutes: 0,
-            onTimeDays: 0
+            totalDays: summary.attendanceData.length,
+            workingDays: summary.attendanceData.filter((r: any) => r.isWorkingDay !== false).length,
+            attendedDays: presentDays,
+            approvedLeaveDays,
+            unauthorizedAbsenceDays,
+            totalUnauthorizedAbsencePenalty,
+            weekendDays,
+            totalLateMinutes,
+            totalEarlyLeaveMinutes,
+            onTimeDays
           }
         }
       }
     };
+
+    console.log('📊 Monthly stats summary:', {
+      presentDays,
+      lateDays,
+      earlyLeaveDays,
+      approvedLeaveDays,
+      businessTripDays,
+      unauthorizedAbsenceDays,
+      totalPenalty,
+      totalUnauthorizedAbsencePenalty
+    });
 
     return res.status(200).json(response);
 
@@ -368,4 +441,35 @@ export const getUserMonthlyFull = async (req: Request, res: Response) => {
 export const getUserMonthlyDetail = async (req: Request, res: Response) => {
   // Dùng chung logic với monthly-full
   return getUserMonthlyFull(req, res);
+};
+
+export const recordAttendance = async (req: Request, res: Response) => {
+  try {
+    const { userId, time } = req.body;
+    
+    if (!userId || !time) {
+      res.status(400).json({
+        success: false,
+        message: 'userId và time là bắt buộc'
+      });
+      return;
+    }
+    
+    // Gọi service để xử lý attendance tự động
+    const result = await AttendanceService.recordAttendance(userId, time);
+    
+    res.json({
+      success: true,
+      message: result.type === 'check_in' 
+        ? 'Chấm công vào thành công' 
+        : 'Chấm công ra thành công',
+      data: result
+    });
+  } catch (error: any) {
+    console.error('Error in /attendance/record:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Lỗi khi chấm công'
+    });
+  }
 };

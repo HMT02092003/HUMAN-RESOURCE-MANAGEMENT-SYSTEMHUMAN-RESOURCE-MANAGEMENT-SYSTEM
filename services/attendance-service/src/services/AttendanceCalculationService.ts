@@ -47,6 +47,8 @@ interface AttendanceCalculation {
   lateMinutes: number;
   earlyDepartureMinutes: number;
   otMinutes: number;
+  otWorkingUnit: number;
+  otSalary: number;
   isLate: boolean;
   isEarlyLeave: boolean;
   penaltyRate: number;
@@ -194,20 +196,19 @@ export class AttendanceCalculationService {
       return 0;
     }
 
-    // Công thức penalty: (Lương cơ bản / 100) * Penalty Rate * Số phút
-    // Penalty rate là % lương cơ bản bị phạt mỗi phút (ví dụ: 0.0001 = 0.01% lương/phút)
+    // New formula requested:
+    // Penalty amount = baseMonthlySalary * rate * minutes
+    // where `rate` is taken from settings and is a fraction per minute (e.g. 0.0001)
     const baseSalary = parseFloat(salaryInfo.baseSalary.toString());
-    const penaltyPerMinute = baseSalary * penaltyRatePercent;
-    const penaltyAmount = penaltyPerMinute * minutes;
-    
+    const penaltyAmount = baseSalary * penaltyRatePercent * minutes;
+
     console.log(`💸 Penalty calculation for ${minutes} minutes:`);
-    console.log(`- Base salary: ${baseSalary.toLocaleString('vi-VN')} VND`);
-    console.log(`- Penalty rate: ${penaltyRatePercent}% per minute`);
-    console.log(`- Penalty per minute: ${penaltyPerMinute.toLocaleString('vi-VN')} VND`);
+    console.log(`- Base monthly salary: ${baseSalary.toLocaleString('vi-VN')} VND`);
+    console.log(`- Penalty rate (fraction per minute): ${penaltyRatePercent}`);
     console.log(`- Minutes: ${minutes}`);
-    console.log(`- Formula: (${baseSalary.toLocaleString('vi-VN')} ÷ 100) × ${penaltyRatePercent} × ${minutes}`);
+    console.log(`- Formula: baseSalary * rate * minutes = ${baseSalary} * ${penaltyRatePercent} * ${minutes}`);
     console.log(`- Penalty amount: ${penaltyAmount.toLocaleString('vi-VN')} VND`);
-    
+
     return Math.round(penaltyAmount * 100) / 100; // Round to 2 decimal places
   }
 
@@ -270,9 +271,10 @@ export class AttendanceCalculationService {
     checkOutTime: string | null,
     date: string,
     userId?: number,
-    token?: string
+    token?: string,
+    approvedOtEndTime?: string | null
   ): Promise<AttendanceCalculation> {
-    console.log('🧮 Starting attendance calculation for:', { date, checkInTime, checkOutTime, userId });
+    console.log('🧮 Starting attendance calculation for:', { date, checkInTime, checkOutTime, userId, approvedOtEndTime });
     
     const settings = await this.getSettings();
     const workingHours = settings.workingHours as WorkingHours;
@@ -296,6 +298,8 @@ export class AttendanceCalculationService {
         lateMinutes: 0,
         earlyDepartureMinutes: 0,
         otMinutes: 0,
+        otWorkingUnit: 0,
+        otSalary: 0,
         isLate: false,
         isEarlyLeave: false,
         penaltyRate,
@@ -331,6 +335,8 @@ export class AttendanceCalculationService {
       lateMinutes,
       earlyDepartureMinutes: 0,
       otMinutes: 0,
+      otWorkingUnit: 0,
+      otSalary: 0,
       isLate: lateMinutes > 0,
       isEarlyLeave: false,
       penaltyRate,
@@ -381,8 +387,67 @@ export class AttendanceCalculationService {
       console.log('- Actual work minutes:', workMinutes);
       console.log('- Work hours:', result.workHours);
 
-      // Tính overtime - KHÔNG tính ở đây theo yêu cầu
-      result.otMinutes = 0; // Không tính OT theo yêu cầu
+      // Tính overtime nếu có đơn OT đã duyệt
+      if (approvedOtEndTime && checkOut.isAfter(expectedCheckOut)) {
+        const approvedOtEnd = dayjs(approvedOtEndTime).tz('Asia/Ho_Chi_Minh');
+        
+        // Chỉ tính OT nếu checkout sau giờ làm việc và trước/bằng giờ OT đã duyệt
+        if (checkOut.isAfter(expectedCheckOut) && checkOut.isSameOrBefore(approvedOtEnd)) {
+          result.otMinutes = checkOut.diff(expectedCheckOut, 'minute');
+          result.otWorkingUnit = Math.round((result.otMinutes / 60) * 100) / 100; // Đơn vị công OT (giờ)
+          
+          // Tính lương OT nếu có thông tin lương
+          if (salaryInfo) {
+            // Derive per-minute OT rate from settings.overtimeRate
+            let perMinuteOtRate = 0;
+            try {
+              const otSetting = settings.overtimeRate as any;
+              if (otSetting && typeof otSetting === 'object') {
+                // If explicit perMinute provided
+                if (otSetting.perMinute) {
+                  perMinuteOtRate = parseFloat(otSetting.perMinute);
+                } else if (otSetting.rate) {
+                  // If rate is multiplier (e.g. 1.5), convert to per-minute fraction:
+                  // multiplier / (working days in month * hours per day * 60)
+                  const days = otSetting.workingDaysPerMonth || 22;
+                  const hours = otSetting.hoursPerDay || 8;
+                  perMinuteOtRate = parseFloat(otSetting.rate) / (days * hours * 60);
+                }
+              } else if (typeof otSetting === 'number') {
+                // interpret as multiplier
+                perMinuteOtRate = (otSetting as number) / (22 * 8 * 60);
+              }
+            } catch (e) {
+              console.log('⚠️ Error parsing overtimeRate setting, falling back to default per-minute rate');
+            }
+
+            // Fallback default per-minute OT rate for multiplier 1.5
+            if (!perMinuteOtRate || isNaN(perMinuteOtRate) || perMinuteOtRate <= 0) {
+              perMinuteOtRate = 1.5 / (22 * 8 * 60);
+            }
+
+            // OT salary = baseMonthlySalary * perMinuteOtRate * otMinutes
+            result.otSalary = Math.round(salaryInfo.baseSalary * perMinuteOtRate * result.otMinutes);
+          }
+          
+          console.log('⏰ Overtime calculation:');
+          console.log('- OT end time (approved):', approvedOtEnd.format('HH:mm'));
+          console.log('- Actual checkout:', checkOut.format('HH:mm'));
+          console.log('- OT minutes:', result.otMinutes);
+          console.log('- OT working unit (hours):', result.otWorkingUnit);
+          console.log('- OT salary:', result.otSalary);
+        } else {
+          result.otMinutes = 0;
+          result.otWorkingUnit = 0;
+          result.otSalary = 0;
+          console.log('⚠️ Checkout time exceeds approved OT time - no OT calculated');
+        }
+      } else {
+        result.otMinutes = 0;
+        result.otWorkingUnit = 0;
+        result.otSalary = 0;
+        console.log('ℹ️ No approved OT or checkout before expected time - no OT calculated');
+      }
     }
 
     // Tính toán tiền phạt dựa trên lương thực tế
@@ -534,8 +599,43 @@ export class AttendanceCalculationService {
       const totalMonthlySalary = salaryInfo.baseSalary + (salaryInfo.allowance || 0);
       const hourlyRate = totalMonthlySalary / (22 * 8); // 22 ngày làm việc, 8 giờ/ngày
       
-      // Lương tăng ca = hourlyRate * overtimeRate * overtimeHours
-      const overtimeSalary = hourlyRate * overtimeRate * overtimeHours;
+      // Lương tăng ca: use base monthly salary * per-minute OT rate * minutes
+      // Convert overtimeHours to minutes
+      const overtimeMinutes = Math.round(overtimeHours * 60);
+
+      // derive per-minute OT rate (same logic as above)
+      let perMinuteOtRate = 0;
+      try {
+        const overtimeRateSetting = await SettingModel.query()
+          .where('key', 'OvertimeRate')
+          .first();
+        if (overtimeRateSetting && overtimeRateSetting.value) {
+          const value = overtimeRateSetting.value;
+          let otSetting: any = value;
+          if (typeof value === 'string') {
+            try { otSetting = JSON.parse(value); } catch {};
+          }
+
+          if (otSetting && typeof otSetting === 'object') {
+            if (otSetting.perMinute) perMinuteOtRate = parseFloat(otSetting.perMinute);
+            else if (otSetting.rate) {
+              const days = otSetting.workingDaysPerMonth || 22;
+              const hours = otSetting.hoursPerDay || 8;
+              perMinuteOtRate = parseFloat(otSetting.rate) / (days * hours * 60);
+            }
+          } else if (typeof otSetting === 'number') {
+            perMinuteOtRate = otSetting / (22 * 8 * 60);
+          }
+        }
+      } catch (e) {
+        console.log('⚠️ Error reading OvertimeRate setting for calculateOvertimeSalary, using default');
+      }
+
+      if (!perMinuteOtRate || isNaN(perMinuteOtRate) || perMinuteOtRate <= 0) {
+        perMinuteOtRate = 1.5 / (22 * 8 * 60);
+      }
+
+      const overtimeSalary = Math.round(salaryInfo.baseSalary * perMinuteOtRate * overtimeMinutes);
 
       console.log(`💰 Overtime salary calculation:`, {
         baseSalary: salaryInfo.baseSalary,
@@ -547,7 +647,7 @@ export class AttendanceCalculationService {
         overtimeSalary: overtimeSalary.toFixed(2)
       });
 
-      return Math.round(overtimeSalary);
+  return overtimeSalary;
 
     } catch (error) {
       console.error('❌ Error calculating overtime salary:', error);
