@@ -14,7 +14,6 @@ import {
 import {
   getSettings,
   updateSettings,
-  getSettingsByKey,
   updateSettingByKey,
   getSettingByKey,
 }  from '@/controller/SettingsController';

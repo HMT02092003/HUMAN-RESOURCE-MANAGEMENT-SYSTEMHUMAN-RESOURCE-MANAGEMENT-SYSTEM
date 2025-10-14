@@ -14,6 +14,7 @@ import { validate } from '@/utils/validation-utility';
 import { getDecodedToken } from '@/utils/decode-token';
 import { AttendanceService } from '@/services/AttendanceService';
 import SettingModel from '@/Models/SettingsModel';
+import axios from 'axios';
 
 /**
  * API 1: Lấy toàn bộ thông tin chấm công theo tháng
@@ -241,14 +242,83 @@ export const getUserMonthlyFull = async (req: Request, res: Response) => {
     let onTimeDays = 0;
     let weekendDays = 0;
 
-    // Lấy cấu hình unauthorized absence penalty
-    const unauthorizedAbsencePenaltySetting = await SettingModel.query()
-      .findOne('key', 'unauthorizedAbsencePenaltyPerDay');
-    const unauthorizedAbsencePenaltyPerDay = unauthorizedAbsencePenaltySetting 
-      ? parseFloat(unauthorizedAbsencePenaltySetting.value as string) 
-      : 500000; // Default 500k
+    // Lấy cấu hình UnauthorizedAbsencePenaltyRate (bắt buộc)
+    const uaSetting = await SettingModel.query().findOne('key', 'UnauthorizedAbsencePenaltyRate');
+    if (!uaSetting) {
+      throw new Error('UnauthorizedAbsencePenaltyRate setting not found');
+    }
 
-    console.log(`💰 Unauthorized absence penalty per day: ${unauthorizedAbsencePenaltyPerDay}`);
+    // Parse setting value: accept { rate: number } or a plain number
+    let uaRate: number;
+    try {
+      const parsed = typeof uaSetting.value === 'string' ? JSON.parse(uaSetting.value) : uaSetting.value;
+      uaRate = parsed && parsed.rate !== undefined ? parseFloat(parsed.rate) : parseFloat(parsed);
+    } catch (e) {
+      uaRate = parseFloat(uaSetting.value as any);
+    }
+
+    if (isNaN(uaRate)) {
+      throw new Error('UnauthorizedAbsencePenaltyRate setting invalid');
+    }
+
+    // Lấy lương của user từ Auth Service (qua API Gateway)
+    const apiGatewayUrl = `http://localhost:${process.env['API_GATEWAY_PORT'] || 4000}`;
+    const headers: any = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    // Strategy to retrieve salary:
+    // 1) try auth internal endpoint (no token): /api/internal/users/:id/salary on auth-service
+    // 2) try employee endpoint via gateway: /api/employee/users/:id/salary
+    // 3) fallback to gateway auth detail which requires token
+
+    let baseSalary: number | null = null;
+    // 1) internal auth internal salary endpoint
+    try {
+      const internalResp = await axios.get(`http://localhost:${process.env['AUTH_SERVICE_PORT'] || 4001}/api/internal/users/${userId}/salary`, { timeout: 4000 });
+      if (internalResp.data && internalResp.data.success && internalResp.data.data) {
+        baseSalary = internalResp.data.data.baseSalary || internalResp.data.data.salary;
+        console.log('✅ Retrieved salary from auth internal endpoint:', baseSalary);
+      }
+    } catch (internalErr: any) {
+      console.log('⚠️ Auth internal salary endpoint not available or failed:', internalErr.message || internalErr.response?.status);
+    }
+
+    // 2) try employee endpoint via gateway
+    if (!baseSalary) {
+      try {
+        const employeeSalaryResp = await axios.get(`${apiGatewayUrl}/api/employee/users/${userId}/salary`, { timeout: 4000 });
+        if (employeeSalaryResp.data && employeeSalaryResp.data.success && employeeSalaryResp.data.data) {
+          baseSalary = employeeSalaryResp.data.data.baseSalary || employeeSalaryResp.data.data.salary;
+          console.log('✅ Retrieved salary via employee endpoint:', baseSalary);
+        }
+      } catch (empErr: any) {
+        console.log('⚠️ Employee salary endpoint via gateway failed:', empErr.message || empErr.response?.status);
+      }
+    }
+
+    // 3) fallback: gateway auth detail (requires token)
+    if (!baseSalary) {
+      try {
+        const userResp = await axios.get(`${apiGatewayUrl}/api/auth/users/detail/${userId}`, { headers, timeout: 5000 });
+        if (userResp.status === 401) {
+          throw new Error('Auth token invalid/expired when fetching user details');
+        }
+        const userData = userResp.data && (userResp.data.data ? userResp.data.data : userResp.data);
+        baseSalary = userData?.salary ?? userData?.baseSalary;
+        console.log('✅ Retrieved salary via auth detail:', baseSalary);
+      } catch (authErr: any) {
+        console.error('❌ Failed to retrieve salary via auth gateway:', authErr.response?.data || authErr.message);
+        throw new Error('Unable to retrieve user salary: ' + (authErr.response?.data?.message || authErr.message));
+      }
+    }
+
+    if (!baseSalary) throw new Error('Salary info for user not found');
+    baseSalary = parseFloat(baseSalary.toString());
+    if (isNaN(baseSalary) || baseSalary <= 0) throw new Error('Invalid base salary for user');
+
+    const unauthorizedAbsencePenaltyPerDay = Math.round((baseSalary / 100) * uaRate);
+
+    console.log(`💰 Unauthorized absence per day: ${unauthorizedAbsencePenaltyPerDay}`);
 
     // Lọc và đếm từ dailyData
     const processedDailyDetails = summary.attendanceData.map((record: any) => {
@@ -272,6 +342,7 @@ export const getUserMonthlyFull = async (req: Request, res: Response) => {
       let statusText = 'Đã chấm công';
       let isOnTime = false;
       let isWorkingDay = record.isWorkingDay !== false; // Giả định true nếu không có thông tin
+      const isFuture = record.isFuture === true;
       
       // Priority 1: Weekend (nếu không phải ngày làm việc và không có OT)
       if (!isWorkingDay && !record.hasApprovedOT) {
@@ -291,8 +362,8 @@ export const getUserMonthlyFull = async (req: Request, res: Response) => {
         statusText = record.leaveInfo || record.leaveTypeName || 'Nghỉ phép';
         approvedLeaveDays++;
       }
-      // Priority 4: Unauthorized absence (ngày làm việc không có chấm công)
-      else if (isWorkingDay && !record.checkInTime) {
+      // Priority 4: Unauthorized absence (ngày làm việc không có chấm công) - ignore future dates
+      else if (isWorkingDay && !record.checkInTime && !isFuture) {
         status = 'absent';
         statusText = 'Nghỉ không phép';
         unauthorizedAbsenceDays++;

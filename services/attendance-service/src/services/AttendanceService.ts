@@ -191,6 +191,13 @@ export class AttendanceService {
     date: string,
     applications: ApprovedLeaveApplication[]
   ): { hasLeave: boolean; leaveType?: string; leaveInfo?: string } {
+    const today = dayjs().format('YYYY-MM-DD');
+
+    // Bỏ qua các ngày sau ngày hôm nay
+    if (dayjs(date).isAfter(today, 'day')) {
+      return { hasLeave: false }; // Bỏ qua các ngày trong tương lai
+    }
+
     for (const app of applications) {
       if (app.type === 'leave' || app.type === 'sick-leave') {
         const appData = app.data;
@@ -245,6 +252,13 @@ export class AttendanceService {
     date: string,
     applications: ApprovedLeaveApplication[]
   ): { hasBusinessTrip: boolean; tripInfo?: string; destination?: string } {
+    const today = dayjs().format('YYYY-MM-DD');
+
+    // Bỏ qua các ngày sau ngày hôm nay
+    if (dayjs(date).isAfter(today, 'day')) {
+      return { hasBusinessTrip: false }; // Bỏ qua các ngày trong tương lai
+    }
+
     for (const app of applications) {
       if (app.type === 'business-trip') {
         const appData = app.data;
@@ -383,6 +397,9 @@ export class AttendanceService {
         // ⭐ Check xem ngày này có phải ngày làm việc không
         const isWorkingDay = this.isWorkingDay(dateKey, workingDaysConfig);
         
+        // Determine if this date is in the future (beyond today)
+        const isFuture = currentDate.isAfter(dayjs(), 'day');
+        
         // Lấy attendance record nếu có
         const attendanceRecord = attendanceMap.get(dateKey);
         
@@ -404,6 +421,7 @@ export class AttendanceService {
           date: currentDate.toISOString(),
           userId,
           isWorkingDay,        // ⭐ Thêm thông tin ngày làm việc
+          isFuture,            // ⭐ Đánh dấu ngày trong tương lai (không tính nghỉ không phép)
           hasApprovedOT,       // ⭐ Thêm thông tin OT đã duyệt
           // Thông tin nghỉ phép
           hasApprovedLeave: leaveCheck.hasLeave,
@@ -412,7 +430,7 @@ export class AttendanceService {
           type: leaveCheck.hasLeave 
             ? leaveCheck.leaveType 
             : (businessTripCheck.hasBusinessTrip ? 'business_trip' : 'attendance'),
-          
+
           // Thông tin công tác
           hasBusinessTrip: businessTripCheck.hasBusinessTrip,
           businessTripInfo: businessTripCheck.tripInfo,
