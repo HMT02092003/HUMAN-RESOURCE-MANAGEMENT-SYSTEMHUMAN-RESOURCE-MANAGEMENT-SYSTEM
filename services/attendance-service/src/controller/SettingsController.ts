@@ -36,6 +36,22 @@ export const getSettingsByKey = async (req: Request, res: Response) => {
     }
 };
 
+export const getSettingByKey = async (req: Request, res: Response) => {
+    try {
+        const { key } = req.params;
+        console.log('Getting setting by key:', key);
+        const setting = await SettingModel.query().findOne({ key });
+        console.log('Found setting:', setting);
+        if (!setting) {
+            return res.status(404).json({ error: 'Setting not found' });
+        }
+        return res.json(setting);
+    } catch (error) {
+        console.error('Error fetching setting by key:', error);
+        return res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
 export const updateSettings = async (req: Request, res: Response) => {
     try {
         const inputs = req.body;
@@ -136,5 +152,40 @@ export const updateSettings = async (req: Request, res: Response) => {
     } catch (error: any) {
         console.error('Update settings error:', error);
         return res.status(500).json({ error: error.message || 'Internal Server Error' });
+    }
+};
+
+export const updateSettingByKey = async (req: Request, res: Response) => {
+    try {
+        const { key, value } = req.body;
+
+        if (!key || value === undefined) {
+            return res.status(400).json({ error: "Key and value are required" });
+        }
+
+        const existingSetting = await SettingModel.query().findOne({ key });
+
+        if (existingSetting) {
+            // Update nếu đã tồn tại
+            await SettingModel.query().patch({ value }).where({ key });
+        } else {
+            // Insert nếu chưa tồn tại - cần thêm name
+            const nameMap: { [key: string]: string } = {
+                'WorkingHours': 'Giờ hành chính',
+                'LunchBreak': 'Giờ nghỉ trưa',
+                'OvertimeRate': 'Tỷ lệ làm thêm',
+                'HolidayRate': 'Tỷ lệ ngày nghỉ',
+                'PenaltyRate': 'Tỷ lệ phạt đi muộn/về sớm',
+                'UnauthorizedAbsencePenaltyRate': 'Tỷ lệ phạt nghỉ không phép',
+                'WorkingDays': 'Ngày làm việc trong tuần'
+            };
+            const name = nameMap[key] || key;
+            await SettingModel.query().insert({ key, name, value });
+        }
+
+        return res.status(200).json({ key, value });
+    } catch (error: any) {
+        console.error("Update setting by key error:", error);
+        return res.status(500).json({ error: error.message || "Internal Server Error" });
     }
 };

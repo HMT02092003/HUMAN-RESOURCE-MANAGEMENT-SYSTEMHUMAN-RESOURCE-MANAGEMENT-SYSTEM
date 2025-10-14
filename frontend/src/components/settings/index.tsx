@@ -50,17 +50,30 @@ const SettingsIndex: React.FC = () => {
   const handleSaveSettings = async (updatedSettings: any) => {
     try {
       console.log('Saving settings from index:', updatedSettings);
-      const updated = await settingsService.updateSettings(updatedSettings);
-      
-      console.log('Settings saved successfully:', updated);
-      setSettingsData(updated);
+      let result: any;
+
+      // If it's a single key update (child sends { Key: value }) call per-key endpoint
+      const keys = Object.keys(updatedSettings || {});
+      if (keys.length === 1) {
+        const k = keys[0];
+        result = await settingsService.updateSetting(k, updatedSettings[k]);
+      } else {
+        // Otherwise save each key sequentially
+        for (const k of keys) {
+          await settingsService.updateSetting(k, updatedSettings[k]);
+        }
+        result = updatedSettings;
+      }
+
+      console.log('Settings saved successfully:', result);
+      setSettingsData(result);
       
       // Tự động tải lại sau khi lưu để đảm bảo đồng bộ
       setTimeout(() => {
         loadSettings();
       }, 500);
       
-      return updated;
+  return result;
     } catch (error: any) {
       console.error('Error saving settings:', error);
       

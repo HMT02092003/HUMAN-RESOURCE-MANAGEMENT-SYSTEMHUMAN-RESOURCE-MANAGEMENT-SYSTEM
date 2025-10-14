@@ -145,8 +145,8 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         'attendance_parent',
         <CalendarOutlined />,
         [
-            getItem('Chấm công cá nhân', 'attendance', <CalendarOutlined />, 'timeAttendance'),
-            getItem('Duyệt chấm công', 'attendanceApproval', <CheckCircleOutlined />, 'timeAttendance', 'approve'), 
+            getItem('Bảng chấm công', 'attendance', <CalendarOutlined />, 'timeAttendance'),
+            getItem('Duyệt bảng chấm công', 'attendanceApproval', <CheckCircleOutlined />, 'timeAttendance', 'approve'), 
         ],
         ['timeAttendance']
     ),

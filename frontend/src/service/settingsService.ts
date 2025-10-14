@@ -30,14 +30,57 @@ const SettingsService = {
     }
   },
 
-  // Cập nhật settings
-  updateSettings: async (data: any) => {
+  // Cập nhật settings theo từng loại
+  updateSetting: async (key: string, value: any) => {
     try {
-      const response = await api.post('/api/attendance/settings', data);
+      const data = { key, value };
+  // Use dedicated per-key endpoint
+  const response = await api.post('/api/attendance/settings/key', data);
       return response.data;
     } catch (error) {
       throw error;
     }
+  },
+
+  // Thêm: Fetch setting theo key (cho revert)
+  getSettingByKey: async (key: string) => {
+    try {
+      const response = await api.get(`/api/attendance/settings/${key}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching setting by key:', error);
+      throw error;
+    }
+  },
+
+  // Convenience methods for dedicated routes
+  updateWorkingHours: async (value: any) => {
+    const response = await api.post('/api/attendance/settings/working-hours', { value });
+    return response.data;
+  },
+  updateLunchBreak: async (value: any) => {
+    const response = await api.post('/api/attendance/settings/lunch-break', { value });
+    return response.data;
+  },
+  updateOvertimeRate: async (value: any) => {
+    const response = await api.post('/api/attendance/settings/overtime-rate', { value });
+    return response.data;
+  },
+  updateHolidayRate: async (value: any) => {
+    const response = await api.post('/api/attendance/settings/holiday-rate', { value });
+    return response.data;
+  },
+  updatePenaltyRate: async (value: any) => {
+    const response = await api.post('/api/attendance/settings/penalty-rate', { value });
+    return response.data;
+  },
+  updateUnauthorizedAbsencePenaltyRate: async (value: any) => {
+    const response = await api.post('/api/attendance/settings/unauthorized-absence-penalty-rate', { value });
+    return response.data;
+  },
+  updateWorkingDays: async (value: any) => {
+    const response = await api.post('/api/attendance/settings/working-days', { value });
+    return response.data;
   },
 
   getWorkingDays: async (key: any) => {
@@ -51,4 +94,4 @@ const SettingsService = {
 
 };
 
-export default SettingsService; 
+export default SettingsService;

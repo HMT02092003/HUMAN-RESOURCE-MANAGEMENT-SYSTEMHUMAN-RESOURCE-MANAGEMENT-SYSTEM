@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Tabs, Card, Form, TimePicker, InputNumber, Button, message, Spin, Row, Col, Checkbox, Typography, Space } from 'antd';
-import { SaveOutlined, SettingOutlined, ClockCircleOutlined, DollarCircleOutlined, CalendarOutlined, ReloadOutlined, ScheduleOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { SaveOutlined, SettingOutlined, ClockCircleOutlined, DollarCircleOutlined, CalendarOutlined, ReloadOutlined, ScheduleOutlined, ExclamationCircleOutlined, RollbackOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import utc from 'dayjs/plugin/utc';
@@ -81,7 +81,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('workingHours');
-  
+
   // Cấu hình mặc định
   const defaultSettings: SettingsData = {
     WorkingHours: { start: '08:00', end: '17:00' },
@@ -100,25 +100,35 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       sunday: false
     }
   };
-  
+
   const [settingsData, setSettingsData] = useState<SettingsData>(defaultSettings);
 
-   const transformBackendData = (backendData: any[]): SettingsData => {
+  const transformBackendData = (backendData: any[]): SettingsData => {
     if (!Array.isArray(backendData) || backendData.length === 0) {
       return defaultSettings;
     }
 
     // Convert từ array format sang object format
     const transformedData: any = {};
-    
+
     backendData.forEach(item => {
-      if (item.key && item.value) {
-        transformedData[item.key] = item.value;
+      if (item.key && item.value !== undefined && item.value !== null) {
+        // Backend sometimes returns value as a JSON string (stored in DB) or as an object.
+        // Try to parse string values so the frontend receives a proper object.
+        let parsedValue: any = item.value;
+        if (typeof parsedValue === 'string') {
+          try {
+            parsedValue = JSON.parse(parsedValue);
+          } catch (e) {
+            // not a JSON string, keep original string
+          }
+        }
+        transformedData[item.key] = parsedValue;
       }
     });
 
     console.log('Transformed data from backend:', transformedData);
-    
+
     // Validate và merge với default settings
     return {
       WorkingHours: {
@@ -153,19 +163,19 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
     };
   };
 
- const fetchSettings = async () => {
+  const fetchSettings = async () => {
     try {
       setFetchLoading(true);
       console.log('Đang lấy thông tin settings từ backend...');
-      
+
       const response = await SettingsService.getAllSettings();
       console.log('Raw settings data từ backend:', response);
-      
+
       if (response && Array.isArray(response) && response.length > 0) {
         // Transform dữ liệu từ backend format
         const transformedData = transformBackendData(response);
         console.log('Transformed settings data:', transformedData);
-        
+
         setSettingsData(transformedData);
         updateFormFields(transformedData);
       } else {
@@ -175,11 +185,11 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       }
     } catch (error: any) {
       console.error('Lỗi khi lấy settings:', error);
-      
+
       // Fallback về default settings nếu có lỗi
       setSettingsData(defaultSettings);
       updateFormFields(defaultSettings);
-      
+
       // Hiển thị thông báo lỗi
       if (error?.response?.status === 404) {
         message.warning('Chưa có cấu hình trong hệ thống. Đang sử dụng cấu hình mặc định.');
@@ -192,12 +202,12 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       setFetchLoading(false);
     }
   };
-  
+
   useEffect(() => {
     // Ưu tiên initialData nếu có, nếu không thì fetch từ backend
     if (initialData) {
       console.log('Sử dụng initialData:', initialData);
-      
+
       // Kiểm tra xem initialData có phải là array format từ backend không
       let processedData;
       if (Array.isArray(initialData)) {
@@ -206,7 +216,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
         // Nếu đã là object format, validate như cũ
         processedData = validateAndMergeSettings(initialData);
       }
-      
+
       setSettingsData(processedData);
       updateFormFields(processedData);
     } else {
@@ -257,7 +267,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       const endTime = data.WorkingHours.end.split(':');
       const lunchStartTime = data.LunchBreak.start.split(':');
       const lunchEndTime = data.LunchBreak.end.split(':');
-      
+
       form.setFieldsValue({
         workingHoursStart: dayjs().hour(parseInt(startTime[0])).minute(parseInt(startTime[1])).second(0),
         workingHoursEnd: dayjs().hour(parseInt(endTime[0])).minute(parseInt(endTime[1])).second(0),
@@ -277,7 +287,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
           sunday: data.WorkingDays.sunday,
         }
       });
-      
+
       // Clear validation errors sau khi set values
       setTimeout(() => {
         form.validateFields().catch(() => {
@@ -292,7 +302,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       const defaultEndTime = defaultSettings.WorkingHours.end.split(':');
       const defaultLunchStartTime = defaultSettings.LunchBreak.start.split(':');
       const defaultLunchEndTime = defaultSettings.LunchBreak.end.split(':');
-      
+
       form.setFieldsValue({
         workingHoursStart: dayjs().hour(parseInt(defaultStartTime[0])).minute(parseInt(defaultStartTime[1])).second(0),
         workingHoursEnd: dayjs().hour(parseInt(defaultEndTime[0])).minute(parseInt(defaultEndTime[1])).second(0),
@@ -312,7 +322,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
           sunday: defaultSettings.WorkingDays.sunday,
         }
       });
-      
+
       // Clear validation errors sau khi set default values
       setTimeout(() => {
         form.validateFields().catch(() => {
@@ -362,9 +372,9 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       throw new Error('Tỷ lệ OT ngày lễ phải cao hơn tỷ lệ OT ngày thường');
     }
 
-    // Kiểm tra tỷ lệ phạt
-    if (values.penaltyRate < 0.0001) {
-      throw new Error('Tỷ lệ phạt đi muộn/về sớm phải lớn hơn hoặc bằng 0.0001');
+    // Kiểm tra tỷ lệ phạt - cho phép giá trị nhỏ, chỉ chặn âm
+    if (values.penaltyRate < 0) {
+      throw new Error('Tỷ lệ phạt đi muộn/về sớm không được âm');
     }
 
     if (values.penaltyRate > 1) {
@@ -400,66 +410,126 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       // Validate business logic
       validateTimeLogic(values);
 
-      const updatedSettings = {
-        WorkingHours: {
-          start: values.workingHoursStart.format('HH:mm') || defaultSettings.WorkingHours.start,
-          end: values.workingHoursEnd.format('HH:mm') || defaultSettings.WorkingHours.end
-        },
-        LunchBreak: {
-          start: values.lunchBreakStart.format('HH:mm') || defaultSettings.LunchBreak.start,
-          end: values.lunchBreakEnd.format('HH:mm') || defaultSettings.LunchBreak.end
-        },
-        OvertimeRate: {
-          rate: parseFloat(values.overtimeRate) || defaultSettings.OvertimeRate.rate
-        },
-        HolidayRate: {
-          rate: parseFloat(values.holidayRate) || defaultSettings.HolidayRate.rate
-        },
-        PenaltyRate: {
-          rate: parseFloat(values.penaltyRate) || defaultSettings.PenaltyRate.rate
-        },
-        UnauthorizedAbsencePenaltyRate: {
-          rate: parseFloat(values.unauthorizedAbsencePenaltyRate) || defaultSettings.UnauthorizedAbsencePenaltyRate.rate
-        },
-        WorkingDays: {
-          monday: values.workingDays?.monday ?? defaultSettings.WorkingDays.monday,
-          tuesday: values.workingDays?.tuesday ?? defaultSettings.WorkingDays.tuesday,
-          wednesday: values.workingDays?.wednesday ?? defaultSettings.WorkingDays.wednesday,
-          thursday: values.workingDays?.thursday ?? defaultSettings.WorkingDays.thursday,
-          friday: values.workingDays?.friday ?? defaultSettings.WorkingDays.friday,
-          saturday: values.workingDays?.saturday ?? defaultSettings.WorkingDays.saturday,
-          sunday: values.workingDays?.sunday ?? defaultSettings.WorkingDays.sunday
-        }
-      };
+      // Build payload for the active tab only
+      let keyToSave: string | null = null;
+      let valueToSave: any = null;
 
-      console.log('Settings to save:', updatedSettings);
-
-      // Gọi API để lưu settings
-      let savedSettings;
-      if (onSave) {
-        // Nếu có callback từ parent component
-        savedSettings = await onSave(updatedSettings);
-      } else {
-        // Gọi trực tiếp SettingsService
-        savedSettings = await SettingsService.updateSettings(updatedSettings);
+      switch (activeTab) {
+        case 'workingHours':
+          keyToSave = 'WorkingHours';
+          valueToSave = {
+            start: values.workingHoursStart.format('HH:mm') || defaultSettings.WorkingHours.start,
+            end: values.workingHoursEnd.format('HH:mm') || defaultSettings.WorkingHours.end
+          };
+          break;
+        case 'lunchBreak':
+          keyToSave = 'LunchBreak';
+          valueToSave = {
+            start: values.lunchBreakStart.format('HH:mm') || defaultSettings.LunchBreak.start,
+            end: values.lunchBreakEnd.format('HH:mm') || defaultSettings.LunchBreak.end
+          };
+          break;
+        case 'overtimeRate':
+          keyToSave = 'OvertimeRate';
+          valueToSave = { rate: parseFloat(values.overtimeRate) };
+          break;
+        case 'holidayRate':
+          keyToSave = 'HolidayRate';
+          valueToSave = { rate: parseFloat(values.holidayRate) };
+          break;
+        case 'penaltyRate':
+          keyToSave = 'PenaltyRate';
+          valueToSave = { rate: parseFloat(values.penaltyRate) };
+          break;
+        case 'unauthorizedAbsencePenaltyRate':
+          keyToSave = 'UnauthorizedAbsencePenaltyRate';
+          valueToSave = { rate: parseFloat(values.unauthorizedAbsencePenaltyRate) };
+          break;
+        case 'workingDays':
+          keyToSave = 'WorkingDays';
+          valueToSave = {
+            monday: values.workingDays?.monday ?? defaultSettings.WorkingDays.monday,
+            tuesday: values.workingDays?.tuesday ?? defaultSettings.WorkingDays.tuesday,
+            wednesday: values.workingDays?.wednesday ?? defaultSettings.WorkingDays.wednesday,
+            thursday: values.workingDays?.thursday ?? defaultSettings.WorkingDays.thursday,
+            friday: values.workingDays?.friday ?? defaultSettings.WorkingDays.friday,
+            saturday: values.workingDays?.saturday ?? defaultSettings.WorkingDays.saturday,
+            sunday: values.workingDays?.sunday ?? defaultSettings.WorkingDays.sunday
+          };
+          break;
+        default:
+          // fallback to whole settings if unknown
+          keyToSave = null;
+          valueToSave = null;
       }
 
-      console.log('Saved settings response:', savedSettings);
+      let savedSettings: any;
 
-      // Cập nhật state với dữ liệu đã lưu
-      const finalSettings = savedSettings || updatedSettings;
-      setSettingsData(finalSettings);
+      if (keyToSave) {
+        if (onSave) {
+          savedSettings = await onSave({ [keyToSave]: valueToSave });
+        } else {
+          // Debug log so request appears in console before network panel
+          console.log('Calling per-key settings API', { key: keyToSave, value: valueToSave });
+          message.info(`Đang gửi cấu hình ${keyToSave}...`);
+          // call per-key API
+          savedSettings = await SettingsService.updateSetting(keyToSave, valueToSave);
+        }
 
-      message.success('Cấu hình đã được lưu thành công!');
-      
-      // Tự động tải lại để đảm bảo đồng bộ với server
-      setTimeout(() => {
-        fetchSettings();
-      }, 1000);
+        // Merge updated key into current settingsData
+        setSettingsData(prev => ({ ...prev, [keyToSave as string]: valueToSave }));
+
+        message.success('Cấu hình đã được lưu thành công!');
+
+        // Refresh the single setting from server to ensure sync
+        setTimeout(() => {
+          fetchSettings();
+        }, 800);
+      } else {
+        // fallback to previous behavior: save all
+        const updatedSettings = {
+          WorkingHours: {
+            start: values.workingHoursStart.format('HH:mm') || defaultSettings.WorkingHours.start,
+            end: values.workingHoursEnd.format('HH:mm') || defaultSettings.WorkingHours.end
+          },
+          LunchBreak: {
+            start: values.lunchBreakStart.format('HH:mm') || defaultSettings.LunchBreak.start,
+            end: values.lunchBreakEnd.format('HH:mm') || defaultSettings.LunchBreak.end
+          },
+          OvertimeRate: { rate: parseFloat(values.overtimeRate) || defaultSettings.OvertimeRate.rate },
+          HolidayRate: { rate: parseFloat(values.holidayRate) || defaultSettings.HolidayRate.rate },
+          PenaltyRate: { rate: parseFloat(values.penaltyRate) || defaultSettings.PenaltyRate.rate },
+          UnauthorizedAbsencePenaltyRate: { rate: parseFloat(values.unauthorizedAbsencePenaltyRate) || defaultSettings.UnauthorizedAbsencePenaltyRate.rate },
+          WorkingDays: {
+            monday: values.workingDays?.monday ?? defaultSettings.WorkingDays.monday,
+            tuesday: values.workingDays?.tuesday ?? defaultSettings.WorkingDays.tuesday,
+            wednesday: values.workingDays?.wednesday ?? defaultSettings.WorkingDays.wednesday,
+            thursday: values.workingDays?.thursday ?? defaultSettings.WorkingDays.thursday,
+            friday: values.workingDays?.friday ?? defaultSettings.WorkingDays.friday,
+            saturday: values.workingDays?.saturday ?? defaultSettings.WorkingDays.saturday,
+            sunday: values.workingDays?.sunday ?? defaultSettings.WorkingDays.sunday
+          }
+        };
+
+        if (onSave) {
+          savedSettings = await onSave(updatedSettings);
+        } else {
+          // Save each key sequentially via per-key endpoint
+          const keys = Object.keys(updatedSettings);
+          for (const k of keys) {
+            // @ts-ignore
+            await SettingsService.updateSetting(k, (updatedSettings as any)[k]);
+          }
+          savedSettings = updatedSettings;
+        }
+
+        setSettingsData(savedSettings || updatedSettings);
+        message.success('Cấu hình đã được lưu thành công!');
+      }
 
     } catch (error: any) {
       console.error('Settings save error:', error);
-      
+
       if (error?.message) {
         message.error(error.message);
       } else if (error?.response?.data?.error) {
@@ -483,6 +553,156 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
     const dataToReset = initialData ? validateAndMergeSettings(initialData) : defaultSettings;
     updateFormFields(dataToReset);
     message.info('Đã khôi phục về giá trị ban đầu');
+  };
+
+  // Save single key helper: validate only relevant fields then call per-key API
+  const saveKey = async (key: string) => {
+    try {
+      setLoading(true);
+
+      // Determine which fields to validate and build value
+      let fieldsToValidate: string[] = [];
+      let payloadValue: any = null;
+
+      switch (key) {
+        case 'WorkingHours':
+          fieldsToValidate = ['workingHoursStart', 'workingHoursEnd'];
+          await form.validateFields(fieldsToValidate);
+          payloadValue = {
+            start: form.getFieldValue('workingHoursStart').format('HH:mm'),
+            end: form.getFieldValue('workingHoursEnd').format('HH:mm')
+          };
+          break;
+        case 'LunchBreak':
+          fieldsToValidate = ['lunchBreakStart', 'lunchBreakEnd'];
+          await form.validateFields(fieldsToValidate);
+          payloadValue = {
+            start: form.getFieldValue('lunchBreakStart').format('HH:mm'),
+            end: form.getFieldValue('lunchBreakEnd').format('HH:mm')
+          };
+          break;
+        case 'OvertimeRate':
+          fieldsToValidate = ['overtimeRate'];
+          await form.validateFields(fieldsToValidate);
+          payloadValue = { rate: parseFloat(form.getFieldValue('overtimeRate')) };
+          break;
+        case 'HolidayRate':
+          fieldsToValidate = ['holidayRate'];
+          await form.validateFields(fieldsToValidate);
+          payloadValue = { rate: parseFloat(form.getFieldValue('holidayRate')) };
+          break;
+        case 'PenaltyRate':
+          fieldsToValidate = ['penaltyRate'];
+          await form.validateFields(fieldsToValidate);
+          payloadValue = { rate: parseFloat(form.getFieldValue('penaltyRate')) };
+          break;
+        case 'UnauthorizedAbsencePenaltyRate':
+          fieldsToValidate = ['unauthorizedAbsencePenaltyRate'];
+          await form.validateFields(fieldsToValidate);
+          payloadValue = { rate: parseFloat(form.getFieldValue('unauthorizedAbsencePenaltyRate')) };
+          break;
+        case 'WorkingDays':
+          // validate workingDays group
+          await form.validateFields(['workingDays']);
+          payloadValue = {
+            monday: form.getFieldValue(['workingDays', 'monday']) ?? defaultSettings.WorkingDays.monday,
+            tuesday: form.getFieldValue(['workingDays', 'tuesday']) ?? defaultSettings.WorkingDays.tuesday,
+            wednesday: form.getFieldValue(['workingDays', 'wednesday']) ?? defaultSettings.WorkingDays.wednesday,
+            thursday: form.getFieldValue(['workingDays', 'thursday']) ?? defaultSettings.WorkingDays.thursday,
+            friday: form.getFieldValue(['workingDays', 'friday']) ?? defaultSettings.WorkingDays.friday,
+            saturday: form.getFieldValue(['workingDays', 'saturday']) ?? defaultSettings.WorkingDays.saturday,
+            sunday: form.getFieldValue(['workingDays', 'sunday']) ?? defaultSettings.WorkingDays.sunday,
+          };
+          break;
+        default:
+          throw new Error('Unknown setting key');
+      }
+
+      console.log('saveKey payload', key, payloadValue);
+
+      let result;
+      if (onSave) {
+        result = await onSave({ [key]: payloadValue });
+      } else {
+        result = await SettingsService.updateSetting(key, payloadValue);
+      }
+
+      // Merge into state
+      setSettingsData(prev => ({ ...prev, [key]: payloadValue }));
+
+      message.success('Đã lưu thành công');
+      // Refresh small delay
+      setTimeout(() => fetchSettings(), 700);
+      return result;
+    } catch (err: any) {
+      console.error('Save key error', key, err);
+      if (err?.message) message.error(err.message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Revert single key helper: fetch server value and set form fields
+  const revertKey = async (key: string) => {
+    try {
+      setLoading(true);
+      console.log('Reverting key:', key);
+      const currentSetting = await SettingsService.getSettingByKey(key);
+      if (!currentSetting) {
+        message.warning('Không tìm thấy cấu hình để revert');
+        return;
+      }
+      // Update form fields based on key
+      switch (key) {
+        case 'WorkingHours':
+          form.setFieldsValue({
+            workingHoursStart: dayjs(currentSetting.value.start, 'HH:mm'),
+            workingHoursEnd: dayjs(currentSetting.value.end, 'HH:mm')
+          });
+          break;
+        case 'LunchBreak':
+          form.setFieldsValue({
+            lunchBreakStart: dayjs(currentSetting.value.start, 'HH:mm'),
+            lunchBreakEnd: dayjs(currentSetting.value.end, 'HH:mm')
+          });
+          break;
+        case 'OvertimeRate':
+          form.setFieldsValue({ overtimeRate: currentSetting.value.rate });
+          break;
+        case 'HolidayRate':
+          form.setFieldsValue({ holidayRate: currentSetting.value.rate });
+          break;
+        case 'PenaltyRate':
+          form.setFieldsValue({ penaltyRate: currentSetting.value.rate });
+          break;
+        case 'UnauthorizedAbsencePenaltyRate':
+          form.setFieldsValue({ unauthorizedAbsencePenaltyRate: currentSetting.value.rate });
+          break;
+        case 'WorkingDays':
+          form.setFieldsValue({
+            workingDays: {
+              monday: currentSetting.value.monday,
+              tuesday: currentSetting.value.tuesday,
+              wednesday: currentSetting.value.wednesday,
+              thursday: currentSetting.value.thursday,
+              friday: currentSetting.value.friday,
+              saturday: currentSetting.value.saturday,
+              sunday: currentSetting.value.sunday
+            }
+          });
+          break;
+        default:
+          message.error('Unknown key for revert');
+          return;
+      }
+      message.success('Đã revert về giá trị ban đầu');
+    } catch (error) {
+      console.error('Revert error:', error);
+      message.error('Không thể revert. Vui lòng thử lại!');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const renderWorkingHoursTab = () => (
@@ -580,6 +800,10 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
           </li>
         </ul>
       </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 24 }}>
+        <Button onClick={() => revertKey('WorkingHours')} size="large" ><RollbackOutlined />Trở về</Button>
+        <Button type="primary" onClick={() => saveKey('WorkingHours')} size="large" ><SaveOutlined />Lưu</Button>
+      </div>
     </Card>
   );
 
@@ -604,35 +828,35 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
               ({ getFieldValue }) => ({
                 validator(_, value) {
                   if (!value) return Promise.resolve();
-                  
+
                   const workStart = getFieldValue('workingHoursStart');
                   const workEnd = getFieldValue('workingHoursEnd');
                   const lunchEnd = getFieldValue('lunchBreakEnd');
-                  
+
                   // Chỉ validate nếu có đủ dữ liệu
                   if (workStart && workEnd) {
                     const valueTime = dayjs(value).format('HH:mm');
                     const workStartTime = dayjs(workStart).format('HH:mm');
                     const workEndTime = dayjs(workEnd).format('HH:mm');
-                    
+
                     if (valueTime < workStartTime) {
                       return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
                     }
-                    
+
                     if (valueTime > workEndTime) {
                       return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
                     }
                   }
-                  
+
                   if (lunchEnd) {
                     const valueTime = dayjs(value).format('HH:mm');
                     const lunchEndTime = dayjs(lunchEnd).format('HH:mm');
-                    
+
                     if (valueTime >= lunchEndTime) {
                       return Promise.reject(new Error('Giờ bắt đầu nghỉ trưa phải trước giờ kết thúc!'));
                     }
                   }
-                  
+
                   return Promise.resolve();
                 },
               }),
@@ -658,35 +882,35 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
               ({ getFieldValue }) => ({
                 validator(_, value) {
                   if (!value) return Promise.resolve();
-                  
+
                   const workStart = getFieldValue('workingHoursStart');
                   const workEnd = getFieldValue('workingHoursEnd');
                   const lunchStart = getFieldValue('lunchBreakStart');
-                  
+
                   // Chỉ validate nếu có đủ dữ liệu
                   if (workStart && workEnd) {
                     const valueTime = dayjs(value).format('HH:mm');
                     const workStartTime = dayjs(workStart).format('HH:mm');
                     const workEndTime = dayjs(workEnd).format('HH:mm');
-                    
+
                     if (valueTime < workStartTime) {
                       return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
                     }
-                    
+
                     if (valueTime > workEndTime) {
                       return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
                     }
                   }
-                  
+
                   if (lunchStart) {
                     const valueTime = dayjs(value).format('HH:mm');
                     const lunchStartTime = dayjs(lunchStart).format('HH:mm');
-                    
+
                     if (valueTime <= lunchStartTime) {
                       return Promise.reject(new Error('Giờ kết thúc nghỉ trưa phải sau giờ bắt đầu!'));
                     }
                   }
-                  
+
                   return Promise.resolve();
                 },
               }),
@@ -725,6 +949,10 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
             Thời gian này sẽ được trừ tự động khi tính lương
           </li>
         </ul>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 24 }}>
+        <Button onClick={() => revertKey('LunchBreak')} size="large" ><RollbackOutlined />Trở về</Button>
+        <Button type="primary" onClick={() => saveKey('LunchBreak')} size="large" ><SaveOutlined />Lưu</Button>
       </div>
     </Card>
   );
@@ -816,6 +1044,10 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
           </li>
         </ul>
       </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 24 }}>
+        <Button onClick={() => revertKey('OvertimeRate')} size="large" ><RollbackOutlined />Trở về</Button>
+        <Button type="primary" onClick={() => saveKey('OvertimeRate')} size="large" ><SaveOutlined />Lưu</Button>
+      </div>
     </Card>
   );
 
@@ -906,6 +1138,10 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
           </li>
         </ul>
       </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 24 }}>
+        <Button onClick={() => revertKey('HolidayRate')} size="large" ><RollbackOutlined />Trở về</Button>
+        <Button type="primary" onClick={() => saveKey('HolidayRate')} size="large" ><SaveOutlined />Lưu</Button>
+      </div>
     </Card>
   );
 
@@ -922,24 +1158,21 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       <Row gutter={24}>
         <Col xs={24} md={12}>
           <Form.Item
-            label="Tỉ lệ phạt (x lần lương cơ bản trên phút)"
+            label="Tỉ lệ phạt (% lần lương cơ bản trên phút)"
             name="penaltyRate"
             rules={[
               { required: true, message: 'Vui lòng nhập tỉ lệ phạt!' },
-              { type: 'number', min: 0.0001, message: 'Tỉ lệ phạt phải lớn hơn hoặc bằng 0.0001' },
-              { type: 'number', max: 1, message: 'Tỉ lệ phạt không được vượt quá 1.0' },
             ]}
           >
             <InputNumber
-              min={0.0001}
+              min={0}
               max={1}
-              step={0.0001}
-              precision={4}
+              step={0.0000001}
               placeholder="Nhập tỉ lệ phạt"
               style={{ width: '100%' }}
               size="large"
-              formatter={(value) => `${value}x`}
-              parser={(value) => value!.replace('x', '') as any}
+              formatter={(value) => `${value}%`}
+              parser={(value) => value!.replace('%', '') as any}
             />
           </Form.Item>
         </Col>
@@ -958,7 +1191,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
                 Tỉ lệ hiện tại
               </p>
               <p style={{ margin: 0, fontSize: '24px', fontWeight: 'bold', color: '#f5222d' }}>
-                {settingsData?.PenaltyRate?.rate || defaultSettings.PenaltyRate.rate}x
+                {settingsData?.PenaltyRate?.rate || defaultSettings.PenaltyRate.rate}%
               </p>
             </div>
           </div>
@@ -993,6 +1226,10 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
           </li>
         </ul>
       </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 24 }}>
+        <Button onClick={() => revertKey('PenaltyRate')} size="large" ><RollbackOutlined />Trở về</Button>
+        <Button type="primary" onClick={() => saveKey('PenaltyRate')} size="large" ><SaveOutlined />Lưu</Button>
+      </div>
     </Card>
   );
 
@@ -1013,15 +1250,10 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
             name="unauthorizedAbsencePenaltyRate"
             rules={[
               { required: true, message: 'Vui lòng nhập tỉ lệ phạt nghỉ không phép!' },
-              { type: 'number', min: 0, message: 'Tỉ lệ phạt không được âm' },
-              { type: 'number', max: 100, message: 'Tỉ lệ phạt không được vượt quá 100%' },
             ]}
           >
             <InputNumber
-              min={0}
-              max={100}
-              step={1}
-              precision={0}
+              step={0.0000001}
               placeholder="Nhập tỉ lệ phạt"
               style={{ width: '100%' }}
               size="large"
@@ -1062,7 +1294,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
         <p style={{ margin: '0 0 8px 0', color: '#faad14', fontWeight: 600 }}>
           <strong>💡 Ví dụ minh họa:</strong>
         </p>
-        <div style={{ 
+        <div style={{
           background: 'white',
           padding: '12px',
           borderRadius: '4px',
@@ -1119,6 +1351,10 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
           </li>
         </ul>
       </div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 24 }}>
+        <Button onClick={() => revertKey('UnauthorizedAbsencePenaltyRate')} size="large" ><RollbackOutlined />Trở về</Button>
+        <Button type="primary" onClick={() => saveKey('UnauthorizedAbsencePenaltyRate')} size="large" ><SaveOutlined />Lưu</Button>
+      </div>
     </Card>
   );
 
@@ -1136,10 +1372,10 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
     const handleDayToggle = (dayKey: string) => {
       const currentValue = form.getFieldValue(['workingDays', dayKey]) || false;
       const newValue = !currentValue;
-      
+
       // Cập nhật giá trị trong form
       form.setFieldValue(['workingDays', dayKey], newValue);
-      
+
       // Force re-render bằng cách cập nhật settingsData
       setSettingsData(prev => ({
         ...prev,
@@ -1167,14 +1403,14 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
           <Row gutter={[16, 16]}>
             {weekDays.map((day) => {
               const isSelected = form.getFieldValue(['workingDays', day.key]) || settingsData?.WorkingDays?.[day.key as keyof WorkingDaysConfig] || false;
-              
+
               return (
                 <Col xs={24} sm={12} md={8} key={day.key}>
                   <Form.Item name={['workingDays', day.key]} valuePropName="checked" style={{ margin: 0 }}>
                     <Card
                       size="small"
                       hoverable
-                      style={{ 
+                      style={{
                         textAlign: 'center',
                         border: `2px solid ${isSelected ? '#52c41a' : '#d9d9d9'}`,
                         borderRadius: '8px',
@@ -1185,7 +1421,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
                       bodyStyle={{ padding: '16px 8px' }}
                       onClick={() => handleDayToggle(day.key)}
                     >
-                      <div style={{ 
+                      <div style={{
                         marginBottom: '8px',
                         fontSize: '24px',
                         color: isSelected ? '#52c41a' : '#d9d9d9'
@@ -1232,6 +1468,11 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
           </ul>
         </div>
 
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 24 }}>
+          <Button onClick={() => revertKey('WorkingDays')} size="large" style={{ minWidth: 120, padding: '8px 18px' }}>Trở về</Button>
+          <Button type="primary" onClick={() => saveKey('WorkingDays')} size="large" style={{ minWidth: 120, padding: '8px 18px' }}>Lưu</Button>
+        </div>
+
 
       </Card>
     );
@@ -1245,128 +1486,99 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
           layout="vertical"
           onFinish={handleSave}
         >
-        <Tabs
-          activeKey={activeTab}
-          onChange={setActiveTab}
-          type="card"
-          size="large"
-          style={{ margin: 0 }}
-        >
-          <TabPane
-            tab={
-              <span>
-                <ClockCircleOutlined />
-                Thời gian hành chính
-              </span>
-            }
-            key="workingHours"
-          >
-            {renderWorkingHoursTab()}
-          </TabPane>
-
-          <TabPane
-            tab={
-              <span>
-                <CalendarOutlined />
-                Thời gian nghỉ trưa
-              </span>
-            }
-            key="lunchBreak"
-          >
-            {renderLunchBreakTab()}
-          </TabPane>
-
-          <TabPane
-            tab={
-              <span>
-                <DollarCircleOutlined />
-                OT ngày thường
-              </span>
-            }
-            key="overtimeRate"
-          >
-            {renderOvertimeRateTab()}
-          </TabPane>
-
-          <TabPane
-            tab={
-              <span>
-                <DollarCircleOutlined />
-                OT ngày lễ
-              </span>
-            }
-            key="holidayRate"
-          >
-            {renderHolidayRateTab()}
-          </TabPane>
-
-          <TabPane
-            tab={
-              <span>
-                <ExclamationCircleOutlined />
-                Phạt đi muộn/về sớm
-              </span>
-            }
-            key="penaltyRate"
-          >
-            {renderPenaltyRateTab()}
-          </TabPane>
-
-          <TabPane
-            tab={
-              <span>
-                <ExclamationCircleOutlined />
-                Phạt nghỉ không phép
-              </span>
-            }
-            key="unauthorizedAbsencePenaltyRate"
-          >
-            {renderUnauthorizedAbsencePenaltyTab()}
-          </TabPane>
-
-          <TabPane
-            tab={
-              <span>
-                <ScheduleOutlined />
-                Ngày làm việc
-              </span>
-            }
-            key="workingDays"
-          >
-            {renderWorkingDaysTab()}
-          </TabPane>
-        </Tabs>
-
-        <div style={{
-          padding: '24px',
-          background: '#fafafa',
-          borderTop: '1px solid #f0f0f0',
-          display: 'flex',
-          justifyContent: 'center',
-          gap: '12px'
-        }}>
-          <Button
-            icon={<ReloadOutlined />}
+          <Tabs
+            activeKey={activeTab}
+            onChange={setActiveTab}
+            type="line"
             size="large"
-            onClick={handleReset}
-            style={{ minWidth: '120px' }}
+            style={{ margin: 0 }}
           >
-            Khôi phục
-          </Button>
-          <Button
-            type="primary"
-            htmlType='submit'
-            icon={<SaveOutlined />}
-            size="large"
-            onClick={handleSave}
-            loading={loading}
-            style={{ minWidth: '120px' }}
-          >
-            Lưu cấu hình
-          </Button>
-        </div>
-      </Form>
-    </Spin>
+            <TabPane
+              tab={
+                <span>
+                  <ClockCircleOutlined />
+                  Thời gian hành chính
+                </span>
+              }
+              key="workingHours"
+            >
+              {renderWorkingHoursTab()}
+            </TabPane>
+
+            <TabPane
+              tab={
+                <span>
+                  <CalendarOutlined />
+                  Thời gian nghỉ trưa
+                </span>
+              }
+              key="lunchBreak"
+            >
+              {renderLunchBreakTab()}
+            </TabPane>
+
+            <TabPane
+              tab={
+                <span>
+                  <DollarCircleOutlined />
+                  OT ngày thường
+                </span>
+              }
+              key="overtimeRate"
+            >
+              {renderOvertimeRateTab()}
+            </TabPane>
+
+            <TabPane
+              tab={
+                <span>
+                  <DollarCircleOutlined />
+                  OT ngày lễ
+                </span>
+              }
+              key="holidayRate"
+            >
+              {renderHolidayRateTab()}
+            </TabPane>
+
+            <TabPane
+              tab={
+                <span>
+                  <ExclamationCircleOutlined />
+                  Phạt đi muộn/về sớm
+                </span>
+              }
+              key="penaltyRate"
+            >
+              {renderPenaltyRateTab()}
+            </TabPane>
+
+            <TabPane
+              tab={
+                <span>
+                  <ExclamationCircleOutlined />
+                  Phạt nghỉ không phép
+                </span>
+              }
+              key="unauthorizedAbsencePenaltyRate"
+            >
+              {renderUnauthorizedAbsencePenaltyTab()}
+            </TabPane>
+
+            <TabPane
+              tab={
+                <span>
+                  <ScheduleOutlined />
+                  Ngày làm việc
+                </span>
+              }
+              key="workingDays"
+            >
+              {renderWorkingDaysTab()}
+            </TabPane>
+          </Tabs>
+        </Form>
+      </Spin>
     </div>
   );
 };
