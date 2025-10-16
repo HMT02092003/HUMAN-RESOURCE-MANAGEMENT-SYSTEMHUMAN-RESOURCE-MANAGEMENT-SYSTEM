@@ -66,6 +66,11 @@ export const approveAttendance = async (req: Request, res: Response) => {
     );
 
     if (!result.success) {
+      // Special handling: attendance already approved
+      if ((result as any).code === 'ALREADY_APPROVED') {
+        return res.status(409).json(result);
+      }
+
       return res.status(400).json(result);
     }
 

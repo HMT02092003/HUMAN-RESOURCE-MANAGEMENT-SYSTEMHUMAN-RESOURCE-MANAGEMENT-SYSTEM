@@ -131,8 +131,7 @@ const AttendanceSimplePage = () => {
 
           message.success('Duyệt bảng chấm công thành công!');
         } catch (error: any) {
-          message.error(error.message || 'Có lỗi xảy ra khi duyệt bảng chấm công');
-          console.error('Error approving attendance:', error);
+          // message.error(error.message || 'Có lỗi xảy ra khi duyệt bảng chấm công');
         }
       }
     });

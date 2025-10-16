@@ -598,12 +598,22 @@ export class AttendanceService {
     approvedBy: number,
     token: string,
     extraData?: any
-  ): Promise<{ success: boolean; message: string; data?: any }> {
+  ): Promise<{ success: boolean; message: string; data?: any; code?: string }> {
     try {
       console.log(`\n🔥 Starting approval/update process for user ${userId} in ${month}`);
 
       // === Bước 1: Tìm bản ghi đã duyệt trước đó ===
-      const existingApproval = await ApprovedAttendanceModel.query().findOne({ userId, month });
+  const existingApproval: any = await ApprovedAttendanceModel.query().findOne({ userId, month });
+
+      // Nếu đã tồn tại bản ghi duyệt thì trả về sớm để frontend biết rằng bảng công đã được duyệt
+      if (existingApproval) {
+        console.log(`⚠️ Approval already exists for user ${userId} in ${month} (ID: ${existingApproval.id}) - aborting create`);
+        return {
+          success: false,
+          code: 'ALREADY_APPROVED',
+          message: 'Bảng công của người dùng này đã được duyệt trong tháng này'
+        };
+      }
 
       // === Bước 2: Xử lý làm thêm (luôn chạy để có dữ liệu mới nhất) ===
       console.log('🔄 Processing overtime applications...');
