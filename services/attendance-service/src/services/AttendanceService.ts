@@ -383,7 +383,9 @@ export class AttendanceService {
       const attendanceMap = new Map<string, any>();
       attendanceData.forEach((record: any) => {
         const dateKey = dayjs(record.date).format('YYYY-MM-DD');
-        attendanceMap.set(dateKey, record);
+        // Convert Objection model to plain object with all fields
+        const plainRecord = record.toJSON ? record.toJSON() : { ...record };
+        attendanceMap.set(dateKey, plainRecord);
       });
 
       // ⭐ 5. Generate TẤT CẢ ngày trong tháng
@@ -439,12 +441,29 @@ export class AttendanceService {
           destination: businessTripCheck.destination
         };
 
-        // Merge với attendance record nếu có
+        // Merge với attendance record nếu có - SPREAD toàn bộ fields trước, sau đó override metadata
         if (attendanceRecord) {
-          Object.assign(dayRecord, attendanceRecord);
-          dayRecord.otWorkingUnit = attendanceRecord.otWorkingUnit ?? 0;
-          dayRecord.otMinutes = attendanceRecord.otMinutes ?? 0;
-          dayRecord.otSalary = attendanceRecord.otSalary ?? 0;
+          // Spread attendance record TRƯỚC để lấy tất cả fields từ DB
+          Object.assign(dayRecord, {
+            ...attendanceRecord,  // Toàn bộ fields từ DB (bao gồm otWorkingUnit, otMinutes, otSalary)
+            // Override metadata fields
+            date: currentDate.toISOString(),
+            userId,
+            isWorkingDay,
+            isFuture,
+            hasApprovedOT,
+            hasApprovedLeave: leaveCheck.hasLeave,
+            leaveType: leaveCheck.leaveType,
+            leaveInfo: leaveCheck.leaveInfo,
+            type: leaveCheck.hasLeave
+              ? leaveCheck.leaveType
+              : (businessTripCheck.hasBusinessTrip ? 'business_trip' : 'attendance'),
+            hasBusinessTrip: businessTripCheck.hasBusinessTrip,
+            businessTripInfo: businessTripCheck.tripInfo,
+            businessTripDestination: businessTripCheck.destination,
+            tripInfo: businessTripCheck.tripInfo,
+            destination: businessTripCheck.destination
+          });
         } else {
           // Ngày không có attendance - set default values
           dayRecord.id = null;
@@ -455,7 +474,6 @@ export class AttendanceService {
           dayRecord.dailyTotalWorkHours = 0;
           dayRecord.lateArrivalPenalty = 0;
           dayRecord.earlyLeavePenalty = 0;
-          dayRecord.otWorkingUnit = 0;
           dayRecord.otMinutes = 0;
           dayRecord.otSalary = 0;
         }
@@ -472,7 +490,7 @@ export class AttendanceService {
 
       let totalWorkDays = 0;
       let totalWorkHours = 0;
-      let totalOvertimeHours = 0;
+      let totalOvertimeMinutes = 0;
       let totalPenalty = 0;
       let totalOvertimeSalary = 0;
 
@@ -480,7 +498,7 @@ export class AttendanceService {
         if (record.checkInTime && record.checkOutTime) {
           totalWorkDays++;
           totalWorkHours += parseFloat(record.dailyTotalWorkHours.toString());
-          totalOvertimeHours += parseFloat(record.otWorkingUnit.toString());
+          totalOvertimeMinutes += parseFloat(record.otMinutes.toString());
           totalPenalty += parseFloat(record.lateArrivalPenalty.toString()) +
             parseFloat(record.earlyLeavePenalty.toString());
           totalOvertimeSalary += parseFloat(record.otSalary.toString());
@@ -515,7 +533,7 @@ export class AttendanceService {
         month,
         totalWorkDays,
         totalWorkHours: Math.round(totalWorkHours * 100) / 100,
-        totalOvertimeHours: Math.round(totalOvertimeHours * 100) / 100,
+        totalOvertimeHours: Math.round(totalOvertimeMinutes / 60 * 100) / 100,
         totalLateDays, // Đếm chính xác từ database
         totalEarlyLeaveDays, // Đếm chính xác từ database
         totalPenalty: Math.round(totalPenalty * 100) / 100,
@@ -609,7 +627,7 @@ export class AttendanceService {
             const dateKey = dayjs(dayDetail.date).format('YYYY-MM-DD');
             
             // Kiểm tra nếu có thông tin OT
-            if (attData.otWorkingUnit || attData.otMinutes || attData.otSalary) {
+            if ( attData.otMinutes || attData.otSalary) {
               try {
                 // Tìm và cập nhật bản ghi attendance
                 const existingRecord = await TimeAttendanceModel.query()
@@ -621,13 +639,12 @@ export class AttendanceService {
                   await TimeAttendanceModel.query()
                     .where('id', existingRecord.id)
                     .patch({
-                      otWorkingUnit: parseFloat(attData.otWorkingUnit || '0'),
                       otMinutes: parseFloat(attData.otMinutes || '0'),
                       otSalary: parseFloat(attData.otSalary || '0'),
                       updated_at: dayjs().toISOString()
                     });
-                  
-                  console.log(`   ✅ Updated OT for ${dateKey}: ${attData.otWorkingUnit}h, ${attData.otSalary} VND`);
+
+                  console.log(`   ✅ Updated OT for ${dateKey}: ${attData.otMinutes}h, ${attData.otSalary} VND`);
                 }
               } catch (err) {
                 console.error(`   ❌ Error updating OT for ${dateKey}:`, err);
@@ -650,14 +667,14 @@ export class AttendanceService {
         let recalculatedOTDays = 0;
         
         updatedRecords.forEach(record => {
-          const otHours = parseFloat(record.otWorkingUnit?.toString() || '0');
+          const otMinutes = parseFloat(record.otMinutes?.toString() || '0');
           const otSalary = parseFloat(record.otSalary?.toString() || '0');
-          
-          recalculatedOTHours += otHours;
+
+          recalculatedOTHours += Math.round((otMinutes / 60) * 100) / 100;
           recalculatedOTSalary += otSalary;
-          
-          // Đếm số ngày có OT (otWorkingUnit > 0)
-          if (otHours > 0) {
+
+          // Đếm số ngày có OT (otMinutes > 0)
+          if (otMinutes > 0) {
             recalculatedOTDays++;
           }
         });
@@ -680,7 +697,7 @@ export class AttendanceService {
       const otRecords = await TimeAttendanceModel.query()
         .where('userId', userId)
         .whereBetween('date', [startDate, endDate])
-        .where('otWorkingUnit', '>', 0);
+        .where('otMinutes', '>', 0);
       const totalOvertimeDays = otRecords.length;
       
       if (extraData && extraData.monthlyStats) {
@@ -731,9 +748,17 @@ export class AttendanceService {
       dataPayload.baseSalary = baseSalary;
       dataPayload.totalAllowance = totalAllowance;
 
+      // ⭐ Tính lương cuối cùng = lương cơ bản + phụ cấp - phạt + tăng ca
       let finalSalary: number | null = null;
       if (baseSalary !== null) {
         finalSalary = (baseSalary || 0) + (totalAllowance || 0) - (dataPayload.totalPenalty || 0) + (dataPayload.totalOvertimeSalary || 0);
+        
+        console.log(`💰 Final salary calculation:`);
+        console.log(`   - Base salary: ${baseSalary?.toLocaleString('vi-VN')} VND`);
+        console.log(`   - Total allowance: ${totalAllowance?.toLocaleString('vi-VN')} VND`);
+        console.log(`   - Total penalty: ${dataPayload.totalPenalty?.toLocaleString('vi-VN')} VND`);
+        console.log(`   - Total overtime salary: ${dataPayload.totalOvertimeSalary?.toLocaleString('vi-VN')} VND`);
+        console.log(`   - Final salary: ${finalSalary?.toLocaleString('vi-VN')} VND`);
       }
       dataPayload.finalSalary = finalSalary;
 
@@ -950,7 +975,6 @@ export class AttendanceService {
           lateArrivalPenalty: calculation.latePenaltyAmount,
           earlyLeavePenalty: calculation.earlyLeavePenaltyAmount,
           otMinutes: calculation.otMinutes,
-          otWorkingUnit: calculation.otWorkingUnit || 0,
           otSalary: calculation.otSalary || 0
         });
 

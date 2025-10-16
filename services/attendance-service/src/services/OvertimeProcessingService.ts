@@ -231,13 +231,16 @@ export class OvertimeProcessingService {
       console.log(`   ⚠️ Partial overtime hours: ${actualOvertimeHours.toFixed(2)} (${((actualOvertimeHours/overtimeHours)*100).toFixed(0)}%)`);
     }
 
-    // Tính lương tăng ca
+    // ⭐ Tính lương tăng ca dựa trên actualOvertimeHours (giờ)
     const overtimeSalary = await AttendanceCalculationService.calculateOvertimeSalary(
       userId,
       actualOvertimeHours
     );
 
-    console.log(`   💰 Overtime salary: ${overtimeSalary.toLocaleString()} VND`);
+    console.log(`   💰 Overtime calculation:`);
+    console.log(`   - Hours: ${actualOvertimeHours.toFixed(2)}`);
+    console.log(`   - Minutes: ${Math.round(actualOvertimeHours * 60)}`);
+    console.log(`   - Salary: ${overtimeSalary.toLocaleString()} VND`);
 
     return {
       date: overtimeDate,
@@ -326,18 +329,21 @@ export class OvertimeProcessingService {
           totalOvertimeHours += result.actualHours;
           totalOvertimeSalary += result.overtimeSalary;
 
-          // Cập nhật vào bảng time_attendances
+          // ⭐ Cập nhật vào bảng time_attendances với otMinutes (phút) và otSalary
           if (attendanceRecord) {
+            const otMinutes = Math.round(result.actualHours * 60);
+            
             await TimeAttendanceModel.query()
               .where('id', attendanceRecord.id)
               .patch({
-                otWorkingUnit: 1, // Đánh dấu có 1 lần tăng ca
-                otMinutes: Math.round(result.actualHours * 60),
+                otMinutes: otMinutes,  // Lưu số phút
                 otSalary: result.overtimeSalary,
                 updated_at: dayjs().toISOString()
               });
 
-            console.log(`   ✅ Updated attendance record for ${overtimeDate}`);
+            console.log(`   ✅ Updated attendance record for ${overtimeDate}:`);
+            console.log(`      - otMinutes: ${otMinutes}`);
+            console.log(`      - otSalary: ${result.overtimeSalary}`);
           }
         } else {
           totalInvalid++;

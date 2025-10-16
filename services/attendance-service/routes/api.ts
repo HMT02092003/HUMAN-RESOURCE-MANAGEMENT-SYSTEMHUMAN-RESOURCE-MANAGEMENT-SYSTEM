@@ -1,14 +1,11 @@
 /**
- * Attendance Service API Routes - Simplified Version
- * Chỉ còn 2 API chính cho attendance và settings
- * + Thêm compatibility routes cho frontend cũ
+ * Attendance Service API Routes - Simplified & Clean
+ * Chỉ giữ các API đang được sử dụng bởi frontend
  */
 import { Router, Request, Response } from 'express';
 import { 
-  getAllAttendance,
-  approveAttendance,
   getUserMonthlyFull,
-  getUserMonthlyDetail,
+  approveAttendance,
   recordAttendance,
 } from '../src/controller/AttendanceController';
 import {
@@ -21,72 +18,55 @@ import {
 const router = Router();
 
 // ===================================
-// ATTENDANCE ROUTES - MAIN
+// ATTENDANCE ROUTES - USED BY FRONTEND
 // ===================================
 
-// API 1: Lấy toàn bộ thông tin chấm công theo tháng
-// GET /api/attendance?month=YYYY-MM&departmentId=1
-router.get('/attendance', async (req: Request, res: Response) => {
-  await getAllAttendance(req, res);
-});
-
-// API 2: Duyệt bảng công tháng
-// POST /api/attendance/approve
-// Body: { userId: number, month: "YYYY-MM" }
-router.post('/attendance/approve', async (req: Request, res: Response) => {
-  await approveAttendance(req, res);
-});
-
-// Compatibility route for gateway path rewrite
-// Gateway may rewrite '/api/attendance/approve' -> '/api/approve' on this service,
-// so expose '/api/approve' as an alias that delegates to the same handler.
-router.post('/approve', async (req: Request, res: Response) => {
-  await approveAttendance(req, res);
-});
-
-// ===================================
-// ATTENDANCE RECORDING ROUTES - NEW
-// ===================================
-
-// API: Chấm công tự động (check-in lần đầu, check-out các lần sau)
-// POST /api/attendance/record (từ gateway) -> /api/record (trong service)
-// Body: { userId: number, time: string }
-router.post('/record', async (req: Request, res: Response) => {
-  await recordAttendance(req, res);
-});
-
-// ===================================
-// BACKWARD COMPATIBILITY ROUTES
-// ===================================
-
+// API: Lấy toàn bộ thông tin chấm công tháng (monthly-full)
 // GET /api/user/:userId/monthly-full?year=2025&month=10
 router.get('/user/:userId/monthly-full', async (req: Request, res: Response) => {
   await getUserMonthlyFull(req, res);
 });
 
-// GET /api/user/:userId/monthly-detail?year=2025&month=10
-router.get('/user/:userId/monthly-detail', async (req: Request, res: Response) => {
-  await getUserMonthlyDetail(req, res);
+// API: Duyệt bảng công tháng
+// POST /api/attendance/approve (from gateway) -> /api/approve (in service)
+router.post('/approve', async (req: Request, res: Response) => {
+  await approveAttendance(req, res);
+});
+
+// API: Chấm công tự động (check-in/check-out)
+// POST /api/attendance/record (from gateway) -> /api/record (in service)
+router.post('/record', async (req: Request, res: Response) => {
+  await recordAttendance(req, res);
 });
 
 // ===================================
 // SETTINGS ROUTES
 // ===================================
+
+// GET /api/settings - Lấy tất cả settings
 router.get('/settings', async (req: Request, res: Response) => {
   await getSettings(req, res);
 });
 
+// POST /api/settings - Cập nhật settings
 router.post('/settings', async (req: Request, res: Response) => {
   await updateSettings(req, res);
 });
 
-// New route: update single setting by key (body: { key, value })
+// POST /api/settings/key - Cập nhật single setting
 router.post('/settings/key', async (req: Request, res: Response) => {
-  // Delegate to new controller method that handles single key upsert
   await updateSettingByKey(req, res as any);
 });
 
-// Dedicated endpoints per setting (convenience wrappers)
+// GET /api/settings/:key - Lấy setting theo key
+router.get('/settings/:key', async (req: Request, res: Response) => {
+  await getSettingByKey(req, res);
+});
+
+// ===================================
+// CONVENIENCE ROUTES - Setting shortcuts
+// ===================================
+
 router.post('/settings/working-hours', async (req: Request, res: Response) => {
   req.body = { key: 'WorkingHours', value: req.body.value };
   await updateSettingByKey(req, res as any);
@@ -120,10 +100,6 @@ router.post('/settings/unauthorized-absence-penalty-rate', async (req: Request, 
 router.post('/settings/working-days', async (req: Request, res: Response) => {
   req.body = { key: 'WorkingDays', value: req.body.value };
   await updateSettingByKey(req, res as any);
-});
-
-router.get('/settings/:key', async (req: Request, res: Response) => {
-  await getSettingByKey(req, res);
 });
 
 export default router;

@@ -13,29 +13,6 @@ export const getSettings = async (_req: Request, res: Response) => {
     }
 };
 
-export const getSettingsByKey = async (req: Request, res: Response) => {
-    try {
-        const inputs = req.params;
-
-        const allowFields = {
-            key: "string!",
-        };
-
-        let params = validate(inputs, allowFields, { removeNotAllow: true });
-
-        const result = await SettingModel.query().findOne('key', params['key']);
-
-        if (!result) {
-            return res.status(404).json({ error: 'Setting not found' });
-        }
-
-        return res.status(200).json(result);
-    } catch (error: any) {
-        console.error('Get settings error:', error);
-        return res.status(500).json({ error: error.message || 'Internal Server Error' });
-    }
-};
-
 export const getSettingByKey = async (req: Request, res: Response) => {
     try {
         const { key } = req.params;

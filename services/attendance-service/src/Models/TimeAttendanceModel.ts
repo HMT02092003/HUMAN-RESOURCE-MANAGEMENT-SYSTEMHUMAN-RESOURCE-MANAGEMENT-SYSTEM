@@ -17,7 +17,6 @@ class TimeAttendanceModel extends Model {
     dailyWorkingUnit!: number;
     earlyLeavePenalty!: number;
     lateArrivalPenalty!: number;
-    otWorkingUnit!: number;
     otMinutes!: number;
     otSalary!: number;
     created_at!: string;
@@ -39,7 +38,6 @@ class TimeAttendanceModel extends Model {
                 dailyWorkingUnit: { type: ['number', 'string'], default: 0 },
                 earlyLeavePenalty: { type: ['number', 'string'], default: 0 },
                 lateArrivalPenalty: { type: ['number', 'string'], default: 0 },
-                otWorkingUnit: { type: ['number', 'string'], default: 0 },
                 otMinutes: { type: ['number', 'string'], default: 0 },
                 otSalary: { type: ['number', 'string'], default: 0 },
                 created_at: { type: 'string' },

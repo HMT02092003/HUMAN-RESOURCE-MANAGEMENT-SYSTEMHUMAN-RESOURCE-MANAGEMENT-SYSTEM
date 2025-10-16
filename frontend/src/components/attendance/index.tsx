@@ -34,7 +34,6 @@ import {
   InfoCircleOutlined
 } from '@ant-design/icons';
 import { attendanceService, AttendanceData, MonthlyStats, MonthlyAttendanceDetailResponse, DailyAttendanceDetail } from '@/service/attendanceService';
-import attendanceApprovalService from '@/service/attendanceApprovalService';
 import Cookies from 'js-cookie';
 import { getDecodedToken } from '@/utils/decode-token';
 import { useSearchParams } from 'next/navigation';
@@ -121,7 +120,7 @@ const AttendanceSimplePage = () => {
           const departmentId = 1; // Placeholder - cần lấy từ API hoặc state
 
           // ⭐ Gửi đầy đủ thông tin: monthlyStats + dailyData (chứa OT từng ngày)
-          await attendanceApprovalService.approveAttendance({
+          await attendanceService.approveAttendance({
             userId: parseInt(userIdFromUrl),
             month: monthStr,
             departmentId: departmentId,
@@ -275,6 +274,10 @@ const AttendanceSimplePage = () => {
           // ⭐ Format date to YYYY-MM-DD để khớp với tileClassName
           const dateKey = dayjs(detail.date).format('YYYY-MM-DD');
 
+          // ⭐ Chuyển otMinutes (phút) sang giờ để hiển thị
+          const otMinutes = parseFloat(attData.otMinutes || '0');
+          const otHours = Math.round((otMinutes / 60) * 100) / 100; // Làm tròn 2 chữ số thập phân
+
           map.set(dateKey, {
             ...attData,
             date: detail.date,
@@ -282,8 +285,8 @@ const AttendanceSimplePage = () => {
             checkOutTime,
             // Map field names từ API sang format cũ của modal
             totalHours: parseFloat(attData.dailyTotalWorkHours || '0'),
-            overtime: parseFloat(attData.otWorkingUnit || '0'),
-            otSalary: parseFloat(attData.otSalary || '0'), // ⭐ Thêm lương OT
+            overtime: otHours, // ⭐ Chuyển đổi từ phút sang giờ
+            otSalary: parseFloat(attData.otSalary || '0'), // ⭐ Lương OT
             lateMinutes: parseFloat(attData.lateMinutes || '0'),
             earlyDepartureMinutes: parseFloat(attData.earlyDepartureMinutes || '0'),
             lateArrivalPenalty: parseFloat(attData.lateArrivalPenalty || '0'),

@@ -47,7 +47,6 @@ interface AttendanceCalculation {
   lateMinutes: number;
   earlyDepartureMinutes: number;
   otMinutes: number;
-  otWorkingUnit: number;
   otSalary: number;
   isLate: boolean;
   isEarlyLeave: boolean;
@@ -298,7 +297,6 @@ export class AttendanceCalculationService {
         lateMinutes: 0,
         earlyDepartureMinutes: 0,
         otMinutes: 0,
-        otWorkingUnit: 0,
         otSalary: 0,
         isLate: false,
         isEarlyLeave: false,
@@ -335,7 +333,6 @@ export class AttendanceCalculationService {
       lateMinutes,
       earlyDepartureMinutes: 0,
       otMinutes: 0,
-      otWorkingUnit: 0,
       otSalary: 0,
       isLate: lateMinutes > 0,
       isEarlyLeave: false,
@@ -394,7 +391,6 @@ export class AttendanceCalculationService {
         // Chỉ tính OT nếu checkout sau giờ làm việc và trước/bằng giờ OT đã duyệt
         if (checkOut.isAfter(expectedCheckOut) && checkOut.isSameOrBefore(approvedOtEnd)) {
           result.otMinutes = checkOut.diff(expectedCheckOut, 'minute');
-          result.otWorkingUnit = Math.round((result.otMinutes / 60) * 100) / 100; // Đơn vị công OT (giờ)
           
           // Tính lương OT nếu có thông tin lương
           if (salaryInfo) {
@@ -426,7 +422,7 @@ export class AttendanceCalculationService {
               perMinuteOtRate = 1.5 / (22 * 8 * 60);
             }
 
-            // OT salary = baseMonthlySalary * perMinuteOtRate * otMinutes
+            // ⭐ OT salary = baseMonthlySalary * perMinuteOtRate * otMinutes
             result.otSalary = Math.round(salaryInfo.baseSalary * perMinuteOtRate * result.otMinutes);
           }
           
@@ -434,17 +430,15 @@ export class AttendanceCalculationService {
           console.log('- OT end time (approved):', approvedOtEnd.format('HH:mm'));
           console.log('- Actual checkout:', checkOut.format('HH:mm'));
           console.log('- OT minutes:', result.otMinutes);
-          console.log('- OT working unit (hours):', result.otWorkingUnit);
+          console.log('- OT hours:', (result.otMinutes / 60).toFixed(2));
           console.log('- OT salary:', result.otSalary);
         } else {
           result.otMinutes = 0;
-          result.otWorkingUnit = 0;
           result.otSalary = 0;
           console.log('⚠️ Checkout time exceeds approved OT time - no OT calculated');
         }
       } else {
         result.otMinutes = 0;
-        result.otWorkingUnit = 0;
         result.otSalary = 0;
         console.log('ℹ️ No approved OT or checkout before expected time - no OT calculated');
       }
