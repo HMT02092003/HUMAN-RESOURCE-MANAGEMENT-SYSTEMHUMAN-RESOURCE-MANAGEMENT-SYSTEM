@@ -82,7 +82,7 @@ interface ApprovedLeaveApplication {
 }
 
 export class AttendanceService {
-  
+
   /**
    * Lấy danh sách users trong phòng ban
    */
@@ -133,10 +133,10 @@ export class AttendanceService {
       const setting = await SettingModel.query().findOne('key', 'WorkingDays');
 
       if (setting && setting.value) {
-        const value = typeof setting.value === 'string' 
-          ? JSON.parse(setting.value) 
+        const value = typeof setting.value === 'string'
+          ? JSON.parse(setting.value)
           : setting.value;
-        
+
         return value as WorkingDaysConfig;
       }
 
@@ -169,7 +169,7 @@ export class AttendanceService {
    */
   static isWorkingDay(date: string, config: WorkingDaysConfig): boolean {
     const dayOfWeek = dayjs(date).day(); // 0=Sunday, 1=Monday, ..., 6=Saturday
-    
+
     const daysMap: { [key: number]: keyof WorkingDaysConfig } = {
       0: 'sunday',
       1: 'monday',
@@ -209,7 +209,7 @@ export class AttendanceService {
           const endDate = dayjs(appData.endDate);
 
           if (checkDate.isSame(startDate, 'day') || checkDate.isSame(endDate, 'day') ||
-              (checkDate.isAfter(startDate, 'day') && checkDate.isBefore(endDate, 'day'))) {
+            (checkDate.isAfter(startDate, 'day') && checkDate.isBefore(endDate, 'day'))) {
             return {
               hasLeave: true,
               leaveType: app.type,
@@ -269,7 +269,7 @@ export class AttendanceService {
           const endDate = dayjs(appData.endDate);
 
           if ((checkDate.isSame(startDate, 'day') || checkDate.isAfter(startDate, 'day')) &&
-              (checkDate.isSame(endDate, 'day') || checkDate.isBefore(endDate, 'day'))) {
+            (checkDate.isSame(endDate, 'day') || checkDate.isBefore(endDate, 'day'))) {
             return {
               hasBusinessTrip: true,
               tripInfo: appData.reason || 'Công tác',
@@ -309,7 +309,7 @@ export class AttendanceService {
         .first() as any;
 
       const count = result ? parseInt(result.count as string) : 0;
-      
+
       console.log(`📊 Total late days for user ${userId} in ${month}: ${count}`);
       return count;
     } catch (error) {
@@ -334,7 +334,7 @@ export class AttendanceService {
         .first() as any;
 
       const count = result ? parseInt(result.count as string) : 0;
-      
+
       console.log(`📊 Total early leave days for user ${userId} in ${month}: ${count}`);
       return count;
     } catch (error) {
@@ -393,29 +393,29 @@ export class AttendanceService {
       for (let day = 1; day <= daysInMonth; day++) {
         const currentDate = dayjs(`${month}-${String(day).padStart(2, '0')}`);
         const dateKey = currentDate.format('YYYY-MM-DD');
-        
+
         // ⭐ Check xem ngày này có phải ngày làm việc không
         const isWorkingDay = this.isWorkingDay(dateKey, workingDaysConfig);
-        
+
         // Determine if this date is in the future (beyond today)
         const isFuture = currentDate.isAfter(dayjs(), 'day');
-        
+
         // Lấy attendance record nếu có
         const attendanceRecord = attendanceMap.get(dateKey);
-        
+
         // Check xem ngày này có đơn nghỉ phép không
         const leaveCheck = this.checkDateHasLeave(dateKey, approvedApplications);
-        
+
         // Check xem ngày này có đơn công tác không
         const businessTripCheck = this.checkDateHasBusinessTrip(dateKey, approvedApplications);
-        
+
         // ⭐ Check xem ngày này có đơn OT đã duyệt không
         const hasApprovedOT = approvedApplications.some(app => {
           if (app.type !== 'overtime') return false;
           const appData = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
           return appData.date === dateKey;
         });
-        
+
         // Tạo record cho ngày này
         const dayRecord: any = {
           date: currentDate.toISOString(),
@@ -427,8 +427,8 @@ export class AttendanceService {
           hasApprovedLeave: leaveCheck.hasLeave,
           leaveType: leaveCheck.leaveType,
           leaveInfo: leaveCheck.leaveInfo,
-          type: leaveCheck.hasLeave 
-            ? leaveCheck.leaveType 
+          type: leaveCheck.hasLeave
+            ? leaveCheck.leaveType
             : (businessTripCheck.hasBusinessTrip ? 'business_trip' : 'attendance'),
 
           // Thông tin công tác
@@ -442,6 +442,9 @@ export class AttendanceService {
         // Merge với attendance record nếu có
         if (attendanceRecord) {
           Object.assign(dayRecord, attendanceRecord);
+          dayRecord.otWorkingUnit = attendanceRecord.otWorkingUnit ?? 0;
+          dayRecord.otMinutes = attendanceRecord.otMinutes ?? 0;
+          dayRecord.otSalary = attendanceRecord.otSalary ?? 0;
         } else {
           // Ngày không có attendance - set default values
           dayRecord.id = null;
@@ -450,9 +453,10 @@ export class AttendanceService {
           dayRecord.lateMinutes = 0;
           dayRecord.earlyDepartureMinutes = 0;
           dayRecord.dailyTotalWorkHours = 0;
-          dayRecord.otWorkingUnit = 0;
           dayRecord.lateArrivalPenalty = 0;
           dayRecord.earlyLeavePenalty = 0;
+          dayRecord.otWorkingUnit = 0;
+          dayRecord.otMinutes = 0;
           dayRecord.otSalary = 0;
         }
 
@@ -477,8 +481,8 @@ export class AttendanceService {
           totalWorkDays++;
           totalWorkHours += parseFloat(record.dailyTotalWorkHours.toString());
           totalOvertimeHours += parseFloat(record.otWorkingUnit.toString());
-          totalPenalty += parseFloat(record.lateArrivalPenalty.toString()) + 
-                         parseFloat(record.earlyLeavePenalty.toString());
+          totalPenalty += parseFloat(record.lateArrivalPenalty.toString()) +
+            parseFloat(record.earlyLeavePenalty.toString());
           totalOvertimeSalary += parseFloat(record.otSalary.toString());
         }
       });
@@ -551,7 +555,7 @@ export class AttendanceService {
 
       for (const user of users) {
         const summary = await this.getUserMonthlyAttendance(user.id, month, token);
-        
+
         if (summary) {
           summary.user = user; // Override với thông tin user đầy đủ
           attendanceSummaries.push(summary);
@@ -574,74 +578,219 @@ export class AttendanceService {
     userId: number,
     month: string,
     approvedBy: number,
-    token: string
+    token: string,
+    extraData?: any
   ): Promise<{ success: boolean; message: string; data?: any }> {
     try {
-      console.log(`\n🔥 Starting approval process for user ${userId} in ${month}`);
+      console.log(`\n🔥 Starting approval/update process for user ${userId} in ${month}`);
 
-      // Kiểm tra đã duyệt chưa
-      const alreadyApproved = await ApprovedAttendanceModel.isApproved(userId, month);
-      
-      if (alreadyApproved) {
-        console.log('⚠️ Already approved');
-        return {
-          success: false,
-          message: 'Bảng công đã được duyệt trước đó'
-        };
-      }
+      // === Bước 1: Tìm bản ghi đã duyệt trước đó ===
+      const existingApproval = await ApprovedAttendanceModel.query().findOne({ userId, month });
 
-      // Xử lý overtime trước khi duyệt
+      // === Bước 2: Xử lý làm thêm (luôn chạy để có dữ liệu mới nhất) ===
       console.log('🔄 Processing overtime applications...');
       const overtimeResult = await OvertimeProcessingService.processAllOvertimeForMonth(
         userId,
         month,
         token
       );
+      console.log('📊 Overtime processing result:', overtimeResult);
 
-      console.log(`📊 Overtime processing result:`, {
-        totalProcessed: overtimeResult.totalProcessed,
-        totalValid: overtimeResult.totalValid,
-        totalOvertimeHours: overtimeResult.totalOvertimeHours,
-        totalOvertimeSalary: overtimeResult.totalOvertimeSalary
-      });
+      // === Bước 2.5: Xử lý dailyData từ frontend (nếu có) ===
+      // Frontend có thể gửi kèm dailyData chứa OT từng ngày
+      if (extraData?.dailyData?.dailyDetails) {
+        console.log('📋 Processing dailyData from frontend...');
+        const dailyDetails = extraData.dailyData.dailyDetails;
+        
+        // Lưu OT từng ngày vào time_attendances nếu có attendance record
+        for (const dayDetail of dailyDetails) {
+          if (dayDetail.hasAttendance && dayDetail.attendanceData) {
+            const attData = dayDetail.attendanceData;
+            const dateKey = dayjs(dayDetail.date).format('YYYY-MM-DD');
+            
+            // Kiểm tra nếu có thông tin OT
+            if (attData.otWorkingUnit || attData.otMinutes || attData.otSalary) {
+              try {
+                // Tìm và cập nhật bản ghi attendance
+                const existingRecord = await TimeAttendanceModel.query()
+                  .where('userId', userId)
+                  .where('date', dateKey)
+                  .first();
+                
+                if (existingRecord) {
+                  await TimeAttendanceModel.query()
+                    .where('id', existingRecord.id)
+                    .patch({
+                      otWorkingUnit: parseFloat(attData.otWorkingUnit || '0'),
+                      otMinutes: parseFloat(attData.otMinutes || '0'),
+                      otSalary: parseFloat(attData.otSalary || '0'),
+                      updated_at: dayjs().toISOString()
+                    });
+                  
+                  console.log(`   ✅ Updated OT for ${dateKey}: ${attData.otWorkingUnit}h, ${attData.otSalary} VND`);
+                }
+              } catch (err) {
+                console.error(`   ❌ Error updating OT for ${dateKey}:`, err);
+              }
+            }
+          }
+        }
+        
+        // === Tính lại tổng OT sau khi cập nhật ===
+        console.log('🔄 Recalculating total overtime from updated records...');
+        const startDate = dayjs(`${month}-01`).startOf('month').format('YYYY-MM-DD');
+        const endDate = dayjs(`${month}-01`).endOf('month').format('YYYY-MM-DD');
+        
+        const updatedRecords = await TimeAttendanceModel.query()
+          .where('userId', userId)
+          .whereBetween('date', [startDate, endDate]);
+        
+        let recalculatedOTHours = 0;
+        let recalculatedOTSalary = 0;
+        let recalculatedOTDays = 0;
+        
+        updatedRecords.forEach(record => {
+          const otHours = parseFloat(record.otWorkingUnit?.toString() || '0');
+          const otSalary = parseFloat(record.otSalary?.toString() || '0');
+          
+          recalculatedOTHours += otHours;
+          recalculatedOTSalary += otSalary;
+          
+          // Đếm số ngày có OT (otWorkingUnit > 0)
+          if (otHours > 0) {
+            recalculatedOTDays++;
+          }
+        });
+        
+        console.log(`📊 Recalculated OT: ${recalculatedOTHours}h, ${recalculatedOTDays} days, ${recalculatedOTSalary} VND`);
+        
+        // Cập nhật lại overtimeResult với giá trị mới
+        overtimeResult.totalOvertimeHours = recalculatedOTHours;
+        overtimeResult.totalOvertimeSalary = recalculatedOTSalary;
+        // Note: totalOvertimeDays không có trong return type của OvertimeProcessingService
+        // Sẽ tính riêng cho dataPayload
+      }
 
-      // Tạo bản ghi duyệt
-      const approvalRecord = await ApprovedAttendanceModel.query().insert({
-        userId,
-        month,
-        approvedBy,
-        approvedAt: dayjs().toISOString(),
-        totalOvertimeHours: overtimeResult.totalOvertimeHours,
-        totalOvertimeSalary: overtimeResult.totalOvertimeSalary
-      });
+      // === Bước 3: Chuẩn bị payload dữ liệu chính từ frontend ===
+      const dataPayload: any = {};
+      
+      // Tính số ngày OT từ DB (đếm số record có otWorkingUnit > 0)
+      const startDate = dayjs(`${month}-01`).startOf('month').format('YYYY-MM-DD');
+      const endDate = dayjs(`${month}-01`).endOf('month').format('YYYY-MM-DD');
+      const otRecords = await TimeAttendanceModel.query()
+        .where('userId', userId)
+        .whereBetween('date', [startDate, endDate])
+        .where('otWorkingUnit', '>', 0);
+      const totalOvertimeDays = otRecords.length;
+      
+      if (extraData && extraData.monthlyStats) {
+        console.log('🔎 Extracting stats from extraData.monthlyStats');
+        const stats = extraData.monthlyStats;
+        // Map dữ liệu từ monthlyStats sang các trường trong DB
+        dataPayload.totalWorkDays = stats.totalDays ?? 0;
+        dataPayload.totalWorkHours = stats.totalHours ?? 0;
+        dataPayload.totalLateDays = stats.lateDays ?? 0;
+        dataPayload.totalEarlyLeaveDays = stats.earlyLeaveDays ?? 0;
+        dataPayload.totalLateMinutes = stats.totalLateMinutes ?? 0;
+        dataPayload.totalEarlyLeaveMinutes = stats.totalEarlyLeaveMinutes ?? 0;
+        dataPayload.totalPaidLeaveDays = stats.approvedLeaveDays ?? 0;
+        dataPayload.totalUnpaidLeaveDays = stats.unauthorizedAbsenceDays ?? 0;
+        dataPayload.totalLatePenalty = stats.totalLatePenalty ?? 0;
+        dataPayload.totalEarlyLeavePenalty = stats.totalEarlyLeavePenalty ?? 0;
+        dataPayload.totalPenalty = stats.totalPenalty ?? 0;
+        dataPayload.totalOvertimeHours = overtimeResult.totalOvertimeHours ?? 0; // Luôn lấy từ kết quả xử lý mới nhất
+        dataPayload.totalOvertimeDays = totalOvertimeDays; // ⭐ Số ngày OT
+        dataPayload.totalOvertimeSalary = overtimeResult.totalOvertimeSalary ?? 0; // Luôn lấy từ kết quả xử lý mới nhất
+      } else {
+        // Nếu không có monthlyStats, vẫn cập nhật overtime
+        dataPayload.totalOvertimeHours = overtimeResult.totalOvertimeHours;
+        dataPayload.totalOvertimeDays = totalOvertimeDays;
+        dataPayload.totalOvertimeSalary = overtimeResult.totalOvertimeSalary;
+      }
 
-      console.log('✅ Approval record created:', approvalRecord.id);
+      if (extraData?.notes) {
+        dataPayload.notes = extraData.notes;
+      }
 
-      // Lấy thống kê sau khi duyệt
-      const summary = await this.getUserMonthlyAttendance(userId, month, token);
+      // === Bước 4: Lấy thông tin lương & tính toán lương cuối cùng ===
+      let baseSalary: number | null = null;
+      let totalAllowance = 0;
+      try {
+        // (Giữ nguyên logic lấy lương của bạn ở đây...)
+        // Ví dụ:
+        const internalResp = await axios.get(`http://localhost:${process.env['AUTH_SERVICE_PORT'] || 4001}/api/internal/users/${userId}/salary`);
+        if (internalResp.data?.success && internalResp.data.data) {
+          baseSalary = parseFloat(internalResp.data.data.baseSalary || internalResp.data.data.salary || '0');
+          totalAllowance = parseFloat(internalResp.data.data.allowance || '0');
+        }
+        // ... các fallback call khác
+      } catch (err) {
+        console.warn('⚠️ Error fetching salary info:', err);
+      }
 
+      dataPayload.baseSalary = baseSalary;
+      dataPayload.totalAllowance = totalAllowance;
+
+      let finalSalary: number | null = null;
+      if (baseSalary !== null) {
+        finalSalary = (baseSalary || 0) + (totalAllowance || 0) - (dataPayload.totalPenalty || 0) + (dataPayload.totalOvertimeSalary || 0);
+      }
+      dataPayload.finalSalary = finalSalary;
+
+      // === Bước 5: Thêm mới hoặc Cập nhật vào DB ===
+      let approvalRecord;
+
+      if (existingApproval) {
+        // --- CẬP NHẬT bản ghi đã có ---
+        console.log(`🛠️ Updating existing approval record (ID: ${existingApproval.id})`);
+        dataPayload.approvedBy = approvedBy; // Cập nhật người duyệt
+        dataPayload.approvedAt = dayjs().toISOString(); // Cập nhật thời gian duyệt
+
+        approvalRecord = await ApprovedAttendanceModel.query()
+          .findById(existingApproval.id)
+          .patchAndFetch(dataPayload);
+
+        console.log('✅ Approval record updated!');
+
+      } else {
+        // --- THÊM MỚI bản ghi ---
+        console.log('🛠️ Creating new approval record...');
+        dataPayload.userId = userId;
+        dataPayload.month = month;
+        dataPayload.approvedBy = approvedBy;
+        dataPayload.approvedAt = dayjs().toISOString();
+
+        // Lấy departmentId nếu thiếu
+        dataPayload.departmentId = extraData?.departmentId;
+        if (!dataPayload.departmentId) {
+          try {
+            const userResp = await axios.get(`${API_GATEWAY_URL}/api/auth/users/detail/${userId}`, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+            const userData = userResp.data?.data || userResp.data;
+            if (userData?.departmentId) dataPayload.departmentId = userData.departmentId;
+          } catch (err: any) {
+            console.warn('⚠️ Could not fetch departmentId for user:', err?.message || err);
+          }
+        }
+
+        approvalRecord = await ApprovedAttendanceModel.query().insert(dataPayload);
+        console.log('✅ New approval record created:', approvalRecord.id);
+      }
+
+      // === Bước 6: Trả về kết quả ===
       return {
         success: true,
-        message: 'Duyệt bảng công thành công',
+        message: `Bảng công đã được ${existingApproval ? 'cập nhật' : 'duyệt'} thành công`,
         data: {
-          approvalId: approvalRecord.id,
-          userId,
-          month,
-          approvedBy,
-          approvedAt: approvalRecord.approvedAt,
-          overtimeProcessing: {
-            totalProcessed: overtimeResult.totalProcessed,
-            totalValid: overtimeResult.totalValid,
-            totalInvalid: overtimeResult.totalInvalid,
-            totalOvertimeHours: overtimeResult.totalOvertimeHours,
-            totalOvertimeSalary: overtimeResult.totalOvertimeSalary
-          },
-          summary
+          approvalRecord,
         }
       };
+
     } catch (error: any) {
-      console.error('❌ Error approving attendance:', error);
-      throw error;
+      console.error('❌ Error in approveMonthlyAttendance service:', error);
+      // Ném lỗi để controller có thể bắt và trả về status 500
+      throw new Error('Lỗi trong quá trình duyệt/cập nhật bảng công.');
     }
   }
 
@@ -684,32 +833,32 @@ export class AttendanceService {
     try {
       const response = await axios.get(
         `${APPLICATION_SERVICE_URL}/api/applications/user/${userId}/approved`,
-        { 
-          params: { 
-            year: dayjs(date).year(), 
-            month: dayjs(date).month() + 1 
-          } 
+        {
+          params: {
+            year: dayjs(date).year(),
+            month: dayjs(date).month() + 1
+          }
         }
       );
 
       const applications = response.data.data || [];
-      
+
       // Lọc đơn OT (overtime) cho ngày cụ thể
       const overtimeApp = applications.find((app: any) => {
         if (app.type !== 'overtime') return false;
-        
+
         // Parse data từ JSON string nếu cần
         const appData = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
-        
+
         // Kiểm tra ngày OT có khớp không
         return appData.date === date;
       });
-      
+
       if (overtimeApp) {
         console.log(`📋 Found approved OT application for user ${userId} on ${date}`);
         return overtimeApp;
       }
-      
+
       return null;
     } catch (error: any) {
       console.error('❌ Error fetching overtime applications:', error.message);
@@ -727,16 +876,16 @@ export class AttendanceService {
   ): Promise<any> {
     try {
       const date = dayjs(time).format('YYYY-MM-DD');
-      
+
       // Kiểm tra đã có record hôm nay chưa
       const existingRecord = await TimeAttendanceModel.query()
         .where('userId', userId)
         .where('date', date)
         .first();
-      
+
       let record;
       let isCheckIn = false;
-      
+
       if (!existingRecord || !existingRecord.checkInTime) {
         // Lần đầu hoặc chưa có check-in -> Check-in
         isCheckIn = true;
@@ -745,14 +894,14 @@ export class AttendanceService {
           date,
           checkInTime: time
         };
-        
+
         if (existingRecord) {
           record = await TimeAttendanceModel.query()
             .patchAndFetchById(existingRecord.id, recordData);
         } else {
           record = await TimeAttendanceModel.query().insert(recordData);
         }
-        
+
         console.log(`✅ Check-in recorded for user ${userId} at ${time}`);
       } else {
         // Đã có check-in -> Check-out (cập nhật mỗi lần)
@@ -761,26 +910,26 @@ export class AttendanceService {
           .patchAndFetchById(existingRecord.id, {
             checkOutTime: time
           });
-        
+
         console.log(`✅ Check-out updated for user ${userId} at ${time}`);
       }
-      
+
       // Kiểm tra đơn OT đã duyệt
       const overtimeApp = await this.getApprovedOvertimeApplication(userId, date);
       let otEndTime: dayjs.Dayjs | null = null;
-      
+
       if (overtimeApp) {
-        const appData = typeof overtimeApp.data === 'string' 
-          ? JSON.parse(overtimeApp.data) 
+        const appData = typeof overtimeApp.data === 'string'
+          ? JSON.parse(overtimeApp.data)
           : overtimeApp.data;
-        
+
         // Lấy thời gian kết thúc OT từ đơn
         if (appData.endTime) {
           otEndTime = dayjs(`${date} ${appData.endTime}`);
           console.log(`⏰ OT approved until: ${otEndTime.format('HH:mm')}`);
         }
       }
-      
+
       // Tính toán attendance ngay lập tức (có thể có OT)
       const calculation = await AttendanceCalculationService.calculateAttendance(
         record.checkInTime,
@@ -790,7 +939,7 @@ export class AttendanceService {
         undefined, // token
         otEndTime ? otEndTime.toISOString() : undefined // Truyền thời gian OT nếu có
       );
-      
+
       // Cập nhật kết quả tính toán đầy đủ
       const updatedRecord = await TimeAttendanceModel.query()
         .patchAndFetchById(record.id, {
@@ -804,7 +953,7 @@ export class AttendanceService {
           otWorkingUnit: calculation.otWorkingUnit || 0,
           otSalary: calculation.otSalary || 0
         });
-      
+
       return {
         type: isCheckIn ? 'check_in' : 'check_out',
         record: updatedRecord,

@@ -37,6 +37,13 @@ router.post('/attendance/approve', async (req: Request, res: Response) => {
   await approveAttendance(req, res);
 });
 
+// Compatibility route for gateway path rewrite
+// Gateway may rewrite '/api/attendance/approve' -> '/api/approve' on this service,
+// so expose '/api/approve' as an alias that delegates to the same handler.
+router.post('/approve', async (req: Request, res: Response) => {
+  await approveAttendance(req, res);
+});
+
 // ===================================
 // ATTENDANCE RECORDING ROUTES - NEW
 // ===================================

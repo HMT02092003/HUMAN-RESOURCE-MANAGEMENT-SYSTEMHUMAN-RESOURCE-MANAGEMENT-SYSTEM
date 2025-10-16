@@ -23,7 +23,8 @@ exports.seed = async function(knex) {
   const penaltyRate = 0.05;
   const otRate = 1.5;
   
-  const calculatePenalty = (minutes) => Math.round((hourlyRate * (minutes / 60) * penaltyRate));
+  // Penalty: fixed 1,500 VND per minute late/early (as requested)
+  const calculatePenalty = (minutes) => Math.round(1500 * minutes);
   const calculateOtSalary = (hours) => Math.round(hourlyRate * otRate * hours);
 
   const attendanceData = [

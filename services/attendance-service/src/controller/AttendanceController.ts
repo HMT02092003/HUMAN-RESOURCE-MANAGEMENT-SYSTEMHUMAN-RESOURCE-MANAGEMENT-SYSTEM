@@ -163,12 +163,13 @@ export const approveAttendance = async (req: Request, res: Response) => {
 
     console.log(`🔍 Approving attendance for user ${userId} in month ${month} by ${approvedBy}`);
 
-    // Gọi service để duyệt
+    // Gọi service để duyệt - forward toàn bộ body (có thể chứa monthlyStats/dailyData)
     const result = await AttendanceService.approveMonthlyAttendance(
       userId,
       month,
       approvedBy,
-      token
+      token,
+      req.body // extra data from FE (monthlyStats, dailyData, departmentId...)
     );
 
     if (!result.success) {

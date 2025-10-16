@@ -30,7 +30,8 @@ import {
   TrophyOutlined,
   WarningOutlined,
   EnvironmentOutlined,
-  FileTextOutlined
+  FileTextOutlined,
+  InfoCircleOutlined
 } from '@ant-design/icons';
 import { attendanceService, AttendanceData, MonthlyStats, MonthlyAttendanceDetailResponse, DailyAttendanceDetail } from '@/service/attendanceService';
 import attendanceApprovalService from '@/service/attendanceApprovalService';
@@ -119,11 +120,14 @@ const AttendanceSimplePage = () => {
           // Tạm thời dùng departmentId từ monthlyDetail nếu có
           const departmentId = 1; // Placeholder - cần lấy từ API hoặc state
 
+          // ⭐ Gửi đầy đủ thông tin: monthlyStats + dailyData (chứa OT từng ngày)
           await attendanceApprovalService.approveAttendance({
             userId: parseInt(userIdFromUrl),
             month: monthStr,
             departmentId: departmentId,
-            notes: `Duyệt bởi ${decoded.username || 'Quản lý'}`
+            notes: `Duyệt bởi ${decoded.username || 'Quản lý'}`,
+            monthlyStats,
+            dailyData: monthlyDetail, // ⭐ Gửi kèm dailyData chứa OT từng ngày
           });
 
           message.success('Duyệt bảng chấm công thành công!');
@@ -279,6 +283,7 @@ const AttendanceSimplePage = () => {
             // Map field names từ API sang format cũ của modal
             totalHours: parseFloat(attData.dailyTotalWorkHours || '0'),
             overtime: parseFloat(attData.otWorkingUnit || '0'),
+            otSalary: parseFloat(attData.otSalary || '0'), // ⭐ Thêm lương OT
             lateMinutes: parseFloat(attData.lateMinutes || '0'),
             earlyDepartureMinutes: parseFloat(attData.earlyDepartureMinutes || '0'),
             lateArrivalPenalty: parseFloat(attData.lateArrivalPenalty || '0'),
@@ -574,6 +579,11 @@ const AttendanceSimplePage = () => {
                       // Có chấm công: hiển thị giờ vào - giờ ra
                       // Màu: đỏ nếu có phạt, đen nếu bình thường
                       <div className="calendar-cell-info">
+                        {attendance.overtime > 0 && (
+                          <div style={{ color: '#52c41a', fontSize: isMobile ? 9 : 11, fontWeight: 'bold' }}>
+                            +{attendance.overtime}
+                          </div>
+                        )}
                         <div style={{ color: hasTimePenalty ? '#ff4d4f' : '#666', fontSize: isMobile ? 9 : 11 }}>
                           {attendance.checkInTime || '--:--'} - {attendance.checkOutTime || '--:--'}
                         </div>
@@ -801,7 +811,43 @@ const AttendanceSimplePage = () => {
                   </div>
                 </div>
               </Col>
-            </Row>            {/* Additional stats row */}
+              <Col xs={12} sm={12} lg={12}>
+                <div style={{
+                  textAlign: 'center',
+                  padding: isMobile ? 12 : 16,
+                  borderRadius: 8,
+                  background: '#e6fffb',
+                  border: '1px solid #d9d9d9',
+                  height: '100%'
+                }}>
+                  <FieldTimeOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#8bc3b9ff', marginBottom: 4 }} />
+                  <div>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#8bc3b9ff' }}>{monthlyStats.overtimeHours}</Title>
+                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#8bc3b9ff', fontWeight: 500 }}>
+                      Số giờ tăng ca
+                    </Text>
+                  </div>
+                </div>
+              </Col>
+              <Col xs={12} sm={12} lg={12}>
+                <div style={{
+                  textAlign: 'center',
+                  padding: isMobile ? 12 : 16,
+                  borderRadius: 8,
+                  background: '#f6ffed',
+                  border: '1px solid #d9d9d9',
+                  height: '100%'
+                }}>
+                  <DollarOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#9ec775ff', marginBottom: 4 }} />
+                  <div>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#9ec775ff' }}>{formatVND(monthlyStats.totalOvertimePay || 0)}đ</Title>
+                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#9ec775ff', fontWeight: 500 }}>
+                      Lương tăng ca
+                    </Text>
+                  </div>
+                </div>
+              </Col>
+            </Row>
             <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
               <Col xs={12} sm={12} lg={12}>
                 <div style={{
@@ -1266,7 +1312,7 @@ const AttendanceSimplePage = () => {
                         </Col>
                       </Row>
                       <Row gutter={[8, 8]}>
-                        <Col xs={12} sm={6}>
+                        <Col xs={12} sm={12}>
                           <div style={{ textAlign: 'center', padding: 8, background: '#e6f7ff', borderRadius: 6, border: '1px solid #91d5ff' }}>
                             <Text style={{ fontSize: isMobile ? 10 : 11, color: '#1890ff', display: 'block' }}>Tổng giờ</Text>
                             <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#1890ff' }}>
@@ -1274,7 +1320,7 @@ const AttendanceSimplePage = () => {
                             </Text>
                           </div>
                         </Col>
-                        <Col xs={12} sm={6}>
+                        <Col xs={12} sm={12}>
                           <div style={{ textAlign: 'center', padding: 8, background: '#f9f0ff', borderRadius: 6, border: '1px solid #d3adf7' }}>
                             <Text style={{ fontSize: isMobile ? 10 : 11, color: '#722ed1', display: 'block' }}>Làm thêm</Text>
                             <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#722ed1' }}>
@@ -1282,7 +1328,7 @@ const AttendanceSimplePage = () => {
                             </Text>
                           </div>
                         </Col>
-                        <Col xs={12} sm={6}>
+                        <Col xs={12} sm={12}>
                           <div style={{ textAlign: 'center', padding: 8, background: '#fff1f0', borderRadius: 6, border: '1px solid #ffccc7' }}>
                             <Text style={{ fontSize: isMobile ? 10 : 11, color: '#ff4d4f', display: 'block' }}>Muộn</Text>
                             <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#ff4d4f' }}>
@@ -1290,7 +1336,7 @@ const AttendanceSimplePage = () => {
                             </Text>
                           </div>
                         </Col>
-                        <Col xs={12} sm={6}>
+                        <Col xs={12} sm={12}>
                           <div style={{ textAlign: 'center', padding: 8, background: '#fff2e8', borderRadius: 6, border: '1px solid #ffd591' }}>
                             <Text style={{ fontSize: isMobile ? 10 : 11, color: '#fa8c16', display: 'block' }}>Sớm</Text>
                             <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#fa8c16' }}>
@@ -1300,6 +1346,37 @@ const AttendanceSimplePage = () => {
                         </Col>
                       </Row>
                     </div>
+
+                    {selectedDateData.overtime > 0 ? (
+                      <div style={{ marginBottom: 16 }}>
+                        <Row gutter={[12, 8]} style={{ marginBottom: 8 }}>
+                          <Col span={24}>
+                            <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#595959' }}>
+                              <InfoCircleOutlined style={{ marginRight: 6 }} />
+                              Thông tin tăng ca
+                            </Text>
+                          </Col>
+                        </Row>
+                        <Row gutter={[8, 8]}>
+                          <Col xs={12} sm={12}>
+                            <div style={{ textAlign: 'center', padding: 8, background: '#f9f0ff', borderRadius: 6, border: '1px solid #d3adf7' }}>
+                              <Text style={{ fontSize: isMobile ? 10 : 11, color: '#722ed1', display: 'block' }}>Thời gian tăng ca</Text>
+                              <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#722ed1' }}>
+                                {selectedDateData.overtime || 0} h
+                              </Text>
+                            </div>
+                          </Col>
+                          <Col xs={12} sm={12}>
+                            <div style={{ textAlign: 'center', padding: 8, background: '#e6fffb', borderRadius: 6, border: '1px solid #87e8de' }}>
+                              <Text style={{ fontSize: isMobile ? 10 : 11, color: '#13c2c2', display: 'block' }}>Lương tăng ca</Text>
+                              <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#13c2c2' }}>
+                                {formatVND(selectedDateData.otSalary || 0)}đ
+                              </Text>
+                            </div>
+                          </Col>
+                        </Row>
+                      </div>
+                    ) : null}
 
                     {/* Thông tin tiền phạt cho ngày này */}
                     {(selectedDateData.lateArrivalPenalty > 0 || selectedDateData.earlyLeavePenalty > 0) && (
