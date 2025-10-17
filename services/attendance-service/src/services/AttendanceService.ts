@@ -10,7 +10,7 @@ import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import axios from 'axios';
 import os from 'os';
 import TimeAttendanceModel from '@/Models/TimeAttendanceModel';
-import ApprovedAttendanceModel from '@/Models/ApprovedAttendanceModel';
+import MonthlySummaryModel from '@/Models/MonthlySummaryModel';
 import SettingModel from '@/Models/SettingsModel';
 import { OvertimeProcessingService } from './OvertimeProcessingService';
 import { AttendanceCalculationService } from './AttendanceCalculationService';
@@ -482,7 +482,7 @@ export class AttendanceService {
       }
 
       // Kiểm tra đã duyệt chưa
-      const isApproved = await ApprovedAttendanceModel.isApproved(userId, month);
+  const isApproved = await MonthlySummaryModel.isApproved(userId, month);
 
       // Tính toán thống kê - sử dụng query để đếm chính xác
       const totalLateDays = await this.calculateTotalLateDays(userId, month);
@@ -603,7 +603,7 @@ export class AttendanceService {
       console.log(`\n🔥 Starting approval/update process for user ${userId} in ${month}`);
 
       // === Bước 1: Tìm bản ghi đã duyệt trước đó ===
-      const existingApproval = await ApprovedAttendanceModel.query().findOne({ userId, month });
+  const existingApproval = await MonthlySummaryModel.query().findOne({ userId, month });
 
       // === Bước 2: Xử lý làm thêm (luôn chạy để có dữ liệu mới nhất) ===
       console.log('🔄 Processing overtime applications...');
@@ -771,7 +771,7 @@ export class AttendanceService {
         dataPayload.approvedBy = approvedBy; // Cập nhật người duyệt
         dataPayload.approvedAt = dayjs().toISOString(); // Cập nhật thời gian duyệt
 
-        approvalRecord = await ApprovedAttendanceModel.query()
+  approvalRecord = await MonthlySummaryModel.query()
           .findById(existingApproval.id)
           .patchAndFetch(dataPayload);
 
@@ -799,7 +799,7 @@ export class AttendanceService {
           }
         }
 
-        approvalRecord = await ApprovedAttendanceModel.query().insert(dataPayload);
+  approvalRecord = await MonthlySummaryModel.query().insert(dataPayload);
         console.log('✅ New approval record created:', approvalRecord.id);
       }
 
@@ -823,7 +823,7 @@ export class AttendanceService {
    * Kiểm tra trạng thái duyệt
    */
   static async getApprovalStatus(userId: number, month: string): Promise<boolean> {
-    return await ApprovedAttendanceModel.isApproved(userId, month);
+  return await MonthlySummaryModel.isApproved(userId, month);
   }
 
   /**
@@ -833,7 +833,7 @@ export class AttendanceService {
     month?: string
   ): Promise<any[]> {
     try {
-      let query = ApprovedAttendanceModel.query();
+  let query = MonthlySummaryModel.query();
 
       if (month) {
         query = query.where('month', month);
