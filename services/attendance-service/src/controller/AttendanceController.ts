@@ -11,6 +11,8 @@ import { getDecodedToken } from '@/utils/decode-token';
 import { AttendanceService } from '@/services/AttendanceService';
 import SettingModel from '@/Models/SettingsModel';
 import axios from 'axios';
+import MonthlySummaryModel from '@/Models/MonthlySummaryModel';
+import ApprovedAttendanceModel from '@/Models/ApprovedAttendanceModel';
 
 /**
  * API: Duyệt bảng công tháng
@@ -443,5 +445,138 @@ export const recordAttendance = async (req: Request, res: Response) => {
       success: false,
       message: error.message || 'Lỗi khi chấm công'
     });
+  }
+};
+
+/**
+ * Internal API: Update attendance for a forgot-check application.
+ * This endpoint is intended to be called by application-service via API Gateway
+ * when an application of type forgot-check is approved. It will create or
+ * update a time_attendance record for the specified date/time and update the
+ * monthly_summaries row for that user/month atomically.
+ */
+export const updateForgotCheck = async (req: Request, res: Response) => {
+  try {
+    const { userId, forgotDate, forgotTime, forgotType } = req.body;
+
+    if (!userId || !forgotDate || !forgotTime || !forgotType) {
+      return res.status(400).json({ success: false, message: 'userId, forgotDate, forgotTime, forgotType are required' });
+    }
+
+    // Call service to process
+    const result = await AttendanceService.processForgotCheck({ userId, forgotDate, forgotTime, forgotType });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    return res.status(200).json(result);
+  } catch (err: any) {
+    console.error('❌ Error in updateForgotCheck:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Internal error' });
+  }
+};
+
+/**
+ * Internal API: Create placeholder attendance records when a leave or business-trip
+ * application is approved. Expected body: { userId, type: 'leave'|'business-trip', startDate, endDate, date, reason }
+ */
+export const createFromApplication = async (req: Request, res: Response) => {
+  try {
+    const { userId, type, startDate, endDate, date, reason } = req.body;
+    if (!userId || !type || (!date && (!startDate || !endDate))) {
+      return res.status(400).json({ success: false, message: 'userId, type and date or startDate+endDate required' });
+    }
+
+    const result = await AttendanceService.processApplicationCreate({ userId, type, startDate, endDate, date, reason });
+
+    if (!result.success) return res.status(400).json(result);
+    return res.status(200).json(result);
+  } catch (err: any) {
+    console.error('❌ Error in createFromApplication:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Internal error' });
+  }
+};
+
+/**
+ * Manager: List monthly summaries with status IN_PROGRESS filtered by department
+ * GET /api/monthly-summaries?departmentId=1
+ */
+export const getMonthlySummariesForManager = async (req: Request, res: Response) => {
+  try {
+    const { departmentId, year, month } = req.query;
+    const q = MonthlySummaryModel.query().where('status', 'IN_PROGRESS');
+
+    if (departmentId) {
+      // department filter will be applied at application layer by joining users if needed
+      // For now, accept departmentId as hint and later filter by user list
+    }
+
+    if (year && month) {
+      q.where('year', Number(year)).where('month', Number(month));
+    }
+
+    const rows = await q.orderBy('user_id');
+
+    return res.status(200).json({ success: true, data: rows });
+  } catch (err: any) {
+    console.error('❌ Error in getMonthlySummariesForManager:', err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
+/**
+ * Manager: Approve (copy to approved_attendances) and close a monthly summary
+ * POST /api/monthly-summaries/:id/approve
+ */
+export const approveMonthlySummary = async (req: Request, res: Response) => {
+  try {
+    // Validate token and approver
+    const token = req.cookies?.['token'] || req.headers.authorization?.replace('Bearer ', '') || req.headers.authorization?.split(' ')[1];
+    const decoded = getDecodedToken(token);
+    const approverId = decoded?.sub ? parseInt(decoded.sub) : null;
+
+    if (!approverId) return res.status(401).json({ success: false, message: 'Token không hợp lệ' });
+
+  const id = Number(req.params['id']);
+    if (!id) return res.status(400).json({ success: false, message: 'id là bắt buộc' });
+
+    const summary = await MonthlySummaryModel.query().findById(id);
+    if (!summary) return res.status(404).json({ success: false, message: 'Không tìm thấy monthly summary' });
+
+    if (summary.status === 'CLOSED') return res.status(409).json({ success: false, message: 'Monthly summary đã đóng' });
+
+    // Copy relevant fields to approved_attendances
+    const payload: any = {
+      userId: summary.user_id,
+      departmentId: req.body.departmentId || null,
+      month: `${summary.year}-${String(summary.month).padStart(2, '0')}`,
+      totalWorkDays: summary.totalWorkDays,
+      totalWorkHours: summary.totalWorkHours,
+      totalLateMinutes: summary.totalLateMinutes,
+      totalEarlyLeaveMinutes: summary.totalEarlyLeaveMinutes,
+      totalOvertimeHours: summary.totalOvertimeHours,
+      totalOvertimeSalary: summary.totalOvertimeSalary,
+      totalPaidLeaveDays: summary.totalPaidLeaveDays || 0,
+      totalUnpaidLeaveDays: 0,
+      totalPenalty: summary.totalPenalty,
+      baseSalary: req.body.baseSalary || null,
+      totalAllowance: req.body.totalAllowance || 0,
+      finalSalary: summary.finalSalary || 0,
+      approvedBy: approverId,
+      approvedAt: new Date().toISOString(),
+      notes: req.body.notes || null
+    };
+
+    const created = await ApprovedAttendanceModel.query().insert(payload);
+
+    // Mark monthly summary as CLOSED
+    await MonthlySummaryModel.query().findById(id).patch({ status: 'CLOSED', updated_at: new Date().toISOString() });
+
+    return res.status(200).json({ success: true, data: created });
+  } catch (err: any) {
+    console.error('❌ Error in approveMonthlySummary:', err);
+    return res.status(500).json({ success: false, message: err.message });
   }
 };

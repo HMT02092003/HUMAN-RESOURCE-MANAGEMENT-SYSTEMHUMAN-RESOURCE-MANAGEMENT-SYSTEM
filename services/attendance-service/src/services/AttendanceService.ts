@@ -12,6 +12,7 @@ import os from 'os';
 import TimeAttendanceModel from '@/Models/TimeAttendanceModel';
 import ApprovedAttendanceModel from '@/Models/ApprovedAttendanceModel';
 import SettingModel from '@/Models/SettingsModel';
+import MonthlySummaryModel from '@/Models/MonthlySummaryModel';
 import { OvertimeProcessingService } from './OvertimeProcessingService';
 import { AttendanceCalculationService } from './AttendanceCalculationService';
 
@@ -101,6 +102,355 @@ export class AttendanceService {
     } catch (error: any) {
       console.error('❌ Error fetching users:', error.message);
       return [];
+    }
+  }
+
+  /**
+   * Process a forgot-check application: insert/update a time_attendance record
+   * for the specified date and update monthly_summaries accordingly.
+   * Returns { success, message, attendanceRecord?, monthlySummary? }
+   */
+  static async processForgotCheck(payload: { userId: number; forgotDate: string; forgotTime: string; forgotType: string }) {
+    const knex = TimeAttendanceModel.knex();
+    const { userId, forgotDate, forgotTime, forgotType } = payload;
+
+  const dateKey: string = dayjs(forgotDate).format('YYYY-MM-DD');
+  const monthKey: string = dayjs(forgotDate).format('YYYY-MM');
+
+    // Determine whether this is a check-in or check-out fix
+    const isCheckIn = forgotType === 'check_in' || forgotType === 'in';
+    const isCheckOut = forgotType === 'check_out' || forgotType === 'out';
+
+    if (!isCheckIn && !isCheckOut) {
+      return { success: false, message: 'forgotType must be check_in or check_out' };
+    }
+
+    try {
+      return await knex.transaction(async (trx: any) => {
+        // Find existing attendance record for that day
+        let existing = await TimeAttendanceModel.query(trx)
+          .where('userId', userId)
+          .where('date', dateKey)
+          .first();
+
+        const timeIso = dayjs(`${dateKey}T${forgotTime}`).toISOString();
+
+        if (existing) {
+          // Patch checkInTime or checkOutTime
+          const patchData: any = {};
+          if (isCheckIn) {
+            patchData.checkInTime = timeIso;
+          }
+          if (isCheckOut) {
+            patchData.checkOutTime = timeIso;
+          }
+
+          patchData.updated_at = dayjs().toISOString();
+
+          await TimeAttendanceModel.query(trx).findById(existing.id).patch(patchData);
+
+          existing = await TimeAttendanceModel.query(trx).findById(existing.id);
+        } else {
+          // Insert new record
+          const insertData: any = {
+            userId,
+            date: dateKey,
+            checkInTime: isCheckIn ? timeIso : null,
+            checkOutTime: isCheckOut ? timeIso : null,
+            created_at: dayjs().toISOString(),
+            updated_at: dayjs().toISOString(),
+            // default numeric fields
+            lateMinutes: 0,
+            earlyDepartureMinutes: 0,
+            dailyTotalWorkHours: 0,
+            lateArrivalPenalty: 0,
+            earlyLeavePenalty: 0,
+            otMinutes: 0,
+            otSalary: 0,
+            day_type: 'WORKDAY'
+          };
+
+          const inserted = await TimeAttendanceModel.query(trx).insert(insertData).returning('*');
+          existing = inserted;
+        }
+
+        // Recalculate attendance for this single day using AttendanceCalculationService
+        try {
+          if (!existing) throw new Error('Attendance record missing after insert/update');
+
+          // calculateAttendance(checkInTime, checkOutTime, date, userId?)
+          const calculation = await AttendanceCalculationService.calculateAttendance(
+            existing.checkInTime || null,
+            existing.checkOutTime || null,
+            dateKey,
+            existing.userId
+          );
+
+          // Patch the attendance record with calculated values
+          const updateFields: any = {
+            dailyTotalWorkHours: calculation.workHours,
+            lateMinutes: calculation.lateMinutes,
+            earlyDepartureMinutes: calculation.earlyDepartureMinutes,
+            lateArrivalPenalty: calculation.latePenaltyAmount,
+            earlyLeavePenalty: calculation.earlyLeavePenaltyAmount,
+            otMinutes: calculation.otMinutes,
+            otSalary: calculation.otSalary,
+            updated_at: dayjs().toISOString()
+          };
+
+          await TimeAttendanceModel.query(trx).findById(existing.id!).patch(updateFields as any);
+
+          const updatedRecord = await TimeAttendanceModel.query(trx).findById(existing.id!);
+
+          // Update monthly_summaries: fetch existing summary row
+          let monthly = await MonthlySummaryModel.query(trx)
+            .where('user_id', userId)
+            .where('month', monthKey)
+            .first();
+
+          // Compute day-level contributions
+          // day-level contributions (used in recompute below)
+
+          if (monthly) {
+            // If monthly is CLOSED, refuse update
+            if (monthly.status === 'CLOSED') {
+              throw new Error('Monthly summary is CLOSED; cannot modify attendance');
+            }
+
+            // Subtract old day's contribution (if existed) and add new
+            // Load old record if existed before our upsert
+            // For simplicity, we fetch the previous DB snapshot before our update by querying history is not available.
+            // We'll approximate by recalculating totals from all day records in the month.
+            const startDate = dayjs(`${monthKey}-01`).startOf('month').format('YYYY-MM-DD');
+            const endDate = dayjs(`${monthKey}-01`).endOf('month').format('YYYY-MM-DD');
+
+            const rows = await TimeAttendanceModel.query(trx)
+              .where('userId', userId)
+              .whereBetween('date', [startDate, endDate]);
+
+            // Recompute aggregates from scratch (safe and idempotent)
+            let totalWorkDays = 0;
+            let totalWorkHours = 0;
+            let totalOvertimeHours = 0;
+            let totalLateMinutes = 0;
+            let totalEarlyLeaveMinutes = 0;
+            let totalLatePenalty = 0;
+            let totalEarlyLeavePenalty = 0;
+            let totalOvertimeSalary = 0;
+
+            rows.forEach((r: any) => {
+              if (r.checkInTime && r.checkOutTime) {
+                totalWorkDays++;
+                totalWorkHours += parseFloat(r.dailyTotalWorkHours?.toString() || '0');
+              }
+              totalOvertimeHours += Math.round((parseFloat(r.otMinutes?.toString() || '0') / 60) * 100) / 100;
+              totalLateMinutes += parseFloat(r.lateMinutes?.toString() || '0');
+              totalEarlyLeaveMinutes += parseFloat(r.earlyDepartureMinutes?.toString() || '0');
+              totalLatePenalty += parseFloat(r.lateArrivalPenalty?.toString() || '0');
+              totalEarlyLeavePenalty += parseFloat(r.earlyLeavePenalty?.toString() || '0');
+              totalOvertimeSalary += parseFloat(r.otSalary?.toString() || '0');
+            });
+
+            // Upsert monthly
+            await MonthlySummaryModel.query(trx)
+              .findById(monthly.id)
+              .patch({
+                totalWorkDays,
+                totalWorkHours: Math.round(totalWorkHours * 100) / 100,
+                totalOvertimeHours: Math.round(totalOvertimeHours * 100) / 100,
+                totalLateMinutes: Math.round(totalLateMinutes),
+                totalEarlyLeaveMinutes: Math.round(totalEarlyLeaveMinutes),
+                totalLatePenalty: Math.round(totalLatePenalty * 100) / 100,
+                totalEarlyLeavePenalty: Math.round(totalEarlyLeavePenalty * 100) / 100,
+                totalOvertimeSalary: Math.round(totalOvertimeSalary * 100) / 100,
+                updated_at: dayjs().toISOString()
+              });
+
+            const refreshed = await MonthlySummaryModel.query(trx).findById(monthly.id);
+
+            return { success: true, message: 'Attendance updated and monthly summary recalculated', attendanceRecord: updatedRecord, monthlySummary: refreshed };
+          } else {
+            // Create monthly summary from scratch for this user/month
+            // Aggregate from all rows
+            const startDate = dayjs(`${monthKey}-01`).startOf('month').format('YYYY-MM-DD');
+            const endDate = dayjs(`${monthKey}-01`).endOf('month').format('YYYY-MM-DD');
+
+            const rows = await TimeAttendanceModel.query(trx)
+              .where('userId', userId)
+              .whereBetween('date', [startDate, endDate]);
+
+            let totalWorkDays = 0;
+            let totalWorkHours = 0;
+            let totalOvertimeHours = 0;
+            let totalLateMinutes = 0;
+            let totalEarlyLeaveMinutes = 0;
+            let totalLatePenalty = 0;
+            let totalEarlyLeavePenalty = 0;
+            let totalOvertimeSalary = 0;
+
+            rows.forEach((r: any) => {
+              if (r.checkInTime && r.checkOutTime) {
+                totalWorkDays++;
+                totalWorkHours += parseFloat(r.dailyTotalWorkHours?.toString() || '0');
+              }
+              totalOvertimeHours += Math.round((parseFloat(r.otMinutes?.toString() || '0') / 60) * 100) / 100;
+              totalLateMinutes += parseFloat(r.lateMinutes?.toString() || '0');
+              totalEarlyLeaveMinutes += parseFloat(r.earlyDepartureMinutes?.toString() || '0');
+              totalLatePenalty += parseFloat(r.lateArrivalPenalty?.toString() || '0');
+              totalEarlyLeavePenalty += parseFloat(r.earlyLeavePenalty?.toString() || '0');
+              totalOvertimeSalary += parseFloat(r.otSalary?.toString() || '0');
+            });
+
+            const created = await MonthlySummaryModel.query(trx).insert({
+              user_id: userId,
+              month: monthKey,
+              year: parseInt((monthKey.split('-')[0] as string)),
+              totalWorkDays,
+              totalWorkHours: Math.round(totalWorkHours * 100) / 100,
+              totalOvertimeHours: Math.round(totalOvertimeHours * 100) / 100,
+              totalLateMinutes: Math.round(totalLateMinutes),
+              totalEarlyLeaveMinutes: Math.round(totalEarlyLeaveMinutes),
+              totalLatePenalty: Math.round(totalLatePenalty * 100) / 100,
+              totalEarlyLeavePenalty: Math.round(totalEarlyLeavePenalty * 100) / 100,
+              totalOvertimeSalary: Math.round(totalOvertimeSalary * 100) / 100,
+              status: 'IN_PROGRESS',
+              created_at: dayjs().toISOString(),
+              updated_at: dayjs().toISOString()
+            } as any).returning('*');
+
+            return { success: true, message: 'Attendance created and monthly summary generated', attendanceRecord: updatedRecord, monthlySummary: created };
+          }
+
+        } catch (calcErr) {
+          console.error('❌ Error calculating attendance for day:', calcErr);
+          throw calcErr;
+        }
+      });
+    } catch (err: any) {
+      console.error('❌ processForgotCheck error:', err);
+      return { success: false, message: err.message || 'Error processing forgot check' };
+    }
+  }
+
+  /**
+   * Create placeholder attendance records for approved applications (leave / business-trip)
+   * payload: { userId, type, startDate, endDate, date, reason }
+   */
+  static async processApplicationCreate(payload: { userId: number; type: string; startDate?: string; endDate?: string; date?: string; reason?: string }) {
+    const { userId, type, startDate, endDate, date, reason } = payload;
+    try {
+      const dates: string[] = [];
+      if (date) dates.push(dayjs(date).format('YYYY-MM-DD'));
+      else if (startDate && endDate) {
+        let cur = dayjs(startDate);
+        const end = dayjs(endDate);
+        while (cur.isSameOrBefore(end, 'day')) {
+          dates.push(cur.format('YYYY-MM-DD'));
+          cur = cur.add(1, 'day');
+        }
+      }
+
+      if (dates.length === 0) return { success: false, message: 'No dates provided' };
+
+      const knex = TimeAttendanceModel.knex();
+      return await knex.transaction(async (trx: any) => {
+        const results: any[] = [];
+        for (const d of dates) {
+          const existing = await TimeAttendanceModel.query(trx).where('userId', userId).where('date', d).first();
+          if (existing) {
+            // update day_type to LEAVE or BUSINESS_TRIP if not already
+            const newType = type === 'business-trip' ? 'BUSINESS_TRIP' : 'LEAVE';
+            if (existing.day_type !== newType) {
+              await TimeAttendanceModel.query(trx).findById(existing.id).patch({ day_type: newType, updated_at: dayjs().toISOString() } as any);
+            }
+            results.push({ date: d, action: 'updated' });
+          } else {
+            // insert placeholder record
+            await TimeAttendanceModel.query(trx).insert({
+              userId,
+              date: d,
+              checkInTime: null,
+              checkOutTime: null,
+              dailyTotalWorkHours: 0,
+              lateMinutes: 0,
+              earlyDepartureMinutes: 0,
+              lateArrivalPenalty: 0,
+              earlyLeavePenalty: 0,
+              otMinutes: 0,
+              otSalary: 0,
+              day_type: type === 'business-trip' ? 'BUSINESS_TRIP' : 'LEAVE',
+              created_at: dayjs().toISOString(),
+              updated_at: dayjs().toISOString()
+            } as any).returning('*');
+            results.push({ date: d, action: 'inserted' });
+          }
+        }
+
+        // After inserting/updating days, recalc monthly summaries per affected month
+        const months = Array.from(new Set(dates.map(x => dayjs(x).format('YYYY-MM'))));
+        const monthlySummaries: any[] = [];
+        for (const m of months) {
+          const start = dayjs(`${m}-01`).startOf('month').format('YYYY-MM-DD');
+          const end = dayjs(`${m}-01`).endOf('month').format('YYYY-MM-DD');
+          const rows = await TimeAttendanceModel.query(trx).where('userId', userId).whereBetween('date', [start, end]);
+
+          let totalWorkDays = 0, totalWorkHours = 0, totalOvertimeHours = 0, totalLateMinutes = 0, totalEarlyLeaveMinutes = 0, totalLatePenalty = 0, totalEarlyPenalty = 0, totalOvertimeSalary = 0;
+          rows.forEach((r: any) => {
+            if (r.checkInTime && r.checkOutTime) { totalWorkDays++; totalWorkHours += Number(r.dailyTotalWorkHours || 0); }
+            totalOvertimeHours += Math.round(((Number(r.otMinutes || 0)) / 60) * 100) / 100;
+            totalLateMinutes += Number(r.lateMinutes || 0);
+            totalEarlyLeaveMinutes += Number(r.earlyDepartureMinutes || 0);
+            totalLatePenalty += Number(r.lateArrivalPenalty || 0);
+            totalEarlyPenalty += Number(r.earlyLeavePenalty || 0);
+            totalOvertimeSalary += Number(r.otSalary || 0);
+          });
+
+          const mRow = await MonthlySummaryModel.query(trx).where('user_id', userId).where('month', Number(m.split('-')[1])).where('year', Number(m.split('-')[0])).first();
+          if (mRow) {
+            if (mRow.status === 'CLOSED') {
+              // skip updating closed month
+              monthlySummaries.push({ month: m, updated: false, reason: 'CLOSED' });
+              continue;
+            }
+            await MonthlySummaryModel.query(trx).findById(mRow.id).patch({
+              totalWorkDays,
+              totalWorkHours: Math.round(totalWorkHours * 100) / 100,
+              totalOvertimeHours: Math.round(totalOvertimeHours * 100) / 100,
+              totalLateMinutes: Math.round(totalLateMinutes),
+              totalEarlyLeaveMinutes: Math.round(totalEarlyLeaveMinutes),
+              totalLatePenalty: Math.round(totalLatePenalty * 100) / 100,
+              totalEarlyLeavePenalty: Math.round(totalEarlyPenalty * 100) / 100,
+              totalOvertimeSalary: Math.round(totalOvertimeSalary * 100) / 100,
+              updated_at: dayjs().toISOString()
+            } as any);
+            const refreshed = await MonthlySummaryModel.query(trx).findById(mRow.id);
+            monthlySummaries.push({ month: m, updated: true, row: refreshed });
+          } else {
+            const created = await MonthlySummaryModel.query(trx).insert({
+              user_id: userId,
+              month: Number(m.split('-')[1]),
+              year: Number(m.split('-')[0]),
+              totalWorkDays,
+              totalWorkHours: Math.round(totalWorkHours * 100) / 100,
+              totalOvertimeHours: Math.round(totalOvertimeHours * 100) / 100,
+              totalLateMinutes: Math.round(totalLateMinutes),
+              totalEarlyLeaveMinutes: Math.round(totalEarlyLeaveMinutes),
+              totalLatePenalty: Math.round(totalLatePenalty * 100) / 100,
+              totalEarlyLeavePenalty: Math.round(totalEarlyPenalty * 100) / 100,
+              totalOvertimeSalary: Math.round(totalOvertimeSalary * 100) / 100,
+              status: 'IN_PROGRESS',
+              created_at: dayjs().toISOString(),
+              updated_at: dayjs().toISOString()
+            } as any).returning('*');
+            monthlySummaries.push({ month: m, updated: true, row: created });
+          }
+        }
+
+        return { success: true, message: 'Application days created/updated', details: results, monthlySummaries };
+      });
+    } catch (err: any) {
+      console.error('❌ processApplicationCreate error:', err);
+      return { success: false, message: err.message || 'Error processing application create' };
     }
   }
 
@@ -411,12 +761,33 @@ export class AttendanceService {
         // Check xem ngày này có đơn công tác không
         const businessTripCheck = this.checkDateHasBusinessTrip(dateKey, approvedApplications);
 
-        // ⭐ Check xem ngày này có đơn OT đã duyệt không
-        const hasApprovedOT = approvedApplications.some(app => {
+        // Check xem ngày này có đơn OT đã duyệt không (from applications list)
+        let hasApprovedOT = approvedApplications.some(app => {
           if (app.type !== 'overtime') return false;
           const appData = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
-          return appData.date === dateKey;
+          // support single-date and ranges
+          if (appData.date && dayjs(appData.date).isSame(dayjs(dateKey), 'day')) return true;
+          if (appData.startDate && appData.endDate) {
+            const start = dayjs(appData.startDate);
+            const end = dayjs(appData.endDate);
+            if ((dayjs(dateKey).isSame(start, 'day') || dayjs(dateKey).isAfter(start, 'day')) &&
+              (dayjs(dateKey).isSame(end, 'day') || dayjs(dateKey).isBefore(end, 'day'))) {
+              return true;
+            }
+          }
+          return false;
         });
+
+        // If not found in approvedApplications array, try to fetch a single overtime application for this date (external endpoint)
+        let overtimeApplicationDetail: any = null;
+        if (!hasApprovedOT) {
+          try {
+            overtimeApplicationDetail = await this.getApprovedOvertimeApplication(userId, dateKey);
+            if (overtimeApplicationDetail) hasApprovedOT = true;
+          } catch (e) {
+            // ignore failures when fetching OT detail
+          }
+        }
 
         // Tạo record cho ngày này
         const dayRecord: any = {
@@ -441,7 +812,7 @@ export class AttendanceService {
           destination: businessTripCheck.destination
         };
 
-        // Merge với attendance record nếu có - SPREAD toàn bộ fields trước, sau đó override metadata
+  // Merge với attendance record nếu có - SPREAD toàn bộ fields trước, sau đó override metadata
         if (attendanceRecord) {
           // Spread attendance record TRƯỚC để lấy tất cả fields từ DB
           Object.assign(dayRecord, {
@@ -476,6 +847,22 @@ export class AttendanceService {
           dayRecord.earlyLeavePenalty = 0;
           dayRecord.otMinutes = 0;
           dayRecord.otSalary = 0;
+        }
+
+        // For weekend days: hide attendance data unless there is an approved OT or the day record was created by an approved application (day_type != WORKDAY)
+        if (!isWorkingDay) {
+          const existingDayType = attendanceRecord ? attendanceRecord.day_type : undefined;
+
+          // If there's no approved OT and the existing day_type is WORKDAY or undefined, clear attendance times so controller treats it as weekend
+          if (!hasApprovedOT && (!existingDayType || existingDayType === 'WORKDAY')) {
+            dayRecord.checkInTime = null;
+            dayRecord.checkOutTime = null;
+            dayRecord.hasApprovedOT = false;
+          } else if (hasApprovedOT) {
+            // attach OT detail if available
+            dayRecord.hasApprovedOT = true;
+            if (overtimeApplicationDetail) dayRecord.overtimeApplication = overtimeApplicationDetail;
+          }
         }
 
         enrichedAttendanceData.push(dayRecord);
@@ -912,7 +1299,25 @@ export class AttendanceService {
     try {
       const date = dayjs(time).format('YYYY-MM-DD');
 
-      // Kiểm tra đã có record hôm nay chưa
+  // Determine month/year for monthly summary
+  const monthNum = dayjs(date).month() + 1; // 1-12
+      const yearNum = dayjs(date).year();
+
+      // Check monthly summary status (if exists)
+      let monthlySummary = await MonthlySummaryModel.query()
+        .where('user_id', userId)
+        .where('month', monthNum)
+        .where('year', yearNum)
+        .first();
+
+      if (monthlySummary && monthlySummary.status === 'CLOSED') {
+        // If month is closed, do not allow attendance changes
+        const err: any = new Error('Tháng này đã được chốt, không thể thay đổi chấm công');
+        err.code = 'MONTH_CLOSED';
+        throw err;
+      }
+
+  // Kiểm tra đã có record hôm nay chưa
       const existingRecord = await TimeAttendanceModel.query()
         .where('userId', userId)
         .where('date', date)
@@ -921,39 +1326,76 @@ export class AttendanceService {
       let record;
       let isCheckIn = false;
 
+      // If record exists and day_type indicates non-workday (LEAVE/BUSINESS_TRIP/HOLIDAY) and there's no OT, skip processing
+      const isWeekendRecord = existingRecord && existingRecord.day_type && existingRecord.day_type !== 'WORKDAY';
+
+      // Determine if date is a working day via settings
+      const workingDaysConfig = await this.getWorkingDaysConfig();
+      const isWorkingDay = this.isWorkingDay(date, workingDaysConfig);
+
+      // Check if there's an approved OT for this date (allow weekend check-in only if OT exists)
+      const overtimeApp = await this.getApprovedOvertimeApplication(userId, date);
+
+      if (isWeekendRecord && !overtimeApp) {
+        console.log(`⚠️ Skipping attendance for ${date} because existing day_type=${existingRecord!.day_type} and no OT`);
+        return {
+          type: 'skipped',
+          reason: `Day is marked as ${existingRecord!.day_type}`,
+          record: existingRecord
+        };
+      }
+
+      // If it's not a working day (weekend) and no OT approved, skip creating new record on first check-in
+      if (!isWorkingDay && !existingRecord && !overtimeApp) {
+        console.log(`⚠️ Skipping creation of attendance on weekend ${date} with no OT`);
+        return { type: 'skipped', reason: 'Weekend without approved OT', record: null };
+      }
+
       if (!existingRecord || !existingRecord.checkInTime) {
         // Lần đầu hoặc chưa có check-in -> Check-in
         isCheckIn = true;
-        const recordData = {
+        const recordData: any = {
           userId,
           date,
           checkInTime: time
         };
 
+        // If weekend but there's an OT approved, mark day_type as WORKDAY (for counting) or as 'WEEKEND' but allow OT
+        if (!isWorkingDay && overtimeApp) {
+          // Prefer marking as WORKDAY to let calculations run; attach an indicator
+          recordData.day_type = 'WORKDAY';
+        }
+
         if (existingRecord) {
           record = await TimeAttendanceModel.query()
             .patchAndFetchById(existingRecord.id, recordData);
         } else {
-          record = await TimeAttendanceModel.query().insert(recordData);
+    record = await TimeAttendanceModel.query().insert({ ...recordData, day_type: 'WORKDAY' });
         }
 
         console.log(`✅ Check-in recorded for user ${userId} at ${time}`);
       } else {
         // Đã có check-in -> Check-out (cập nhật mỗi lần)
         isCheckIn = false;
+        const patchData: any = { checkOutTime: time };
+        if (!isWorkingDay && !overtimeApp) {
+          // Should not reach here due to earlier guards, but keep defensive
+          return { type: 'skipped', reason: 'Weekend without OT', record: existingRecord };
+        }
+
+        // Ensure day_type remains correct
+        patchData.day_type = 'WORKDAY';
+
         record = await TimeAttendanceModel.query()
-          .patchAndFetchById(existingRecord.id, {
-            checkOutTime: time
-          });
+          .patchAndFetchById(existingRecord.id, patchData);
 
         console.log(`✅ Check-out updated for user ${userId} at ${time}`);
       }
 
-      // Kiểm tra đơn OT đã duyệt
-      const overtimeApp = await this.getApprovedOvertimeApplication(userId, date);
-      let otEndTime: dayjs.Dayjs | null = null;
+  // Note: overtimeApp was possibly fetched earlier
+  let otEndTime: dayjs.Dayjs | null = null;
 
-      if (overtimeApp) {
+  if (overtimeApp) {
         const appData = typeof overtimeApp.data === 'string'
           ? JSON.parse(overtimeApp.data)
           : overtimeApp.data;
@@ -975,7 +1417,39 @@ export class AttendanceService {
         otEndTime ? otEndTime.toISOString() : undefined // Truyền thời gian OT nếu có
       );
 
-      // Cập nhật kết quả tính toán đầy đủ
+      // Compute new values for monthly summary delta
+      const newDayValues = {
+        workDay: (calculation.workHours && calculation.workHours > 0) ? 1 : 0,
+        workHours: Number(calculation.workHours || 0),
+        lateMinutes: Number(calculation.lateMinutes || 0),
+        earlyLeaveMinutes: Number(calculation.earlyDepartureMinutes || 0),
+        overtimeHours: Number((calculation.otMinutes || 0) / 60),
+        overtimeSalary: Number(calculation.otSalary || 0),
+        penalty: Number((calculation.latePenaltyAmount || 0) + (calculation.earlyLeavePenaltyAmount || 0))
+      };
+
+      // Determine old day values from existingRecord (before update)
+      let oldDayValues = {
+        workDay: 0,
+        workHours: 0,
+        lateMinutes: 0,
+        earlyLeaveMinutes: 0,
+        overtimeHours: 0,
+        overtimeSalary: 0,
+        penalty: 0
+      };
+
+      if (existingRecord && existingRecord.checkInTime && existingRecord.checkOutTime && (existingRecord.day_type === undefined || existingRecord.day_type === 'WORKDAY')) {
+        oldDayValues.workDay = 1;
+        oldDayValues.workHours = Number(existingRecord.dailyTotalWorkHours || 0);
+        oldDayValues.lateMinutes = Number(existingRecord.lateMinutes || 0);
+        oldDayValues.earlyLeaveMinutes = Number(existingRecord.earlyDepartureMinutes || 0);
+        oldDayValues.overtimeHours = Number((existingRecord.otMinutes || 0) / 60);
+        oldDayValues.overtimeSalary = Number(existingRecord.otSalary || 0);
+        oldDayValues.penalty = Number((existingRecord.lateArrivalPenalty || 0) + (existingRecord.earlyLeavePenalty || 0));
+      }
+
+      // Cập nhật kết quả tính toán đầy đủ và set day_type
       const updatedRecord = await TimeAttendanceModel.query()
         .patchAndFetchById(record.id, {
           dailyTotalWorkHours: calculation.workHours,
@@ -985,8 +1459,45 @@ export class AttendanceService {
           lateArrivalPenalty: calculation.latePenaltyAmount,
           earlyLeavePenalty: calculation.earlyLeavePenaltyAmount,
           otMinutes: calculation.otMinutes,
-          otSalary: calculation.otSalary || 0
+          otSalary: calculation.otSalary || 0,
+          day_type: 'WORKDAY'
         });
+
+      // Update or create monthly summary using subtract-old + add-new
+      try {
+        if (!monthlySummary) {
+          // create new monthly summary
+          monthlySummary = await MonthlySummaryModel.query().insert({
+            user_id: userId,
+            month: monthNum,
+            year: yearNum,
+            totalWorkDays: newDayValues.workDay,
+            totalWorkHours: newDayValues.workHours,
+            totalLateMinutes: newDayValues.lateMinutes,
+            totalEarlyLeaveMinutes: newDayValues.earlyLeaveMinutes,
+            totalOvertimeHours: newDayValues.overtimeHours,
+            totalOvertimeSalary: newDayValues.overtimeSalary,
+            totalPaidLeaveDays: 0,
+            totalPenalty: newDayValues.penalty,
+            finalSalary: 0 // will be calculated at approval time
+          });
+        } else {
+          // patch: new = old - oldDay + newDay
+          const patchData: any = {};
+
+          patchData.totalWorkDays = Number(monthlySummary.totalWorkDays || 0) - oldDayValues.workDay + newDayValues.workDay;
+          patchData.totalWorkHours = Number(monthlySummary.totalWorkHours || 0) - oldDayValues.workHours + newDayValues.workHours;
+          patchData.totalLateMinutes = Number(monthlySummary.totalLateMinutes || 0) - oldDayValues.lateMinutes + newDayValues.lateMinutes;
+          patchData.totalEarlyLeaveMinutes = Number(monthlySummary.totalEarlyLeaveMinutes || 0) - oldDayValues.earlyLeaveMinutes + newDayValues.earlyLeaveMinutes;
+          patchData.totalOvertimeHours = Number(monthlySummary.totalOvertimeHours || 0) - oldDayValues.overtimeHours + newDayValues.overtimeHours;
+          patchData.totalOvertimeSalary = Number(monthlySummary.totalOvertimeSalary || 0) - oldDayValues.overtimeSalary + newDayValues.overtimeSalary;
+          patchData.totalPenalty = Number(monthlySummary.totalPenalty || 0) - oldDayValues.penalty + newDayValues.penalty;
+
+          await MonthlySummaryModel.query().findById(monthlySummary.id).patch(patchData);
+        }
+      } catch (err) {
+        console.error('❌ Error updating monthly summary:', err);
+      }
 
       return {
         type: isCheckIn ? 'check_in' : 'check_out',

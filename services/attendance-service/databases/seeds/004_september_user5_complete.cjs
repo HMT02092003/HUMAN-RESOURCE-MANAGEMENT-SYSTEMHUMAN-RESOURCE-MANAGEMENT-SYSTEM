@@ -123,11 +123,15 @@ exports.seed = async function(knex) {
   ];
 
   // Thêm timestamps cho tất cả records
-  const dataWithTimestamps = attendanceData.map(record => ({
-    ...record,
-    created_at: new Date(),
-    updated_at: new Date()
-  }));
+  const dataWithTimestamps = attendanceData.map(record => {
+    // remove obsolete otWorkingUnit field (schema migrated)
+    const { otWorkingUnit, ...rest } = record;
+    return {
+      ...rest,
+      created_at: new Date(),
+      updated_at: new Date()
+    };
+  });
 
   await knex('time_attendances').insert(dataWithTimestamps);
 

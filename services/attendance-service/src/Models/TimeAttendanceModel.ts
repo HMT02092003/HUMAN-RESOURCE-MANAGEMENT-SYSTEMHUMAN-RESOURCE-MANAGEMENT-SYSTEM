@@ -11,6 +11,7 @@ class TimeAttendanceModel extends Model {
     date!: string;
     checkInTime!: string | null;
     checkOutTime!: string | null;
+    day_type!: string; // 'WORKDAY' | 'LEAVE' | 'BUSINESS_TRIP' | 'HOLIDAY' | 'WEEKEND'
     dailyTotalWorkHours!: number;
     lateMinutes!: number;
     earlyDepartureMinutes!: number;
@@ -32,6 +33,7 @@ class TimeAttendanceModel extends Model {
                 date: { type: 'string' },
                 checkInTime: { type: ['string', 'null'] },
                 checkOutTime: { type: ['string', 'null'] },
+                day_type: { type: 'string', default: 'WORKDAY' },
                 dailyTotalWorkHours: { type: ['number', 'string'], default: 0 },
                 lateMinutes: { type: ['number', 'string'], default: 0 },
                 earlyDepartureMinutes: { type: ['number', 'string'], default: 0 },

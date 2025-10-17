@@ -27,10 +27,40 @@ router.get('/user/:userId/monthly-full', async (req: Request, res: Response) => 
   await getUserMonthlyFull(req, res);
 });
 
+// API: Manager - list monthly summaries IN_PROGRESS
+// GET /api/monthly-summaries?departmentId=1
+router.get('/monthly-summaries', async (req: Request, res: Response) => {
+  // lazy-load controller here to avoid circular
+  const { getMonthlySummariesForManager } = await import('../src/controller/AttendanceController');
+  await getMonthlySummariesForManager(req, res as any);
+});
+
+// API: Manager - approve & close monthly summary
+// POST /api/monthly-summaries/:id/approve
+router.post('/monthly-summaries/:id/approve', async (req: Request, res: Response) => {
+  const { approveMonthlySummary } = await import('../src/controller/AttendanceController');
+  await approveMonthlySummary(req as any, res as any);
+});
+
 // API: Duyệt bảng công tháng
 // POST /api/attendance/approve (from gateway) -> /api/approve (in service)
 router.post('/approve', async (req: Request, res: Response) => {
   await approveAttendance(req, res);
+});
+
+// API: Called by application-service (via API Gateway) to update attendance when
+// an application (forgot-check / leave / business-trip) is approved.
+// Gateway forwards /api/attendance/update-forgot-check -> attendance-service /api/update-forgot-check
+router.post('/update-forgot-check', async (req: Request, res: Response) => {
+  const { updateForgotCheck } = await import('../src/controller/AttendanceController');
+  await updateForgotCheck(req, res as any);
+});
+
+// API: Called by application-service when a leave or business-trip application is approved
+// Gateway forwards /api/attendance/create-from-application -> attendance-service /api/create-from-application
+router.post('/create-from-application', async (req: Request, res: Response) => {
+  const { createFromApplication } = await import('../src/controller/AttendanceController');
+  await createFromApplication(req, res as any);
 });
 
 // API: Chấm công tự động (check-in/check-out)

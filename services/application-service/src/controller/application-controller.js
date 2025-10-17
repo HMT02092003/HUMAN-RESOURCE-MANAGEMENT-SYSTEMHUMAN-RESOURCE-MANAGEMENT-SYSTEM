@@ -816,6 +816,60 @@ export class ApplicationController {
         });
       }
 
+      // Đơn nghỉ phép hoặc công tác: tạo bản ghi chấm công placeholder TRƯỚC KHI approve
+      if (applicationBeforeApprove.type === 'leave' || applicationBeforeApprove.type === 'business-trip') {
+        try {
+          console.log('📝 Processing leave/business-trip application approval - creating attendance placeholders...');
+          const appData = applicationBeforeApprove.data;
+
+          // Prepare payload
+          const payload = {};
+          payload.userId = applicationBeforeApprove.userId;
+          payload.type = applicationBeforeApprove.type; // 'leave' or 'business-trip'
+
+          if (appData.startDate && appData.endDate) {
+            payload.startDate = appData.startDate;
+            payload.endDate = appData.endDate;
+          } else if (appData.date) {
+            payload.date = appData.date;
+          }
+          payload.reason = appData.reason || appData.description || null;
+
+          // get token for authentication to pass through
+          const token = req.cookies.token || (req.headers.authorization && req.headers.authorization.split(' ')[1]);
+          if (!token) {
+            return res.status(401).json({ success: false, message: 'Không tìm thấy token để xác thực' });
+          }
+
+          console.log(`🌐 Calling attendance service via API Gateway: ${API_GATEWAY_URL}/api/attendance/create-from-application`);
+
+          const attendanceResponse = await axios.post(
+            `${API_GATEWAY_URL}/api/attendance/create-from-application`,
+            payload,
+            {
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'Cookie': `token=${token}`
+              },
+              timeout: 15000
+            }
+          );
+
+          console.log('✅ Attendance placeholders created:', attendanceResponse.data);
+
+          // Only after attendance creation succeed, approve the application
+          const application = await ApplicationModel.approveApplication(
+            parseInt(id), approvedBy, note
+          );
+
+          return res.json({ success: true, message: 'Duyệt đơn và cập nhật chấm công thành công', data: application, attendanceUpdate: attendanceResponse.data, timestamp: dayjs().format() });
+        } catch (attendanceErr) {
+          console.error('❌ Error creating attendance placeholders:', attendanceErr);
+          return res.status(500).json({ success: false, message: 'Lỗi khi tạo bản ghi chấm công: ' + attendanceErr.message, detail: attendanceErr.response?.data || attendanceErr.message, timestamp: dayjs().format() });
+        }
+      }
+
       // Đơn thôi việc: chỉ approve đơn, việc cập nhật trạng thái user sẽ xử lý cuối tháng
       if (applicationBeforeApprove.type === 'resignation') {
         console.log('📝 Approving resignation application (user status will be updated during month-end processing)...');
