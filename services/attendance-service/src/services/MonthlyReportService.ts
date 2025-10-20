@@ -19,13 +19,21 @@ export class MonthlyReportService {
     const summary = await AttendanceQueryService.getUserMonthlyAttendance(userId, month, token);
     if (!summary) return null;
 
-    // Load UA penalty rate setting via SettingsService
-    let uaRate = (await SettingsService.getUnauthorizedAbsencePenaltyRate()) || 0;
-
     // Fetch salary via SalaryService
     const salary = await SalaryService.fetchSalary(userId, token);
-    const baseSalary = salary?.baseSalary ?? null;
-    const unauthorizedAbsencePenaltyPerDay = baseSalary ? Math.round((baseSalary / 100) * uaRate) : 0;
+    const baseSalary = salary?.baseSalary ? parseFloat(salary.baseSalary.toString()) : 0;
+
+    // Derive scheduled working days for this month from the attendance summary so
+    // that the unauthorized absence penalty per day is computed on a daily salary
+    // basis (baseSalary / totalScheduledDays) — kept consistent with
+    // calculateAndSaveMonthlyAttendance.
+    const attendanceDataForCalc = summary.attendanceData || [];
+    const totalScheduledDaysFromSummary = Array.isArray(attendanceDataForCalc)
+      ? attendanceDataForCalc.filter((d: any) => (d.isWorkingDay !== false) && !d.isHoliday).length
+      : 0;
+    const dailySalaryForSummary = totalScheduledDaysFromSummary > 0 ? baseSalary / totalScheduledDaysFromSummary : 0;
+    // Calculate penalty per day as daily salary (rounded to integer, no decimals)
+    const unauthorizedAbsencePenaltyPerDay = Math.round(dailySalaryForSummary);
 
     // Build processed daily details
     const attendanceRows = summary.attendanceData || [];
@@ -57,7 +65,9 @@ export class MonthlyReportService {
       let status: string = 'working';
       let statusText = 'Đã chấm công';
       let isOnTime = false;
-      let isWorkDay = record.isWorkingDay !== false;
+      // Respect the computed working day definition (settings + holidays)
+      // `record.isWorkingDay` may be present from upstream, but ensure we treat holidays as non-working here
+      const isWorkDay = (record.isWorkingDay !== false) && !record.isHoliday;
       const isFuture = record.isFuture === true;
 
       if (!isWorkDay && !record.hasApprovedOT) {
@@ -67,17 +77,21 @@ export class MonthlyReportService {
       } else if (record.hasBusinessTrip || record.type === 'business_trip') {
         status = 'business_trip';
         statusText = 'Công tác';
-        businessTripDays++;
+        // Count business trip days only if this day is a scheduled working day
+        if (isWorkDay) businessTripDays++;
       } else if (record.hasApprovedLeave || record.type === 'leave' || record.type === 'sick-leave') {
         status = 'approved_leave';
         statusText = record.leaveInfo || record.leaveTypeName || 'Nghỉ phép';
-        approvedLeaveDays++;
+        // Count approved leave only if this day is a scheduled working day
+        if (isWorkDay) approvedLeaveDays++;
       } else if (isWorkDay && !record.checkInTime && !isFuture) {
         status = 'absent';
         statusText = 'Nghỉ không phép';
+        // Count unauthorized absence only for scheduled working days
         unauthorizedAbsenceDays++;
       } else if (record.checkInTime) {
-        presentDays++;
+        // Count present day only if it's a scheduled working day
+        if (isWorkDay) presentDays++;
         if (!isLate && !isEarlyLeave) {
           isOnTime = true;
           onTimeDays++;
@@ -99,6 +113,10 @@ export class MonthlyReportService {
           : ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][new Date(record.date).getDay()],
         isWorkingDay: record.isWorkingDay !== false,
         hasAttendance: !!record.checkInTime,
+        // ✨ Giữ lại thông tin ngày lễ từ record gốc
+        isHoliday: record.isHoliday || false,
+        holidayName: record.holidayName || null,
+        isPublicHoliday: record.isPublicHoliday || false,
         attendanceData: record.checkInTime ? {
           id: record.id,
           userId: record.userId,
@@ -139,13 +157,13 @@ export class MonthlyReportService {
     const monthlyRecord = await MonthlySummaryModel.getByUserAndMonth(userId, month);
     const db: any = monthlyRecord as any;
     const monthlyStatsFromDb = monthlyRecord ? {
-  totalDays: parseFloat((db.totalScheduledDays ?? summary.presentDays ?? 0).toString()) || 0,
+      totalDays: parseFloat((db.totalScheduledDays ?? summary.presentDays ?? 0).toString()) || 0,
       presentDays: parseFloat((db.presentDays ?? presentDays).toString()) || presentDays,
-  absentDays: parseFloat((db.absentDays ?? (db.approvedLeaveDays ?? db.approvedLeaveDays) ?? absentDays).toString()) || absentDays,
-  lateDays: parseFloat((db.lateDays ?? lateDays).toString()) || lateDays,
-  earlyLeaveDays: parseFloat((db.earlyLeaveDays ?? earlyLeaveDays).toString()) || earlyLeaveDays,
+      absentDays: parseFloat((db.absentDays ?? (db.approvedLeaveDays ?? db.approvedLeaveDays) ?? absentDays).toString()) || absentDays,
+      lateDays: parseFloat((db.lateDays ?? lateDays).toString()) || lateDays,
+      earlyLeaveDays: parseFloat((db.earlyLeaveDays ?? earlyLeaveDays).toString()) || earlyLeaveDays,
       totalHours: parseFloat((db.totalWorkHours ?? 0).toString()) || summary.totalWorkHours,
-  averageHours: parseFloat((db.averageWorkHours ?? (db.totalWorkHours && (db.totalScheduledDays || presentDays) ? db.totalWorkHours / (db.totalScheduledDays || presentDays) : undefined) ?? (presentDays > 0 ? summary.totalWorkHours / presentDays : 0)).toString()) || (presentDays > 0 ? summary.totalWorkHours / presentDays : 0),
+      averageHours: parseFloat((db.averageWorkHours ?? (db.totalWorkHours && (db.totalScheduledDays || presentDays) ? db.totalWorkHours / (db.totalScheduledDays || presentDays) : undefined) ?? (presentDays > 0 ? summary.totalWorkHours / presentDays : 0)).toString()) || (presentDays > 0 ? summary.totalWorkHours / presentDays : 0),
       overtimeHours: parseFloat((db.totalOvertimeHours ?? summary.totalOvertimeHours).toString()) || summary.totalOvertimeHours,
       totalLatePenalty: parseFloat((db.totalLatePenalty ?? totalLatePenalty).toString()) || totalLatePenalty,
       totalEarlyLeavePenalty: parseFloat((db.totalEarlyLeavePenalty ?? totalEarlyLeavePenalty).toString()) || totalEarlyLeavePenalty,
@@ -153,9 +171,12 @@ export class MonthlyReportService {
       totalOvertimePay: parseFloat((db.totalOvertimeSalary ?? summary.totalOvertimeSalary).toString()) || summary.totalOvertimeSalary,
       totalLateMinutes: parseFloat((db.totalLateMinutes ?? totalLateMinutes).toString()) || totalLateMinutes,
       totalEarlyLeaveMinutes: parseFloat((db.totalEarlyLeaveMinutes ?? totalEarlyLeaveMinutes).toString()) || totalEarlyLeaveMinutes,
-  unauthorizedAbsenceDays: parseFloat((db.unauthorizedAbsenceDays ?? unauthorizedAbsenceDays).toString()) || unauthorizedAbsenceDays,
-      totalUnauthorizedAbsencePenalty: parseFloat((db.totalUnauthorizedAbsencePenalty ?? totalUnauthorizedAbsencePenalty).toString()) || totalUnauthorizedAbsencePenalty,
-  approvedLeaveDays: parseFloat((db.approvedLeaveDays ?? approvedLeaveDays).toString()) || approvedLeaveDays,
+      unauthorizedAbsenceDays: parseFloat((db.unauthorizedAbsenceDays ?? unauthorizedAbsenceDays).toString()) || unauthorizedAbsenceDays,
+      // Round to integer (no decimals)
+      totalUnauthorizedAbsencePenalty: Math.round(parseFloat((db.totalUnauthorizedAbsencePenalty ?? totalUnauthorizedAbsencePenalty).toString()) || totalUnauthorizedAbsencePenalty),
+      // Per-day unauthorized absence penalty (VND) - rounded to integer
+      unauthorizedAbsencePenaltyPerDay: Math.round(parseFloat(((db as any).unauthorizedAbsencePenaltyPerDay ?? unauthorizedAbsencePenaltyPerDay).toString()) || unauthorizedAbsencePenaltyPerDay),
+      approvedLeaveDays: parseFloat((db.approvedLeaveDays ?? approvedLeaveDays).toString()) || approvedLeaveDays,
       businessTripDays: parseFloat((db.businessTripDays ?? businessTripDays).toString()) || businessTripDays,
       totalWorkingUnits: parseFloat((db.totalWorkingUnits ?? 0).toString()) || 0,
       totalOtWorkingUnits: parseFloat((db.totalOtWorkingUnits ?? 0).toString()) || 0,
@@ -202,7 +223,10 @@ export class MonthlyReportService {
             attendedDays: presentDays,
             approvedLeaveDays,
             unauthorizedAbsenceDays,
-            totalUnauthorizedAbsencePenalty,
+            // Total unauthorized absence penalty for the month (rounded to integer)
+            totalUnauthorizedAbsencePenalty: Math.round(totalUnauthorizedAbsencePenalty),
+            // Unauthorized absence penalty per day (VND) - rounded to integer
+            unauthorizedAbsencePenaltyPerDay: Math.round(unauthorizedAbsencePenaltyPerDay),
             weekendDays,
             totalLateMinutes,
             totalEarlyLeaveMinutes,
@@ -217,67 +241,139 @@ export class MonthlyReportService {
 
   /**
    * Calculate aggregates for a given user and date (any date inside month) and upsert into monthly_attendances
+   * ✨ CẬP NHẬT: Tính toán theo công thức mới của user
    */
   static async calculateAndSaveMonthlyAttendance(userId: number, date: string) {
-  // use top-level imports (dayjs, TimeAttendanceModel, HolidayModel, axios, SettingsService, SalaryService)
     try {
+      console.log(`\n📊 [attendance] Starting calculateAndSaveMonthlyAttendance for user ${userId}, date ${date}`);
+
       const m = dayjs(date).format('YYYY-MM');
       const startDate = dayjs(`${m}-01`).startOf('month').format('YYYY-MM-DD');
       const endDate = dayjs(`${m}-01`).endOf('month').format('YYYY-MM-DD');
 
-      // Load rows for the month
+      // 1️⃣ Load attendance rows for the month
       const rows: any[] = await TimeAttendanceModel.query()
         .where('userId', userId)
         .whereBetween('date', [startDate, endDate])
         .orderBy('date', 'asc');
 
-      // Settings and holidays
+      console.log(`📋 [attendance] Found ${rows.length} attendance records for ${m}`);
+
+      // 2️⃣ Load settings and holidays
       const workingDaysConfig = await SettingsService.getWorkingDays();
-      // holidays table may store either a single 'date' column or a start_date/end_date range
-      const holidayRows: any[] = await connection('holidays').where(function () {
-        // try to match rows that overlap the month range
-        this.whereBetween('date', [startDate, endDate]).orWhereBetween('start_date', [startDate, endDate]).orWhereBetween('end_date', [startDate, endDate]);
-      }).select('*').catch(() => []);
+      console.log(`⚙️ [attendance] Working days config:`, workingDaysConfig);
+
+      // Load holidays from database (table has start_date and end_date columns)
+      const holidayRows: any[] = await connection('holidays')
+        .where(function () {
+          this.whereBetween('start_date', [startDate, endDate])
+            .orWhereBetween('end_date', [startDate, endDate])
+            .orWhere(function () {
+              // Trường hợp kỳ nghỉ lễ bao trùm cả tháng
+              this.where('start_date', '<=', startDate).andWhere('end_date', '>=', endDate);
+            });
+        })
+        .select('*')
+        .catch(() => []);
 
       const holidaySet = new Set<string>();
       for (const hr of holidayRows) {
-        if (hr.date) {
-          holidaySet.add(hr.date);
-        } else if (hr.start_date && hr.end_date) {
+        // Bảng holidays chỉ có start_date và end_date
+        if (hr.start_date && hr.end_date) {
           let cur = dayjs(hr.start_date);
           const end = dayjs(hr.end_date);
           while (cur.isBefore(end) || cur.isSame(end, 'day')) {
-            const d = cur.format('YYYY-MM-DD');
-            holidaySet.add(d);
+            holidaySet.add(cur.format('YYYY-MM-DD'));
             cur = cur.add(1, 'day');
           }
-        } else if (hr.start_date) {
-          // single-day represented by start_date
-          holidaySet.add(dayjs(hr.start_date).format('YYYY-MM-DD'));
         }
       }
+      console.log(`🎉 [attendance] Found ${holidaySet.size} holiday dates:`, Array.from(holidaySet));
 
-      // Fetch approved applications (leave / business trip) from application service
+      // 3️⃣ Fetch approved applications (leave/business trip)
       let approvedApplications: any[] = [];
       try {
         const [yearStr, monthStr] = m.split('-');
         const appUrl = (process.env['APPLICATION_SERVICE_URL'] || 'http://localhost:4004') as string;
-        const resp = await axios.get(`${appUrl}/api/applications/user/${userId}/approved`, { params: { year: parseInt(yearStr || '0'), month: parseInt(monthStr || '0') } });
+        const resp = await axios.get(`${appUrl}/api/applications/user/${userId}/approved`, {
+          params: { year: parseInt(yearStr || '0'), month: parseInt(monthStr || '0') }
+        });
         approvedApplications = resp.data.data || [];
+        console.log(`✅ [attendance] Found ${approvedApplications.length} approved applications`);
       } catch (e) {
-        // fallback to local DB leave_requests if external app service is unavailable
-        try {
-          const rows = await connection('leave_requests').where('userId', userId).andWhere(function () {
-            // try common column names for date ranges
-            this.whereBetween('date', [startDate, endDate]).orWhereBetween('startDate', [startDate, endDate]).orWhereBetween('endDate', [startDate, endDate]);
-          }).andWhere('status', 'approved').select('*');
-          approvedApplications = (rows || []).map((r: any) => ({ type: r.type || 'leave', data: r.data || r, status: r.status, id: r.id }));
-        } catch (innerErr) {
-          // ignore if local table doesn't exist or query fails
+        console.log(`⚠️ [attendance] Failed to fetch applications, using fallback`);
+      }
+
+      // 4️⃣ Tính tổng số ngày làm việc trong tháng (loại trừ ngày nghỉ theo setting)
+      const daysInMonth = dayjs(`${m}-01`).daysInMonth();
+      let totalScheduledDays = 0;
+      // We also compute scheduled working days up to today (for unauthorized absence calculation)
+      const todayStr = dayjs().format('YYYY-MM-DD');
+      const isCurrentMonth = dayjs().format('YYYY-MM') === m;
+      let totalScheduledDaysUpToToday = 0;
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateKey = dayjs(`${m}-${String(d).padStart(2, '0')}`).format('YYYY-MM-DD');
+        const dow = dayjs(dateKey).day(); // 0-6 Sun-Sat
+        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const dayKey = dayNames[dow] || 'monday';
+
+        // Kiểm tra xem ngày này có phải ngày làm việc không (theo setting)
+        const isWorkingDay = workingDaysConfig ? !!(workingDaysConfig as any)[dayKey] : true;
+        const isHoliday = holidaySet.has(dateKey);
+
+        // Chỉ tính những ngày là ngày làm việc và không phải ngày lễ
+        if (isWorkingDay && !isHoliday) {
+          totalScheduledDays++;
+          // If month is current month, only count up to today
+          if (!isCurrentMonth || dayjs(dateKey).isSameOrBefore(todayStr, 'day')) {
+            totalScheduledDaysUpToToday++;
+          }
         }
       }
 
-      // Aggregations
+      console.log(`📅 [attendance] Total scheduled working days in ${m}: ${totalScheduledDays} (excluding holidays and weekend)`);
+      console.log(`📅 [attendance] Scheduled working days up to today in ${m}: ${totalScheduledDaysUpToToday}`);
+
+      // 5️⃣ Map applications to days
+      const leaveDaysSet = new Set<string>();
+      const businessTripDaysSet = new Set<string>();
+
+      for (const app of approvedApplications) {
+        try {
+          const data = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
+
+          if (app.type === 'leave') {
+            if (data.date) {
+              leaveDaysSet.add(data.date);
+            } else if (data.startDate && data.endDate) {
+              let cur = dayjs(data.startDate);
+              while (cur.isBefore(dayjs(data.endDate)) || cur.isSame(dayjs(data.endDate), 'day')) {
+                leaveDaysSet.add(cur.format('YYYY-MM-DD'));
+                cur = cur.add(1, 'day');
+              }
+            }
+          }
+
+          if (app.type === 'business_trip') {
+            if (data.date) {
+              businessTripDaysSet.add(data.date);
+            } else if (data.startDate && data.endDate) {
+              let cur = dayjs(data.startDate);
+              while (cur.isBefore(dayjs(data.endDate)) || cur.isSame(dayjs(data.endDate), 'day')) {
+                businessTripDaysSet.add(cur.format('YYYY-MM-DD'));
+                cur = cur.add(1, 'day');
+              }
+            }
+          }
+        } catch (e) {
+          console.error(`⚠️ [attendance] Error parsing application:`, e);
+        }
+      }
+
+      console.log(`📝 [attendance] Leave days: ${leaveDaysSet.size}, Business trip days: ${businessTripDaysSet.size}`);
+
+      // 6️⃣ Process attendance rows và tính toán
       let totalWorkHours = 0;
       let totalLateMinutes = 0;
       let totalEarlyLeaveMinutes = 0;
@@ -291,51 +387,32 @@ export class MonthlyReportService {
       let lateDays = 0;
       let earlyLeaveDays = 0;
 
-      // Map applications to days
-      const leaveDaysSet = new Set<string>();
-      const businessTripDaysSet = new Set<string>();
-      for (const app of approvedApplications) {
-        try {
-          const data = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
-          if (app.type === 'leave' && data && data.date) leaveDaysSet.add(data.date);
-          if (app.type === 'business_trip' && data && data.date) businessTripDaysSet.add(data.date);
-          if (app.type === 'leave' && data && data.startDate && data.endDate) {
-            let cur = dayjs(data.startDate);
-            while (cur.isBefore(dayjs(data.endDate)) || cur.isSame(dayjs(data.endDate), 'day')) { leaveDaysSet.add(cur.format('YYYY-MM-DD')); cur = cur.add(1, 'day'); }
-          }
-          if (app.type === 'business_trip' && data && data.startDate && data.endDate) {
-            let cur = dayjs(data.startDate);
-            while (cur.isBefore(dayjs(data.endDate)) || cur.isSame(dayjs(data.endDate), 'day')) { businessTripDaysSet.add(cur.format('YYYY-MM-DD')); cur = cur.add(1, 'day'); }
-          }
-        } catch (e) { /* ignore */ }
-      }
+      // Helper to check scheduled working day (respect settings + holidays)
+      const isScheduledWorkingDay = (dateKey: string) => {
+        const dow = dayjs(dateKey).day();
+        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+        const dayKey = dayNames[dow] || 'monday';
+        const cfgIsWork = workingDaysConfig ? !!(workingDaysConfig as any)[dayKey] : true;
+        return cfgIsWork && !holidaySet.has(dateKey);
+      };
 
-      // Iterate days in month
-      const daysInMonth = dayjs(`${m}-01`).daysInMonth();
-      let totalScheduledDays = 0;
-      for (let d = 1; d <= daysInMonth; d++) {
-        const dateKey = dayjs(`${m}-${String(d).padStart(2, '0')}`).format('YYYY-MM-DD');
-        const isWorking = (function (dateStr: string) {
-          if (!workingDaysConfig) return true; // default all days
-          try {
-            const dow = dayjs(dateStr).day(); // 0-6 Sun-Sat
-            const map = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-            const key = map[dow] as keyof any;
-            return workingDaysConfig && workingDaysConfig[key] ? !!workingDaysConfig[key] : true;
-          } catch (e) { return true; }
-        })(dateKey);
-        const isHoliday = holidaySet.has(dateKey);
-        if (isWorking && !isHoliday) totalScheduledDays++;
-      }
-
-      // Process attendance rows
       for (const r of rows) {
-        // Normalize date key
         const dateKey = dayjs(r.date).format('YYYY-MM-DD');
+        const isHoliday = holidaySet.has(dateKey);
+        const rowIsScheduledWorkDay = isScheduledWorkingDay(dateKey);
+        const isFuture = dayjs(dateKey).isAfter(todayStr, 'day');
 
-        // Recalculate per-day values to avoid timezone/format drift or stale DB values
         try {
-          const calc = await AttendanceCalculationService.calculateAttendance(r.checkInTime || null, r.checkOutTime || null, dateKey, userId);
+          // Recalculate để có dữ liệu chính xác nhất
+          const calc = await AttendanceCalculationService.calculateAttendance(
+            r.checkInTime || null,
+            r.checkOutTime || null,
+            dateKey,
+            userId,
+            undefined, // token
+            r.approvedOtEndTime || null, // approvedOtEndTime
+            isHoliday // ✨ Truyền thông tin ngày lễ để tính lương OT đúng
+          );
 
           const workHours = parseFloat((calc.workHours || 0).toString());
           const lateMin = parseFloat((calc.lateMinutes || 0).toString());
@@ -348,18 +425,22 @@ export class MonthlyReportService {
           totalWorkHours += workHours;
           totalLateMinutes += lateMin;
           totalEarlyLeaveMinutes += earlyMin;
-          totalWorkingUnits += workHours; // dailyWorkingUnit ~ workHours
+          totalWorkingUnits += workHours;
           totalLatePenalty += latePenalty;
           totalEarlyLeavePenalty += earlyPenalty;
           totalOvertimeSalary += otSal;
           totalOvertimeMinutes += otMin;
 
-          const hasAttendance = workHours > 0 || (parseFloat(r.dailyWorkingUnit?.toString() || '0') > 0);
-          if (hasAttendance) presentDays++;
-          if (lateMin > 0) lateDays++;
-          if (earlyMin > 0) earlyLeaveDays++;
+          // ✨ Tổng số ngày đi làm = số ngày có chấm công
+          const hasAttendance = !!(r.checkInTime || r.checkOutTime);
+          // Count present/late/early only if the day is a scheduled working day and it's not in the future
+          if (hasAttendance && rowIsScheduledWorkDay && !isFuture) presentDays++;
+          if (lateMin > 0 && rowIsScheduledWorkDay && !isFuture) lateDays++;
+          if (earlyMin > 0 && rowIsScheduledWorkDay && !isFuture) earlyLeaveDays++;
+
         } catch (e) {
-          // fallback to using stored DB values if recalculation fails
+          console.error(`⚠️ [attendance] Error calculating for date ${dateKey}:`, e);
+          // Fallback to stored values
           totalWorkHours += parseFloat(r.dailyTotalWorkHours?.toString() || '0');
           totalLateMinutes += parseFloat(r.lateMinutes?.toString() || '0');
           totalEarlyLeaveMinutes += parseFloat(r.earlyDepartureMinutes?.toString() || '0');
@@ -369,28 +450,56 @@ export class MonthlyReportService {
           totalOvertimeSalary += parseFloat(r.otSalary?.toString() || '0');
           totalOvertimeMinutes += parseFloat(r.otMinutes?.toString() || '0');
 
-          const hasAttendance = !!(r.checkInTime && r.checkOutTime) || (parseFloat(r.dailyWorkingUnit?.toString() || '0') > 0);
-          if (hasAttendance) presentDays++;
-          if (parseFloat(r.lateMinutes?.toString() || '0') > 0) lateDays++;
-          if (parseFloat(r.earlyDepartureMinutes?.toString() || '0') > 0) earlyLeaveDays++;
+          const hasAttendance = !!(r.checkInTime && r.checkOutTime);
+          if (hasAttendance && rowIsScheduledWorkDay && !isFuture) presentDays++;
+          if (parseFloat(r.lateMinutes?.toString() || '0') > 0 && rowIsScheduledWorkDay && !isFuture) lateDays++;
+          if (parseFloat(r.earlyDepartureMinutes?.toString() || '0') > 0 && rowIsScheduledWorkDay && !isFuture) earlyLeaveDays++;
         }
       }
 
-      // Approved leave / businessTrip counts
-      const approvedLeaveDays = Array.from(leaveDaysSet).filter(d => d.startsWith(m)).length;
-      const businessTripDays = Array.from(businessTripDaysSet).filter(d => d.startsWith(m)).length;
+      // 7️⃣ Tính các số liệu tổng hợp
+      // Count approved leave and business trip days only when they fall on scheduled working days
+  const approvedLeaveDays = [...leaveDaysSet].filter(d => d.startsWith(m) && isScheduledWorkingDay(d) && dayjs(d).isSameOrBefore(todayStr, 'day')).length;
+  const businessTripDays = [...businessTripDaysSet].filter(d => d.startsWith(m) && isScheduledWorkingDay(d) && dayjs(d).isSameOrBefore(todayStr, 'day')).length;
 
-      const unauthorizedAbsenceDays = Math.max(0, totalScheduledDays - (presentDays + approvedLeaveDays + businessTripDays));
+      // ✨ LOGIC ĐÚNG theo public/2.0.3:
+      // - absentDays = Vắng mặt (có lý do) = nghỉ phép + công tác
+      // - unauthorizedAbsenceDays = Nghỉ không phép = Tổng ngày làm việc - (Có chấm công + Nghỉ phép + Công tác)
+      const absentDays = approvedLeaveDays + businessTripDays;
+      // Compute unauthorized absence as scheduled working days minus (present + approved leave + business trip)
+  // Compute unauthorized absence using scheduled working days up to today
+  const unauthorizedAbsenceDaysFinal = Math.max(0, totalScheduledDaysUpToToday - (presentDays + approvedLeaveDays + businessTripDays));
 
       const averageWorkHours = presentDays > 0 ? Math.round((totalWorkHours / presentDays) * 100) / 100 : 0;
 
-      // Unauthorized absence penalty calculation
-  const uaRate = (await SettingsService.getUnauthorizedAbsencePenaltyRate()) || 0;
-  const salary = await SalaryService.fetchSalary(userId);
-  const baseSalary = salary?.baseSalary ? parseFloat(salary.baseSalary.toString()) : null;
-  const totalUnauthorizedAbsencePenalty = baseSalary ? Math.round((baseSalary / 100) * uaRate) * unauthorizedAbsenceDays : 0;
+      // ✨ Tiền phạt nghỉ không phép = (Lương / Số ngày làm việc trong tháng) * Số ngày nghỉ không phép
+      const salary = await SalaryService.fetchSalary(userId);
+      const baseSalary = salary?.baseSalary ? parseFloat(salary.baseSalary.toString()) : 0;
+
+      // Dùng totalScheduledDays (tổng số ngày làm việc trong tháng) để tính lương ngày
+      const dailySalary = totalScheduledDays > 0 ? baseSalary / totalScheduledDays : 0;
+      // Calculate penalty: dailySalary * unauthorizedAbsenceDays, rounded to integer (no decimals)
+      const totalUnauthorizedAbsencePenalty = Math.round(dailySalary * unauthorizedAbsenceDaysFinal);
 
       const totalOvertimeHours = Math.round((totalOvertimeMinutes / 60) * 100) / 100;
+
+      console.log(`\n📊 [attendance] Calculation summary for ${m}:`);
+      console.log(`   - Total scheduled days: ${totalScheduledDays}`);
+      console.log(`   - Present days (có chấm công): ${presentDays}`);
+      console.log(`   - Approved leave days: ${approvedLeaveDays}`);
+      console.log(`   - Business trip days: ${businessTripDays}`);
+      console.log(`   - Absent days (= nghỉ phép + công tác): ${absentDays}`);
+      console.log(`   - Unauthorized absence days (nghỉ không phép): ${unauthorizedAbsenceDaysFinal}`);
+      console.log(`   - Late days: ${lateDays}`);
+      console.log(`   - Early leave days: ${earlyLeaveDays}`);
+      console.log(`   - Total work hours: ${totalWorkHours.toFixed(2)}`);
+      console.log(`   - Average work hours: ${averageWorkHours}`);
+      console.log(`   - Total overtime hours: ${totalOvertimeHours}`);
+      console.log(`   - Total late penalty: ${totalLatePenalty} VND`);
+      console.log(`   - Total early leave penalty: ${totalEarlyLeavePenalty} VND`);
+      console.log(`   - Total unauthorized absence penalty: ${totalUnauthorizedAbsencePenalty} VND`);
+      console.log(`   - Total penalty: ${totalLatePenalty + totalEarlyLeavePenalty + totalUnauthorizedAbsencePenalty} VND`);
+      console.log(`   - Total overtime salary: ${totalOvertimeSalary} VND`);
 
       // Build upsert payload — map to migration columns
       const payload: any = {
@@ -398,51 +507,72 @@ export class MonthlyReportService {
         month: m,
         totalScheduledDays,
         presentDays,
-        // absentDays = scheduled - present - approved - businessTrip
-        absentDays: Math.max(0, totalScheduledDays - (presentDays + approvedLeaveDays + businessTripDays)),
+        absentDays, // ✨ Vắng mặt = nghỉ phép + công tác
         approvedLeaveDays,
-        unauthorizedAbsenceDays,
+        unauthorizedAbsenceDays: unauthorizedAbsenceDaysFinal,
         businessTripDays,
         lateDays,
         earlyLeaveDays,
-  totalLateMinutes: Math.round(totalLateMinutes * 100) / 100,
-  totalEarlyLeaveMinutes: Math.round(totalEarlyLeaveMinutes * 100) / 100,
-  totalWorkHours: Math.round(totalWorkHours * 100) / 100,
-  averageWorkHours: Math.round(averageWorkHours * 100) / 100,
-  totalWorkingUnits: Math.round(totalWorkingUnits * 100) / 100,
-  totalOvertimeHours: Math.round(totalOvertimeHours * 100) / 100,
-  totalOtWorkingUnits: 0,
-  totalLatePenalty: Math.round(totalLatePenalty * 100) / 100,
-  totalEarlyLeavePenalty: Math.round(totalEarlyLeavePenalty * 100) / 100,
-  totalUnauthorizedAbsencePenalty: Math.round(totalUnauthorizedAbsencePenalty * 100) / 100,
-  totalPenalty: Math.round((totalLatePenalty + totalEarlyLeavePenalty + totalUnauthorizedAbsencePenalty) * 100) / 100,
-  totalOvertimeSalary: Math.round(totalOvertimeSalary * 100) / 100,
+        totalLateMinutes: Math.round(totalLateMinutes * 100) / 100,
+        totalEarlyLeaveMinutes: Math.round(totalEarlyLeaveMinutes * 100) / 100,
+        totalWorkHours: Math.round(totalWorkHours * 100) / 100,
+        averageWorkHours: Math.round(averageWorkHours * 100) / 100,
+        totalWorkingUnits: Math.round(totalWorkingUnits * 100) / 100,
+        totalOvertimeHours: Math.round(totalOvertimeHours * 100) / 100,
+        totalOtWorkingUnits: 0,
+        totalLatePenalty: Math.round(totalLatePenalty * 100) / 100,
+        totalEarlyLeavePenalty: Math.round(totalEarlyLeavePenalty * 100) / 100,
+        totalUnauthorizedAbsencePenalty: Math.round(totalUnauthorizedAbsencePenalty * 100) / 100,
+        totalPenalty: Math.round((totalLatePenalty + totalEarlyLeavePenalty + totalUnauthorizedAbsencePenalty) * 100) / 100,
+        totalOvertimeSalary: Math.round(totalOvertimeSalary * 100) / 100,
         isApproved: false,
         approvedBy: null,
         approvedAt: null,
         notes: null
       };
 
+      console.log(`\n📝 [attendance] Full payload to save:`);
+      console.log(JSON.stringify(payload, null, 2));
+
       // Upsert using objection: if exists update, else insert
       // Filter payload to allowed DB columns to avoid insert errors
       const allowed = [
-        'userId','month','totalScheduledDays','presentDays','absentDays','approvedLeaveDays','unauthorizedAbsenceDays','businessTripDays',
-        'lateDays','earlyLeaveDays','totalLateMinutes','totalEarlyLeaveMinutes','totalWorkHours','averageWorkHours','totalWorkingUnits',
-        'totalOvertimeHours','totalOtWorkingUnits','totalLatePenalty','totalEarlyLeavePenalty','totalUnauthorizedAbsencePenalty','totalPenalty',
-        'totalOvertimeSalary','isApproved','approvedBy','approvedAt','notes'
+        'userId', 'month', 'totalScheduledDays', 'presentDays', 'absentDays', 'approvedLeaveDays', 'unauthorizedAbsenceDays', 'businessTripDays',
+        'lateDays', 'earlyLeaveDays', 'totalLateMinutes', 'totalEarlyLeaveMinutes', 'totalWorkHours', 'averageWorkHours', 'totalWorkingUnits',
+        'totalOvertimeHours', 'totalOtWorkingUnits', 'totalLatePenalty', 'totalEarlyLeavePenalty', 'totalUnauthorizedAbsencePenalty', 'totalPenalty',
+        'totalOvertimeSalary', 'isApproved', 'approvedBy', 'approvedAt', 'notes', 'dailyDetails'
       ];
       const filtered = Object.fromEntries(Object.entries(payload).filter(([k]) => allowed.includes(k)));
 
+      // ✨ Lưu full daily details snapshot vào dailyDetails
+      try {
+        // Build the enriched daily data for storage by reusing the same enrichment
+        // logic used by getUserMonthlyAttendance
+        console.log(`🔄 [attendance] Building dailyDetails snapshot...`);
+        const full = await AttendanceQueryService.getUserMonthlyAttendance(userId, m, undefined);
+        if (full && full.attendanceData) {
+          filtered['dailyDetails'] = JSON.stringify(full.attendanceData);
+          console.log(`✅ [attendance] dailyDetails snapshot saved (${full.attendanceData.length} days)`);
+        }
+      } catch (e) {
+        console.error(`⚠️ [attendance] Failed to build dailyDetails snapshot:`, e);
+      }
+
+      // ✨ Upsert logic: Nếu có rồi thì update, chưa có thì insert
       const existing = await MonthlySummaryModel.query().findOne({ userId, month: m });
       if (existing) {
+        console.log(`🔄 [attendance] Updating existing monthly record id=${existing.id}`);
         await MonthlySummaryModel.query().where('id', existing.id).patch(filtered);
-        return { success: true, action: 'updated', data: filtered };
+        console.log(`✅ [attendance] Updated monthly_attendances for user ${userId} month ${m}`);
+        return { success: true, action: 'updated', data: filtered, id: existing.id };
       } else {
-        const inserted = await MonthlySummaryModel.query().insert({ userId, month: m, ...filtered });
+        console.log(`➕ [attendance] Inserting new monthly record`);
+        const inserted = await MonthlySummaryModel.query().insert(filtered);
+        console.log(`✅ [attendance] Inserted monthly_attendances for user ${userId} month ${m}, id=${inserted.id}`);
         return { success: true, action: 'inserted', data: inserted };
       }
     } catch (error: any) {
-      console.error('Error in calculateAndSaveMonthlyAttendance:', error);
+      console.error('❌ [attendance] Error in calculateAndSaveMonthlyAttendance:', error);
       return { success: false, error: error.message };
     }
   }

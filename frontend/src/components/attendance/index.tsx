@@ -70,7 +70,7 @@ const AttendanceSimplePage = () => {
   const [calendarValue, setCalendarValue] = useState<Dayjs>(dayjs());
   const [attendanceData, setAttendanceData] = useState<AttendanceData[]>([]);
   const [monthlyDetail, setMonthlyDetail] = useState<MonthlyAttendanceDetailResponse | null>(null);
-  const [monthlyStats, setMonthlyStats] = useState<MonthlyStats>({
+  const [monthlyStats, setMonthlyStats] = useState<any>({
     totalDays: 0,
     presentDays: 0,
     absentDays: 0,
@@ -200,6 +200,8 @@ const AttendanceSimplePage = () => {
             totalLateMinutes: monthlyStats.totalLateMinutes ?? monthlyStats.totalLateMinutes ?? 0,
             totalEarlyLeaveMinutes: monthlyStats.totalEarlyLeaveMinutes ?? monthlyStats.totalEarlyLeaveMinutes ?? 0,
             unauthorizedAbsenceDays: monthlyStats.unauthorizedAbsenceDays ?? monthlyStats.unauthorizedAbsenceDays ?? 0,
+            // Per-day penalty for unauthorized absence (required by MonthlyStats)
+            unauthorizedAbsencePenaltyPerDay: monthlyStats.unauthorizedAbsencePenaltyPerDay ?? 0,
             totalUnauthorizedAbsencePenalty: monthlyStats.totalUnauthorizedAbsencePenalty ?? monthlyStats.totalUnauthorizedAbsencePenalty ?? 0,
             approvedLeaveDays: monthlyStats.approvedLeaveDays ?? monthlyStats.approvedLeaveDays ?? 0,
             businessTripDays: monthlyStats.businessTripDays ?? monthlyStats.businessTripDays ?? 0
@@ -519,8 +521,13 @@ const AttendanceSimplePage = () => {
 
                 if (!isCurrentMonth) return 'other-month';
 
-                // Ưu tiên: Công tác > Nghỉ phép > Phạt chấm công > Chấm công đúng giờ > Weekend
+                // ✨ Kiểm tra ngày lễ
+                const isHoliday = (dailyDetail as any)?.isHoliday === true;
 
+                // ✨ NGÀY LỄ LUÔN CÓ NỀN XANH NƯỚC BIỂN (ưu tiên cao nhất)
+                if (isHoliday) return 'status-holiday';
+
+                // Sau đó mới đến các trạng thái khác (nhưng ngày lễ đã có nền xanh rồi)
                 // Công tác -> background tím
                 if (dailyDetail?.status === 'business_trip') return 'status-business-trip';
 
@@ -533,7 +540,7 @@ const AttendanceSimplePage = () => {
                 // Ngày bị phạt chấm công -> background đỏ
                 if (hasPenaltyTime) return 'status-penalty';
 
-                // Ngày chấm công đúng giờ -> background xanh
+                // Ngày chấm công đúng giờ -> background xanh nhạt
                 if (attendance && dailyDetail?.isOnTime) return 'status-working';
 
                 // Nghỉ không phép -> KHÔNG có background (chỉ chữ đỏ)
@@ -557,6 +564,10 @@ const AttendanceSimplePage = () => {
 
                 if (!isCurrentMonth) return null;
 
+                // ✨ Kiểm tra ngày lễ
+                const isHoliday = (dailyDetail as any)?.isHoliday === true;
+                const holidayName = (dailyDetail as any)?.holidayName || 'Ngày lễ';
+
                 // Debug: Log attendance data for dates with attendance
                 if (attendance) {
                   console.log(`📅 Date ${dateStr}:`, {
@@ -564,15 +575,17 @@ const AttendanceSimplePage = () => {
                     checkOutTime: attendance.checkOutTime,
                     lateMinutes: attendance.lateMinutes,
                     earlyDepartureMinutes: attendance.earlyDepartureMinutes,
-                    hasTimePenalty
+                    hasTimePenalty,
+                    isHoliday,
+                    holidayName
                   });
                 }
 
                 return (
                   <div className="calendar-cell-content" onClick={() => setSelectedDate(date)}>
-                    {/* Ưu tiên hiển thị: Công tác > Nghỉ phép > Nghỉ không phép (chỉ <= hôm nay) > Chấm công */}
+                    {/* ✨ Ưu tiên hiển thị: Công tác > Nghỉ phép > Nghỉ không phép > Chấm công > Tên ngày lễ (nếu không có gì) */}
                     {dailyDetail && dailyDetail.status === 'business_trip' ? (
-                      // Công tác: chữ tím, không hiển thị icon
+                      // Công tác: chữ tím (nền xanh nếu là ngày lễ)
                       <div style={{
                         textAlign: 'center',
                         padding: '2px',
@@ -583,7 +596,7 @@ const AttendanceSimplePage = () => {
                         Công tác
                       </div>
                     ) : dailyDetail && dailyDetail.status === 'approved_leave' ? (
-                      // Nghỉ phép: chữ vàng cam
+                      // Nghỉ phép: chữ vàng cam (nền xanh nếu là ngày lễ)
                       <div style={{
                         textAlign: 'center',
                         padding: '2px',
@@ -595,7 +608,6 @@ const AttendanceSimplePage = () => {
                       </div>
                     ) : dailyDetail && dailyDetail.status === 'absent' && isPastOrToday ? (
                       // Nghỉ không phép: chỉ hiển thị cho ngày <= hôm nay
-                      // nền trống, chỉ chữ "Nghỉ" màu đỏ + tiền phạt
                       <div style={{
                         textAlign: 'center',
                         padding: '2px',
@@ -606,8 +618,7 @@ const AttendanceSimplePage = () => {
                         Nghỉ
                       </div>
                     ) : attendance ? (
-                      // Có chấm công: hiển thị giờ vào - giờ ra
-                      // Màu: đỏ nếu có phạt, đen nếu bình thường
+                      // Có chấm công: hiển thị giờ vào - giờ ra (nền xanh nếu là ngày lễ)
                       <div className="calendar-cell-info">
                         {attendance.overtime > 0 && (
                           <div style={{ color: '#52c41a', fontSize: isMobile ? 9 : 11, fontWeight: 'bold' }}>
@@ -617,6 +628,17 @@ const AttendanceSimplePage = () => {
                         <div style={{ color: hasTimePenalty ? '#ff4d4f' : '#666', fontSize: isMobile ? 9 : 11 }}>
                           {attendance.checkInTime || '--:--'} - {attendance.checkOutTime || '--:--'}
                         </div>
+                      </div>
+                    ) : isHoliday ? (
+                      // ✨ Ngày lễ không có chấm công/công tác/nghỉ phép → hiển thị tên ngày lễ
+                      <div style={{
+                        textAlign: 'center',
+                        padding: '2px',
+                        fontSize: isMobile ? 9 : 11,
+                        color: '#13c2c2',
+                        fontWeight: 600
+                      }}>
+                        {holidayName}
                       </div>
                     ) : null}
                   </div>
@@ -686,6 +708,19 @@ const AttendanceSimplePage = () => {
                       marginRight: 8
                     }} />
                     <Text style={{ fontSize: isMobile ? 11 : 12 }}>Công tác</Text>
+                  </div>
+                </Col>
+                <Col xs={12} sm={6}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <div style={{
+                      width: 16,
+                      height: 16,
+                      background: '#e6fffb',
+                      border: '1px solid #87e8de',
+                      borderRadius: 4,
+                      marginRight: 8
+                    }} />
+                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Ngày lễ</Text>
                   </div>
                 </Col>
                 <Col xs={12} sm={6}>
@@ -818,7 +853,7 @@ const AttendanceSimplePage = () => {
                   <CalendarOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#faad14', marginBottom: 4 }} />
                   <div>
                     <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#faad14' }}>
-                      {monthlyDetail?.summary.approvedLeaveDays || 0}
+                      {monthlyStats.approvedLeaveDays || 0}
                     </Title>
                     <Text style={{ fontSize: isMobile ? 11 : 12, color: '#faad14', fontWeight: 500 }}>
                       Nghỉ phép
@@ -856,7 +891,7 @@ const AttendanceSimplePage = () => {
                   <MinusCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#cf1322', marginBottom: 4 }} />
                   <div>
                     <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#cf1322' }}>
-                      {monthlyDetail?.summary.unauthorizedAbsenceDays || 0}
+                      {monthlyStats.unauthorizedAbsenceDays || 0}
                     </Title>
                     <Text style={{ fontSize: isMobile ? 11 : 12, color: '#cf1322', fontWeight: 500 }}>
                       Nghỉ không phép
@@ -875,7 +910,7 @@ const AttendanceSimplePage = () => {
                 }}>
                   <MinusCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#cf1322', marginBottom: 4 }} />
                   <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#cf1322' }}>{formatVND(monthlyStats.totalUnauthorizedAbsencePenalty || 0)}đ</Title>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#cf1322' }}>{formatVND(monthlyStats.unauthorizedAbsencePenaltyPerDay || 0)}đ</Title>
                     <Text style={{ fontSize: isMobile ? 11 : 12, color: '#cf1322', fontWeight: 500 }}>
                       Tiền phạt nghỉ không phép
                     </Text>
@@ -1009,7 +1044,7 @@ const AttendanceSimplePage = () => {
                   <WarningOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#ff4d4f', marginBottom: 4 }} />
                   <div>
                     <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#ff4d4f' }}>
-                      {monthlyDetail?.summary.totalLateMinutes || 0}
+                      {monthlyStats.totalLateMinutes || 0}
                     </Title>
                     <Text style={{ fontSize: isMobile ? 11 : 12, color: '#ff4d4f', fontWeight: 500 }}>
                       Phút đi muộn
@@ -1029,7 +1064,7 @@ const AttendanceSimplePage = () => {
                   <ExclamationCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#fa8c16', marginBottom: 4 }} />
                   <div>
                     <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#fa8c16' }}>
-                      {monthlyDetail?.summary.totalEarlyLeaveMinutes || 0}
+                      {monthlyStats.totalEarlyLeaveMinutes || 0}
                     </Title>
                     <Text style={{ fontSize: isMobile ? 11 : 12, color: '#fa8c16', fontWeight: 500 }}>
                       Phút về sớm
@@ -1100,12 +1135,12 @@ const AttendanceSimplePage = () => {
                     <div>
                       <Text style={{ fontSize: isMobile ? 10 : 11, color: '#8c8c8c', display: 'block' }}>Nghỉ không phép</Text>
                       <Text strong style={{ color: '#cf1322', fontSize: isMobile ? 12 : 14 }}>
-                        {formatVND(monthlyDetail?.summary.totalUnauthorizedAbsencePenalty || 0)}đ
+                        {formatVND(monthlyStats.totalUnauthorizedAbsencePenalty || 0)}đ
                       </Text>
-                      {(monthlyDetail?.summary?.unauthorizedAbsenceDays || 0) > 0 && (
+                      {( (monthlyStats.unauthorizedAbsenceDays || 0) > 0 ) && (
                         <div style={{ marginTop: 4 }}>
                           <Text style={{ fontSize: isMobile ? 9 : 10, color: '#8c8c8c' }}>
-                            ({(monthlyDetail?.summary?.unauthorizedAbsenceDays)?.toLocaleString('vi-VN') || 0} ngày)
+                            ({(monthlyStats.unauthorizedAbsenceDays || 0).toLocaleString('vi-VN')} ngày)
                           </Text>
                         </div>
                       )}
@@ -1122,7 +1157,7 @@ const AttendanceSimplePage = () => {
                 <Text style={{ fontSize: isMobile ? 11 : 12, color: '#8c8c8c' }}>Tổng cộng</Text>
                 <div>
                   <Text strong style={{ color: '#ff4d4f', fontSize: isMobile ? 16 : 18 }}>
-                    {formatVND(monthlyStats.totalPenalty || 0)}đ
+                    {formatVND((monthlyStats.totalPenalty || 0) + (monthlyStats.totalUnauthorizedAbsencePenalty || 0))}đ
                   </Text>
                 </div>
               </div>

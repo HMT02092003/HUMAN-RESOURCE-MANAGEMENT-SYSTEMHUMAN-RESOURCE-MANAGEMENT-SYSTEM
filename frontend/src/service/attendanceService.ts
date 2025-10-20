@@ -39,6 +39,7 @@ export interface MonthlyStats {
   totalLateMinutes?: number;
   totalEarlyLeaveMinutes?: number;
   unauthorizedAbsenceDays?: number;
+  unauthorizedAbsencePenaltyPerDay: number;
   totalUnauthorizedAbsencePenalty?: number;
   approvedLeaveDays?: number;
   businessTripDays?: number;

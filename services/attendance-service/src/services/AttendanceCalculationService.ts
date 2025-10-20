@@ -256,9 +256,10 @@ export class AttendanceCalculationService {
     date: string,
     userId?: number,
     token?: string,
-    approvedOtEndTime?: string | null
+    approvedOtEndTime?: string | null,
+    isHoliday?: boolean // ✨ Thêm tham số để xác định ngày lễ
   ): Promise<AttendanceCalculation> {
-    console.log('🧮 Starting attendance calculation for:', { date, checkInTime, checkOutTime, userId, approvedOtEndTime });
+    console.log('🧮 Starting attendance calculation for:', { date, checkInTime, checkOutTime, userId, approvedOtEndTime, isHoliday });
     
     const settings = await this.getSettings();
     const workingHours = settings.workingHours as WorkingHours;
@@ -273,6 +274,7 @@ export class AttendanceCalculationService {
 
     console.log('⚙️ Using settings:', { workingHours, lunchBreak, penaltyRate });
     console.log('💰 User salary info:', salaryInfo);
+    console.log('🎉 Is holiday:', isHoliday);
 
     // Nếu không có check-in thì return default
     if (!checkInTime) {
@@ -379,44 +381,35 @@ export class AttendanceCalculationService {
           
           // Tính lương OT nếu có thông tin lương
           if (salaryInfo) {
-            // Derive per-minute OT rate from settings.overtimeRate
-            let perMinuteOtRate = 0;
-            try {
-              const otSetting = settings.overtimeRate as any;
-              if (otSetting && typeof otSetting === 'object') {
-                // If explicit perMinute provided
-                if (otSetting.perMinute) {
-                  perMinuteOtRate = parseFloat(otSetting.perMinute);
-                } else if (otSetting.rate) {
-                  // If rate is multiplier (e.g. 1.5), convert to per-minute fraction:
-                  // multiplier / (working days in month * hours per day * 60)
-                  const days = otSetting.workingDaysPerMonth || 22;
-                  const hours = otSetting.hoursPerDay || 8;
-                  perMinuteOtRate = parseFloat(otSetting.rate) / (days * hours * 60);
-                }
-              } else if (typeof otSetting === 'number') {
-                // interpret as multiplier
-                perMinuteOtRate = (otSetting as number) / (22 * 8 * 60);
-              }
-            } catch (e) {
-              console.log('⚠️ Error parsing overtimeRate setting, falling back to default per-minute rate');
-            }
-
-            // Fallback default per-minute OT rate for multiplier 1.5
-            if (!perMinuteOtRate || isNaN(perMinuteOtRate) || perMinuteOtRate <= 0) {
-              perMinuteOtRate = 1.5 / (22 * 8 * 60);
-            }
-
-            // ⭐ OT salary = baseMonthlySalary * perMinuteOtRate * otMinutes
-            result.otSalary = Math.round(salaryInfo.baseSalary * perMinuteOtRate * result.otMinutes);
+            // ✨ Tính lương OT theo ngày lễ hoặc ngày thường
+            // Công thức: Lương OT = (Lương / Số ngày làm việc) * Tỷ lệ OT * Số phút OT
+            
+            // Lấy tỷ lệ OT từ settings
+            const otRate = isHoliday 
+              ? ((settings.holidayRate as any)?.rate || 3.0)  // Ngày lễ: 300%
+              : ((settings.overtimeRate as any)?.rate || 1.5); // Ngày thường: 150%
+            
+            // Số ngày làm việc trong tháng (mặc định 22 ngày)
+            const workingDaysInMonth = 22;
+            
+            // Tính lương OT theo công thức mới:
+            // Lương ngày = Lương tháng / Số ngày làm việc
+            // Lương OT = (Lương ngày / (8 giờ * 60 phút)) * Tỷ lệ OT * Số phút OT
+            const baseSalary = parseFloat(salaryInfo.baseSalary.toString());
+            const dailySalary = baseSalary / workingDaysInMonth;
+            const perMinuteSalary = dailySalary / (8 * 60); // 8 giờ làm việc
+            
+            result.otSalary = Math.round(perMinuteSalary * otRate * result.otMinutes);
+            
+            console.log('⏰ Overtime calculation:');
+            console.log('- Is holiday:', isHoliday);
+            console.log('- OT rate:', otRate);
+            console.log('- Base salary:', baseSalary.toLocaleString('vi-VN'), 'VND');
+            console.log('- Daily salary:', dailySalary.toLocaleString('vi-VN'), 'VND');
+            console.log('- Per-minute salary:', perMinuteSalary.toLocaleString('vi-VN'), 'VND');
+            console.log('- OT minutes:', result.otMinutes);
+            console.log('- OT salary:', result.otSalary.toLocaleString('vi-VN'), 'VND');
           }
-          
-          console.log('⏰ Overtime calculation:');
-          console.log('- OT end time (approved):', approvedOtEnd.format('HH:mm'));
-          console.log('- Actual checkout:', checkOut.format('HH:mm'));
-          console.log('- OT minutes:', result.otMinutes);
-          console.log('- OT hours:', (result.otMinutes / 60).toFixed(2));
-          console.log('- OT salary:', result.otSalary);
         } else {
           result.otMinutes = 0;
           result.otSalary = 0;

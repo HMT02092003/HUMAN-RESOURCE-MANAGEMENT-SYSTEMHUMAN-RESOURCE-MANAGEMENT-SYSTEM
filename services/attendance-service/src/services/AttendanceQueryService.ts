@@ -2,6 +2,7 @@ import dayjs from 'dayjs';
 import TimeAttendanceModel from '@/Models/TimeAttendanceModel';
 import MonthlySummaryModel from '@/Models/MonthlySummaryModel';
 import axios from 'axios';
+import connection from '@/lib/Databases/Connection';
 import { getWorkingDaysConfig as helpersGetWorkingDaysConfig, isWorkingDay as helpersIsWorkingDay, checkDateHasLeave as helpersCheckDateHasLeave, checkDateHasBusinessTrip as helpersCheckDateHasBusinessTrip } from './AttendanceHelpers';
 
 interface ApprovedLeaveApplication {
@@ -54,48 +55,84 @@ export async function calculateTotalEarlyLeaveDays(userId: number, month: string
   }
 }
 
-export async function getUserMonthlyAttendance(userId: number, month: string, token?: string): Promise<any | null> {
+export async function getUserMonthlyAttendance(userId: number, month: string, token?: string, useMonthlySummaryOnly: boolean = false): Promise<any | null> {
   try {
     const startDate = dayjs(`${month}-01`).startOf('month').format('YYYY-MM-DD');
     const endDate = dayjs(`${month}-01`).endOf('month').format('YYYY-MM-DD');
 
     const monthlyRecord = await MonthlySummaryModel.getByUserAndMonth(userId, month);
-    if (monthlyRecord) {
-      const rawAttendanceRows = await TimeAttendanceModel.query()
-        .where('userId', userId)
-        .whereBetween('date', [startDate, endDate])
-        .orderBy('date', 'asc');
-
-      const attendancePlain = rawAttendanceRows.map((r: any) => (r.toJSON ? r.toJSON() : { ...r }));
-
-      return {
-        userId,
-        user: {
-          id: userId,
-          name: 'N/A',
-          email: 'N/A',
-          departmentId: monthlyRecord.departmentId || 0,
-          department: { id: monthlyRecord.departmentId || 0, name: 'N/A' }
-        },
-  month,
-  presentDays: parseFloat((monthlyRecord.presentDays ?? 0).toString()) || 0,
-        totalWorkHours: parseFloat((monthlyRecord.totalWorkHours ?? 0).toString()) || 0,
-        totalOvertimeHours: parseFloat((monthlyRecord.totalOvertimeHours ?? 0).toString()) || 0,
-  totalLateDays: parseFloat((monthlyRecord.lateDays ?? 0).toString()) || 0,
-    totalEarlyLeaveDays: parseFloat((monthlyRecord.earlyLeaveDays ?? 0).toString()) || 0,
-        totalPenalty: parseFloat((monthlyRecord.totalPenalty ?? 0).toString()) || 0,
-        totalOvertimeSalary: parseFloat((monthlyRecord.totalOvertimeSalary ?? 0).toString()) || 0,
-        isApproved: true,
-        attendanceData: attendancePlain
-      };
+    // If caller explicitly requests to use the monthly summary only and a snapshot exists,
+    // return the stored dailyDetails directly without performing enrichment/recalculation.
+    if (useMonthlySummaryOnly && monthlyRecord && (monthlyRecord as any)['dailyDetails']) {
+      try {
+        const dailyDetails = JSON.parse((monthlyRecord as any)['dailyDetails']);
+        const isApprovedFlag = await MonthlySummaryModel.isApproved(userId, month);
+        return {
+          userId,
+          user: { id: userId, name: 'N/A', email: 'N/A', departmentId: (monthlyRecord as any)['departmentId'] || 0, department: { id: (monthlyRecord as any)['departmentId'] || 0, name: 'N/A' } },
+          month,
+          presentDays: parseFloat(((monthlyRecord as any)['presentDays'] ?? 0).toString()) || 0,
+          totalWorkHours: parseFloat(((monthlyRecord as any)['totalWorkHours'] ?? 0).toString()) || 0,
+          totalOvertimeHours: parseFloat(((monthlyRecord as any)['totalOvertimeHours'] ?? 0).toString()) || 0,
+          totalLateDays: parseFloat(((monthlyRecord as any)['lateDays'] ?? 0).toString()) || 0,
+          totalEarlyLeaveDays: parseFloat(((monthlyRecord as any)['earlyLeaveDays'] ?? 0).toString()) || 0,
+          totalPenalty: parseFloat(((monthlyRecord as any)['totalPenalty'] ?? 0).toString()) || 0,
+          totalOvertimeSalary: parseFloat(((monthlyRecord as any)['totalOvertimeSalary'] ?? 0).toString()) || 0,
+          isApproved: !!isApprovedFlag,
+          attendanceData: dailyDetails
+        };
+      } catch (e) {
+        // parse error - fall through to enrichment path
+      }
     }
-
-    const attendanceData = await TimeAttendanceModel.query()
+    // Always load raw rows for the month. We'll enrich them into a full-month dataset below
+    const rawAttendanceRows = await TimeAttendanceModel.query()
       .where('userId', userId)
       .whereBetween('date', [startDate, endDate])
       .orderBy('date', 'asc');
 
-    const workingDaysConfig = await helpersGetWorkingDaysConfig();
+    const attendancePlain = rawAttendanceRows.map((r: any) => (r.toJSON ? r.toJSON() : { ...r }));
+
+    // Note: if monthlyRecord exists we still want to return a full-month, enriched attendanceData
+    // that includes leave/business-trip markers for days without TimeAttendance rows. We'll reuse
+    // the enrichment logic below (approvedApplications, attendanceMap, enrichedAttendanceData).
+
+  const attendanceData = attendancePlain; // use preloaded rows
+
+  const workingDaysConfig = await helpersGetWorkingDaysConfig();
+
+    // ✨ Load holidays from database (table has start_date and end_date columns)
+    const holidayRows: any[] = await connection('holidays')
+      .where(function () {
+        this.whereBetween('start_date', [startDate, endDate])
+          .orWhereBetween('end_date', [startDate, endDate])
+          .orWhere(function() {
+            // Trường hợp kỳ nghỉ lễ bao trùm cả tháng
+            this.where('start_date', '<=', startDate).andWhere('end_date', '>=', endDate);
+          });
+      })
+      .select('*')
+      .catch(() => []);
+
+    const holidaySet = new Set<string>();
+    const holidayInfoMap = new Map<string, { name: string; isPublic: boolean }>();
+    
+    for (const hr of holidayRows) {
+      // Bảng holidays chỉ có start_date và end_date (không có cột date riêng lẻ)
+      if (hr.start_date && hr.end_date) {
+        let cur = dayjs(hr.start_date);
+        const end = dayjs(hr.end_date);
+        while (cur.isBefore(end) || cur.isSame(end, 'day')) {
+          const dateKey = cur.format('YYYY-MM-DD');
+          holidaySet.add(dateKey);
+          // importance >= 2 được coi là ngày lễ công ty (isPublic: true)
+          holidayInfoMap.set(dateKey, { name: hr.name || 'Ngày lễ', isPublic: (hr.importance || 0) >= 2 });
+          cur = cur.add(1, 'day');
+        }
+      }
+    }
+
+    console.log(`🎉 [attendance] Found ${holidaySet.size} holiday dates in ${month}:`, Array.from(holidaySet));
 
     const [year, monthNum] = month.split('-');
     const approvedApplications: ApprovedLeaveApplication[] = [];
@@ -134,6 +171,10 @@ export async function getUserMonthlyAttendance(userId: number, month: string, to
         return appData.date === dateKey;
       });
 
+      // ✨ Kiểm tra xem ngày này có phải ngày lễ không
+      const isHoliday = holidaySet.has(dateKey);
+      const holidayInfo = holidayInfoMap.get(dateKey);
+
       const dayRecord: any = {
         date: currentDate.toISOString(),
         userId,
@@ -148,11 +189,35 @@ export async function getUserMonthlyAttendance(userId: number, month: string, to
         businessTripInfo: businessTripCheck.tripInfo,
         businessTripDestination: businessTripCheck.destination,
         tripInfo: businessTripCheck.tripInfo,
-        destination: businessTripCheck.destination
+        destination: businessTripCheck.destination,
+        // ✨ Thông tin ngày lễ
+        isHoliday,
+        holidayName: holidayInfo?.name || null,
+        isPublicHoliday: holidayInfo?.isPublic || false
       };
 
       if (attendanceRecord) {
-        Object.assign(dayRecord, { ...attendanceRecord, date: currentDate.toISOString(), userId, isWorkingDay: isWork, isFuture, hasApprovedOT, hasApprovedLeave: leaveCheck.hasLeave, leaveType: leaveCheck.leaveType, leaveInfo: leaveCheck.leaveInfo, type: leaveCheck.hasLeave ? leaveCheck.leaveType : (businessTripCheck.hasBusinessTrip ? 'business_trip' : 'attendance'), hasBusinessTrip: businessTripCheck.hasBusinessTrip, businessTripInfo: businessTripCheck.tripInfo, businessTripDestination: businessTripCheck.destination, tripInfo: businessTripCheck.tripInfo, destination: businessTripCheck.destination });
+        Object.assign(dayRecord, { 
+          ...attendanceRecord, 
+          date: currentDate.toISOString(), 
+          userId, 
+          isWorkingDay: isWork, 
+          isFuture, 
+          hasApprovedOT, 
+          hasApprovedLeave: leaveCheck.hasLeave, 
+          leaveType: leaveCheck.leaveType, 
+          leaveInfo: leaveCheck.leaveInfo, 
+          type: leaveCheck.hasLeave ? leaveCheck.leaveType : (businessTripCheck.hasBusinessTrip ? 'business_trip' : 'attendance'), 
+          hasBusinessTrip: businessTripCheck.hasBusinessTrip, 
+          businessTripInfo: businessTripCheck.tripInfo, 
+          businessTripDestination: businessTripCheck.destination, 
+          tripInfo: businessTripCheck.tripInfo, 
+          destination: businessTripCheck.destination,
+          // ✨ Giữ lại thông tin ngày lễ
+          isHoliday,
+          holidayName: holidayInfo?.name || null,
+          isPublicHoliday: holidayInfo?.isPublic || false
+        });
       } else {
         dayRecord.id = null;
         dayRecord.checkInTime = null;
@@ -169,7 +234,7 @@ export async function getUserMonthlyAttendance(userId: number, month: string, to
       enrichedAttendanceData.push(dayRecord);
     }
 
-    const isApproved = await MonthlySummaryModel.isApproved(userId, month);
+  const isApproved = await MonthlySummaryModel.isApproved(userId, month);
 
     const totalLateDays = await calculateTotalLateDays(userId, month);
     const totalEarlyLeaveDays = await calculateTotalEarlyLeaveDays(userId, month);
@@ -190,18 +255,30 @@ export async function getUserMonthlyAttendance(userId: number, month: string, to
       }
     });
 
+    // If there is an existing monthlyRecord use its totals to preserve any manual adjustments
+    const totalsFromDb = monthlyRecord ? {
+      presentDays: parseFloat((monthlyRecord.presentDays ?? totalWorkDays).toString()) || totalWorkDays,
+      totalWorkHours: parseFloat((monthlyRecord.totalWorkHours ?? totalWorkHours).toString()) || Math.round(totalWorkHours * 100) / 100,
+      totalOvertimeHours: parseFloat((monthlyRecord.totalOvertimeHours ?? Math.round(totalOvertimeMinutes / 60 * 100) / 100).toString()) || Math.round(totalOvertimeMinutes / 60 * 100) / 100,
+      totalLateDays: parseFloat((monthlyRecord.lateDays ?? totalLateDays).toString()) || totalLateDays,
+      totalEarlyLeaveDays: parseFloat((monthlyRecord.earlyLeaveDays ?? totalEarlyLeaveDays).toString()) || totalEarlyLeaveDays,
+      totalPenalty: parseFloat((monthlyRecord.totalPenalty ?? Math.round(totalPenalty * 100) / 100).toString()) || Math.round(totalPenalty * 100) / 100,
+      totalOvertimeSalary: parseFloat((monthlyRecord.totalOvertimeSalary ?? Math.round(totalOvertimeSalary * 100) / 100).toString()) || Math.round(totalOvertimeSalary * 100) / 100,
+  isApproved: monthlyRecord ? !!isApproved : isApproved
+    } : null;
+
     return {
       userId,
-      user: { id: userId, name: 'N/A', email: 'N/A', departmentId: 0, department: { id: 0, name: 'N/A' } },
+      user: { id: userId, name: 'N/A', email: 'N/A', departmentId: monthlyRecord?.departmentId || 0, department: { id: monthlyRecord?.departmentId || 0, name: 'N/A' } },
       month,
-      presentDays: totalWorkDays,
-      totalWorkHours: Math.round(totalWorkHours * 100) / 100,
-      totalOvertimeHours: Math.round(totalOvertimeMinutes / 60 * 100) / 100,
-      totalLateDays,
-      totalEarlyLeaveDays,
-      totalPenalty: Math.round(totalPenalty * 100) / 100,
-      totalOvertimeSalary: Math.round(totalOvertimeSalary * 100) / 100,
-      isApproved,
+      presentDays: totalsFromDb ? totalsFromDb.presentDays : totalWorkDays,
+      totalWorkHours: totalsFromDb ? totalsFromDb.totalWorkHours : Math.round(totalWorkHours * 100) / 100,
+      totalOvertimeHours: totalsFromDb ? totalsFromDb.totalOvertimeHours : Math.round(totalOvertimeMinutes / 60 * 100) / 100,
+      totalLateDays: totalsFromDb ? totalsFromDb.totalLateDays : totalLateDays,
+      totalEarlyLeaveDays: totalsFromDb ? totalsFromDb.totalEarlyLeaveDays : totalEarlyLeaveDays,
+      totalPenalty: totalsFromDb ? totalsFromDb.totalPenalty : Math.round(totalPenalty * 100) / 100,
+      totalOvertimeSalary: totalsFromDb ? totalsFromDb.totalOvertimeSalary : Math.round(totalOvertimeSalary * 100) / 100,
+      isApproved: totalsFromDb ? totalsFromDb.isApproved : isApproved,
       attendanceData: enrichedAttendanceData
     };
   } catch (error) {

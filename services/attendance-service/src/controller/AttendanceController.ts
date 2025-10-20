@@ -5,6 +5,8 @@
 
 import { Request, Response } from 'express';
 import { AttendanceService } from '@/services/AttendanceService';
+import MonthlySummaryModel from '@/Models/MonthlySummaryModel';
+import SalaryService from '@/services/SalaryService';
 
 /**
  * API: Duyệt bảng công tháng
@@ -45,20 +47,59 @@ export const getUserMonthlyFull = async (req: Request, res: Response) => {
     // Format month
     const monthStr = `${year}-${String(month).padStart(2, '0')}`;
 
-    // Delegate to service which returns the ready-to-send monthly-full payload
-  // Frontend -> Controller -> Service mapping (concise):
-  // GET /api/attendance/user/:userId/monthly-full?year=YYYY&month=MM
-  // -> controller: getUserMonthlyFull (this function)
-  // -> service: AttendanceService.getUserMonthlyFull(userId, monthStr, token)
-  //    -> MonthlyReportService.buildMonthlyFull(...) (builds monthlyStats + dailyData)
-  //       -> AttendanceQueryService.getUserMonthlyAttendance(...) (reads TimeAttendanceModel, MonthlySummaryModel)
-  //       -> SettingsService, SalaryService, OvertimeProcessingService used inside building
-    const payload = await AttendanceService.getUserMonthlyFull(parseInt(userId), monthStr, token);
+    // First try to read monthly summary row (monthly_attendances)
+    const monthlyRecord = await MonthlySummaryModel.getByUserAndMonth(parseInt(userId), monthStr);
 
-    if (!payload) {
-      return res.status(404).json({ success: false, message: 'Không tìm thấy dữ liệu chấm công' });
+    if (monthlyRecord && (monthlyRecord as any).dailyDetails) {
+      // If dailyDetails snapshot exists, return 100% from monthly_attendances per user request
+      let dailyDetails: any[] = [];
+      try { dailyDetails = JSON.parse((monthlyRecord as any).dailyDetails); } catch (e) { dailyDetails = []; }
+
+      // Build monthlyStats from DB fields following requested formulas (cast to any for DB-only columns)
+      const db: any = monthlyRecord as any;
+      const totalScheduledDays = Number(db.totalScheduledDays || 0);
+      const presentDays = Number(db.presentDays || 0);
+      const approvedLeaveDays = Number(db.approvedLeaveDays || 0);
+      const businessTripDays = Number(db.businessTripDays || 0);
+      const unauthorizedAbsenceDays = Number(db.unauthorizedAbsenceDays ?? Math.max(0, totalScheduledDays - (presentDays + approvedLeaveDays + businessTripDays)) );
+
+      const salary = await SalaryService.fetchSalary(parseInt(userId), token);
+      const baseSalary = salary?.baseSalary ? Number(salary.baseSalary) : 0;
+      const workingDaysInMonth = Number(db.totalScheduledDays || totalScheduledDays || 0);
+      // Calculate penalty per day as daily salary (rounded to integer, no decimals)
+      const unauthorizedAbsencePenaltyPerDay = baseSalary && workingDaysInMonth ? Math.round(baseSalary / workingDaysInMonth) : 0;
+      const totalUnauthorizedAbsencePenalty = unauthorizedAbsencePenaltyPerDay * unauthorizedAbsenceDays;
+
+      const monthlyStats = {
+        totalDays: totalScheduledDays,
+        presentDays,
+        absentDays: Number(db.absentDays || unauthorizedAbsenceDays),
+        lateDays: Number(db.lateDays || 0),
+        earlyLeaveDays: Number(db.earlyLeaveDays || 0),
+        totalHours: Number(db.totalWorkHours || 0),
+        averageHours: Number(db.averageWorkHours || 0),
+        overtimeHours: Number(db.totalOvertimeHours || 0),
+        totalLatePenalty: Number(db.totalLatePenalty || 0),
+        totalEarlyLeavePenalty: Number(db.totalEarlyLeavePenalty || 0),
+        totalPenalty: Number(db.totalPenalty || 0),
+        totalOvertimePay: Number(db.totalOvertimeSalary || 0),
+        totalLateMinutes: Number(db.totalLateMinutes || 0),
+        totalEarlyLeaveMinutes: Number(db.totalEarlyLeaveMinutes || 0),
+        unauthorizedAbsenceDays,
+        totalUnauthorizedAbsencePenalty,
+        approvedLeaveDays,
+        businessTripDays,
+        totalWorkingUnits: Number(db.totalWorkingUnits || 0),
+        totalOtWorkingUnits: Number(db.totalOtWorkingUnits || 0)
+      };
+
+      return res.status(200).json({ success: true, data: { monthlyStats, dailyData: { userId: parseInt(userId), month: Number(monthStr.split('-')[1]), year: Number(monthStr.split('-')[0]), dailyDetails, monthlySalary: Number(db.baseSalary || 0), penaltyRate: 0, summary: {} } } });
     }
 
+    // Fallback: delegate to existing service to compute on the fly
+    const payload = await AttendanceService.getUserMonthlyFull(parseInt(userId), monthStr, token);
+
+    if (!payload) return res.status(404).json({ success: false, message: 'Không tìm thấy dữ liệu chấm công' });
     return res.status(200).json(payload);
 
   } catch (error: any) {

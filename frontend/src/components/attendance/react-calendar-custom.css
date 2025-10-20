@@ -94,6 +94,10 @@
 }
 
 /* Status colors */
+.status-holiday {
+  background: #e6fffb !important; /* Màu xanh nhạt cho ngày lễ */
+}
+
 .status-penalty {
   background: #fff1f0 !important; /* Đỏ nhạt cho ngày bị phạt chấm công */
   border-color: #ffccc7 !important;
