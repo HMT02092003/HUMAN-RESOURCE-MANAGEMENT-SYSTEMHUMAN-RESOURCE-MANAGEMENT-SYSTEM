@@ -1,12 +1,14 @@
-import SettingModel from '@/Models/SettingsModel';
+import SettingsService from './SettingsService';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import axios from 'axios';
 import os from 'os';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
+dayjs.extend(isSameOrBefore);
 
 // Helper function to get local IP address
 function getLocalIpAddress(): string {
@@ -214,40 +216,23 @@ export class AttendanceCalculationService {
   private static async getSettings() {
     console.log('🔧 ATTENDANCE CALCULATION SERVICE - Getting settings...');
     try {
-      const settings = await SettingModel.query();
-      console.log('📊 Raw settings from DB:', settings);
-      
-      // Nếu chưa có settings thì return default
-      if (!settings || settings.length === 0) {
-        console.log('⚠️ No settings found in database, using defaults');
-        return this.getDefaultSettings();
-      }
+      // Use SettingsService to fetch individual setting values
+      const [workingHoursVal, lunchBreakVal, overtimeRateVal, holidayRateVal, penaltyRateVal] = await Promise.all([
+        SettingsService.getSettingValue('WorkingHours'),
+        SettingsService.getSettingValue('LunchBreak'),
+        SettingsService.getSettingValue('OvertimeRate'),
+        SettingsService.getSettingValue('HolidayRate'),
+        SettingsService.getSettingValue('PenaltyRate'),
+      ]);
 
-      const settingsMap: { [key: string]: any } = {};
-      
-      settings.forEach(setting => {
-        try {
-          // Parse JSON value từ database
-          const parsedValue = typeof setting.value === 'string' 
-            ? JSON.parse(setting.value) 
-            : setting.value;
-          settingsMap[setting.key] = parsedValue;
-          console.log(`⚙️ Setting loaded: ${setting.key} =`, parsedValue);
-        } catch (parseError) {
-          console.error(`❌ Error parsing setting ${setting.key}:`, parseError);
-          // Nếu parse lỗi thì skip setting này
-        }
-      });
-
-      // Merge với default values nếu thiếu settings
       const defaults = this.getDefaultSettings();
-      
+
       return {
-        workingHours: settingsMap['WorkingHours'] || defaults.workingHours,
-        lunchBreak: settingsMap['LunchBreak'] || defaults.lunchBreak,
-        overtimeRate: settingsMap['OvertimeRate'] || defaults.overtimeRate,
-        holidayRate: settingsMap['HolidayRate'] || defaults.holidayRate,
-        penaltyRate: settingsMap['PenaltyRate'] || defaults.penaltyRate
+        workingHours: workingHoursVal || defaults.workingHours,
+        lunchBreak: lunchBreakVal || defaults.lunchBreak,
+        overtimeRate: overtimeRateVal || defaults.overtimeRate,
+        holidayRate: holidayRateVal || defaults.holidayRate,
+        penaltyRate: penaltyRateVal || defaults.penaltyRate
       };
     } catch (error) {
       console.error('❌ Error getting settings:', error);
@@ -557,25 +542,17 @@ export class AttendanceCalculationService {
       // Lấy cấu hình tỷ lệ lương tăng ca từ bảng settings
       let overtimeRate = 1.5; // Mặc định 150% lương cơ bản
       try {
-        const overtimeRateSetting = await SettingModel.query()
-          .where('key', 'OvertimeRate')
-          .first();
-        
-        if (overtimeRateSetting && overtimeRateSetting.value) {
-          // Parse value từ JSON object hoặc string number
-          const value = overtimeRateSetting.value;
-          
+        const overtimeRateSetting = await SettingsService.getSettingValue('OvertimeRate');
+        if (overtimeRateSetting) {
+          const value = overtimeRateSetting;
           if (typeof value === 'object' && value !== null) {
-            // Trường hợp value là object JSON: {"rate": 1.5}
             const valueObj = value as any;
             overtimeRate = parseFloat(valueObj.rate || valueObj.value || 1.5);
           } else if (typeof value === 'string') {
             try {
-              // Thử parse JSON trước
               const parsedValue = JSON.parse(value);
-              overtimeRate = parseFloat(parsedValue.rate || parsedValue.value || parsedValue);
+              overtimeRate = parseFloat(parsedValue.rate || parsedValue.value || parsedValue || 1.5);
             } catch {
-              // Nếu không phải JSON, parse trực tiếp là number
               overtimeRate = parseFloat(value);
             }
           } else if (typeof value === 'number') {
@@ -600,14 +577,11 @@ export class AttendanceCalculationService {
       // derive per-minute OT rate (same logic as above)
       let perMinuteOtRate = 0;
       try {
-        const overtimeRateSetting = await SettingModel.query()
-          .where('key', 'OvertimeRate')
-          .first();
-        if (overtimeRateSetting && overtimeRateSetting.value) {
-          const value = overtimeRateSetting.value;
-          let otSetting: any = value;
-          if (typeof value === 'string') {
-            try { otSetting = JSON.parse(value); } catch {};
+        const overtimeRateSetting2 = await SettingsService.getSettingValue('OvertimeRate');
+        if (overtimeRateSetting2) {
+          let otSetting: any = overtimeRateSetting2;
+          if (typeof otSetting === 'string') {
+            try { otSetting = JSON.parse(otSetting); } catch {};
           }
 
           if (otSetting && typeof otSetting === 'object') {
@@ -650,3 +624,6 @@ export class AttendanceCalculationService {
     }
   }
 }
+
+// Provide a default export for compatibility with different import styles
+export default AttendanceCalculationService;

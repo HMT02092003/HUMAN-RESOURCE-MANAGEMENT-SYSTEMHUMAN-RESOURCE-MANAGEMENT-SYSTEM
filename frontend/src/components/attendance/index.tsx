@@ -176,9 +176,36 @@ const AttendanceSimplePage = () => {
 
         // Tách monthlyStats và dailyData từ response
         if (monthlyFullData) {
-          const { monthlyStats, dailyData } = monthlyFullData;
+          let { monthlyStats, dailyData } = monthlyFullData;
 
           console.log('📅 Monthly detail data:', dailyData);
+
+          // Normalize monthlyStats to support fields coming from `monthly_attendances` table
+          const normalizedMonthlyStats = {
+            totalDays: monthlyStats.totalDays ?? monthlyStats.totalScheduledDays ?? 0,
+            presentDays: monthlyStats.presentDays ?? 0,
+            absentDays: monthlyStats.absentDays ?? 0,
+            lateDays: monthlyStats.lateDays ?? 0,
+            earlyLeaveDays: monthlyStats.earlyLeaveDays ?? 0,
+            totalHours: monthlyStats.totalHours ?? monthlyStats.totalWorkHours ?? 0,
+            averageHours: monthlyStats.averageHours ?? monthlyStats.averageWorkHours ?? 0,
+            overtimeHours: monthlyStats.overtimeHours ?? monthlyStats.totalOvertimeHours ?? 0,
+            totalLatePenalty: monthlyStats.totalLatePenalty ?? 0,
+            totalEarlyLeavePenalty: monthlyStats.totalEarlyLeavePenalty ?? 0,
+            totalPenalty: monthlyStats.totalPenalty ?? 0,
+            // overtime pay may come under either name
+            totalOvertimePay: monthlyStats.totalOvertimePay ?? monthlyStats.totalOvertimeSalary ?? 0,
+            totalWorkingUnits: monthlyStats.totalWorkingUnits ?? monthlyStats.totalWorkingUnits ?? 0,
+            totalOtWorkingUnits: monthlyStats.totalOtWorkingUnits ?? monthlyStats.totalOtWorkingUnits ?? 0,
+            totalLateMinutes: monthlyStats.totalLateMinutes ?? monthlyStats.totalLateMinutes ?? 0,
+            totalEarlyLeaveMinutes: monthlyStats.totalEarlyLeaveMinutes ?? monthlyStats.totalEarlyLeaveMinutes ?? 0,
+            unauthorizedAbsenceDays: monthlyStats.unauthorizedAbsenceDays ?? monthlyStats.unauthorizedAbsenceDays ?? 0,
+            totalUnauthorizedAbsencePenalty: monthlyStats.totalUnauthorizedAbsencePenalty ?? monthlyStats.totalUnauthorizedAbsencePenalty ?? 0,
+            approvedLeaveDays: monthlyStats.approvedLeaveDays ?? monthlyStats.approvedLeaveDays ?? 0,
+            businessTripDays: monthlyStats.businessTripDays ?? monthlyStats.businessTripDays ?? 0
+          };
+
+          monthlyStats = normalizedMonthlyStats;
 
           // Debug business trip days
           if (dailyData?.dailyDetails) {
@@ -712,14 +739,33 @@ const AttendanceSimplePage = () => {
                   textAlign: 'center',
                   padding: isMobile ? 12 : 16,
                   borderRadius: 8,
+                  background: '#fffbe6',
+                  border: '1px solid #ffe58f',
+                  height: '100%'
+                }}>
+                  <CalendarOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#faad14', marginBottom: 4 }} />
+                  <div>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#faad14' }}>{monthlyStats.totalDays}</Title>
+                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#faad14', fontWeight: 500 }}>
+                      Tổng ngày làm việc trong tháng
+                    </Text>
+                  </div>
+                </div>
+              </Col>
+              <Col xs={12} sm={12} lg={12}>
+                <div style={{
+                  textAlign: 'center',
+                  padding: isMobile ? 12 : 16,
+                  borderRadius: 8,
                   background: '#f6ffed',
                   border: '1px solid #b7eb8f',
+                  height: '100%'
                 }}>
                   <CheckCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#52c41a', marginBottom: 4 }} />
                   <div>
                     <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#52c41a' }}>{monthlyStats.presentDays}</Title>
                     <Text style={{ fontSize: isMobile ? 11 : 12, color: '#52c41a', fontWeight: 500 }}>
-                      Có mặt
+                      Số ngày làm việc trong tháng
                     </Text>
                   </div>
                 </div>
@@ -731,6 +777,7 @@ const AttendanceSimplePage = () => {
                   borderRadius: 8,
                   background: '#fff1f0',
                   border: '1px solid #ffccc7',
+                  height: '100%'
                 }}>
                   <ClockCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#ff4d4f', marginBottom: 4 }} />
                   <div>
@@ -748,6 +795,7 @@ const AttendanceSimplePage = () => {
                   borderRadius: 8,
                   background: '#fff2e8',
                   border: '1px solid #ffd591',
+                  height: '100%'
                 }}>
                   <ExclamationCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#fa8c16', marginBottom: 4 }} />
                   <div>
@@ -765,6 +813,7 @@ const AttendanceSimplePage = () => {
                   borderRadius: 8,
                   background: '#fffbe6',
                   border: '1px solid #ffe58f',
+                  height: '100%'
                 }}>
                   <CalendarOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#faad14', marginBottom: 4 }} />
                   <div>
@@ -773,25 +822,6 @@ const AttendanceSimplePage = () => {
                     </Title>
                     <Text style={{ fontSize: isMobile ? 11 : 12, color: '#faad14', fontWeight: 500 }}>
                       Nghỉ phép
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#fff1f0',
-                  border: '1px solid #ffa39e',
-                }}>
-                  <MinusCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#cf1322', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#cf1322' }}>
-                      {monthlyDetail?.summary.unauthorizedAbsenceDays || 0}
-                    </Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#cf1322', fontWeight: 500 }}>
-                      Nghỉ không phép
                     </Text>
                   </div>
                 </div>
@@ -810,6 +840,44 @@ const AttendanceSimplePage = () => {
                     <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#8c8c8c' }}>{monthlyStats.absentDays}</Title>
                     <Text style={{ fontSize: isMobile ? 11 : 12, color: '#8c8c8c', fontWeight: 500 }}>
                       Vắng mặt
+                    </Text>
+                  </div>
+                </div>
+              </Col>
+              <Col xs={12} sm={12} lg={12}>
+                <div style={{
+                  textAlign: 'center',
+                  padding: isMobile ? 12 : 16,
+                  borderRadius: 8,
+                  background: '#fff1f0',
+                  border: '1px solid #ffa39e',
+                  height: '100%'
+                }}>
+                  <MinusCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#cf1322', marginBottom: 4 }} />
+                  <div>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#cf1322' }}>
+                      {monthlyDetail?.summary.unauthorizedAbsenceDays || 0}
+                    </Title>
+                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#cf1322', fontWeight: 500 }}>
+                      Nghỉ không phép
+                    </Text>
+                  </div>
+                </div>
+              </Col>
+              <Col xs={12} sm={12} lg={12}>
+                <div style={{
+                  textAlign: 'center',
+                  padding: isMobile ? 12 : 16,
+                  borderRadius: 8,
+                  background: '#fff0f6',
+                  border: '1px solid #ffadd2',
+                  height: '100%'
+                }}>
+                  <MinusCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#cf1322', marginBottom: 4 }} />
+                  <div>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#cf1322' }}>{formatVND(monthlyStats.totalUnauthorizedAbsencePenalty || 0)}đ</Title>
+                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#cf1322', fontWeight: 500 }}>
+                      Tiền phạt nghỉ không phép
                     </Text>
                   </div>
                 </div>
@@ -859,6 +927,7 @@ const AttendanceSimplePage = () => {
                   borderRadius: 8,
                   background: '#e6f7ff',
                   border: '1px solid #91d5ff',
+                  height: '100%'
                 }}>
                   <FieldTimeOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#1890ff', marginBottom: 4 }} />
                   <div>
@@ -887,6 +956,43 @@ const AttendanceSimplePage = () => {
                   </div>
                 </div>
               </Col>
+              <Col xs={12} sm={12} lg={12}>
+                <div style={{
+                  textAlign: 'center',
+                  padding: isMobile ? 12 : 16,
+                  borderRadius: 8,
+                  background: '#f0f5ff',
+                  border: '1px solid #adc6ff',
+                  height: '100%'
+                }}>
+                  <InfoCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#5b8cff', marginBottom: 4 }} />
+                  <div>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#5b8cff' }}>{monthlyStats.averageHours.toFixed(2)}h</Title>
+                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#5b8cff', fontWeight: 500 }}>
+                      Giờ trung bình/ngày
+                    </Text>
+                  </div>
+                </div>
+              </Col>
+              {/* New: totalWorkingUnits */}
+              <Col xs={12} sm={12} lg={12}>
+                <div style={{
+                  textAlign: 'center',
+                  padding: isMobile ? 12 : 16,
+                  borderRadius: 8,
+                  background: '#e6fffb',
+                  border: '1px solid #b7eb8f',
+                  height: '100%'
+                }}>
+                  <UserOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#13c2c2', marginBottom: 4 }} />
+                  <div>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#13c2c2' }}>{monthlyStats.totalWorkingUnits}</Title>
+                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#13c2c2', fontWeight: 500 }}>
+                      Tổng công (công)
+                    </Text>
+                  </div>
+                </div>
+              </Col>
             </Row>
 
             {/* Thống kê phút muộn/sớm */}
@@ -898,6 +1004,7 @@ const AttendanceSimplePage = () => {
                   borderRadius: 8,
                   background: '#fff1f0',
                   border: '1px solid #ffccc7',
+                  height: '100%'
                 }}>
                   <WarningOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#ff4d4f', marginBottom: 4 }} />
                   <div>
@@ -917,6 +1024,7 @@ const AttendanceSimplePage = () => {
                   borderRadius: 8,
                   background: '#fff7e6',
                   border: '1px solid #ffd591',
+                  height: '100%'
                 }}>
                   <ExclamationCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#fa8c16', marginBottom: 4 }} />
                   <div>

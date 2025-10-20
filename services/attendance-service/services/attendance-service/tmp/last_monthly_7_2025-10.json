@@ -1,0 +1,22 @@
+{
+  "existingId": 2,
+  "payload": {
+    "totalWorkDays": 1,
+    "totalWorkHours": 0,
+    "totalLateDays": 0,
+    "totalEarlyLeaveDays": 0,
+    "totalLateMinutes": 810,
+    "totalEarlyLeaveMinutes": 180,
+    "totalOvertimeHours": 0,
+    "totalOvertimeDays": 0,
+    "totalOvertimeSalary": 0,
+    "totalPaidLeaveDays": 0,
+    "totalUnpaidLeaveDays": 0,
+    "totalLatePenalty": 8100000,
+    "totalEarlyLeavePenalty": 1800000,
+    "totalPenalty": 9900000,
+    "baseSalary": null,
+    "totalAllowance": 0,
+    "finalSalary": null
+  }
+}

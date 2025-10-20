@@ -7,8 +7,8 @@ import dayjs from 'dayjs';
 import axios from 'axios';
 import os from 'os';
 import TimeAttendanceModel from '@/Models/TimeAttendanceModel';
-import SettingModel from '@/Models/SettingsModel';
-import { AttendanceCalculationService } from './AttendanceCalculationService';
+import AttendanceCalculationService from './AttendanceCalculationService';
+import { getWorkingDaysConfig as helpersGetWorkingDaysConfig, isWorkingDay as helpersIsWorkingDay } from './AttendanceHelpers';
 
 function getLocalIpAddress(): string {
   const interfaces = os.networkInterfaces();
@@ -101,43 +101,31 @@ export class OvertimeProcessingService {
    * Lấy cấu hình ngày làm việc trong tuần từ settings
    */
   static async getWorkingDaysConfig(): Promise<WorkingDaysConfig> {
-    try {
-      const setting = await SettingModel.query()
-        .where('key', 'WorkingDays')
-        .first();
-
-      if (setting && setting.value) {
-        const value = setting.value;
-        
-        // Parse value
-        if (typeof value === 'object' && value !== null && 'workingDays' in value) {
-          return value as WorkingDaysConfig;
-        } else if (typeof value === 'string') {
-          try {
-            const parsed = JSON.parse(value);
-            if (parsed.workingDays) {
-              return parsed;
-            }
-          } catch {}
-        }
-      }
-
-      // Mặc định T2-T6 (1-5)
-      console.log('⚠️ Using default working days: Monday-Friday');
-      return { workingDays: [1, 2, 3, 4, 5] };
-
-    } catch (error) {
-      console.error('❌ Error loading working days config:', error);
-      return { workingDays: [1, 2, 3, 4, 5] };
+    // Delegate to shared helper which returns a WorkingDaysConfig-like object
+    const cfg: any = await helpersGetWorkingDaysConfig();
+    // Normalize shape to { workingDays: number[] }
+    if (cfg && typeof cfg === 'object' && Array.isArray((cfg as any).workingDays)) {
+      return { workingDays: (cfg as any).workingDays } as WorkingDaysConfig;
     }
+    // Fallback default
+    return { workingDays: [1, 2, 3, 4, 5] };
   }
 
   /**
    * Kiểm tra xem ngày có phải ngày làm việc không
    */
   static isWorkingDay(date: string, workingDays: number[]): boolean {
-    const dayOfWeek = dayjs(date).day(); // 0=Sunday, 1=Monday, ..., 6=Saturday
-    return workingDays.includes(dayOfWeek);
+    // Convert workingDays array to a config object expected by the helper
+    const cfg = {
+      monday: workingDays.includes(1),
+      tuesday: workingDays.includes(2),
+      wednesday: workingDays.includes(3),
+      thursday: workingDays.includes(4),
+      friday: workingDays.includes(5),
+      saturday: workingDays.includes(6),
+      sunday: workingDays.includes(0),
+    };
+    return helpersIsWorkingDay(date, cfg as any);
   }
 
   /**

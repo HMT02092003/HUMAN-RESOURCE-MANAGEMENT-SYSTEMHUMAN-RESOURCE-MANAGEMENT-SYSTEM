@@ -30,7 +30,22 @@ export interface MonthlyStats {
   totalLatePenalty: number;      // Tổng tiền phạt đi muộn (VND)
   totalEarlyLeavePenalty: number; // Tổng tiền phạt về sớm (VND)
   totalPenalty: number;          // Tổng tiền phạt (VND)
-  totalOvertimePay?: number;     // Tổng tiền overtime (VND)
+  totalOvertimePay?: number;     // Tổng tiền overtime (VND) - API may use this name
+  // Additional optional fields that may come from `monthly_attendances`
+  totalOvertimeSalary?: number;  // alternative column name used in DB
+  totalWorkingUnits?: number;    // Tổng số công trong tháng
+  totalOvertimeHours?: number;   // Tổng giờ OT
+  totalOtWorkingUnits?: number;  // Tổng công OT
+  totalLateMinutes?: number;
+  totalEarlyLeaveMinutes?: number;
+  unauthorizedAbsenceDays?: number;
+  totalUnauthorizedAbsencePenalty?: number;
+  approvedLeaveDays?: number;
+  businessTripDays?: number;
+  // Alternate DB column names
+  totalScheduledDays?: number;
+  totalWorkHours?: number;
+  averageWorkHours?: number;
 }
 
 export interface DailyAttendanceDetail {

@@ -18,27 +18,25 @@ class MonthlySummaryModel extends Model {
     month!: string; // Format: YYYY-MM
     
     // ========== MONTHLY SUMMARY FIELDS ==========
-    totalWorkDays!: number;
     totalWorkHours!: number;
+    totalScheduledDays!: number;
+    presentDays!: number;
     
-    totalLateDays!: number;
-    totalEarlyLeaveDays!: number;
+    lateDays!: number;
+    earlyLeaveDays!: number;
     totalLateMinutes!: number;
     totalEarlyLeaveMinutes!: number;
     
     totalOvertimeHours!: number;
-    totalOvertimeDays!: number;
     totalOvertimeSalary!: number;
     
-    totalPaidLeaveDays!: number;
-    totalUnpaidLeaveDays!: number;
+    // totalUnpaidLeaveDays removed - use unauthorizedAbsenceDays
     
     totalLatePenalty!: number;
     totalEarlyLeavePenalty!: number;
     totalPenalty!: number;
     
     baseSalary!: number | null;
-    totalAllowance!: number;
     finalSalary!: number | null;
     
     approvedBy!: number;
@@ -51,38 +49,37 @@ class MonthlySummaryModel extends Model {
     static override get jsonSchema() {
         return {
             type: 'object',
-            required: ['userId', 'departmentId', 'month', 'approvedBy'],
+            // Only require fields that exist in migration and are essential for identification
+            // departmentId / approvedBy / approvedAt are optional for auto-created monthly summaries
+            required: ['userId', 'month'],
             properties: {
                 id: { type: 'integer' },
                 userId: { type: 'integer' },
-                departmentId: { type: 'integer' },
+                departmentId: { type: ['integer', 'null'] },
                 month: { type: 'string', pattern: '^\\d{4}-\\d{2}$' }, // YYYY-MM format
                 
-                totalWorkDays: { type: 'integer', default: 0 },
+                totalScheduledDays: { type: 'integer', default: 0 },
                 totalWorkHours: { type: 'number', default: 0 },
+                presentDays: { type: 'integer', default: 0 },
                 
-                totalLateDays: { type: 'integer', default: 0 },
-                totalEarlyLeaveDays: { type: 'integer', default: 0 },
+                lateDays: { type: 'integer', default: 0 },
                 totalLateMinutes: { type: 'integer', default: 0 },
                 totalEarlyLeaveMinutes: { type: 'integer', default: 0 },
                 
                 totalOvertimeHours: { type: 'number', default: 0 },
-                totalOvertimeDays: { type: 'integer', default: 0 },
                 totalOvertimeSalary: { type: 'number', default: 0 },
                 
-                totalPaidLeaveDays: { type: 'integer', default: 0 },
-                totalUnpaidLeaveDays: { type: 'integer', default: 0 },
+                // totalUnpaidLeaveDays: removed
                 
                 totalLatePenalty: { type: 'number', default: 0 },
                 totalEarlyLeavePenalty: { type: 'number', default: 0 },
                 totalPenalty: { type: 'number', default: 0 },
                 
                 baseSalary: { type: ['number', 'null'] },
-                totalAllowance: { type: 'number', default: 0 },
                 finalSalary: { type: ['number', 'null'] },
                 
-                approvedBy: { type: 'integer' },
-                approvedAt: { type: 'string' },
+                approvedBy: { type: ['integer', 'null'] },
+                approvedAt: { type: ['string', 'null'] },
                 notes: { type: ['string', 'null'] },
                 
                 created_at: { type: 'string' },
@@ -147,28 +144,57 @@ class MonthlySummaryModel extends Model {
             .where('userId', userId)
             .where('month', month)
             .select(
-                'totalWorkDays',
+                'totalScheduledDays',
+                'presentDays',
                 'totalWorkHours',
                 'totalOvertimeHours',
-                'totalOvertimeDays',
                 'totalLateDays',
-                'totalEarlyLeaveDays',
                 'totalLateMinutes',
                 'totalEarlyLeaveMinutes',
-                'totalPaidLeaveDays',
-                'totalUnpaidLeaveDays',
+                //'totalPaidLeaveDays',
+                //'totalUnpaidLeaveDays',
                 'totalPenalty',
                 'totalLatePenalty',
                 'totalEarlyLeavePenalty',
                 'totalOvertimeSalary',
                 'baseSalary',
-                'totalAllowance',
                 'finalSalary',
                 'approvedBy',
                 'approvedAt',
                 'notes'
             )
             .first();
+    }
+
+    // Sanitize properties before insert/update to avoid writing unexpected columns
+    override async $beforeInsert() {
+        const allowed = [
+            'userId','month','totalScheduledDays','presentDays','absentDays','approvedLeaveDays','unauthorizedAbsenceDays','businessTripDays',
+            'lateDays','earlyLeaveDays','totalLateMinutes','totalEarlyLeaveMinutes','totalWorkHours','averageWorkHours','totalWorkingUnits',
+            'totalOvertimeHours','totalOtWorkingUnits','totalLatePenalty','totalEarlyLeavePenalty','totalUnauthorizedAbsencePenalty','totalPenalty',
+            'totalOvertimeSalary','isApproved','approvedBy','approvedAt','notes','baseSalary','finalSalary','departmentId','created_at','updated_at'
+        ];
+        for (const k of Object.keys(this)) {
+            if (!allowed.includes(k) && k !== 'id') {
+                // @ts-ignore
+                delete this[k];
+            }
+        }
+    }
+
+    override async $beforeUpdate() {
+        const allowed = [
+            'userId','month','totalScheduledDays','presentDays','absentDays','approvedLeaveDays','unauthorizedAbsenceDays','businessTripDays',
+            'lateDays','earlyLeaveDays','totalLateMinutes','totalEarlyLeaveMinutes','totalWorkHours','averageWorkHours','totalWorkingUnits',
+            'totalOvertimeHours','totalOtWorkingUnits','totalLatePenalty','totalEarlyLeavePenalty','totalUnauthorizedAbsencePenalty','totalPenalty',
+            'totalOvertimeSalary','isApproved','approvedBy','approvedAt','notes','baseSalary','finalSalary','departmentId','created_at','updated_at'
+        ];
+        for (const k of Object.keys(this)) {
+            if (!allowed.includes(k) && k !== 'id') {
+                // @ts-ignore
+                delete this[k];
+            }
+        }
     }
 }
 
