@@ -128,6 +128,34 @@ class AttendanceService {
       throw new Error(error.response?.data?.message || 'Lỗi khi duyệt chấm công');
     }
   }
+
+  async approveMonthlyAttendance(params: any): Promise<{ userIds: number[] }> {
+    try {
+      const response = await apiService.post('/api/attendance/approve-monthly', params);
+      if (response.data.success) {
+        return response.data.data;
+      } else {
+        throw new Error(response.data.message || 'Không thể duyệt chấm công tháng');
+      }
+    } catch (error: any) {
+      console.error('Error approving monthly attendance:', error);
+      throw new Error(error.response?.data?.message || 'Lỗi khi duyệt chấm công tháng');
+    }
+  }
+
+  async getAllMonthlyAttendance(params: any): Promise<{ results: any[]; total: number }> {
+    try {
+      const response = await apiService.get('/api/attendance/approve-monthly', { params });  
+      if (response.data.success) {
+        return response.data.data;
+      } else {
+        throw new Error(response.data.message || 'Không thể lấy danh sách chấm công tháng');
+      }
+    } catch (error: any) {
+      console.error('Error fetching all monthly attendance:', error);
+      throw new Error(error.response?.data?.message || 'Lỗi khi lấy danh sách chấm công tháng');
+    }
+  }
 }
 
 export const attendanceService = new AttendanceService();

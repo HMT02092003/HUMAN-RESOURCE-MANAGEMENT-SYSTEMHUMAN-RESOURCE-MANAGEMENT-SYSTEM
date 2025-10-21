@@ -7,8 +7,8 @@ import dayjs from 'dayjs';
 import axios from 'axios';
 import os from 'os';
 import TimeAttendanceModel from '@/Models/TimeAttendanceModel';
-import AttendanceCalculationService from './AttendanceCalculationService';
-import { getWorkingDaysConfig as helpersGetWorkingDaysConfig, isWorkingDay as helpersIsWorkingDay } from './AttendanceHelpers';
+import AttendanceCalculationService from './attendance/AttendanceCalculationService';
+import { getWorkingDaysConfig as helpersGetWorkingDaysConfig, isWorkingDay as helpersIsWorkingDay } from './attendance/AttendanceHelpers';
 
 function getLocalIpAddress(): string {
   const interfaces = os.networkInterfaces();

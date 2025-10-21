@@ -3,7 +3,7 @@
  * Chỉ giữ các API đang được sử dụng bởi frontend
  */
 import { Router, Request, Response } from 'express';
-import { getUserMonthlyFull, recordAttendance } from '../src/controller/AttendanceController';
+import { getAllMonthlyAttendance, getUserMonthlyFull, recordAttendance, approveMonthlyAttendance } from '@/controller/AttendanceController';
 import {
   getSettings,
   updateSettings,
@@ -23,13 +23,19 @@ router.get('/user/:userId/monthly-full', async (req: Request, res: Response) => 
   await getUserMonthlyFull(req, res);
 });
 
-// Note: approve/record routes intentionally removed — this service exposes only the
-// monthly-full attendance read endpoint and settings management endpoints used by frontend.
-
 // API: Chấm công tự động (check-in/check-out)
 // POST /api/attendance/record (from gateway) -> /api/record (in service)
 router.post('/record', async (req: Request, res: Response) => {
   await recordAttendance(req, res);
+});
+
+
+router.get('/monthly-attendance', async (req: Request, res: Response) => {
+  await getAllMonthlyAttendance(req, res);
+});
+
+router.post('/approve-monthly', async (req: Request, res: Response) => {
+  await approveMonthlyAttendance(req, res);
 });
 
 // ===================================

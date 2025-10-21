@@ -5,8 +5,7 @@ import axios from 'axios';
 import HolidayModel from '@/Models/HolidayModel';
 import SettingsService from './SettingsService';
 import SalaryService from './SalaryService';
-import * as AttendanceQueryService from './AttendanceQueryService';
-import AttendanceCalculationService from './AttendanceCalculationService';
+import AttendanceCalculationService from './attendance/AttendanceCalculationService';
 
 /**
  * Builds the "monthly-full" payload expected by frontend.
@@ -16,7 +15,7 @@ export class MonthlyReportService {
   static async buildMonthlyFull(userId: number, month: string, token?: string) {
     // Reuse existing attendance summary if available by calling TimeAttendance + MonthlySummary
     // Call AttendanceQueryService directly (no circular import expected)
-    const summary = await AttendanceQueryService.getUserMonthlyAttendance(userId, month, token);
+    const summary = await AttendanceCalculationService.getUserMonthlyAttendance(userId, month, token);
     if (!summary) return null;
 
     // Fetch salary via SalaryService
@@ -479,7 +478,7 @@ export class MonthlyReportService {
       // 7️⃣ Tính các số liệu tổng hợp
       // Count approved leave and business trip days only when they fall on scheduled working days
       // ✨ Lấy enriched attendance data để có đầy đủ thông tin nghỉ phép/công tác
-      const enrichedData = await AttendanceQueryService.getUserMonthlyAttendance(userId, m, undefined);
+      const enrichedData = await AttendanceCalculationService.getUserMonthlyAttendance(userId, m, undefined);
       const enrichedRows = enrichedData?.attendanceData || [];
 
       // Kết hợp ngày nghỉ phép/công tác từ enriched data (đã có đầy đủ thông tin)
@@ -607,7 +606,7 @@ export class MonthlyReportService {
         // Build the enriched daily data for storage by reusing the same enrichment
         // logic used by getUserMonthlyAttendance
         console.log(`🔄 [attendance] Building dailyDetails snapshot...`);
-        const full = await AttendanceQueryService.getUserMonthlyAttendance(userId, m, undefined);
+        const full = await AttendanceCalculationService.getUserMonthlyAttendance(userId, m, undefined);
         if (full && full.attendanceData) {
           filtered['dailyDetails'] = JSON.stringify(full.attendanceData);
           console.log(`✅ [attendance] dailyDetails snapshot saved (${full.attendanceData.length} days)`);
@@ -631,6 +630,20 @@ export class MonthlyReportService {
       }
     } catch (error: any) {
       console.error('❌ [attendance] Error in calculateAndSaveMonthlyAttendance:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  static async getMonthlyAttendanceForAllUsers(page: number, pageSize: number, sortField: string, sortOrder: 'asc' | 'desc') {
+    try {
+      await MonthlySummaryModel.query()
+        .orderBy(sortField || 'id', sortOrder || 'asc')
+        .page(page - 1, pageSize)
+        .then(result => {
+          return { success: true, data: result };
+        });
+    } catch (error: any) {
+      console.error('❌ [attendance] Error in getMonthlyAttendanceForAllUsers:', error);
       return { success: false, error: error.message };
     }
   }

@@ -7,16 +7,7 @@ import { CheckCircleOutlined, HomeOutlined } from '@ant-design/icons';
 import UserService from '@/service/userService';
 import constantConfig from '@/config/constant';
 import dayjs from 'dayjs';
-import { keys } from 'lodash';
-import { render } from 'react-dom';
-
-const { statusOptions, Gender } = constantConfig;
-
-// Format date utility
-const formatDate = (date: string | Date | null): string => {
-  if (!date) return '';
-  return dayjs(date).format('DD/MM/YYYY');
-};
+import { attendanceService } from '@/service/attendanceService';
 
 // Sort state interface
 interface SorterState {
@@ -37,9 +28,6 @@ const AttendanceApprovalManagement = () => {
     total: 0
   });
 
-  const router = useRouter();
-  const screens = Grid.useBreakpoint();
-
   useEffect(() => {
     loadData();
   }, [pagination.current, pagination.pageSize, sorter.field, sorter.order]);
@@ -49,7 +37,7 @@ const AttendanceApprovalManagement = () => {
     try {
       const sortOrderApi = sorter.order === 'ascend' ? 'asc' : sorter.order === 'descend' ? 'desc' : undefined;
       
-      const response = await UserService.getAllUsers({
+      const response = await attendanceService.getAllMonthlyAttendance({
         page: pagination.current - 1,
         pageSize: pagination.pageSize,
         sortField: sorter.field, 
@@ -89,68 +77,17 @@ const AttendanceApprovalManagement = () => {
   };
 
   // Handle navigate to attendance detail
-  const handleApproveAttendance = (userId: number) => {
-    router.push(`/attendance?userId=${userId}`);
+  const handleApproveAttendance = async (userId: number) => {
+    try {
+      await attendanceService.approveMonthlyAttendance({ userId });
+      const router = useRouter();
+      router.push(`/attendance/approval/${userId}`);
+    } catch (error) {
+      message.error('Có lỗi xảy ra khi chuyển đến trang chi tiết chấm công!');
+    }
   };
 
   const columns = [
-    {
-      title: "STT",
-      dataIndex: "",
-      keys: "",
-      sorter: true,
-      defaultSortOrder: sorter.field === 'index' ? sorter.order : undefined,
-      render: (_: any, __: any, index: number) => (pagination.current - 1) * pagination.pageSize + index + 1,
-      width: 6,
-    },
-    {
-      title: "Họ và tên",
-      dataIndex: "fullName",
-      key: "fullName",
-      sorter: true,
-      defaultSortOrder: sorter.field === 'fullName' ? sorter.order : undefined,
-      render: (_: any, record: any) => `${record.lastName || ''} ${record.firstName || ''}`.trim()
-    },
-    {
-      title: "Email",
-      dataIndex: "email",
-      key: "email",
-      sorter: true,
-      defaultSortOrder: sorter.field === 'email' ? sorter.order : undefined,
-      render: (text: string) => text || '-'
-    },
-    {
-      title: "Số điện thoại",
-      dataIndex: "phone",
-      key: "phone",
-      sorter: true,
-      defaultSortOrder: sorter.field === 'phone' ? sorter.order : undefined,
-      render: (text: string) => text || '-'
-    },
-    {
-      title: "Vai trò",
-      dataIndex: "role.name",
-      key: "role.name",
-      sorter: true,
-      defaultSortOrder: sorter.field === 'role.name' ? sorter.order : undefined,
-      render: (_: any, record: any) => `${record.role?.name || ''}`.trim()
-    },
-    {
-      title: "Phòng ban",
-      dataIndex: ["department", "name"],
-      key: "department",
-      sorter: true,
-      defaultSortOrder: sorter.field === 'department' ? sorter.order : undefined,
-      render: (text: string) => text || '-'
-    },
-    {
-      title: "Chức vụ",
-      dataIndex: ["chevron", "name"],
-      key: "chevron",
-      sorter: true,
-      defaultSortOrder: sorter.field === 'chevron' ? sorter.order : undefined,
-      render: (text: string) => text || '-'
-    },
     {
       title: "Thao tác",
       key: "actions",

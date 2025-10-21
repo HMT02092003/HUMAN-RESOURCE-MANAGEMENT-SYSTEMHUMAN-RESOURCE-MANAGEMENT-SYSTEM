@@ -7,6 +7,7 @@ import { Request, Response } from 'express';
 import { AttendanceService } from '@/services/AttendanceService';
 import MonthlySummaryModel from '@/Models/MonthlySummaryModel';
 import SalaryService from '@/services/SalaryService';
+import { MonthlyReportService } from '@/services/MonthlyReportService';
 
 /**
  * API: Duyệt bảng công tháng
@@ -143,4 +144,53 @@ export const recordAttendance = async (req: Request, res: Response) => {
       message: error.message || 'Lỗi khi chấm công'
     });
   }
+};
+
+export const getAllMonthlyAttendance = async (req: Request, res: Response) => {
+  try {
+    const { page = 0, pageSize = 10, sortField = 'id', sortOrder = 'desc' } = req.query;  
+    const result = await MonthlyReportService.getMonthlyAttendanceForAllUsers(
+      Number(page),
+      Number(pageSize),
+      String(sortField),
+      String(sortOrder) as 'asc' | 'desc'
+    ); 
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error: any) {
+    console.error('Error in /attendance/monthly-attendance:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Lỗi khi lấy danh sách chấm công tháng'
+    });
+  }
+};
+
+export const approveMonthlyAttendance = async (req: Request, res: Response) => {
+  // try {
+  //   const { userId, month, approvedBy, extraData } = req.body;
+  //   if (!userId || !month || !approvedBy) {
+  //     return res.status(400).json({
+  //       success: false,
+  //       message: 'userId, month và approvedBy là bắt buộc'
+  //     });
+  //   }
+  //   const token = req.cookies?.['token'] ||
+  //     req.headers.authorization?.replace('Bearer ', '') ||
+  //     req.headers.authorization?.split(' ')[1];
+  //   const result = await AttendanceService.approveMonthlyAttendance(userId, month, approvedBy, token, extraData);
+  //   return res.status(200).json({
+  //     success: true,
+  //     message: 'Duyệt chấm công tháng thành công',
+  //     data: result
+  //   });
+  // } catch (error: any) {
+  //   console.error('❌ Error in approveMonthlyAttendance:', error);
+  //   return res.status(500).json({
+  //     success: false,
+  //     message: error.message || 'Lỗi khi duyệt chấm công tháng'
+  //   });
+  // } 
 };

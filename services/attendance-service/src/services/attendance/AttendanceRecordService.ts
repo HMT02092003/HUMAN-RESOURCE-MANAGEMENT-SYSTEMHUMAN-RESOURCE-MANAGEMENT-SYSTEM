@@ -1,8 +1,12 @@
+// (Xử lý ghi nhận chấm công: check-in, check-out, cập nhật bản ghi.)
+
 import dayjs from 'dayjs';
 import TimeAttendanceModel from '@/Models/TimeAttendanceModel';
-import { getApprovedOvertimeApplication } from './AttendanceQueryService';
 import AttendanceCalculationService from './AttendanceCalculationService';
-import { MonthlyReportService } from './MonthlyReportService';
+// Sử dụng phương thức static từ class
+// import { getApprovedOvertimeApplication } from './AttendanceCalculationService';
+// Thay thế bằng gọi trực tiếp từ class
+import { MonthlyReportService } from '../MonthlyReportService';
 
 export async function recordAttendance(userId: number, time: string): Promise<any> {
   try {
@@ -23,7 +27,8 @@ export async function recordAttendance(userId: number, time: string): Promise<an
       record = await TimeAttendanceModel.query().patchAndFetchById(existingRecord.id, { checkOutTime: time });
     }
 
-    const overtimeApp = await getApprovedOvertimeApplication(userId, date);
+    // Sửa lại gọi hàm từ class
+    const overtimeApp = await AttendanceCalculationService.getApprovedOvertimeApplication(userId, date);
     let otEndTime: dayjs.Dayjs | null = null;
     if (overtimeApp) {
       const appData = typeof overtimeApp.data === 'string' ? JSON.parse(overtimeApp.data) : overtimeApp.data;

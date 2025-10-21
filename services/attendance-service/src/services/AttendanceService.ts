@@ -2,9 +2,8 @@
 import axios from 'axios';
 import os from 'os';
 import { MonthlyReportService } from './MonthlyReportService';
-import * as AttendanceQueryService from './AttendanceQueryService';
-// Approval service intentionally not used in trimmed deployment.
-import * as AttendanceRecordService from './AttendanceRecordService';
+import * as AttendanceRecordService from './attendance/AttendanceRecordService';
+import AttendanceCalculationService from './attendance/AttendanceCalculationService';
 
 function getLocalIpAddress(): string {
   const interfaces = os.networkInterfaces();
@@ -45,7 +44,7 @@ export class AttendanceService {
   }
 
   static async getUserMonthlyAttendance(userId: number, month: string, token?: string) {
-    return AttendanceQueryService.getUserMonthlyAttendance(userId, month, token);
+    return AttendanceCalculationService.getUserMonthlyAttendance(userId, month, token);
   }
 
   static async approveMonthlyAttendance(userId: number, month: string) {
