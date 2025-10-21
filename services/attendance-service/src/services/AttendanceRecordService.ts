@@ -30,11 +30,18 @@ export async function recordAttendance(userId: number, time: string): Promise<an
       if (appData.endTime) { otEndTime = dayjs(`${date} ${appData.endTime}`); }
     }
 
+
     const calculation = await AttendanceCalculationService.calculateAttendance(record.checkInTime, record.checkOutTime, date, userId, undefined, otEndTime ? otEndTime.toISOString() : undefined);
+
+    // Calculate dailyWorkingUnit: min(1, workHours / standardHours)
+    let dailyWorkingUnit = 0;
+    if (calculation.standardHours > 0) {
+      dailyWorkingUnit = Math.min(1, calculation.workHours / calculation.standardHours);
+    }
 
     const updatedRecord = await TimeAttendanceModel.query().patchAndFetchById(record.id, {
       dailyTotalWorkHours: calculation.workHours,
-      dailyWorkingUnit: calculation.workHours,
+      dailyWorkingUnit,
       lateMinutes: calculation.lateMinutes,
       earlyDepartureMinutes: calculation.earlyDepartureMinutes,
       lateArrivalPenalty: calculation.latePenaltyAmount,

@@ -258,11 +258,11 @@ export class AttendanceCalculationService {
     token?: string,
     approvedOtEndTime?: string | null,
     isHoliday?: boolean // ✨ Thêm tham số để xác định ngày lễ
-  ): Promise<AttendanceCalculation> {
+  ): Promise<AttendanceCalculation & { standardHours: number }> {
     console.log('🧮 Starting attendance calculation for:', { date, checkInTime, checkOutTime, userId, approvedOtEndTime, isHoliday });
     
     const settings = await this.getSettings();
-    const workingHours = settings.workingHours as WorkingHours;
+  const workingHours = settings.workingHours as WorkingHours;
     const lunchBreak = settings.lunchBreak as LunchBreak;
     const penaltyRate = (settings.penaltyRate as PenaltyConfig).rate;
 
@@ -275,6 +275,17 @@ export class AttendanceCalculationService {
     console.log('⚙️ Using settings:', { workingHours, lunchBreak, penaltyRate });
     console.log('💰 User salary info:', salaryInfo);
     console.log('🎉 Is holiday:', isHoliday);
+
+    // Calculate standard working hours for the day
+    let standardHours = 8; // fallback default
+    if (workingHours && workingHours.start && workingHours.end) {
+      const start = dayjs(`${date} ${workingHours.start}`).tz('Asia/Ho_Chi_Minh');
+      const end = dayjs(`${date} ${workingHours.end}`).tz('Asia/Ho_Chi_Minh');
+      const diff = end.diff(start, 'minute');
+      if (diff > 0) {
+        standardHours = diff / 60;
+      }
+    }
 
     // Nếu không có check-in thì return default
     if (!checkInTime) {
@@ -289,7 +300,8 @@ export class AttendanceCalculationService {
         isEarlyLeave: false,
         penaltyRate,
         latePenaltyAmount: 0,
-        earlyLeavePenaltyAmount: 0
+        earlyLeavePenaltyAmount: 0,
+        standardHours
       };
     }
 
@@ -462,7 +474,11 @@ export class AttendanceCalculationService {
     }
 
     console.log('✅ Final calculation result:', result);
-    return result;
+    // Attach standardHours to result
+    return {
+      ...result,
+      standardHours
+    };
   }
 
   private static calculateLunchBreakTime(

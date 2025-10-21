@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import MonthlySummaryModel from '@/Models/MonthlySummaryModel';
 import TimeAttendanceModel from '@/Models/TimeAttendanceModel';
 import axios from 'axios';
-import connection from '@/lib/Databases/Connection';
+import HolidayModel from '@/Models/HolidayModel';
 import SettingsService from './SettingsService';
 import SalaryService from './SalaryService';
 import * as AttendanceQueryService from './AttendanceQueryService';
@@ -263,13 +263,12 @@ export class MonthlyReportService {
       const workingDaysConfig = await SettingsService.getWorkingDays();
       console.log(`⚙️ [attendance] Working days config:`, workingDaysConfig);
 
-      // Load holidays from database (table has start_date and end_date columns)
-      const holidayRows: any[] = await connection('holidays')
+      // Load holidays using Objection.js HolidayModel
+      const holidayRows: any[] = await HolidayModel.query()
         .where(function () {
           this.whereBetween('start_date', [startDate, endDate])
             .orWhereBetween('end_date', [startDate, endDate])
             .orWhere(function () {
-              // Trường hợp kỳ nghỉ lễ bao trùm cả tháng
               this.where('start_date', '<=', startDate).andWhere('end_date', '>=', endDate);
             });
         })
@@ -374,6 +373,7 @@ export class MonthlyReportService {
       console.log(`📝 [attendance] Leave days: ${leaveDaysSet.size}, Business trip days: ${businessTripDaysSet.size}`);
 
       // 6️⃣ Process attendance rows và tính toán
+
       let totalWorkHours = 0;
       let totalLateMinutes = 0;
       let totalEarlyLeaveMinutes = 0;
@@ -395,6 +395,11 @@ export class MonthlyReportService {
         const cfgIsWork = workingDaysConfig ? !!(workingDaysConfig as any)[dayKey] : true;
         return cfgIsWork && !holidaySet.has(dateKey);
       };
+
+      // Build a set of all days in month for fast lookup
+      const allDaysInMonth = Array.from({ length: daysInMonth }, (_, i) => dayjs(`${m}-${String(i + 1).padStart(2, '0')}`).format('YYYY-MM-DD'));
+      // Track which days already have attendance
+      const attendanceDaysSet = new Set(rows.map(r => dayjs(r.date).format('YYYY-MM-DD')));
 
       for (const r of rows) {
         const dateKey = dayjs(r.date).format('YYYY-MM-DD');
@@ -425,7 +430,7 @@ export class MonthlyReportService {
           totalWorkHours += workHours;
           totalLateMinutes += lateMin;
           totalEarlyLeaveMinutes += earlyMin;
-          totalWorkingUnits += workHours;
+          totalWorkingUnits += Math.min(1, workHours / (calc.standardHours || 8)); // Chỉ tính tối đa 1 công/ngày
           totalLatePenalty += latePenalty;
           totalEarlyLeavePenalty += earlyPenalty;
           totalOvertimeSalary += otSal;
@@ -433,7 +438,6 @@ export class MonthlyReportService {
 
           // ✨ Tổng số ngày đi làm = số ngày có chấm công
           const hasAttendance = !!(r.checkInTime || r.checkOutTime);
-          // Count present/late/early only if the day is a scheduled working day and it's not in the future
           if (hasAttendance && rowIsScheduledWorkDay && !isFuture) presentDays++;
           if (lateMin > 0 && rowIsScheduledWorkDay && !isFuture) lateDays++;
           if (earlyMin > 0 && rowIsScheduledWorkDay && !isFuture) earlyLeaveDays++;
@@ -444,7 +448,7 @@ export class MonthlyReportService {
           totalWorkHours += parseFloat(r.dailyTotalWorkHours?.toString() || '0');
           totalLateMinutes += parseFloat(r.lateMinutes?.toString() || '0');
           totalEarlyLeaveMinutes += parseFloat(r.earlyDepartureMinutes?.toString() || '0');
-          totalWorkingUnits += parseFloat(r.dailyWorkingUnit?.toString() || '0');
+          totalWorkingUnits += Math.min(1, parseFloat(r.dailyWorkingUnit?.toString() || '0')); // Chỉ tính tối đa 1 công/ngày
           totalLatePenalty += parseFloat(r.lateArrivalPenalty?.toString() || '0');
           totalEarlyLeavePenalty += parseFloat(r.earlyLeavePenalty?.toString() || '0');
           totalOvertimeSalary += parseFloat(r.otSalary?.toString() || '0');
@@ -457,18 +461,72 @@ export class MonthlyReportService {
         }
       }
 
+      // ✨ Bổ sung công cho các ngày nghỉ phép, công tác, ngày lễ có đơn công tác (không có chấm công)
+      for (const dateKey of allDaysInMonth) {
+        // Chỉ cộng 1 công cho các ngày nghỉ phép, công tác, hoặc ngày lễ có đơn công tác nếu KHÔNG có chấm công
+        if (!attendanceDaysSet.has(dateKey) && isScheduledWorkingDay(dateKey) && dayjs(dateKey).isSameOrBefore(todayStr, 'day')) {
+          if (leaveDaysSet.has(dateKey)) {
+            totalWorkingUnits += 1;
+          } else if (businessTripDaysSet.has(dateKey)) {
+            totalWorkingUnits += 1;
+          } else if (holidaySet.has(dateKey) && businessTripDaysSet.has(dateKey)) {
+            totalWorkingUnits += 1;
+          }
+        }
+      }
+
+
       // 7️⃣ Tính các số liệu tổng hợp
       // Count approved leave and business trip days only when they fall on scheduled working days
-  const approvedLeaveDays = [...leaveDaysSet].filter(d => d.startsWith(m) && isScheduledWorkingDay(d) && dayjs(d).isSameOrBefore(todayStr, 'day')).length;
-  const businessTripDays = [...businessTripDaysSet].filter(d => d.startsWith(m) && isScheduledWorkingDay(d) && dayjs(d).isSameOrBefore(todayStr, 'day')).length;
+      // ✨ Lấy enriched attendance data để có đầy đủ thông tin nghỉ phép/công tác
+      const enrichedData = await AttendanceQueryService.getUserMonthlyAttendance(userId, m, undefined);
+      const enrichedRows = enrichedData?.attendanceData || [];
+
+      // Kết hợp ngày nghỉ phép/công tác từ enriched data (đã có đầy đủ thông tin)
+      const approvedLeaveDaysSetCombined = new Set(
+        enrichedRows
+          .filter((r: any) => r.hasApprovedLeave && isScheduledWorkingDay(dayjs(r.date).format('YYYY-MM-DD')) && dayjs(r.date).isSameOrBefore(todayStr, 'day'))
+          .map((r: any) => dayjs(r.date).format('YYYY-MM-DD'))
+      );
+      const businessTripDaysSetCombined = new Set(
+        enrichedRows
+          .filter((r: any) => r.hasBusinessTrip && isScheduledWorkingDay(dayjs(r.date).format('YYYY-MM-DD')) && dayjs(r.date).isSameOrBefore(todayStr, 'day'))
+          .map((r: any) => dayjs(r.date).format('YYYY-MM-DD'))
+      );
+      const approvedLeaveDaysArr = Array.from(approvedLeaveDaysSetCombined);
+      const businessTripDaysArr = Array.from(businessTripDaysSetCombined);
+      const approvedLeaveDays = approvedLeaveDaysArr.length;
+      const businessTripDays = businessTripDaysArr.length;
 
       // ✨ LOGIC ĐÚNG theo public/2.0.3:
       // - absentDays = Vắng mặt (có lý do) = nghỉ phép + công tác
       // - unauthorizedAbsenceDays = Nghỉ không phép = Tổng ngày làm việc - (Có chấm công + Nghỉ phép + Công tác)
       const absentDays = approvedLeaveDays + businessTripDays;
-      // Compute unauthorized absence as scheduled working days minus (present + approved leave + business trip)
-  // Compute unauthorized absence using scheduled working days up to today
-  const unauthorizedAbsenceDaysFinal = Math.max(0, totalScheduledDaysUpToToday - (presentDays + approvedLeaveDays + businessTripDays));
+
+      // Tìm danh sách các ngày bị tính là nghỉ không phép
+      // Lấy ngày có chấm công hợp lệ
+      const presentDaysSet = new Set(rows.filter(r => {
+        const dateKey = dayjs(r.date).format('YYYY-MM-DD');
+        return isScheduledWorkingDay(dateKey) && !!(r.checkInTime || r.checkOutTime) && dayjs(dateKey).isSameOrBefore(todayStr, 'day');
+      }).map(r => dayjs(r.date).format('YYYY-MM-DD')));
+
+      const unauthorizedAbsenceDates: string[] = [];
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateKey = dayjs(`${m}-${String(d).padStart(2, '0')}`).format('YYYY-MM-DD');
+        if (
+          isScheduledWorkingDay(dateKey)
+          && dayjs(dateKey).isSameOrBefore(todayStr, 'day')
+          && !presentDaysSet.has(dateKey)
+          && !approvedLeaveDaysSetCombined.has(dateKey)
+          && !businessTripDaysSetCombined.has(dateKey)
+        ) {
+          unauthorizedAbsenceDates.push(dateKey);
+        }
+      }
+      const unauthorizedAbsenceDaysFinal = unauthorizedAbsenceDates.length;
+
+      // Debug log các ngày bị tính là nghỉ không phép
+      console.log(`\n❗ [attendance] Unauthorized absence days (${unauthorizedAbsenceDaysFinal}):`, unauthorizedAbsenceDates);
 
       const averageWorkHours = presentDays > 0 ? Math.round((totalWorkHours / presentDays) * 100) / 100 : 0;
 

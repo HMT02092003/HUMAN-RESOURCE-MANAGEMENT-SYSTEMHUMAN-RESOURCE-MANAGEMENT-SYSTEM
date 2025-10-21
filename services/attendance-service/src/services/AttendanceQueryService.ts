@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import TimeAttendanceModel from '@/Models/TimeAttendanceModel';
 import MonthlySummaryModel from '@/Models/MonthlySummaryModel';
 import axios from 'axios';
-import connection from '@/lib/Databases/Connection';
+import HolidayModel from '@/Models/HolidayModel';
 import { getWorkingDaysConfig as helpersGetWorkingDaysConfig, isWorkingDay as helpersIsWorkingDay, checkDateHasLeave as helpersCheckDateHasLeave, checkDateHasBusinessTrip as helpersCheckDateHasBusinessTrip } from './AttendanceHelpers';
 
 interface ApprovedLeaveApplication {
@@ -101,8 +101,8 @@ export async function getUserMonthlyAttendance(userId: number, month: string, to
 
   const workingDaysConfig = await helpersGetWorkingDaysConfig();
 
-    // ✨ Load holidays from database (table has start_date and end_date columns)
-    const holidayRows: any[] = await connection('holidays')
+    // ✨ Load holidays using Objection.js HolidayModel
+    const holidayRows: any[] = await HolidayModel.query()
       .where(function () {
         this.whereBetween('start_date', [startDate, endDate])
           .orWhereBetween('end_date', [startDate, endDate])
