@@ -38,6 +38,16 @@ router.post('/approve-monthly', async (req: Request, res: Response) => {
   await approveMonthlyAttendance(req, res);
 });
 
+// GET/POST /api/attendance/monthly-summaries-by-scope - return monthly_attendances for users in scope
+const handleMonthlySummariesByScope = async (req: any, res: any) => {
+  const controller = await import('@/controller/AttendanceController');
+  return controller.getMonthlySummariesByScopeController(req, res as any);
+};
+
+router.route('/monthly-summaries-by-scope')
+  .get((req: any, res: any, next: any) => { handleMonthlySummariesByScope(req, res).catch(next); })
+  .post((req: any, res: any, next: any) => { handleMonthlySummariesByScope(req, res).catch(next); });
+
 // ===================================
 // SETTINGS ROUTES
 // ===================================

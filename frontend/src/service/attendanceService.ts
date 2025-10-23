@@ -129,9 +129,9 @@ class AttendanceService {
     }
   }
 
-  async approveMonthlyAttendance(params: any): Promise<{ userIds: number[] }> {
+  async approveMonthlyAttendance(ids: number[]): Promise<{ updated: number }> {
     try {
-      const response = await apiService.post('/api/attendance/approve-monthly', params);
+      const response = await apiService.post('/api/attendance/approve-monthly', { ids });
       if (response.data.success) {
         return response.data.data;
       } else {
@@ -154,6 +154,18 @@ class AttendanceService {
     } catch (error: any) {
       console.error('Error fetching all monthly attendance:', error);
       throw new Error(error.response?.data?.message || 'Lỗi khi lấy danh sách chấm công tháng');
+    }
+  }
+
+  // New: fetch monthly summaries filtered by scope (backend resolves userIds via auth-service)
+  async getMonthlySummariesByScope(params: { permissionKey?: string; page?: number; pageSize?: number; month?: string }) {
+    try {
+      const response = await apiService.get('/api/attendance/monthly-summaries-by-scope', { params });
+      if (response.data.success) return response.data.data as { results: any[]; total: number; page: number; pageSize: number };
+      throw new Error(response.data.message || 'Không thể lấy dữ liệu');
+    } catch (error: any) {
+      console.error('Error fetching monthly summaries by scope:', error);
+      throw new Error(error.response?.data?.message || error.message || 'Lỗi khi lấy dữ liệu');
     }
   }
 }

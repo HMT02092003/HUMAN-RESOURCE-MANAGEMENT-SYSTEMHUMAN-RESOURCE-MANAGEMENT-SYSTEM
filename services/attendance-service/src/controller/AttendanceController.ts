@@ -8,6 +8,7 @@ import { AttendanceService } from '@/services/AttendanceService';
 import MonthlySummaryModel from '@/Models/MonthlySummaryModel';
 import SalaryService from '@/services/SalaryService';
 import { MonthlyReportService } from '@/services/MonthlyReportService';
+import { getDecodedToken } from '@/utils/decode-token';
 
 /**
  * API: Duyệt bảng công tháng
@@ -168,29 +169,51 @@ export const getAllMonthlyAttendance = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Get monthly summaries according to permission scope returned by auth-service
+ * GET /api/attendance/monthly-summaries-by-scope?permissionKey=users&page=0&pageSize=10&month=2025-09
+ */
+export const getMonthlySummariesByScopeController = async (req: Request, res: Response) => {
+  try {
+  const permissionKey = String(req.query['permissionKey'] || req.body?.permissionKey || 'users');
+  const page = Number(req.query['page'] ?? req.body?.page ?? 0);
+  const pageSize = Number(req.query['pageSize'] ?? req.body?.pageSize ?? 10);
+  const monthRaw = req.query['month'] ?? req.body?.month ?? undefined;
+  const month = monthRaw ? String(monthRaw) : undefined;
+
+  const result = await AttendanceService.getMonthlySummariesByScope(permissionKey, req, { page, pageSize, month });
+
+    return res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    console.error('Error in getMonthlySummariesByScopeController:', error);
+    if (error?.status === 401) {
+      return res.status(401).json({ success: false, message: error.message || 'Unauthorized' });
+    }
+    return res.status(500).json({ success: false, message: error.message || 'Internal Server Error' });
+  }
+};
+
 export const approveMonthlyAttendance = async (req: Request, res: Response) => {
-  // try {
-  //   const { userId, month, approvedBy, extraData } = req.body;
-  //   if (!userId || !month || !approvedBy) {
-  //     return res.status(400).json({
-  //       success: false,
-  //       message: 'userId, month và approvedBy là bắt buộc'
-  //     });
-  //   }
-  //   const token = req.cookies?.['token'] ||
-  //     req.headers.authorization?.replace('Bearer ', '') ||
-  //     req.headers.authorization?.split(' ')[1];
-  //   const result = await AttendanceService.approveMonthlyAttendance(userId, month, approvedBy, token, extraData);
-  //   return res.status(200).json({
-  //     success: true,
-  //     message: 'Duyệt chấm công tháng thành công',
-  //     data: result
-  //   });
-  // } catch (error: any) {
-  //   console.error('❌ Error in approveMonthlyAttendance:', error);
-  //   return res.status(500).json({
-  //     success: false,
-  //     message: error.message || 'Lỗi khi duyệt chấm công tháng'
-  //   });
-  // } 
+  try {
+    const { ids } = req.body;
+
+    const token = req.cookies?.['token'] || req.headers.authorization?.replace('Bearer ', '') ||  req.headers.authorization?.split(' ')[1];
+    let approverId: number | undefined;
+    try {
+      const decoded = getDecodedToken(token || '');
+      approverId = decoded ? Number((decoded as any).sub) : undefined;
+    } catch (e) {
+      approverId = undefined;
+    }
+
+    if(!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'Không có ID nào được cung cấp' });
+    }
+
+    const result = await AttendanceService.bulkApproveByRecordIds(ids, approverId);
+    return res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
+    console.error('❌ Error in approveMonthlyAttendance:', error);
+    return res.status(500).json({ success: false, message: error.message || 'Lỗi khi duyệt chấm công tháng' });
+  }
 };

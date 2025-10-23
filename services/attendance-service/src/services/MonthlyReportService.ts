@@ -636,12 +636,11 @@ export class MonthlyReportService {
 
   static async getMonthlyAttendanceForAllUsers(page: number, pageSize: number, sortField: string, sortOrder: 'asc' | 'desc') {
     try {
-      await MonthlySummaryModel.query()
+      const result = await MonthlySummaryModel.query()
         .orderBy(sortField || 'id', sortOrder || 'asc')
-        .page(page - 1, pageSize)
-        .then(result => {
-          return { success: true, data: result };
-        });
+        .page(Math.max(0, page - 1), pageSize);
+
+      return { success: true, data: result };
     } catch (error: any) {
       console.error('❌ [attendance] Error in getMonthlyAttendanceForAllUsers:', error);
       return { success: false, error: error.message };

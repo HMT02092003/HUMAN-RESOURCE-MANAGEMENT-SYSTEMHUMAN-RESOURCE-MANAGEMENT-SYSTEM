@@ -1,5 +1,8 @@
 import { Model } from 'objection';
 import connection from '@/lib/Databases/Connection';
+// Note: avoid importing UserModel/DepartmentModel from other services here to
+// prevent tight coupling. Fetch related user/department data via the auth
+// service endpoints when needed instead of using Objection relationMappings.
 
 Model.knex(connection as any);
 
@@ -35,6 +38,7 @@ class MonthlySummaryModel extends Model {
     totalLatePenalty!: number;
     totalEarlyLeavePenalty!: number;
     totalPenalty!: number;
+    isApproved!: boolean;
     
     baseSalary!: number | null;
     finalSalary!: number | null;
@@ -74,6 +78,7 @@ class MonthlySummaryModel extends Model {
                 totalLatePenalty: { type: 'number', default: 0 },
                 totalEarlyLeavePenalty: { type: 'number', default: 0 },
                 totalPenalty: { type: 'number', default: 0 },
+                isApproved: { type: 'boolean', default: false },
                 
                 baseSalary: { type: ['number', 'null'] },
                 finalSalary: { type: ['number', 'null'] },
@@ -88,32 +93,10 @@ class MonthlySummaryModel extends Model {
         };
     }
 
-    static override relationMappings = {
-        user: {
-            relation: Model.BelongsToOneRelation,
-            modelClass: 'UserModel',
-            join: {
-                from: 'monthly_attendances.userId',
-                to: 'users.id'
-            }
-        },
-        approver: {
-            relation: Model.BelongsToOneRelation,
-            modelClass: 'UserModel',
-            join: {
-                from: 'monthly_attendances.approvedBy',
-                to: 'users.id'
-            }
-        },
-        department: {
-            relation: Model.BelongsToOneRelation,
-            modelClass: 'DepartmentModel',
-            join: {
-                from: 'monthly_attendances.departmentId',
-                to: 'departments.id'
-            }
-        }
-    };
+    // relationMappings removed intentionally. If you need related user or
+    // department data, call the Auth/Employee service endpoints or perform
+    // explicit joins in service-layer queries. This avoids cross-service
+    // model imports and TS resolution issues.
 
     // ========== HELPER METHODS ==========
     static async getByUserAndMonth(userId: number, month: string) {
@@ -124,10 +107,12 @@ class MonthlySummaryModel extends Model {
     }
 
     static async getByDepartmentAndMonth(departmentId: number, month: string) {
+        // Return monthly summaries for a department and month. Do not eager-load
+        // user relations here — perform any necessary user enrichment in the
+        // service layer by calling the auth/employee service.
         return this.query()
             .where('departmentId', departmentId)
             .where('month', month)
-            .withGraphFetched('user')
             .orderBy('userId');
     }
 

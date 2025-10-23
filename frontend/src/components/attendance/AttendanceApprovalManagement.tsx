@@ -3,9 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Button, message, Tag, Grid, ConfigProvider, Tooltip } from 'antd';
 import { useRouter } from 'next/navigation';
-import { CheckCircleOutlined, HomeOutlined } from '@ant-design/icons';
-import UserService from '@/service/userService';
-import constantConfig from '@/config/constant';
+import { CheckCircleOutlined, CheckOutlined, HomeOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { attendanceService } from '@/service/attendanceService';
 
@@ -18,6 +16,7 @@ interface SorterState {
 const AttendanceApprovalManagement = () => {
   const [userData, setUserData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [sorter, setSorter] = useState<SorterState>({
     field: 'id',
     order: 'descend'
@@ -32,25 +31,19 @@ const AttendanceApprovalManagement = () => {
     loadData();
   }, [pagination.current, pagination.pageSize, sorter.field, sorter.order]);
 
+  const router = useRouter();
+
   const loadData = async () => {
     setLoading(true);
     try {
-      const sortOrderApi = sorter.order === 'ascend' ? 'asc' : sorter.order === 'descend' ? 'desc' : undefined;
-      
-      const response = await attendanceService.getAllMonthlyAttendance({
+      const response = await attendanceService.getMonthlySummariesByScope({
+        permissionKey: 'users',
         page: pagination.current - 1,
         pageSize: pagination.pageSize,
-        sortField: sorter.field, 
-        sortOrder: sortOrderApi
-      } as any);
+      });
 
-      console.log('API Response:', response); // Debug log
-
-      setUserData(response.results);
-      setPagination(prev => ({
-        ...prev,
-        total: response.total
-      }));
+      setUserData(response.results || []);
+      setPagination(prev => ({ ...prev, total: response.total || 0 }));
     } catch (error: any) {
       const data = error?.response?.data;
       message.destroy();
@@ -63,7 +56,7 @@ const AttendanceApprovalManagement = () => {
 
   const handleTableChange = (newPagination: any, filters: any, newSorter: any) => {
     setPagination(newPagination);
-    
+
     // Cập nhật trạng thái sắp xếp
     if (newSorter.field) {
       setSorter({
@@ -77,17 +70,127 @@ const AttendanceApprovalManagement = () => {
   };
 
   // Handle navigate to attendance detail
-  const handleApproveAttendance = async (userId: number) => {
+  const handleApproveAttendance = async (monthlyAttendanceId: number) => {
     try {
-      await attendanceService.approveMonthlyAttendance({ userId });
-      const router = useRouter();
-      router.push(`/attendance/approval/${userId}`);
-    } catch (error) {
-      message.error('Có lỗi xảy ra khi chuyển đến trang chi tiết chấm công!');
+      await attendanceService.approveMonthlyAttendance([monthlyAttendanceId]);
+      message.success('Đã duyệt bảng chấm công');
+      loadData();
+    } catch (error: any) {
+      message.error(error.message || 'Có lỗi xảy ra khi duyệt chấm công!');
     }
   };
 
   const columns = [
+    {
+      title: 'Người dùng',
+      key: 'user',
+      render: (_: any, record: any) => {
+        const u = record.user || {};
+        return `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.username || '—';
+      }
+    },
+    {
+      title: 'Username',
+      dataIndex: ['user', 'username'],
+      key: 'username'
+    },
+    {
+      title: 'Phòng ban',
+      dataIndex: ['user', 'departmentName'],
+      key: 'department'
+    },
+    {
+      title: 'Tháng',
+      dataIndex: 'month', key: 'month',
+      render: (val: string) => {
+        if (!val) return '-';
+        const parts = val.split('-');
+        if (parts.length === 2) return `${parts[1]}/${parts[0]}`;
+        return dayjs(val).format('MM/YYYY');
+      }
+    },
+    {
+      title: 'Trạng thái duyệt',
+      dataIndex: 'isApproved',
+      key: 'isApproved',
+      render: (v: any) => (
+        v ? <Tag color="green">Đã duyệt</Tag> : <Tag color="red">Chưa duyệt</Tag>
+      )
+    },
+    {
+      title: 'Tổng ngày dự kiến',
+      dataIndex: 'totalScheduledDays',
+      key: 'totalScheduledDays'
+    },
+    {
+      title: 'Ngày công',
+      dataIndex: 'presentDays',
+      key: 'presentDays'
+    },
+    {
+      title: 'Ngày vắng',
+      dataIndex: 'absentDays', key: 'absentDays'
+    },
+    {
+      title: 'Ngày nghỉ phép',
+      dataIndex: 'approvedLeaveDays',
+      key: 'approvedLeaveDays'
+    },
+    {
+      title: 'Ngày nghỉ không lý do',
+      dataIndex: 'unauthorizedAbsenceDays',
+      key: 'unauthorizedAbsenceDays'
+    },
+    {
+      title: 'Công tác',
+      dataIndex: 'businessTripDays',
+      key: 'businessTripDays'
+    },
+    {
+      title: 'Tổng giờ làm',
+      dataIndex: 'totalWorkHours',
+      key: 'totalWorkHours'
+    },
+    {
+      title: 'Trung bình giờ',
+      dataIndex: 'averageWorkHours',
+      key: 'averageWorkHours'
+    },
+    {
+      title: 'Tổng công',
+      dataIndex: 'totalWorkingUnits',
+      key: 'totalWorkingUnits'
+    },
+    {
+      title: 'OT giờ',
+      dataIndex: 'totalOvertimeHours',
+      key: 'totalOvertimeHours'
+    },
+    {
+      title: 'OT lương',
+      dataIndex: 'totalOvertimeSalary',
+      key: 'totalOvertimeSalary'
+    },
+    {
+      title: 'Phạt đi muộn',
+      dataIndex: 'totalLatePenalty',
+      key: 'totalLatePenalty'
+    },
+    {
+      title: 'Phạt về sớm',
+      dataIndex: 'totalEarlyLeavePenalty',
+      key: 'totalEarlyLeavePenalty'
+    },
+    {
+      title: 'Phạt vắng',
+      dataIndex: 'totalUnauthorizedAbsencePenalty',
+      key: 'totalUnauthorizedAbsencePenalty'
+    },
+    {
+      title: 'Tổng phạt',
+      dataIndex: 'totalPenalty',
+      key: 'totalPenalty'
+    },
     {
       title: "Thao tác",
       key: "actions",
@@ -109,7 +212,7 @@ const AttendanceApprovalManagement = () => {
           <Tooltip title="Duyệt bảng chấm công">
             <Button
               type="text"
-              icon={<CheckCircleOutlined style={{ fontSize: '20px' }} />}
+              icon={<CheckOutlined style={{ color: 'green' }} />}
               onClick={() => handleApproveAttendance(record.id)}
             />
           </Tooltip>
@@ -118,12 +221,39 @@ const AttendanceApprovalManagement = () => {
     },
   ];
 
+  const rowSelection = {
+    selectedRowKeys,
+    onChange: (newKeys: React.Key[]) => setSelectedRowKeys(newKeys),
+  };
+
+  const handleApproveSelected = async () => {
+    if (!selectedRowKeys || selectedRowKeys.length === 0) {
+      message.info('Vui lòng chọn ít nhất một bản ghi');
+      return;
+    }
+    try {
+      const ids = selectedRowKeys.map(k => Number(k));
+      await attendanceService.approveMonthlyAttendance(ids);
+      message.success('Đã duyệt bảng chấm công cho các bản ghi đã chọn');
+      setSelectedRowKeys([]);
+      loadData();
+    } catch (err: any) {
+      message.error(err.message || 'Lỗi khi duyệt các bản ghi đã chọn');
+    }
+  };
+
   return (
     <div style={{ padding: '24px' }}>
+      <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
+        {selectedRowKeys.length > 0 ? (
+          <Button type="primary" onClick={() => handleApproveSelected()} disabled={selectedRowKeys.length === 0}><CheckOutlined />Duyệt bảng chấm công</Button>
+        ) : null}
+      </div>
       <Table
         rowKey="id"
         columns={columns}
         dataSource={userData}
+        rowSelection={rowSelection}
         loading={loading}
         onChange={handleTableChange}
         pagination={{
