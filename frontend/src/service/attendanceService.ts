@@ -49,24 +49,53 @@ export interface MonthlyStats {
   averageWorkHours?: number;
 }
 
+export interface HolidayData {
+  isHoliday: boolean;
+  holidayName: string | null;
+  isPublicHoliday: boolean;
+}
+
+export interface LeaveData {
+  hasApprovedLeave: boolean;
+  leaveType: string;
+  leaveInfo: string;
+  leaveTypeName?: string;
+  // Full application object(s) attached by backend
+  leave?: any;
+  leaveApplications?: any[];
+  // Convenience: applicationCategory if backend provides it at top-level
+  applicationCategory?: string;
+}
+
+export interface BusinessTripData {
+  hasBusinessTrip: boolean;
+  businessTripInfo: string;
+  businessTripDestination: string;
+  reason?: string;
+  // Full application object(s) attached by backend
+  businessTrip?: any;
+  businessTripApplications?: any[];
+  applicationCategory?: string;
+}
+
 export interface DailyAttendanceDetail {
   date: string;
   dayOfWeek: number;
   dayName: string;
   isWorkingDay: boolean;
   hasAttendance: boolean;
+  // ✨ New structured data objects
   attendanceData?: AttendanceData;
-  hasApprovedLeave: boolean;
-  leaveType?: string;
+  holidayData?: HolidayData;
+  leaveData?: LeaveData;
+  businessTripData?: BusinessTripData;
+  // Core status fields
   status: 'working' | 'absent' | 'approved_leave' | 'business_trip' | 'weekend' | 'holiday';
   statusText: string;
   unauthorizedAbsencePenalty: number;
   isOnTime: boolean;
   lateMinutes?: number;
   earlyLeaveMinutes?: number;
-  businessTripInfo?: string;
-  businessTripDestination?: string;
-  leaveInfo?: string; // Thông tin lý do nghỉ phép
 }
 
 export interface MonthlyAttendanceDetailResponse {
@@ -158,8 +187,10 @@ class AttendanceService {
   }
 
   // New: fetch monthly summaries filtered by scope (backend resolves userIds via auth-service)
-  async getMonthlySummariesByScope(params: { permissionKey?: string; page?: number; pageSize?: number; month?: string }) {
+  // Accept optional sortField and sortOrder so the UI can request specific ordering (e.g., month desc)
+  async getMonthlySummariesByScope(params: { permissionKey?: string; page?: number; pageSize?: number; month?: string; sortField?: string; sortOrder?: 'ascend' | 'descend'; search?: string; filters?: Record<string, string> }) {
     try {
+      // forward params directly; backend can ignore unknown params if not supported
       const response = await apiService.get('/api/attendance/monthly-summaries-by-scope', { params });
       if (response.data.success) return response.data.data as { results: any[]; total: number; page: number; pageSize: number };
       throw new Error(response.data.message || 'Không thể lấy dữ liệu');

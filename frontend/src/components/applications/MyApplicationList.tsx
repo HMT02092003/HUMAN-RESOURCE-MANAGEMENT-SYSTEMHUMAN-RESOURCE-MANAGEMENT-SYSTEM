@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import applicationService from '@/service/applicationService';
 import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS, FORGOT_CHECK_TYPE_LABELS } from '@/config/constant';
 import ApplicationDetailModal from './ApplicationDetailModal';
+import commonGetColumnSearchProps from '@/components/common/getColumnSearchProps';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -279,7 +280,12 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
             title: 'Người duyệt',
             dataIndex: ['approvedByInfo', 'fullName'],
             key: 'approvedByInfo.fullName',
-            ...getColumnSearchProps('approvedByInfo.fullName', 'Tìm người duyệt...'),
+            sorter: (a: any, b: any) => {
+                const va = String(a.approvedByInfo?.fullName || '').toLowerCase();
+                const vb = String(b.approvedByInfo?.fullName || '').toLowerCase();
+                return va < vb ? -1 : va > vb ? 1 : 0;
+            },
+            ...commonGetColumnSearchProps('approvedByInfo.fullName', 'Tìm người duyệt...'),
         },
         {
             title: 'Ngày duyệt',

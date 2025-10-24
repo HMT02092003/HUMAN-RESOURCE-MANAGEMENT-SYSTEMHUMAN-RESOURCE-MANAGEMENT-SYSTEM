@@ -243,6 +243,7 @@ export class AttendanceCalculationService {
           isWorkingDay: isWork,
           isFuture,
           hasApprovedOT,
+          // Keep legacy fields for backward compatibility
           hasApprovedLeave: leaveCheck.hasLeave,
           leaveType: leaveCheck.leaveType,
           leaveInfo: leaveCheck.leaveInfo,
@@ -252,7 +253,6 @@ export class AttendanceCalculationService {
           businessTripDestination: businessTripCheck.destination,
           tripInfo: businessTripCheck.tripInfo,
           destination: businessTripCheck.destination,
-          // ✨ Thông tin ngày lễ
           isHoliday,
           holidayName: holidayInfo?.name || null,
           isPublicHoliday: holidayInfo?.isPublic || false
@@ -275,7 +275,6 @@ export class AttendanceCalculationService {
             businessTripDestination: businessTripCheck.destination,
             tripInfo: businessTripCheck.tripInfo,
             destination: businessTripCheck.destination,
-            // ✨ Giữ lại thông tin ngày lễ
             isHoliday,
             holidayName: holidayInfo?.name || null,
             isPublicHoliday: holidayInfo?.isPublic || false

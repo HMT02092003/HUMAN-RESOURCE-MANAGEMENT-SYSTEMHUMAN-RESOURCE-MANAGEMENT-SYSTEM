@@ -34,120 +34,313 @@ export class MonthlyReportService {
     // Calculate penalty per day as daily salary (rounded to integer, no decimals)
     const unauthorizedAbsencePenaltyPerDay = Math.round(dailySalaryForSummary);
 
-    // Build processed daily details
+    // Build processed daily details using a small builder and a single loop for aggregates
     const attendanceRows = summary.attendanceData || [];
-    let presentDays = 0, lateDays = 0, earlyLeaveDays = 0, approvedLeaveDays = 0, businessTripDays = 0, unauthorizedAbsenceDays = 0;
-    let totalLateMinutes = 0, totalEarlyLeaveMinutes = 0, totalLatePenalty = 0, totalEarlyLeavePenalty = 0, onTimeDays = 0, weekendDays = 0;
 
-    const processedDailyDetails = attendanceRows.map((record: any) => {
-      const checkInTime = record.checkInTime ? new Date(record.checkInTime) : null;
-      const lateMinutes = parseFloat(record.lateMinutes || '0');
-      const earlyDepartureMinutes = parseFloat(record.earlyDepartureMinutes || '0');
-      const lateArrivalPenalty = parseFloat(record.lateArrivalPenalty || '0');
-      const earlyLeavePenalty = parseFloat(record.earlyLeavePenalty || '0');
-      const dailyTotalWorkHours = parseFloat(record.dailyTotalWorkHours || '0');
-      const otMinutes = parseFloat(record.otMinutes || '0');
-      const otSalary = parseFloat(record.otSalary || '0');
+    // Fetch full holiday rows for the month and build a date->holiday map so we can
+    // include full holiday objects in the response (preferred over small holiday fields)
+    // Note: we already load holidays in calculateAndSaveMonthlyAttendance, but here
+    // we fetch the HolidayModel entries to provide richer info to the frontend.
+    let holidayRowsForMonth: any[] = [];
+    try {
+      const [y, mStr] = (month || '').split('-');
+      const monthStart = dayjs(`${y}-${mStr}-01`).startOf('month').format('YYYY-MM-DD');
+      const monthEnd = dayjs(`${y}-${mStr}-01`).endOf('month').format('YYYY-MM-DD');
+      holidayRowsForMonth = await HolidayModel.query()
+        .where(function () {
+          this.whereBetween('start_date', [monthStart, monthEnd])
+            .orWhereBetween('end_date', [monthStart, monthEnd])
+            .orWhere(function () {
+              this.where('start_date', '<=', monthStart).andWhere('end_date', '>=', monthEnd);
+            });
+        })
+        .select('*')
+        .catch(() => []);
+    } catch (e) {
+      holidayRowsForMonth = [];
+    }
 
-      const isLate = lateMinutes > 0;
-      const isEarlyLeave = earlyDepartureMinutes > 0;
-      const hasLatePenalty = lateArrivalPenalty > 0;
-      const hasEarlyLeavePenalty = earlyLeavePenalty > 0;
+    // Build a map from date -> holiday full object (if holiday spans multiple days, map each day)
+    const holidayMap = new Map<string, any>();
+    for (const hr of holidayRowsForMonth) {
+      if (hr && hr.start_date && hr.end_date) {
+        let cur = dayjs(hr.start_date);
+        const end = dayjs(hr.end_date);
+        while (cur.isBefore(end) || cur.isSame(end, 'day')) {
+          holidayMap.set(cur.format('YYYY-MM-DD'), hr);
+          cur = cur.add(1, 'day');
+        }
+      }
+    }
 
-      if (hasLatePenalty) lateDays++;
-      if (hasEarlyLeavePenalty) earlyLeaveDays++;
-      totalLateMinutes += lateMinutes;
-      totalEarlyLeaveMinutes += earlyDepartureMinutes;
-      totalLatePenalty += lateArrivalPenalty;
-      totalEarlyLeavePenalty += earlyLeavePenalty;
+    // Attach full holiday object to each attendance row if available
+    for (const r of attendanceRows) {
+      try {
+        const d = dayjs(r.date).format('YYYY-MM-DD');
+        if (holidayMap.has(d)) {
+          (r as any)._holidayFullObject = holidayMap.get(d);
+          // also set isHoliday flag for backward-compat
+          r.isHoliday = true;
+          r.holidayName = r.holidayName || holidayMap.get(d).name || null;
+          r.isPublicHoliday = r.isPublicHoliday ?? !!holidayMap.get(d).is_public;
+        }
+      } catch (e) {
+        // ignore attach errors
+      }
+    }
 
-      let status: string = 'working';
-      let statusText = 'Đã chấm công';
-      let isOnTime = false;
-      // Respect the computed working day definition (settings + holidays)
-      // `record.isWorkingDay` may be present from upstream, but ensure we treat holidays as non-working here
+    // --- Attach full approved application objects (leave / business trip) to rows ---
+    let approvedAppsForMonth: any[] = [];
+    try {
+      const [y, mStr] = (month || '').split('-');
+      const appUrl = (process.env['APPLICATION_SERVICE_URL'] || 'http://localhost:4004') as string;
+      const resp = await axios.get(`${appUrl}/api/applications/user/${userId}/approved`, {
+        params: { year: parseInt(y || '0'), month: parseInt(mStr || '0') }
+      });
+      approvedAppsForMonth = resp.data?.data || [];
+    } catch (e) {
+      approvedAppsForMonth = [];
+    }
+
+    const leaveAppMap = new Map<string, any[]>();
+    const businessTripAppMap = new Map<string, any[]>();
+    for (const app of approvedAppsForMonth) {
+      try {
+        const data = typeof app.data === 'string' ? JSON.parse(app.data) : app.data || {};
+        const t = (app.type || '').toString().toLowerCase();
+        const isLeaveApp = t.includes('leave');
+        const isBusinessTripApp = t.includes('business') || t.includes('trip') || t.includes('businesstrip') || t.includes('business_trip') || t.includes('business-trip') || t === 'businesstrip';
+
+        // single-day
+        // Single-day (explicit date) or date range. Normalize dates before expansion.
+        if (data.date) {
+          const d = dayjs(data.date).format('YYYY-MM-DD');
+          if (isLeaveApp) {
+            const arr = leaveAppMap.get(d) || [];
+            arr.push(app);
+            leaveAppMap.set(d, arr);
+          }
+          if (isBusinessTripApp) {
+            const arr = businessTripAppMap.get(d) || [];
+            arr.push(app);
+            businessTripAppMap.set(d, arr);
+          }
+        } else if (data.startDate && data.endDate) {
+          // Ensure start <= end
+          let start = dayjs(data.startDate);
+          let end = dayjs(data.endDate);
+          if (start.isAfter(end)) {
+            const tmp = start; start = end; end = tmp;
+          }
+          let cur = start;
+          while (cur.isBefore(end) || cur.isSame(end, 'day')) {
+            const d = cur.format('YYYY-MM-DD');
+            if (isLeaveApp) {
+              const arr = leaveAppMap.get(d) || [];
+              arr.push(app);
+              leaveAppMap.set(d, arr);
+            }
+            if (isBusinessTripApp) {
+              const arr = businessTripAppMap.get(d) || [];
+              arr.push(app);
+              businessTripAppMap.set(d, arr);
+            }
+            cur = cur.add(1, 'day');
+          }
+        }
+      } catch (e) {
+        // ignore parse errors
+      }
+    }
+
+    // Attach app objects to attendance rows for convenience
+    for (const r of attendanceRows) {
+      try {
+        const d = dayjs(r.date).format('YYYY-MM-DD');
+        const leaves = leaveAppMap.get(d) || [];
+        const trips = businessTripAppMap.get(d) || [];
+        if (leaves.length > 0) {
+          (r as any)._leaveFullObjects = leaves;
+          (r as any)._leaveFullObject = leaves[0];
+          r.hasApprovedLeave = r.hasApprovedLeave || true;
+          r.leaveInfo = r.leaveInfo || leaves[0].title || leaves[0].reason || null;
+        }
+        if (trips.length > 0) {
+          (r as any)._businessTripFullObjects = trips;
+          (r as any)._businessTripFullObject = trips[0];
+          r.hasBusinessTrip = r.hasBusinessTrip || true;
+          r.businessTripInfo = r.businessTripInfo || trips[0].title || trips[0].reason || null;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    const weekdayNames = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+
+    const buildDay = (record: any) => {
+      const checkInDate = record.checkInTime ? new Date(record.checkInTime) : null;
+      const lateMinutes = Number(record.lateMinutes ?? 0);
+      const earlyDepartureMinutes = Number(record.earlyDepartureMinutes ?? 0);
+      const lateArrivalPenalty = Number(record.lateArrivalPenalty ?? 0);
+      const earlyLeavePenalty = Number(record.earlyLeavePenalty ?? 0);
+      const workHours = Number(record.dailyTotalWorkHours ?? record.workHours ?? record.totalHours ?? 0);
+
       const isWorkDay = (record.isWorkingDay !== false) && !record.isHoliday;
       const isFuture = record.isFuture === true;
 
-      if (!isWorkDay && !record.hasApprovedOT) {
-        status = 'weekend';
-        statusText = 'Cuối tuần';
-        weekendDays++;
-      } else if (record.hasBusinessTrip || record.type === 'business_trip') {
-        status = 'business_trip';
-        statusText = 'Công tác';
-        // Count business trip days only if this day is a scheduled working day
-        if (isWorkDay) businessTripDays++;
-      } else if (record.hasApprovedLeave || record.type === 'leave' || record.type === 'sick-leave') {
-        status = 'approved_leave';
-        statusText = record.leaveInfo || record.leaveTypeName || 'Nghỉ phép';
-        // Count approved leave only if this day is a scheduled working day
-        if (isWorkDay) approvedLeaveDays++;
-      } else if (isWorkDay && !record.checkInTime && !isFuture) {
-        status = 'absent';
-        statusText = 'Nghỉ không phép';
-        // Count unauthorized absence only for scheduled working days
-        unauthorizedAbsenceDays++;
-      } else if (record.checkInTime) {
-        // Count present day only if it's a scheduled working day
-        if (isWorkDay) presentDays++;
-        if (!isLate && !isEarlyLeave) {
-          isOnTime = true;
-          onTimeDays++;
-          statusText = 'Đúng giờ';
-        } else if (isLate && isEarlyLeave) {
-          statusText = 'Đi muộn & về sớm';
-        } else if (isLate) {
-          statusText = 'Đi muộn';
-        } else if (isEarlyLeave) {
-          statusText = 'Về sớm';
-        }
+      let status = 'working';
+      let statusText = 'Đã chấm công';
+      let isOnTime = false;
+
+      if (!isWorkDay && !record.hasApprovedOT) { status = 'weekend'; statusText = 'Cuối tuần'; }
+      else if (record.hasBusinessTrip || record.type === 'business_trip') { status = 'business_trip'; statusText = 'Công tác'; }
+      else if (record.hasApprovedLeave || ['leave','sick-leave'].includes(record.type)) { status = 'approved_leave'; statusText = record.leaveInfo ?? record.leaveTypeName ?? 'Nghỉ phép'; }
+      else if (isWorkDay && !record.checkInTime && !isFuture) { status = 'absent'; statusText = 'Nghỉ không phép'; }
+      else if (record.checkInTime) {
+        const late = lateMinutes > 0;
+        const early = earlyDepartureMinutes > 0;
+        if (!late && !early) { isOnTime = true; statusText = 'Đúng giờ'; }
+        else if (late && early) statusText = 'Đi muộn & về sớm';
+        else if (late) statusText = 'Đi muộn';
+        else if (early) statusText = 'Về sớm';
       }
+
+  // Prefer the full HolidayModel object for the date if available (added map below)
+      const holidayObjForDate = (record._holidayFullObject) ? record._holidayFullObject : undefined;
+      const holidayData = holidayObjForDate ? {
+        // include full holiday object fields: keep original keys for consumers
+        isHoliday: Boolean(record.isHoliday || true),
+        holidayName: holidayObjForDate.name ?? record.holidayName ?? null,
+        isPublicHoliday: Boolean(holidayObjForDate.is_public ?? record.isPublicHoliday),
+        // attach raw holiday object for consumers who want full data
+        holiday: holidayObjForDate
+      } : ((record.isHoliday || record.holidayName) ? {
+        isHoliday: Boolean(record.isHoliday),
+        holidayName: record.holidayName ?? null,
+        isPublicHoliday: Boolean(record.isPublicHoliday)
+      } : undefined);
+
+      // Date key to lookup apps maps if full objects were not attached to the record
+      const dateKey = dayjs(record.date).format('YYYY-MM-DD');
+      const leaveAppsFromMap = (leaveAppMap && leaveAppMap.get) ? (leaveAppMap.get(dateKey) || []) : [];
+
+      // Determine single leave object (prefer attached record-level object, then first from map)
+      const singleLeaveObj = (record as any)._leaveFullObject ?? (leaveAppsFromMap[0] ?? undefined);
+      // Determine leaveApplications array only when no single leave object is set (avoid redundancy)
+      const leaveAppsArray = !(singleLeaveObj) ? ((record as any)._leaveFullObjects ?? (leaveAppsFromMap.length > 0 ? leaveAppsFromMap : undefined)) : undefined;
+
+      const leaveData = (record.hasApprovedLeave || ['leave','sick-leave'].includes(record.type) || singleLeaveObj || (leaveAppsFromMap && leaveAppsFromMap.length > 0)) ? {
+        hasApprovedLeave: Boolean(record.hasApprovedLeave),
+        leaveType: record.leaveType ?? record.type,
+        leaveInfo: record.leaveInfo ?? record.reason ?? null,
+        leaveTypeName: record.leaveTypeName ?? null,
+        // embed full application object (single) if attached earlier or found in approvedAppsForMonth map
+        leave: singleLeaveObj,
+        // Only include leaveApplications when single leave object is not present
+        leaveApplications: leaveAppsArray
+      } : undefined;
+
+      const tripAppsFromMap = (businessTripAppMap && businessTripAppMap.get) ? (businessTripAppMap.get(dateKey) || []) : [];
+      const businessTripData = (record.hasBusinessTrip || record.type === 'business_trip' || record._businessTripFullObject || (tripAppsFromMap && tripAppsFromMap.length > 0)) ? {
+        hasBusinessTrip: Boolean(record.hasBusinessTrip),
+        businessTripInfo: record.tripInfo ?? record.businessTripInfo ?? null,
+        businessTripDestination: record.destination ?? record.businessTripDestination ?? null,
+        // embed full application objects (prefer attached objects, otherwise use map)
+        businessTrip: (record as any)._businessTripFullObject ?? (tripAppsFromMap[0] ?? undefined),
+        businessTripApplications: (record as any)._businessTripFullObjects ?? (tripAppsFromMap.length > 0 ? tripAppsFromMap : undefined)
+      } : undefined;
+
+      const attendanceData = record.checkInTime ? {
+        id: record.id,
+        userId: record.userId,
+        date: record.date,
+        checkIn: record.checkIn ?? record.checkInTime ?? null,
+        checkOut: record.checkOut ?? record.checkOutTime ?? null,
+        checkInTime: record.checkInTime ?? null,
+        checkOutTime: record.checkOutTime ?? null,
+        status,
+        totalHours: Number(record.totalHours ?? workHours),
+        workHours,
+        lateMinutes,
+        earlyDepartureMinutes,
+        lateArrivalPenalty,
+        earlyLeavePenalty,
+        dailyTotalWorkHours: workHours,
+        otMinutes: Number(record.otMinutes ?? 0),
+        otSalary: Number(record.otSalary ?? 0)
+      } : undefined;
+
+      const dayIndex = checkInDate ? checkInDate.getDay() : new Date(record.date).getDay();
 
       return {
         date: record.date,
-        dayOfWeek: checkInTime ? checkInTime.getDay() : new Date(record.date).getDay(),
-        dayName: checkInTime
-          ? ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][checkInTime.getDay()]
-          : ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][new Date(record.date).getDay()],
+        dayOfWeek: dayIndex,
+        dayName: weekdayNames[dayIndex],
         isWorkingDay: record.isWorkingDay !== false,
         hasAttendance: !!record.checkInTime,
-        // ✨ Giữ lại thông tin ngày lễ từ record gốc
-        isHoliday: record.isHoliday || false,
-        holidayName: record.holidayName || null,
-        isPublicHoliday: record.isPublicHoliday || false,
-        attendanceData: record.checkInTime ? {
-          id: record.id,
-          userId: record.userId,
-          date: record.date,
-          checkIn: record.checkIn || record.checkInTime,
-          checkOut: record.checkOut || record.checkOutTime,
-          checkInTime: record.checkInTime,
-          checkOutTime: record.checkOutTime,
-          status: status as any,
-          totalHours: dailyTotalWorkHours,
-          workHours: dailyTotalWorkHours,
-          lateMinutes,
-          earlyDepartureMinutes,
-          lateArrivalPenalty,
-          earlyLeavePenalty,
-          dailyTotalWorkHours,
-          otMinutes,
-          otSalary
-        } : undefined,
-        hasApprovedLeave: status === 'approved_leave',
-        leaveType: record.leaveType || record.type,
-        leaveInfo: record.leaveInfo || record.reason,
-        status: status as any,
+        holidayData,
+        leaveData,
+        businessTripData,
+        attendanceData,
+        status,
         statusText,
         unauthorizedAbsencePenalty: status === 'absent' ? unauthorizedAbsencePenaltyPerDay : 0,
         isOnTime,
         lateMinutes,
-        earlyLeaveMinutes: earlyDepartureMinutes,
-        businessTripInfo: record.tripInfo || record.businessTripInfo,
-        businessTripDestination: record.destination || record.businessTripDestination
+        earlyLeaveMinutes: earlyDepartureMinutes
       };
-    });
+    };
+
+    const processedDailyDetails = attendanceRows.map(buildDay);
+
+    // Compute aggregates (used later) in a single pass
+    const agg = processedDailyDetails.reduce((acc: any, d: any) => {
+      acc.totalLateMinutes += Number(d.lateMinutes ?? 0);
+      acc.totalEarlyLeaveMinutes += Number(d.earlyLeaveMinutes ?? 0);
+      acc.totalLatePenalty += Number(d.attendanceData?.lateArrivalPenalty ?? 0);
+      acc.totalEarlyLeavePenalty += Number(d.attendanceData?.earlyLeavePenalty ?? 0);
+
+      if (d.isWorkingDay) {
+        if (d.status === 'approved_leave') acc.approvedLeaveDays++;
+        if (d.status === 'business_trip') acc.businessTripDays++;
+        if (d.status === 'absent') acc.unauthorizedAbsenceDays++;
+        if (d.hasAttendance) acc.presentDays++;
+        if (d.attendanceData && Number(d.attendanceData.lateMinutes ?? 0) > 0) acc.lateDays++;
+        if (d.attendanceData && Number(d.attendanceData.earlyDepartureMinutes ?? 0) > 0) acc.earlyLeaveDays++;
+      }
+
+      if (d.status === 'weekend') acc.weekendDays++;
+      if (d.isOnTime) acc.onTimeDays++;
+
+      return acc;
+    }, {
+      totalLateMinutes: 0,
+      totalEarlyLeaveMinutes: 0,
+      totalLatePenalty: 0,
+      totalEarlyLeavePenalty: 0,
+      presentDays: 0,
+      lateDays: 0,
+      earlyLeaveDays: 0,
+      approvedLeaveDays: 0,
+      businessTripDays: 0,
+      unauthorizedAbsenceDays: 0,
+      weekendDays: 0,
+      onTimeDays: 0
+    } as any);
+
+    const presentDays = agg.presentDays;
+    const lateDays = agg.lateDays;
+    const earlyLeaveDays = agg.earlyLeaveDays;
+    const approvedLeaveDays = agg.approvedLeaveDays;
+    const businessTripDays = agg.businessTripDays;
+    const unauthorizedAbsenceDays = agg.unauthorizedAbsenceDays;
+    const totalLateMinutes = agg.totalLateMinutes;
+    const totalEarlyLeaveMinutes = agg.totalEarlyLeaveMinutes;
+    const totalLatePenalty = agg.totalLatePenalty;
+    const totalEarlyLeavePenalty = agg.totalEarlyLeavePenalty;
+    const onTimeDays = agg.onTimeDays;
+    const weekendDays = agg.weekendDays;
 
     const totalUnauthorizedAbsencePenalty = unauthorizedAbsenceDays * unauthorizedAbsencePenaltyPerDay;
     const totalPenalty = totalLatePenalty + totalEarlyLeavePenalty + totalUnauthorizedAbsencePenalty;
@@ -343,10 +536,13 @@ export class MonthlyReportService {
 
           if (app.type === 'leave') {
             if (data.date) {
-              leaveDaysSet.add(data.date);
+              leaveDaysSet.add(dayjs(data.date).format('YYYY-MM-DD'));
             } else if (data.startDate && data.endDate) {
-              let cur = dayjs(data.startDate);
-              while (cur.isBefore(dayjs(data.endDate)) || cur.isSame(dayjs(data.endDate), 'day')) {
+              let start = dayjs(data.startDate);
+              let end = dayjs(data.endDate);
+              if (start.isAfter(end)) { const tmp = start; start = end; end = tmp; }
+              let cur = start;
+              while (cur.isBefore(end) || cur.isSame(end, 'day')) {
                 leaveDaysSet.add(cur.format('YYYY-MM-DD'));
                 cur = cur.add(1, 'day');
               }
@@ -355,10 +551,13 @@ export class MonthlyReportService {
 
           if (app.type === 'business_trip') {
             if (data.date) {
-              businessTripDaysSet.add(data.date);
+              businessTripDaysSet.add(dayjs(data.date).format('YYYY-MM-DD'));
             } else if (data.startDate && data.endDate) {
-              let cur = dayjs(data.startDate);
-              while (cur.isBefore(dayjs(data.endDate)) || cur.isSame(dayjs(data.endDate), 'day')) {
+              let start = dayjs(data.startDate);
+              let end = dayjs(data.endDate);
+              if (start.isAfter(end)) { const tmp = start; start = end; end = tmp; }
+              let cur = start;
+              while (cur.isBefore(end) || cur.isSame(end, 'day')) {
                 businessTripDaysSet.add(cur.format('YYYY-MM-DD'));
                 cur = cur.add(1, 'day');
               }

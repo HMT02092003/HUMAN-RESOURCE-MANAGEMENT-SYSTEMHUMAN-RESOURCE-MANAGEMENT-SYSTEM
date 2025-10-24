@@ -60,17 +60,47 @@ export class AttendanceService {
       const total = Number(countResult.count || 0);
       let results = await baseQuery.clone().orderBy('month', 'desc').limit(pageSize).offset(offset);
 
-      // Enrich with user profiles
+      // Enrich with user profiles (auth-service) and department info (employee-service)
       try {
         const usersResp = await axios.post(`${AUTH_SERVICE_URL}/api/users/bulk`, { userIds }, 
           { headers: { 'Content-Type': 'application/json' }, timeout: 5000 }
         );
         const users = usersResp?.data?.data || usersResp?.data || [];
+
+        // Build a map of users by id
         const usersById: Record<number, any> = {};
         for (const u of users) usersById[u.id] = u;
+
+        // Collect unique departmentIds from users
+  const rawDeptIds: number[] = users.filter((u: any) => u.departmentId).map((u: any) => Number(u.departmentId));
+  const deptIds: number[] = Array.from(new Set<number>(rawDeptIds));
+
+        const EMPLOYEE_SERVICE_URL = `http://${getLocalIpAddress()}:${process.env['EMPLOYEE_SERVICE_PORT'] || 4002}`;
+
+        // Fetch department details in parallel (no bulk endpoint available). Small number expected.
+        const deptById: Record<number, any> = {};
+        if (deptIds.length > 0) {
+      await Promise.all(deptIds.map(async (did) => {
+            try {
+              const resp = await axios.get(`${EMPLOYEE_SERVICE_URL}/api/departments/${did}`, { timeout: 4000 });
+              if (resp?.data) deptById[did] = resp.data;
+            } catch (depErr) {
+              // Non-fatal: log and continue
+        logger.error(`Failed to fetch department ${did}`, (depErr as any)?.message || depErr);
+            }
+          }));
+        }
+
+        // Attach department object onto each user object if available
+        for (const uid of Object.keys(usersById)) {
+          const u = usersById[Number(uid)];
+          if (u && u.departmentId) u.department = deptById[u.departmentId] || null;
+        }
+
+        // Merge into results
         results = results.map((r: any) => ({ ...r, user: usersById[r.userId] || null }));
       } catch (e: any) {
-        logger.error('Failed to enrich users', e?.message || e);
+        logger.error('Failed to enrich users or departments', e?.message || e);
       }
 
       return { results, total, page, pageSize };

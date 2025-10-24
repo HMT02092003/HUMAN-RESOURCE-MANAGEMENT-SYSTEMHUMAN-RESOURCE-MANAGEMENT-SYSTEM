@@ -521,10 +521,14 @@ const AttendanceSimplePage = () => {
 
                 if (!isCurrentMonth) return 'other-month';
 
-                // ✨ Kiểm tra ngày lễ
-                const isHoliday = (dailyDetail as any)?.isHoliday === true;
+                // ✨ Kiểm tra ngày lễ từ holidayData object
+                const isHoliday = dailyDetail?.holidayData?.isHoliday === true;
+                const hasHolidayWork = isHoliday && (attendance || dailyDetail?.status === 'business_trip');
 
-                // ✨ NGÀY LỄ LUÔN CÓ NỀN XANH NƯỚC BIỂN (ưu tiên cao nhất)
+                // ✨ NGÀY LỄ CÓ CHẤM CÔNG / CÔNG TÁC -> nền navy-blue (ưu tiên cao nhất)
+                if (hasHolidayWork) return 'status-holiday-work';
+
+                // ✨ NGÀY LỄ LUÔN CÓ NỀN XANH (không có chấm công) (ưu tiên tiếp theo)
                 if (isHoliday) return 'status-holiday';
 
                 // Sau đó mới đến các trạng thái khác (nhưng ngày lễ đã có nền xanh rồi)
@@ -564,9 +568,9 @@ const AttendanceSimplePage = () => {
 
                 if (!isCurrentMonth) return null;
 
-                // ✨ Kiểm tra ngày lễ
-                const isHoliday = (dailyDetail as any)?.isHoliday === true;
-                const holidayName = (dailyDetail as any)?.holidayName || 'Ngày lễ';
+                // ✨ Kiểm tra ngày lễ từ holidayData object
+                const isHoliday = dailyDetail?.holidayData?.isHoliday === true;
+                const holidayName = dailyDetail?.holidayData?.holidayName || 'Ngày lễ';
 
                 // Debug: Log attendance data for dates with attendance
                 if (attendance) {
@@ -1191,9 +1195,9 @@ const AttendanceSimplePage = () => {
                 // Hiển thị thông tin dựa trên status
                 if (dailyDetail) {
                   // Case 1: Nghỉ phép
-                  if (dailyDetail.status === 'approved_leave') {
-                    // Lấy thông tin loại nghỉ từ config
-                    const leaveTypeKey = dailyDetail.leaveType || 'leave';
+                  if (dailyDetail.status === 'approved_leave' && dailyDetail.leaveData) {
+                    // ✨ Lấy thông tin loại nghỉ từ leaveData object
+                    const leaveTypeKey = dailyDetail.leaveData.leaveType || 'leave';
                     const leaveConfig = constants.LeaveTypeConfig[leaveTypeKey as keyof typeof constants.LeaveTypeConfig]
                     return (
                       <div>
@@ -1222,45 +1226,44 @@ const AttendanceSimplePage = () => {
                           </Paragraph>
 
                           {/* Hiển thị loại nghỉ phép */}
-                          <div style={{
-                            marginTop: 12,
-                            padding: 12,
-                            background: leaveConfig.hasSalary ? '#f6ffed' : '#fff2e8',
-                            borderRadius: 6,
-                            border: leaveConfig.hasSalary ? '1px solid #b7eb8f' : '1px solid #ffd591'
-                          }}>
-                            <div style={{ textAlign: 'center' }}>
-                              <Text strong style={{
-                                fontSize: 14,
-                                color: leaveConfig.hasSalary ? '#52c41a' : '#fa8c16'
+                          {(() => {
+                            // Prefer applicationCategory from leave object data when present
+                            const leaveObj = dailyDetail.leaveData?.leave ?? (dailyDetail.leaveData?.leaveApplications && dailyDetail.leaveData.leaveApplications[0]);
+                            const appCategory = leaveObj?.data?.applicationCategory ?? leaveObj?.data?.application_category ?? undefined;
+                            // Map applicationCategory to leaveConfig key: assume 'regular' means unpaid else 'leave' as paid
+                            const cfgKey = appCategory === 'regular' ? 'regular' : (appCategory === 'paid' ? 'leave' : (dailyDetail.leaveData?.leaveType || 'leave'));
+                            const effectiveLeaveConfig = constants.LeaveTypeConfig[cfgKey as keyof typeof constants.LeaveTypeConfig] ?? leaveConfig;
+                            return (
+                              <div style={{
+                                marginTop: 12,
+                                padding: 12,
+                                background: effectiveLeaveConfig.hasSalary ? '#f6ffed' : '#fff2e8',
+                                borderRadius: 6,
+                                border: effectiveLeaveConfig.hasSalary ? '1px solid #b7eb8f' : '1px solid #ffd591'
                               }}>
-                                {leaveConfig.label}
-                              </Text>
-                            </div>
-                            <div style={{ textAlign: 'center', marginTop: 8 }}>
-                              <Tag color={leaveConfig.hasSalary ? 'success' : 'warning'} style={{ fontSize: 12 }}>
-                                {leaveConfig.hasSalary ? '✓ Có lương' : '✗ Không lương'}
-                              </Tag>
-                            </div>
-                          </div>
-
-                          {/* Lý do nghỉ */}
-                          {dailyDetail.leaveInfo && (
-                            <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 6 }}>
-                              <Text strong style={{ display: 'block', marginBottom: 8, color: '#faad14' }}>
-                                <FileTextOutlined style={{ marginRight: 6 }} />
-                                Lý do:
-                              </Text>
-                              <Text style={{ fontSize: 13, color: '#595959' }}>{dailyDetail.leaveInfo}</Text>
-                            </div>
-                          )}
+                                <div style={{ textAlign: 'center' }}>
+                                  <Text strong style={{
+                                    fontSize: 14,
+                                    color: effectiveLeaveConfig.hasSalary ? '#52c41a' : '#fa8c16'
+                                  }}>
+                                    {effectiveLeaveConfig.label}
+                                  </Text>
+                                </div>
+                                <div style={{ textAlign: 'center', marginTop: 8 }}>
+                                  <Tag color={effectiveLeaveConfig.hasSalary ? 'success' : 'warning'} style={{ fontSize: 12 }}>
+                                    {effectiveLeaveConfig.hasSalary ? '✓ Có lương' : '✗ Không lương'}
+                                  </Tag>
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     );
                   }
 
                   // Case 2: Công tác
-                  if (dailyDetail.status === 'business_trip') {
+                  if (dailyDetail.status === 'business_trip' && dailyDetail.businessTripData) {
                     return (
                       <div>
                         <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#f9f0ff', borderRadius: 8 }}>
@@ -1284,27 +1287,64 @@ const AttendanceSimplePage = () => {
                             Công tác
                           </Title>
 
-                          {/* Địa điểm công tác */}
-                          {dailyDetail.businessTripDestination && (
-                            <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 6 }}>
-                              <Text strong style={{ display: 'block', marginBottom: 8, color: '#722ed1' }}>
-                                <EnvironmentOutlined style={{ marginRight: 6 }} />
-                                Địa điểm:
-                              </Text>
-                              <Text style={{ fontSize: 14, color: '#262626' }}>{dailyDetail.businessTripDestination}</Text>
-                            </div>
-                          )}
+                          {/* Địa điểm công tác, lý do và chi tiết đơn (nếu có) */}
+                          {(() => {
+                            const tripObj = dailyDetail.businessTripData?.businessTrip ?? (dailyDetail.businessTripData?.businessTripApplications && dailyDetail.businessTripData.businessTripApplications[0]);
+                            const tripDestination = dailyDetail.businessTripData?.businessTripDestination ?? tripObj?.data?.destination ?? tripObj?.data?.location ?? undefined;
+                            const tripReason = dailyDetail.businessTripData?.businessTripInfo ?? tripObj?.data?.reason ?? tripObj?.data?.title ?? undefined;
 
-                          {/* Lý do công tác */}
-                          {dailyDetail.businessTripInfo && (
-                            <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 6 }}>
-                              <Text strong style={{ display: 'block', marginBottom: 8, color: '#722ed1' }}>
-                                <FileTextOutlined style={{ marginRight: 6 }} />
-                                Lý do:
-                              </Text>
-                              <Text style={{ fontSize: 13, color: '#595959' }}>{dailyDetail.businessTripInfo}</Text>
-                            </div>
-                          )}
+                            return (
+                              <>
+                                {tripDestination && (
+                                  <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 6 }}>
+                                    <Text strong style={{ display: 'block', marginBottom: 8, color: '#722ed1' }}>
+                                      <EnvironmentOutlined style={{ marginRight: 6 }} />
+                                      Địa điểm:
+                                    </Text>
+                                    <Text style={{ fontSize: 14, color: '#262626' }}>{tripDestination}</Text>
+                                  </div>
+                                )}
+
+                                {tripReason && (
+                                  <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 6 }}>
+                                    <Text strong style={{ display: 'block', marginBottom: 8, color: '#722ed1' }}>
+                                      <FileTextOutlined style={{ marginRight: 6 }} />
+                                      Lý do:
+                                    </Text>
+                                    <Text style={{ fontSize: 13, color: '#595959' }}>{tripReason}</Text>
+                                  </div>
+                                )}
+
+                                {tripObj && (
+                                  <div style={{ marginTop: 12, padding: 12, background: '#ffffff', borderRadius: 6, border: '1px dashed #f0f0f0' }}>
+                                    <Text strong style={{ display: 'block', marginBottom: 8, color: '#404040' }}>
+                                      <InfoCircleOutlined style={{ marginRight: 6 }} />
+                                      Chi tiết đơn công tác
+                                    </Text>
+                                    <div style={{ fontSize: 13, color: '#595959', marginBottom: 8 }}>
+                                      <div><strong>ID:</strong> {tripObj.id}</div>
+                                      <div><strong>Loại:</strong> {tripObj.type}</div>
+                                      <div>
+                                        <strong>Thời gian:</strong>{' '}
+                                        {tripObj.data?.startDate ? dayjs(tripObj.data.startDate).format('YYYY-MM-DD') : ''}
+                                        {tripObj.data?.endDate ? ` → ${dayjs(tripObj.data.endDate).format('YYYY-MM-DD')}` : ''}
+                                      </div>
+                                      {tripObj.data?.destination && <div><strong>Địa điểm:</strong> {tripObj.data.destination}</div>}
+                                      {tripObj.approvedBy !== undefined && <div><strong>Duyệt bởi:</strong> {tripObj.approvedBy}</div>}
+                                      {tripObj.approvedDate && <div><strong>Ngày duyệt:</strong> {dayjs(tripObj.approvedDate).format('YYYY-MM-DD')}</div>}
+                                    </div>
+
+                                    {/* Pretty-print full object for debugging / full detail */}
+                                    <div style={{ marginTop: 8, background: '#fafafa', padding: 12, borderRadius: 6, overflow: 'auto', maxHeight: 320 }}>
+                                      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, margin: 0 }}>
+{JSON.stringify(tripObj, null, 2)}
+                                      </pre>
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
 
                           <div style={{ marginTop: 16, padding: 12, background: '#f6ffed', borderRadius: 6, border: '1px solid #b7eb8f' }}>
                             <Text style={{ fontSize: 12, color: '#52c41a', display: 'block', textAlign: 'center' }}>

@@ -7,21 +7,18 @@ import { useRouter } from 'next/navigation';
 import applicationService from '@/service/applicationService';
 import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS, FORGOT_CHECK_TYPE_LABELS } from '@/config/constant';
 import ApplicationDetailModal from './ApplicationDetailModal';
+import commonGetColumnSearchProps from '@/components/common/getColumnSearchProps';
 import { render } from 'react-dom';
-
-const { Title, Text } = Typography;
-const { RangePicker } = DatePicker;
-const { TextArea } = Input;
 
 interface MyApplicationListProps {
     onCreateClick?: () => void;
     onEditClick?: (record: any) => void;
 }
 
-const ApplicationList: React.FC<MyApplicationListProps> = ({
-    onCreateClick,
-    onEditClick
-}) => {
+const { Title, Text } = Typography;
+const { RangePicker } = DatePicker;
+
+const ApplicationList: React.FC<MyApplicationListProps> = ({ onCreateClick, onEditClick }) => {
     const router = useRouter();
     const [applications, setApplications] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
@@ -287,7 +284,7 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
             <div style={{ padding: 8 }}>
                 <RangePicker
                     value={selectedKeys[0] ? [dayjs(String(selectedKeys[0]).split(',')[0]), dayjs(String(selectedKeys[0]).split(',')[1])] : null}
-                    onChange={(dates) => {
+                    onChange={(dates: any) => {
                         if (dates) {
                             setSelectedKeys([`${dates[0]?.format('YYYY-MM-DD')},${dates[1]?.format('YYYY-MM-DD')}`]);
                         } else {
@@ -351,6 +348,11 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
                 { text: '📄 Thôi việc', value: 'resignation' }
             ],
             onFilter: (value: any, record: any) => record.applicationType === value,
+            sorter: (a: any, b: any) => {
+                const la = String(APPLICATION_TYPE_LABELS[a.type as keyof typeof APPLICATION_TYPE_LABELS] || a.type || '').toLowerCase();
+                const lb = String(APPLICATION_TYPE_LABELS[b.type as keyof typeof APPLICATION_TYPE_LABELS] || b.type || '').toLowerCase();
+                return la < lb ? -1 : la > lb ? 1 : 0;
+            }
         },  
         {
             title: 'Trạng thái',
@@ -370,22 +372,37 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({
                 { text: '❌ Bị từ chối', value: 2 }
             ],
             onFilter: (value: any, record: any) => record.status === value,
+            sorter: (a: any, b: any) => (a.status ?? 0) - (b.status ?? 0),
         },
         {
             title: 'Người tạo đơn',
             dataIndex: ['userInfo', 'fullName'],
             key: 'userInfo.fullName',
+            sorter: (a: any, b: any) => {
+                const va = String(a.userInfo?.fullName || '').toLowerCase();
+                const vb = String(b.userInfo?.fullName || '').toLowerCase();
+                return va < vb ? -1 : va > vb ? 1 : 0;
+            },
+            ...commonGetColumnSearchProps('userInfo.fullName', 'Tìm người tạo...')
         },
         {
             title: 'Người duyệt',
             dataIndex: ['approvedByInfo', 'fullName'],
             key: 'approvedByInfo.fullName',
+            sorter: (a: any, b: any) => {
+                const va = String(a.approvedByInfo?.fullName || '').toLowerCase();
+                const vb = String(b.approvedByInfo?.fullName || '').toLowerCase();
+                return va < vb ? -1 : va > vb ? 1 : 0;
+            },
+            ...commonGetColumnSearchProps('approvedByInfo.fullName', 'Tìm người duyệt...')
         },
         {
             title: 'Ngày duyệt',
             dataIndex: 'approvedDate',
             key: 'approvedDate',
             render: (date: string) => date ? dayjs(date).format('DD/MM/YYYY') : null,
+            sorter: (a: any, b: any) => (a.approvedDate ? dayjs(a.approvedDate).unix() : 0) - (b.approvedDate ? dayjs(b.approvedDate).unix() : 0),
+            ...getDateRangeFilter(),
         },
         {
             title: 'Ngày tạo',

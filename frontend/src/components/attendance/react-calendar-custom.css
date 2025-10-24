@@ -98,6 +98,13 @@
   background: #e6fffb !important; /* Màu xanh nhạt cho ngày lễ */
 }
 
+/* Holiday that has attendance or business trip: navy blue background */
+.status-holiday-work {
+  background: #e6f7ff !important; /* light blue base */
+  border-color: #0050b3 !important; /* navy border */
+  box-shadow: inset 0 0 0 2px rgba(0,80,179,0.08);
+}
+
 .status-penalty {
   background: #fff1f0 !important; /* Đỏ nhạt cho ngày bị phạt chấm công */
   border-color: #ffccc7 !important;
