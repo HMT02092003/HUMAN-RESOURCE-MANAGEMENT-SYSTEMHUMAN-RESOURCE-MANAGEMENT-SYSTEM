@@ -74,8 +74,8 @@ app.get('/', (req, res) => {
   });
 });
 
-// Khởi động server
-app.listen(PORT, '0.0.0.0', () => {
+// Khởi động server (với xử lý lỗi startup)
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 API Gateway v2.0 running on port ${PORT}`);
   console.log(`🌐 Health check: http://localhost:${PORT}/gateway-health`);
   
@@ -83,4 +83,14 @@ app.listen(PORT, '0.0.0.0', () => {
   Object.entries(SERVICES).forEach(([name, url]) => {
     console.log(`📡 ${name.toUpperCase()}: ${url || '❌ NOT CONFIGURED'}`);
   });
-}); 
+});
+
+server.on('error', (err) => {
+  if (err && err.code === 'EADDRINUSE') {
+    console.error(`❌ Port ${PORT} already in use. Another process is listening on this port.`);
+    console.error('Please stop the conflicting process or change the PORT environment variable.');
+    process.exit(1);
+  }
+  console.error('API Gateway startup error:', err);
+  process.exit(1);
+});

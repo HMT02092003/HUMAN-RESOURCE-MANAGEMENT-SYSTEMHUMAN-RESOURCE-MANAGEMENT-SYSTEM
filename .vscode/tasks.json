@@ -99,7 +99,8 @@
 				"Attendance Service",
 				"Application Service",
 				"AI Face Recognition Service",
-				"Mobile App (Face Recognition)"
+				"Mobile App (Face Recognition)",
+				"Salary Service"
 			],
 			"dependsOrder": "parallel",
 			"problemMatcher": [],
@@ -155,6 +156,16 @@
 				"panel": "new"
 			},
 			"problemMatcher": []
+		},
+		{
+			"label": "Salary Service",
+			"type": "shell",
+			"command": "yarn dev",
+			"options": {
+				"cwd": "services/salary-service"
+			},
+			"isBackground": true,
+			"group": "none"
 		}
 	],
 	"inputs": [

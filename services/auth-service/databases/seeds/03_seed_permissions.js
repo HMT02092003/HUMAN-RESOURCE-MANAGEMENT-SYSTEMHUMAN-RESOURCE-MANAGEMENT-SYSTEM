@@ -77,6 +77,13 @@ export async function seed(knex) {
       "value": 31,
       "key": "timeAttendance",
     },
+    {
+      "id": 12,
+      "name": "Quản lý phụ cấp",
+      "description": "Quản lý phụ cấp",
+      "value": 31,
+      "key": "salary_allowances",
+    }
   ];
 
   // Deletes ALL existing entries

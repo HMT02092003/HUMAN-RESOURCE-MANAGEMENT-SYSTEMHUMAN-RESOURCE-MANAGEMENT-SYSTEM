@@ -42,9 +42,33 @@ const createOptimizedProxy = (target, pathRewrite = false, handleMultipart = fal
         proxyReq.write(bodyData);
       }
     },
+    onProxyRes: (proxyRes, req, res) => {
+      // Ensure CORS headers are present on proxied responses so browser clients are not blocked
+      const origin = req.headers.origin || '*';
+      try {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+      } catch (e) {
+        // ignore header set errors
+      }
+    },
     
     onError: (err, req, res) => {
-      console.error(`❌ Proxy error for ${req.url}:`, err.message);
+      console.error(`❌ Proxy error for ${req.url}:`, err && err.message ? err.message : err);
+      // Ensure CORS headers so browser gets the JSON error
+      const origin = req && req.headers ? req.headers.origin || '*' : '*';
+      try {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+      } catch (e) {}
+
+      // If headers already sent, just end
+      if (res.headersSent) return res.end();
+
       res.status(502).json({ 
         error: 'Bad gateway', 
         message: 'Service temporarily unavailable',

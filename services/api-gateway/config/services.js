@@ -5,6 +5,7 @@
 // Hàm để lấy service URLs từ environment variables (runtime)
 const getServices = () => ({
   auth: process.env.AUTH_SERVICE_URL,
+  salary: process.env.SALARY_SERVICE_URL,
   employee: process.env.EMPLOYEE_SERVICE_URL,
   attendance: process.env.ATTENDANCE_SERVICE_URL,
   application: process.env.APPLICATION_SERVICE_URL,
@@ -37,6 +38,11 @@ const ROUTE_CONFIG = [
     path: '/api/attendance',
     target: 'attendance',
     pathRewrite: { '^/api/attendance': '/api' }
+  },
+  {
+    path: '/api/salary',
+    target: 'salary',
+    pathRewrite: { '^/api/salary': '/api' },
   },
   {
     path: '/api/applications',

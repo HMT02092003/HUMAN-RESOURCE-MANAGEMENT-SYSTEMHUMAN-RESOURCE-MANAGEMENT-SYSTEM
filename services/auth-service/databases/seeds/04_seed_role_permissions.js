@@ -88,6 +88,14 @@ export async function seed(knex) {
       "key": "timeAttendance",
       "scope": 1,
     },
+    {
+      "id": 12,
+      "roleId": 1,
+      "permissionId": 12,
+      "value": 31,
+      "key": "salary_allowances",
+      "scope": 1,
+    },
   ];
 
   // Deletes ALL existing entries

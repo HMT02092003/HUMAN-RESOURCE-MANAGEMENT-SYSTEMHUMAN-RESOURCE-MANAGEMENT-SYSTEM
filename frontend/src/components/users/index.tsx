@@ -14,7 +14,7 @@ import dayjs from 'dayjs';
 import UserService from '@/service/userService'; // Ensure this path is correct
 import { useRouter } from "next/navigation";
 import constantConfig from "@/config/constant";
-import SalaryModal from './SalaryModal';
+// SalaryModal was used previously for inline editing; we now navigate to a dedicated edit page
 
 const { statusOptions, Gender } = constantConfig;
 
@@ -394,12 +394,12 @@ const UserTable = () => {
               }}
             />
           </Tooltip>
-          <Tooltip title="Thông tin lương">
+          <Tooltip title="Chỉnh lương">
             <Button
               type="text"
               icon={<DollarOutlined />}
               size="small"
-              onClick={() => handleOpenSalaryModal(record.id)}
+              onClick={() => router.push(`/user/edit-salary/${record.id}`)}
               hidden={!updatePer}
               style={{
                 padding: '4px 6px',
@@ -508,13 +508,7 @@ const UserTable = () => {
         <p>Bạn có chắc chắn muốn xóa các bản ghi được chọn?</p>
       </Modal>
 
-      <SalaryModal
-        visible={isSalaryModalVisible}
-        onCancel={handleCloseSalaryModal}
-        onOk={handleUpdateSalary}
-        loading={salaryLoading}
-        salaryInfo={salaryInfo}
-      />
+  {/* Salary editing moved to dedicated page /user/edit-salary/[id] */}
 
       <style jsx global>{`
         .row-even {

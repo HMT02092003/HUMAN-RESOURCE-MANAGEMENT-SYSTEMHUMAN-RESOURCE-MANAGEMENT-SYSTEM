@@ -153,6 +153,17 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
 
     // Cài đặt hệ thống
     getItem('Cài đặt hệ thống', 'settings', <SettingOutlined />, 'settings'),
+
+    // Quản lý lương
+    getItem(
+        'Quản lý lương',
+        'salary_parent',
+        <ProfileOutlined />,
+        [
+            getItem('Cấu hình phụ cấp', 'salary_allowances', <ContainerOutlined />, 'salary_allowances')
+        ],
+        ['salary_allowances']
+    ),
 ];
 
 const isDeepEqual = (obj1: any, obj2: any): boolean => {
@@ -331,6 +342,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
 
         if (pathname === '/user') return ['users'];
         if (pathname === '/roles') return ['roles'];
+    if (pathname.startsWith('/salary/allowances')) return ['salary_allowances'];
 
         const pathSegment = pathname.split('/')[1];
         return [pathSegment || 'home'];
@@ -370,6 +382,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                 break;
             case 'myApplications':
                 router.push('/applications/me');
+                break;
+            case 'salary_allowances':
+                router.push('/salary/allowances');
                 break;
             case 'account_management_parent':
             case 'applications_parent':

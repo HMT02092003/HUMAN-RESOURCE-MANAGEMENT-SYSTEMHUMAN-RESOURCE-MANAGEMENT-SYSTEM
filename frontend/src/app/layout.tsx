@@ -1,8 +1,15 @@
 import type { Metadata } from "next";
 import { ConfigProvider } from "antd";
+import dayjs from 'dayjs';
+// plugins required by some antd/rc-picker internals
+import weekday from 'dayjs/plugin/weekday';
+import utc from 'dayjs/plugin/utc';
+import customParseFormat from 'dayjs/plugin/customParseFormat';
 import { LoadingProvider } from "@/components/loadingContext";
 import "@/styles/globals.css";
 import "@/styles/admin.css";
+import dynamic from 'next/dynamic';
+const DayjsSetup = dynamic(() => import('@/components/DayjsSetup'), { ssr: false });
 
 export const metadata: Metadata = {
   title: "HRMS - Human Resource Management System",
@@ -22,6 +29,21 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Ensure dayjs has the plugins rc-picker expects (weekday is required by rc-picker internals)
+  // Do not re-extend if already extended to avoid duplicate registrations during HMR
+  try {
+    // @ts-ignore
+    if (!dayjs.prototype.weekday) {
+      dayjs.extend(weekday);
+    }
+  } catch (e) {
+    // In some build environments dayjs.prototype may be frozen; safe-guard and continue
+    // eslint-disable-next-line no-console
+    console.warn('Could not extend dayjs with weekday plugin', e);
+  }
+  // other useful plugins used elsewhere in the app
+  try { if (!dayjs.prototype.utc) dayjs.extend(utc); } catch (e) {}
+  try { if (!dayjs.prototype.format) dayjs.extend(customParseFormat); } catch (e) {}
   return (
     <html lang="vi">
       <body>
@@ -47,6 +69,7 @@ export default function RootLayout({
           }}
         >
           <LoadingProvider>
+              <DayjsSetup />
             {children}
           </LoadingProvider>
         </ConfigProvider>
