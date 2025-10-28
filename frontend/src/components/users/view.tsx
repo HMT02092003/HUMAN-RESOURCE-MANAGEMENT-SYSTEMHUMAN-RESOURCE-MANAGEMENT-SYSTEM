@@ -5,7 +5,8 @@ import { Tabs, Form, Row, Col, message } from 'antd';
 import { useRouter, useParams } from 'next/navigation';
 import ContractInfo from './Users/ContractInfo';
 import UserInfo from './userInfo';
-import SalaryInfo from './Users/SalaryInfo';
+// import SalaryInfo from './Users/SalaryInfo';
+import SalaryDealsList from './SalaryDealsList';
 import UserService from '@/service/userService';
 
 const View = () => {
@@ -64,7 +65,14 @@ const View = () => {
     {
       key: "2",
       label: <div style={{ textAlign: "center" }}>Thông tin lương</div>,
-      children: userData ? <SalaryInfo userId={parseInt(params.id as string)} userData={userData} /> : null,
+      children: userData ? (
+        <div>
+          <SalaryDealsList userId={parseInt(params.id as string)} />
+          <div style={{ marginTop: 18 }}>
+            {/* <SalaryInfo userId={parseInt(params.id as string)} userData={userData} /> */}
+          </div>
+        </div>
+      ) : null,
     },
     {
       key: "3",

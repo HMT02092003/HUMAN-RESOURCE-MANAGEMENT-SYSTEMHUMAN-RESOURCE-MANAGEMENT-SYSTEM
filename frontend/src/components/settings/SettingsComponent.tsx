@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Tabs, Card, Form, TimePicker, InputNumber, Button, message, Spin, Row, Col, Checkbox, Typography, Space } from 'antd';
-import { SaveOutlined, SettingOutlined, ClockCircleOutlined, DollarCircleOutlined, CalendarOutlined, ReloadOutlined, ScheduleOutlined, ExclamationCircleOutlined, RollbackOutlined } from '@ant-design/icons';
+import { SaveOutlined, SettingOutlined, ClockCircleOutlined, DollarCircleOutlined, CalendarOutlined, ReloadOutlined, ScheduleOutlined, ExclamationCircleOutlined, RollbackOutlined, TeamOutlined, MedicineBoxOutlined, FileTextOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import utc from 'dayjs/plugin/utc';
@@ -15,7 +15,8 @@ dayjs.extend(utc);
 // CSS cho TimePicker hover effect
 const timePickerStyle = {
   width: '100%',
-};
+            
+}
 
 const { TabPane } = Tabs;
 const { Title, Text } = Typography;
@@ -52,6 +53,10 @@ interface UnauthorizedAbsencePenaltyRateConfig {
   rate: number;
 }
 
+interface InsuranceRateConfig {
+  rate: number;
+}
+
 interface WorkingDaysConfig {
   monday: boolean;
   tuesday: boolean;
@@ -70,6 +75,9 @@ interface SettingsData {
   PenaltyRate: PenaltyRateConfig;
   UnauthorizedAbsencePenaltyRate: UnauthorizedAbsencePenaltyRateConfig;
   WorkingDays: WorkingDaysConfig;
+  BHXH: InsuranceRateConfig;
+  BHYT: InsuranceRateConfig;
+  TNCN: InsuranceRateConfig;
 }
 
 const SettingsComponent: React.FC<SettingsComponentProps> = ({
@@ -99,6 +107,10 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       saturday: false,
       sunday: false
     }
+  ,
+  BHXH: { rate: 8.0 },
+  BHYT: { rate: 1.5 },
+  TNCN: { rate: 0.0 }
   };
 
   const [settingsData, setSettingsData] = useState<SettingsData>(defaultSettings);
@@ -159,7 +171,10 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
         friday: transformedData?.WorkingDays?.friday ?? defaultSettings.WorkingDays.friday,
         saturday: transformedData?.WorkingDays?.saturday ?? defaultSettings.WorkingDays.saturday,
         sunday: transformedData?.WorkingDays?.sunday ?? defaultSettings.WorkingDays.sunday
-      }
+  },
+  BHXH: { rate: transformedData?.BHXH?.rate ?? defaultSettings.BHXH.rate },
+  BHYT: { rate: transformedData?.BHYT?.rate ?? defaultSettings.BHYT.rate },
+  TNCN: { rate: transformedData?.TNCN?.rate ?? defaultSettings.TNCN.rate },
     };
   };
 
@@ -256,7 +271,10 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
         friday: data?.WorkingDays?.friday ?? defaultSettings.WorkingDays.friday,
         saturday: data?.WorkingDays?.saturday ?? defaultSettings.WorkingDays.saturday,
         sunday: data?.WorkingDays?.sunday ?? defaultSettings.WorkingDays.sunday
-      }
+  },
+  BHXH: { rate: data?.BHXH?.rate ?? defaultSettings.BHXH.rate },
+  BHYT: { rate: data?.BHYT?.rate ?? defaultSettings.BHYT.rate },
+  TNCN: { rate: data?.TNCN?.rate ?? defaultSettings.TNCN.rate },
     };
   };
 
@@ -277,6 +295,9 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
         holidayRate: data.HolidayRate.rate,
         penaltyRate: data.PenaltyRate.rate,
         unauthorizedAbsencePenaltyRate: data.UnauthorizedAbsencePenaltyRate.rate,
+  BHXH: data.BHXH?.rate,
+  BHYT: data.BHYT?.rate,
+  TNCN: data.TNCN?.rate,
         workingDays: {
           monday: data.WorkingDays.monday,
           tuesday: data.WorkingDays.tuesday,
@@ -312,6 +333,9 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
         holidayRate: defaultSettings.HolidayRate.rate,
         penaltyRate: defaultSettings.PenaltyRate.rate,
         unauthorizedAbsencePenaltyRate: defaultSettings.UnauthorizedAbsencePenaltyRate.rate,
+  BHXH: defaultSettings.BHXH.rate,
+  BHYT: defaultSettings.BHYT.rate,
+  TNCN: defaultSettings.TNCN.rate,
         workingDays: {
           monday: defaultSettings.WorkingDays.monday,
           tuesday: defaultSettings.WorkingDays.tuesday,
@@ -456,6 +480,18 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
             saturday: values.workingDays?.saturday ?? defaultSettings.WorkingDays.saturday,
             sunday: values.workingDays?.sunday ?? defaultSettings.WorkingDays.sunday
           };
+          break;
+        case 'BHXH':
+          keyToSave = 'BHXH';
+          valueToSave = { rate: parseFloat(values.BHXH) || defaultSettings.BHXH.rate };
+          break;
+        case 'BHYT':
+          keyToSave = 'BHYT';
+          valueToSave = { rate: parseFloat(values.BHYT) || defaultSettings.BHYT.rate };
+          break;
+        case 'TNCN':
+          keyToSave = 'TNCN';
+          valueToSave = { rate: parseFloat(values.TNCN) || defaultSettings.TNCN.rate };
           break;
         default:
           // fallback to whole settings if unknown
@@ -614,6 +650,26 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
             sunday: form.getFieldValue(['workingDays', 'sunday']) ?? defaultSettings.WorkingDays.sunday,
           };
           break;
+        case 'BHXH':
+          fieldsToValidate = ['BHXH'];
+          await form.validateFields(fieldsToValidate);
+          payloadValue = { rate: parseFloat(form.getFieldValue('BHXH')) };
+          break;
+        case 'BHYT':
+          fieldsToValidate = ['BHYT'];
+          await form.validateFields(fieldsToValidate);
+          payloadValue = { rate: parseFloat(form.getFieldValue('BHYT')) };
+          break;
+        case 'BHTN':
+          fieldsToValidate = ['BHTN'];
+          await form.validateFields(fieldsToValidate);
+          payloadValue = { rate: parseFloat(form.getFieldValue('BHTN')) };
+          break;
+        case 'TNCN':
+          fieldsToValidate = ['TNCN'];
+          await form.validateFields(fieldsToValidate);
+          payloadValue = { rate: parseFloat(form.getFieldValue('TNCN')) };
+          break;
         default:
           throw new Error('Unknown setting key');
       }
@@ -691,6 +747,18 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
               sunday: currentSetting.value.sunday
             }
           });
+          break;
+        case 'BHXH':
+          form.setFieldsValue({ BHXH: currentSetting.value?.rate ?? currentSetting.value });
+          break;
+        case 'BHYT':
+          form.setFieldsValue({ BHYT: currentSetting.value?.rate ?? currentSetting.value });
+          break;
+        case 'BHTN':
+          form.setFieldsValue({ BHTN: currentSetting.value?.rate ?? currentSetting.value });
+          break;
+        case 'TNCN':
+          form.setFieldsValue({ TNCN: currentSetting.value?.rate ?? currentSetting.value });
           break;
         default:
           message.error('Unknown key for revert');
@@ -1576,6 +1644,63 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
             >
               {renderWorkingDaysTab()}
             </TabPane>
+
+            <TabPane
+              tab={
+                <span>
+                  <TeamOutlined />
+                  Bảo hiểm xã hội
+                </span>
+              }
+              key="BHXH"
+            >
+              <Card title={<><TeamOutlined /> Bảo hiểm xã hội (BHXH)</>}>
+                <Form.Item
+                  label="Phần trăm BHXH (từ phía nhân viên)"
+                  name="BHXH"
+                  rules={[{ required: true, message: 'Vui lòng nhập BHXH' }, { type: 'number', min: 0, max: 100 }]}
+                >
+                  <InputNumber min={0} max={100} step={0.1} precision={2} style={{ width: '100%' }} formatter={v => `${v}%`} parser={v => v!.replace('%','') as any} />
+                </Form.Item>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 12 }}>
+                  <Button onClick={() => revertKey('BHXH')}><RollbackOutlined />Trở về</Button>
+                  <Button type="primary" onClick={() => saveKey('BHXH')}><SaveOutlined />Lưu</Button>
+                </div>
+              </Card>
+            </TabPane>
+
+            <TabPane
+              tab={<span><MedicineBoxOutlined /> Bảo hiểm y tế</span>}
+              key="BHYT"
+            >
+              <Card title={<><MedicineBoxOutlined /> Bảo hiểm y tế (BHYT)</>}>
+                <Form.Item
+                  label="Phần trăm BHYT (từ phía nhân viên)"
+                  name="BHYT"
+                  rules={[{ required: true, message: 'Vui lòng nhập BHYT' }, { type: 'number', min: 0, max: 100 }]}
+                >
+                  <InputNumber min={0} max={100} step={0.1} precision={2} style={{ width: '100%' }} formatter={v => `${v}%`} parser={v => v!.replace('%','') as any} />
+                </Form.Item>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 12 }}>
+                  <Button onClick={() => revertKey('BHYT')}><RollbackOutlined />Trở về</Button>
+                  <Button type="primary" onClick={() => saveKey('BHYT')}><SaveOutlined />Lưu</Button>
+                </div>
+              </Card>
+            </TabPane>
+
+
+            <TabPane tab={<span><FileTextOutlined /> Thuế thu nhập cá nhân</span>} key="TNCN">
+              <Card title={<><FileTextOutlined /> Thuế thu nhập cá nhân (TNCN)</>}>
+                <Form.Item label="Cấu hình TNCN (phần trăm mẫu / placeholder)" name="TNCN" rules={[{ required: true, message: 'Vui lòng nhập TNCN' }, { type: 'number', min: 0, max: 100 }]}>
+                  <InputNumber min={0} max={100} step={0.1} precision={2} style={{ width: '100%' }} formatter={v => `${v}%`} parser={v => v!.replace('%','') as any} />
+                </Form.Item>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 12 }}>
+                  <Button onClick={() => revertKey('TNCN')}><RollbackOutlined />Trở về</Button>
+                  <Button type="primary" onClick={() => saveKey('TNCN')}><SaveOutlined />Lưu</Button>
+                </div>
+              </Card>
+            </TabPane>
+
           </Tabs>
         </Form>
       </Spin>

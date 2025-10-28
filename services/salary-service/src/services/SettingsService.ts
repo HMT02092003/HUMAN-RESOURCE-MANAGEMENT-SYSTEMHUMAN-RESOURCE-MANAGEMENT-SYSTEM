@@ -1,0 +1,20 @@
+import SettingModel from '../Models/SettingsModel';
+
+export class SettingsService {
+  static async getSettingValue(key: string): Promise<any | null> {
+    try {
+      const s = await SettingModel.query().findOne('key', key);
+      if (!s) return null;
+      try {
+        return typeof s.value === 'string' ? JSON.parse(s.value) : s.value;
+      } catch (e) {
+        return s.value;
+      }
+    } catch (error) {
+      console.error('Error reading setting', key, error);
+      return null;
+    }
+  }
+}
+
+export default SettingsService;

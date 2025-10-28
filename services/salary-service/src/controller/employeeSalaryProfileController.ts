@@ -14,6 +14,7 @@ export const getByUserId = async (req: Request, res: Response, next: NextFunctio
       .where('user_id', userId)
       .where('effective_from', '<=', today)
       .orderBy('effective_from', 'desc')
+      .orderBy('created_at', 'desc')
       .first();
     
     if (!item) return res.status(200).json({ salary: 0, allowance: 0 });
@@ -47,24 +48,44 @@ export const upsertByUserId = async (req: Request, res: Response, next: NextFunc
     const { salary, allowance_type_ids, bank_account, bank_name, tax_code, effective_from } = req.body;
 
     // Build bank_info object from separate fields
-    let bank_info:any = null;
-    if (bank_account || bank_name) {
+    // If incoming fields are empty strings or undefined, prefer preserving the most recent stored values
+    let bank_info: any = null;
+    // Fetch latest profile for this user to get previous bank_info as defaults
+    const latestProfile = await EmployeeSalaryProfile.query()
+      .where('user_id', userId)
+      .orderBy('effective_from', 'desc')
+      .first();
+    const prevBankInfo = latestProfile ? latestProfile.bank_info : null;
+
+    const hasBankAccount = bank_account !== undefined && bank_account !== null && String(bank_account).trim() !== '';
+    const hasBankName = bank_name !== undefined && bank_name !== null && String(bank_name).trim() !== '';
+
+    if (hasBankAccount || hasBankName) {
       bank_info = {
-        bank_account: bank_account || '',
-        bank_name: bank_name || ''
+        bank_account: hasBankAccount ? String(bank_account) : (prevBankInfo ? prevBankInfo.bank_account || '' : ''),
+        bank_name: hasBankName ? String(bank_name) : (prevBankInfo ? prevBankInfo.bank_name || '' : ''),
       };
+    } else if (prevBankInfo) {
+      // No bank fields provided in request — inherit previous bank info
+      bank_info = prevBankInfo;
     }
 
     // Always create new record
+    const effDate = effective_from 
+      ? new Date(effective_from).toISOString().split('T')[0]
+      : new Date().toISOString().split('T')[0];
+
+  // Previously we rejected creating a profile with the same effective_from.
+  // Allow inserting profiles even if a record with the same effective_from exists.
+  // If duplicate handling is desired later, implement merging or versioning instead of blocking the request.
+
     const payload: any = {
       user_id: userId,
       base_salary: salary != null ? String(salary) : '0',
       insurance_salary: '0',
       tax_code: tax_code || null,
       bank_info: bank_info,
-      effective_from: effective_from 
-        ? new Date(effective_from).toISOString().split('T')[0] 
-        : new Date().toISOString().split('T')[0],
+      effective_from: effDate,
     };
 
     console.log('Inserting new salary profile for user', userId, payload);
@@ -105,4 +126,47 @@ export const upsertByUserId = async (req: Request, res: Response, next: NextFunc
   }
 };
 
+// List all salary profiles for a user (historical, current, future)
+export const listByUserId = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = String(req.params.userId);
+    const items = await EmployeeSalaryProfile.query()
+      .withGraphFetched('[allowances.allowanceType]')
+      .where('user_id', userId)
+      .orderBy('effective_from', 'desc')
+      .orderBy('created_at', 'desc');
+
+    const mapped = (items || []).map((item: any) => ({
+      id: item.id,
+      user_id: item.user_id,
+      salary: Number(item.base_salary || 0),
+      allowance: Number(item.insurance_salary || 0),
+      tax_code: item.tax_code,
+      bank_info: item.bank_info,
+      effective_from: item.effective_from,
+      allowances: (item.allowances || []).map((a: any) => ({
+        id: a.id,
+        allowance_type_id: a.allowance_type_id,
+        allowance_type_name: a.allowanceType?.name || '',
+        amount: Number(a.allowanceType?.default_amount || 0),
+      })),
+    }));
+
+    res.json(mapped);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Create new salary profile for a user (wrapper around upsert logic)
+export const createForUser = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // Reuse upsertByUserId insertion logic but keep it separate for clarity
+    req.params.userId = String(req.params.userId);
+    // Call upsertByUserId which always inserts a new record
+    await upsertByUserId(req, res, next);
+  } catch (err) {
+    next(err);
+  }
+};
 export default { getByUserId, upsertByUserId };

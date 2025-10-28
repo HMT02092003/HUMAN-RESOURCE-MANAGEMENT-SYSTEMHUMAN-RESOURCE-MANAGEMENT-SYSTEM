@@ -2,8 +2,14 @@ import express from 'express';
 import * as allowanceCtrl from '../src/controller/allowanceTypeController';
 import * as employeeSalaryCtrl from '../src/controller/employeeSalaryProfileController';
 import * as payslipCtrl from '../src/controller/payslipController';
+import * as settingsCtrl from '../src/controller/SettingsController';
 
 const router = express.Router();
+
+// Small wrapper to adapt async controller functions to Express RequestHandler
+const asyncHandler = (fn: any) => (req: express.Request, res: express.Response, next: express.NextFunction) => {
+	Promise.resolve(fn(req, res, next)).catch(next);
+};
 
 // allowance types CRUD
 router.get('/allowance-types', allowanceCtrl.list as express.RequestHandler);
@@ -18,13 +24,34 @@ router.delete('/allowance-types/:id', allowanceCtrl.removeOne as express.Request
 router.get('/auth/users/:userId/salary', employeeSalaryCtrl.getByUserId as express.RequestHandler);
 router.put('/auth/users/:userId/salary', employeeSalaryCtrl.upsertByUserId as express.RequestHandler);
 
+// list all salary profiles for a user and create new salary profile
+router.get('/auth/users/:userId/salary-profiles', employeeSalaryCtrl.listByUserId as express.RequestHandler);
+router.post('/auth/users/:userId/salary-profiles', employeeSalaryCtrl.createForUser as express.RequestHandler);
+
 // Also expose the same endpoints without the 'auth' segment so API Gateway
 // path rewrite from /api/salary -> /api will work with frontend calls to
 // /api/salary/users/:userId/salary (consistent with other services).
 router.get('/users/:userId/salary', employeeSalaryCtrl.getByUserId as express.RequestHandler);
 router.put('/users/:userId/salary', employeeSalaryCtrl.upsertByUserId as express.RequestHandler);
 
+router.get('/users/:userId/salary-profiles', employeeSalaryCtrl.listByUserId as express.RequestHandler);
+router.post('/users/:userId/salary-profiles', employeeSalaryCtrl.createForUser as express.RequestHandler);
+
 // Generate monthly payslip from employee profile and its allowances
 router.post('/payslips/generate-from-profile/:userId', payslipCtrl.generateFromProfile as express.RequestHandler);
+
+// Settings endpoints (for salary-related configs)
+router.get('/settings', asyncHandler(settingsCtrl.getSettings));
+router.post('/settings', asyncHandler(settingsCtrl.updateSettings));
+router.post('/settings/key', asyncHandler(settingsCtrl.updateSettingByKey));
+router.get('/settings/:key', asyncHandler(settingsCtrl.getSettingByKey));
+
+// Convenience routes
+router.post('/settings/working-hours', asyncHandler(settingsCtrl.updateSettingByKey));
+router.post('/settings/overtime-rate', asyncHandler(settingsCtrl.updateSettingByKey));
+router.post('/settings/penalty-rate', asyncHandler(settingsCtrl.updateSettingByKey));
+router.post('/settings/bhxh', asyncHandler(settingsCtrl.updateSettingByKey));
+router.post('/settings/bhyt', asyncHandler(settingsCtrl.updateSettingByKey));
+router.post('/settings/tncn', asyncHandler(settingsCtrl.updateSettingByKey));
 
 export default router;

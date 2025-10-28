@@ -37,4 +37,15 @@ export default {
   upsertEmployeeSalaryProfile(userId: number | string, payload: any) {
   return api.put(`/api/salary/users/${userId}/salary`, payload).then(r => r.data);
   }
+,
+
+  // list all salary profiles for a user
+  listEmployeeSalaryProfiles(userId: number | string) {
+    return api.get(`/api/salary/users/${userId}/salary-profiles`).then(r => r.data);
+  },
+
+  // create a new salary profile for a user
+  createEmployeeSalaryProfile(userId: number | string, payload: any) {
+    return api.post(`/api/salary/users/${userId}/salary-profiles`, payload).then(r => r.data);
+  }
 };
