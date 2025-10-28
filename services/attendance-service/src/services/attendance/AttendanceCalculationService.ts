@@ -1,4 +1,5 @@
 import SettingsService from '../SettingsService';
+import SalaryService from '../SalaryService';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
@@ -364,129 +365,23 @@ export class AttendanceCalculationService {
     }
   }
 
-  // Lấy thông tin lương của user từ auth-service qua API Gateway
+  // Lấy thông tin lương của user từ salary-service
   private static async getUserSalaryInfo(userId: number, token?: string): Promise<UserSalaryInfo | null> {
     try {
-      console.log(`🔍 Getting salary info for user ${userId}...`);
+      console.log(`🔍 Getting salary info for user ${userId} from salary-service...`);
 
-      // Thử với token trước nếu có
-      if (token) {
-        const headers: any = {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        };
-
-        try {
-          // Gọi API lấy thông tin user qua gateway
-          console.log(`🔄 Calling API Gateway with token: ${API_GATEWAY_URL}/api/auth/users/detail/${userId}`);
-          const response = await axios.get(`${API_GATEWAY_URL}/api/auth/users/detail/${userId}`, { headers });
-
-          console.log('📥 Gateway response status:', response.status);
-          console.log('📥 Gateway response data:', response.data);
-
-          if (response.data && (response.data.salary !== undefined || response.data.baseSalary !== undefined)) {
-            const salaryInfo: UserSalaryInfo = {
-              baseSalary: response.data.salary || response.data.baseSalary || 0,
-              allowance: response.data.allowance || 0
-            };
-            console.log('💰 Salary info retrieved via Gateway with token:', salaryInfo);
-            return salaryInfo;
-          } else {
-            console.log('⚠️ Gateway response does not contain salary info, trying direct auth service...');
-          }
-        } catch (tokenError: any) {
-          console.log('⚠️ Failed to get salary via Gateway with token:', tokenError.response?.status, tokenError.message);
-          console.log('🔄 Trying direct auth service call...');
-        }
+      // Use SalaryService to fetch from salary-service
+      const salaryInfo = await SalaryService.fetchSalary(userId, token);
+      
+      if (salaryInfo) {
+        console.log('✅ Salary info retrieved from salary-service:', salaryInfo);
+        return salaryInfo;
       }
 
-      // Fallback: Gọi trực tiếp auth service với token nếu có
-      try {
-        console.log(`🔄 Trying direct auth service call for user ${userId}:`);
-
-        const headers: any = {
-          'Content-Type': 'application/json',
-          'X-Internal-Request': 'true'
-        };
-
-        // Thử với token nếu có
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
-
-        // Try new internal salary endpoint first (no token required)
-        const salaryEndpoint = `http://localhost:4001/api/internal/users/${userId}/salary`;
-        console.log(`🔍 Trying internal salary endpoint: ${salaryEndpoint}`);
-
-        try {
-          const salaryResponse = await axios.get(salaryEndpoint, {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 10000
-          });
-
-          console.log('📥 Internal salary response status:', salaryResponse.status);
-          console.log('📥 Internal salary response data:', salaryResponse.data);
-
-          if (salaryResponse.data && salaryResponse.data.success && salaryResponse.data.data) {
-            const salaryData = salaryResponse.data.data;
-            const salaryInfo: UserSalaryInfo = {
-              baseSalary: salaryData.salary || salaryData.baseSalary || 0,
-              allowance: salaryData.allowance || 0
-            };
-            console.log('✅ Salary info retrieved from internal endpoint:', salaryInfo);
-            return salaryInfo;
-          }
-        } catch (salaryError: any) {
-          console.log('⚠️ Internal salary endpoint failed:', salaryError.response?.status, salaryError.message);
-        }
-
-        // Fallback to old endpoint with token
-        const endpoint = `http://localhost:4001/api/users/detail/${userId}`;
-        console.log(`🔍 Trying fallback auth service endpoint: ${endpoint}`);
-        console.log('📤 Headers:', headers);
-
-        const response = await axios.get(endpoint, {
-          headers,
-          timeout: 10000
-        });
-
-        console.log('📥 Auth service response status:', response.status);
-        console.log('📥 Auth service response data keys:', Object.keys(response.data));
-
-        if (response.data && (response.data.salary !== undefined || response.data.baseSalary !== undefined)) {
-          const salaryInfo: UserSalaryInfo = {
-            baseSalary: response.data.salary || response.data.baseSalary || 0,
-            allowance: response.data.allowance || 0
-          };
-          console.log(`✅ Salary info retrieved from internal auth service:`, salaryInfo);
-          return salaryInfo;
-        } else {
-          console.error('❌ Auth service response does not contain salary information');
-          console.error('Response data:', response.data);
-        }
-      } catch (directError: any) {
-        console.error('❌ Internal auth service call failed:', {
-          status: directError.response?.status,
-          message: directError.message,
-          data: directError.response?.data
-        });
-      }
-
-      console.log('⚠️ No salary info found - this might be because:');
-      console.log('  - Token expired or invalid');
-      console.log('  - User does not exist in auth service');
-      console.log('  - User has no salary data');
-      console.log('  - Network/service connection issues');
-
-      // NOTE: Salary info retrieval failed - this could be due to:
-      // - User does not exist in database
-      // - User has no salary data configured
-      // - Network connectivity issues between services
-
-      console.log('  - Will set penalty to 0 and continue attendance recording');
+      console.log('⚠️ No salary info found for user - penalty will be 0');
       return null;
     } catch (error) {
-      console.error('❌ Error getting user salary info:', error);
+      console.error('❌ Error getting user salary info from salary-service:', error);
       console.log('⚠️ Will set penalty to 0 and continue attendance recording');
       return null;
     }
@@ -521,13 +416,15 @@ export class AttendanceCalculationService {
   private static async getSettings() {
     console.log('🔧 ATTENDANCE CALCULATION SERVICE - Getting settings...');
     try {
-      // Use SettingsService to fetch individual setting values
-      const [workingHoursVal, lunchBreakVal, overtimeRateVal, holidayRateVal, penaltyRateVal] = await Promise.all([
+      // Fetch penalty rates from salary-service
+      const penaltyRates = await SalaryService.fetchPenaltyRates();
+      
+      // Use SettingsService (attendance-service) to fetch attendance-related settings only
+      const [workingHoursVal, lunchBreakVal, overtimeRateVal, holidayRateVal] = await Promise.all([
         SettingsService.getSettingValue('WorkingHours'),
         SettingsService.getSettingValue('LunchBreak'),
         SettingsService.getSettingValue('OvertimeRate'),
         SettingsService.getSettingValue('HolidayRate'),
-        SettingsService.getSettingValue('PenaltyRate'),
       ]);
 
       const defaults = this.getDefaultSettings();
@@ -537,7 +434,8 @@ export class AttendanceCalculationService {
         lunchBreak: lunchBreakVal || defaults.lunchBreak,
         overtimeRate: overtimeRateVal || defaults.overtimeRate,
         holidayRate: holidayRateVal || defaults.holidayRate,
-        penaltyRate: penaltyRateVal || defaults.penaltyRate
+        // Use penalty rate from salary-service, fallback to default
+        penaltyRate: penaltyRates ? { rate: penaltyRates.late } : defaults.penaltyRate
       };
     } catch (error) {
       console.error('❌ Error getting settings:', error);
