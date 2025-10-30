@@ -34,9 +34,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     const pathname = usePathname();
     const router = useRouter();
 
-    console.log("permissions", permissions);
-    console.log("hasAccess", hasAccess);
-    console.log("permissionType", permissionType);
+    // debug logs removed
 
     // Generate default breadcrumb items based on current path
     const [currentBreadcrumb, setCurrentBreadcrumb] = useState<{ title: string; href?: string }[]>([]);
@@ -82,12 +80,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     }, [pathname, breadcrumbItems]);
 
     useEffect(() => {
-        // Lấy token từ cookies
-        const authToken = Cookies.get('token');
-        console.log("authToken", authToken);
+    // Lấy token từ cookies
+    const authToken = Cookies.get('token');
         if (authToken) {
             const tokenAfterDecode = getDecodedToken(authToken);
-            console.log("tokenAfterDecode", tokenAfterDecode);
+            // token decoded
             setRole(tokenAfterDecode);
 
             // Check permissions when we have both the decoded token and a requiredPermission
@@ -97,7 +94,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         } else {
             // Thử refresh token nếu có
             const refreshToken = Cookies.get('refreshToken');
-            console.log("refreshToken", refreshToken);
+                // refresh token available
             if (refreshToken) {
                 api.post('/api/refresh-token', { refreshToken })
                     .then(response => {
@@ -134,9 +131,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     }, [role, requiredPermission, permissionType]);
 
     const checkUserPermissions = (userData: any, permissionKey: string, permType: PermissionType) => {
-        if (userData?.user?.permissions) {
+            if (userData?.user?.permissions) {
             const permissionValue = userData.user.permissions[permissionKey];
-            console.log("permissionValue", permissionValue);
 
             const decodedPermissions = decodePermissions(permissionValue);
             setPermissions(decodedPermissions);

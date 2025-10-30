@@ -4,9 +4,15 @@ import { message } from 'antd';
 import moment from 'moment-timezone';
 import { getDecodedToken } from '../utils/decode-token';
 
-const API_BASE_URL = typeof window !== 'undefined' 
-  ? `${window.location.protocol}//${window.location.hostname}:4000`
-  : 'http://localhost:4000';
+const API_BASE_URL = (() => {
+  if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_API_GATEWAY_URL) {
+    return process.env.NEXT_PUBLIC_API_GATEWAY_URL;
+  }
+  if (typeof window !== 'undefined') {
+    return `${window.location.protocol}//${window.location.hostname}:4000`;
+  }
+  return 'http://localhost:4000';
+})();
 
 // --- Hàm để xây dựng FormData (copy từ BaseService) ---
 function buildFormData(formData: FormData, data: any, parentKey?: string) {
@@ -34,7 +40,11 @@ const createApiInstance = () => {
   instance.interceptors.request.use(
     (config) => {
       // Nhét cái Authorization Token vào
-      const accessToken = Cookies.get('token');
+      // Try to attach token from cookie (non-HttpOnly) or fallback to localStorage token
+      let accessToken = Cookies.get('token');
+      if (!accessToken && typeof window !== 'undefined') {
+        accessToken = window.localStorage?.getItem('token') || undefined;
+      }
       if (accessToken) {
         config.headers.Authorization = `Bearer ${accessToken}`;
       }

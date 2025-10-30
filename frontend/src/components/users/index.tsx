@@ -55,8 +55,6 @@ const UserTable = () => {
   const router = useRouter();
   const screens = Grid.useBreakpoint();
 
-  console.log("userData", userData);
-
   const createPer = true;
   const updatePer = true;
   const deletePer = true;

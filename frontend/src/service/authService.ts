@@ -26,7 +26,8 @@ class AuthService {
       }
 
       if (response.data.token) {
-        Cookies.set('token', response.data.token);
+  Cookies.set('token', response.data.token);
+  if (typeof window !== 'undefined') window.localStorage?.setItem('token', response.data.token);
       }
 
       const token = Cookies.get('token');
@@ -69,7 +70,8 @@ class AuthService {
       const response = await api.post(`/api/refresh-token`, { refreshToken });
       
       if (response.data.token) {
-        Cookies.set('token', response.data.token);
+    Cookies.set('token', response.data.token);
+    if (typeof window !== 'undefined') window.localStorage?.setItem('token', response.data.token);
       }
       
       return response.data;
@@ -102,6 +104,7 @@ class AuthService {
   logout() {
     Cookies.remove('token');
     Cookies.remove('refreshToken');
+  if (typeof window !== 'undefined') window.localStorage?.removeItem('token');
   }
 }
 

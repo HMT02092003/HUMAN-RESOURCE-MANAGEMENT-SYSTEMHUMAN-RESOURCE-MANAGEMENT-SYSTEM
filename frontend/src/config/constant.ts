@@ -80,6 +80,11 @@ const TypeOfStatusApplication = {
   3: "Từ chối",
 };
 
+const TypeOfStatusSalary = {
+  1: "Chưa chi lương",
+  2: "Đã chi lương",
+};
+
 const permissionScope = {
   global: 1,
   department: 2,
@@ -232,4 +237,7 @@ export default {
   ApplicationTypes,
   AttendanceStatus,
   LeaveTypeConfig,
+  APPLICATION_STATUS_LABELS,
+  APPLICATION_STATUS_COLORS,
+  TypeOfStatusSalary,
 };

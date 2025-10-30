@@ -72,8 +72,8 @@ export async function seed(knex) {
     },
     {
       "id": 11,
-      "name": "timeAttendance",
-      "description": "timeAttendance",
+      "name": "Chấm công",
+      "description": "Chấm công",
       "value": 31,
       "key": "timeAttendance",
     },
@@ -83,6 +83,20 @@ export async function seed(knex) {
       "description": "Quản lý phụ cấp",
       "value": 31,
       "key": "salary_allowances",
+    },
+    {
+      "id": 13,
+      "name": "Quản lý lương",
+      "description": "Quản lý lương",
+      "value": 31,
+      "key": "salaries",
+    },
+    {
+      "id": 14,
+      "name": "Thông tin lương cá nhân",
+      "description": "Thông tin lương cá nhân",
+      "value": 31,
+      "key": "personal_salary_info",
     }
   ];
 

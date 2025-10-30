@@ -1,4 +1,3 @@
-import { calculateOverrideValues } from 'next/dist/server/font-utils';
 import api from './apiService';
 
 export default {
@@ -55,6 +54,35 @@ export default {
   listPayslips(month: string) {
     return api.get('/api/salary/payslips', { params: { month } })
       .then(r => ({ success: r.data?.success ?? true, data: r.data?.data ?? r.data ?? [], message: r.data?.message }))
+      .catch(err => ({ success: false, data: [], message: err?.response?.data?.message || err.message }));
+  },
+
+  // List payslips paginated
+  listPayslipsPaginated(params: { month?: string; page?: number; pageSize?: number }) {
+    return api.get('/api/salary/payslips', { params: { month: params.month, page: params.page, pageSize: params.pageSize } })
+      .then(r => ({ success: r.data?.success ?? true, data: r.data?.data ?? r.data ?? [], total: r.data?.total ?? 0, message: r.data?.message }))
+      .catch(err => ({ success: false, data: [], total: 0, message: err?.response?.data?.message || err.message }));
+  },
+
+  // Get payslips for a single user (optional month filter)
+  getPayslipsByUser(userId: number | string, params?: { month?: string; year?: number; monthNum?: number }) {
+    const qs: any = {};
+    if (params?.month) qs.month = params.month;
+    if (params?.year) qs.year = params.year;
+    if (params?.monthNum) qs.month = params.monthNum;
+    return api.get(`/api/salary/users/${userId}/payslips`, { params: qs })
+      .then(r => ({ success: r.data?.success ?? true, data: r.data?.data ?? [], message: r.data?.message }))
+      .catch(err => ({ success: false, data: [], message: err?.response?.data?.message || err.message }));
+  },
+
+  // Get payslips for the authenticated user (me). Optional month filter.
+  getMyPayslips(params?: { month?: string; year?: number; monthNum?: number }) {
+    const qs: any = {};
+    if (params?.month) qs.month = params.month;
+    if (params?.year) qs.year = params.year;
+    if (params?.monthNum) qs.month = params.monthNum;
+    return api.get('/api/salary/payslips/me', { params: qs })
+      .then(r => ({ success: r.data?.success ?? true, data: r.data?.data ?? [], message: r.data?.message }))
       .catch(err => ({ success: false, data: [], message: err?.response?.data?.message || err.message }));
   },
 

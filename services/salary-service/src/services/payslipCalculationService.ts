@@ -76,6 +76,40 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
     if (!profileMap.has(key)) profileMap.set(key, p);
   });
 
+  // Detect users that don't have a salary profile
+  const missingProfileUserIds = newUserIds.filter(uid => !profileMap.has(uid));
+  if (missingProfileUserIds.length > 0) {
+    console.warn('[salary-service] Missing salary profiles for userIds:', missingProfileUserIds);
+    try {
+      // Fetch user info from auth-service via API Gateway
+      const usersResp = await axios.post(`${apiGateway}/api/auth/users/bulk`, { userIds: missingProfileUserIds.map(id => Number(id)) });
+      const missingUsers = (usersResp?.data?.data && Array.isArray(usersResp.data.data)) ? usersResp.data.data : [];
+
+      // Build readable missing info: if auth-service returned details use them, otherwise fallback to id only
+      const missingInfo = missingProfileUserIds.map(id => {
+        const found = missingUsers.find((u: any) => String(u.id) === String(id));
+        if (found) return { id: found.id, username: found.username, fullName: `${found.firstName || ''} ${found.lastName || ''}`.trim() };
+        return { id, username: null, fullName: null };
+      });
+
+      return {
+        success: false,
+        inserted: 0,
+        message: 'Không tìm thấy thông tin lương (salary profile) cho một số người dùng',
+        missingUsers: missingInfo
+      };
+    } catch (err) {
+      console.error('[salary-service] Error fetching missing users from auth-service:', err?.message || err);
+      // If we cannot fetch user info, still return ids
+      return {
+        success: false,
+        inserted: 0,
+        message: 'Không tìm thấy thông tin lương cho một số người dùng (và không thể lấy thông tin người dùng)',
+        missingUsers: missingProfileUserIds.map(id => ({ id }))
+      };
+    }
+  }
+
   // Lấy allowances từ bảng trung gian
   const profileIds = [...profileMap.values()].map(p => Number(p.id)).filter(Boolean);
   let allowanceRows: any[] = [];
@@ -198,7 +232,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
       total_deductions: round2(totalDeductions).toFixed(2),
       net_salary: round2(net).toFixed(2),
       notes:  `Bảng lương cho tháng ${monthStr}`,
-      status: 'unapproved'
+      status: "1"
     });
   }
 
@@ -214,6 +248,22 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
       if (created) createdRows.push(...(Array.isArray(created) ? created : [created]));
     }
   });
+
+  // Enrich createdRows with user info from auth-service
+  try {
+    const createdUserIds = [...new Set(createdRows.map(r => String(r.user_id)))].map(id => Number(id));
+    if (createdUserIds.length > 0) {
+      const usersResp = await axios.post(`${apiGateway}/api/auth/users/bulk`, { userIds: createdUserIds });
+      const users = (usersResp?.data?.data && Array.isArray(usersResp.data.data)) ? usersResp.data.data : [];
+      // attach user info to each created row
+      createdRows.forEach(row => {
+        const u = users.find((x: any) => String(x.id) === String(row.user_id));
+        row.user = u || null;
+      });
+    }
+  } catch (err) {
+    console.warn('[salary-service] Failed to enrich created payslips with user info:', err?.message || err);
+  }
 
   return {
     success: true,

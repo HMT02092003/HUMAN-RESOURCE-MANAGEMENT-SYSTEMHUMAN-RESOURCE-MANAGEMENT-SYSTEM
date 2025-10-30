@@ -2,6 +2,7 @@ import express from 'express';
 import * as allowanceCtrl from '../src/controller/allowanceTypeController';
 import * as employeeSalaryCtrl from '../src/controller/employeeSalaryProfileController';
 import * as payslipCtrl from '../src/controller/payslipController';
+import authenticate from '../src/middleware/authenticate';
 import * as settingsCtrl from '../src/controller/SettingsController';
 
 const router = express.Router();
@@ -43,6 +44,18 @@ router.post('/payslips/generate-from-profile/:userId', payslipCtrl.generateFromP
 router.post('/payslips/generate-from-attendance/:userId', payslipCtrl.generateFromAttendance as express.RequestHandler);
 // Bulk calculate payslips for a month from approved attendances
 router.post('/payslips/calculate-from-attendance', payslipCtrl.calculateFromAttendanceBulk as express.RequestHandler);
+
+// Get payslips for a single user (optional month filter)
+router.get('/auth/users/:userId/payslips', payslipCtrl.getPayslipsByUser as express.RequestHandler);
+router.get('/users/:userId/payslips', payslipCtrl.getPayslipsByUser as express.RequestHandler);
+
+// Authenticated user's own payslips
+router.get('/payslips/me', authenticate as express.RequestHandler, payslipCtrl.getMyPayslips as express.RequestHandler);
+router.get('/auth/payslips/me', authenticate as express.RequestHandler, payslipCtrl.getMyPayslips as express.RequestHandler);
+
+// Public/admin: list payslips paginated with optional month filter
+// GET /payslips?month=YYYY-MM&page=0&pageSize=25
+router.get('/payslips', payslipCtrl.listPaginatedPayslips as express.RequestHandler);
 
 // Admin: list payslips for a given year+month (for debugging/inspection)
 router.get('/payslips/admin/list-by-month', payslipCtrl.listPayslipsByMonth as express.RequestHandler);

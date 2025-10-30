@@ -15,10 +15,8 @@ class FormDataBuilder {
           this.buildFormData(formData, data[key], parentKey ? `${parentKey}[${key}]` : key);
         });
       } else {
-        const value = data == null ? '' : data;
-        // console.log('parentKey: ', parentKey)
-        console.log('value: ', value)
-        formData.append(parentKey, value);
+  const value = data == null ? '' : data;
+  formData.append(parentKey, value);
       }
     }
   }

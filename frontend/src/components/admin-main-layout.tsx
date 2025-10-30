@@ -72,12 +72,12 @@ function getItem(
 ): ExtendedMenuItem {
     // Xác định xem tham số thứ 4 là permission hay children
     const isChildren = Array.isArray(permissionOrChildren);
-    
+
     // Xác định xem tham số thứ 5 là requirePermission hay permissions array
     const isPermissionsArray = Array.isArray(requirePermissionOrPermissions);
-    const isPermissionType = typeof requirePermissionOrPermissions === 'string' && 
-                             ['read', 'create', 'update', 'delete', 'approve'].includes(requirePermissionOrPermissions);
-    
+    const isPermissionType = typeof requirePermissionOrPermissions === 'string' &&
+        ['read', 'create', 'update', 'delete', 'approve'].includes(requirePermissionOrPermissions);
+
     return {
         key,
         icon,
@@ -146,7 +146,7 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         <CalendarOutlined />,
         [
             getItem('Bảng chấm công', 'attendance', <CalendarOutlined />, 'timeAttendance'),
-            getItem('Duyệt bảng chấm công', 'attendanceApproval', <CheckCircleOutlined />, 'timeAttendance', 'approve'), 
+            getItem('Duyệt bảng chấm công', 'attendanceApproval', <CheckCircleOutlined />, 'timeAttendance', 'approve'),
         ],
         ['timeAttendance']
     ),
@@ -161,7 +161,8 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         <ProfileOutlined />,
         [
             getItem('Cấu hình phụ cấp', 'salary_allowances', <ContainerOutlined />, 'salary_allowances'),
-            getItem('Quản lý bảng lương', 'salary_management', <FileTextOutlined />, 'salary_allowances'),
+            getItem('Quản lý bảng lương', 'salaries', <FileTextOutlined />, 'salaries'),
+            getItem('Bảng lương', 'personal_salary_info', <FileTextOutlined />, 'personal_salary_info'),
         ],
         ['salary_allowances']
     ),
@@ -201,13 +202,13 @@ const isDeepEqual = (obj1: any, obj2: any): boolean => {
     return true;
 };
 
-const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({ 
-    children, 
-    userData, 
-    breadcrumbItems = [], 
-    pageTitle, 
-    pageDescription, 
-    userPermissions = {} 
+const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
+    children,
+    userData,
+    breadcrumbItems = [],
+    pageTitle,
+    pageDescription,
+    userPermissions = {}
 }) => {
     const [collapsed, setCollapsed] = useState(false);
     const screens = Grid.useBreakpoint();
@@ -288,15 +289,15 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
             if (item.requirePermission) {
                 const permKey = item.permission;
                 if (!permKey) return [];
-                
+
                 const permVal = userPermissions[permKey];
                 if (!permVal) return [];
-                
+
                 const decoded = decodePermissions(parseInt(permVal));
-                
+
                 // Phải có cả quyền READ và quyền được yêu cầu (approve/create/update/delete)
                 if (!decoded.read || !decoded[item.requirePermission]) return [];
-                
+
                 return [item];
             }
 
@@ -341,10 +342,11 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
         if (pathname === '/attendance') return ['attendance'];
         if (pathname.startsWith('/attendance')) return ['attendance_parent'];
 
-        if (pathname === '/user') return ['users'];
-        if (pathname === '/roles') return ['roles'];
+    if (pathname === '/user') return ['users'];
+    if (pathname === '/roles') return ['roles'];
     if (pathname.startsWith('/salary/allowances')) return ['salary_allowances'];
-    if (pathname === '/salary/management') return ['salary_management'];
+    if (pathname === '/salary/management') return ['salaries'];
+    if (pathname.startsWith('/salary')) return ['salary_parent'];
 
         const pathSegment = pathname.split('/')[1];
         return [pathSegment || 'home'];
@@ -388,8 +390,11 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
             case 'salary_allowances':
                 router.push('/salary/allowances');
                 break;
-            case 'salary_management':
+            case 'salaries':
                 router.push('/salary/management');
+                break;
+            case 'personal_salary_info':
+                router.push('/salary/personal');
                 break;
             case 'account_management_parent':
             case 'applications_parent':
@@ -492,7 +497,8 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                         items={convertToAntMenuItems(menuItems)}
                         onClick={handleMenuClick}
                         selectedKeys={getSelectedKeys()}
-                        defaultOpenKeys={['applications_parent', 'account_management_parent', 'attendance_parent']}
+                        // Ensure salary section is open on initial load in addition to other defaults
+                        defaultOpenKeys={[ 'applications_parent', 'account_management_parent', 'attendance_parent', 'salary_parent', pathname && pathname.startsWith('/salary') ? 'salary_parent' : '' ].filter(Boolean)}
                     />
                 </Sider>
 
