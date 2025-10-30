@@ -170,6 +170,37 @@ export const getAllMonthlyAttendance = async (req: Request, res: Response) => {
 };
 
 /**
+ * GET /api/attendance/monthly-attendance/by-month?month=YYYY-MM&isApproved=true&page=0&pageSize=100
+ * Return monthly_attendances filtered by month and approval flag (fast direct DB query).
+ */
+export const getMonthlyAttendanceByMonth = async (req: Request, res: Response) => {
+  try {
+  const month = String((req.query as any)['month'] || req.body?.['month'] || '').trim();
+  const isApprovedRaw = (req.query as any)['isApproved'] ?? req.body?.['isApproved'];
+  const page = Number((req.query as any)['page'] ?? req.body?.['page'] ?? 0);
+  const pageSize = Number((req.query as any)['pageSize'] ?? req.body?.['pageSize'] ?? 1000);
+
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ success: false, message: 'month is required in YYYY-MM format' });
+    }
+
+    const q = MonthlySummaryModel.query().where('month', String(month));
+    if (typeof isApprovedRaw !== 'undefined') {
+      const approved = (String(isApprovedRaw) === 'true' || String(isApprovedRaw) === '1' || isApprovedRaw === true || isApprovedRaw === 1);
+      q.andWhere('isApproved', approved);
+    }
+
+    // Use simple pagination
+    const pageIndex = Math.max(0, page);
+    const p = await q.orderBy('id', 'asc').page(pageIndex, pageSize);
+    return res.status(200).json({ success: true, data: { results: p.results, total: p.total } });
+  } catch (error: any) {
+    console.error('❌ Error in getMonthlyAttendanceByMonth:', error);
+    return res.status(500).json({ success: false, message: error.message || 'Internal error' });
+  }
+};
+
+/**
  * Get monthly summaries according to permission scope returned by auth-service
  * GET /api/attendance/monthly-summaries-by-scope?permissionKey=users&page=0&pageSize=10&month=2025-09
  */
@@ -215,5 +246,20 @@ export const approveMonthlyAttendance = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('❌ Error in approveMonthlyAttendance:', error);
     return res.status(500).json({ success: false, message: error.message || 'Lỗi khi duyệt chấm công tháng' });
+  }
+};
+
+// POST /api/admin/calculate-monthly/:userId?year=YYYY&month=MM
+export const calculateAndSaveMonthly = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { year, month } = req.query;
+    if (!userId || !year || !month) return res.status(400).json({ success: false, message: 'userId, year and month are required' });
+    const dateStr = `${String(year)}-${String(month).padStart(2,'0')}-01`;
+    await MonthlyReportService.calculateAndSaveMonthlyAttendance(Number(userId), dateStr);
+    return res.status(200).json({ success: true, message: 'Monthly attendance calculated and saved' });
+  } catch (error: any) {
+    console.error('Error in calculateAndSaveMonthly:', error);
+    return res.status(500).json({ success: false, message: error.message || 'Internal error' });
   }
 };

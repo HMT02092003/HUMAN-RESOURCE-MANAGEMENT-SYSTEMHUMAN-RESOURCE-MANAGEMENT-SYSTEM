@@ -5,6 +5,7 @@ import { MonthlyReportService } from './MonthlyReportService';
 import * as AttendanceRecordService from './attendance/AttendanceRecordService';
 import AttendanceCalculationService from './attendance/AttendanceCalculationService';
 import MonthlySummaryModel from '@/Models/MonthlySummaryModel';
+import { getDecodedToken } from '@/utils/decode-token';
 
 function getLocalIpAddress(): string {
   const interfaces = os.networkInterfaces();
@@ -52,9 +53,19 @@ export class AttendanceService {
       const userIds: number[] = scopeResult?.data?.userIds || [];
       if (!userIds || userIds.length === 0) return { results: [], total: 0, page, pageSize };
 
+      // Resolve current user id locally by decoding the token and exclude it from results
+      let currentUserId: number | null = null;
+      try {
+        const decoded:any = getDecodedToken(token);
+        if (decoded && decoded.sub) currentUserId = Number(decoded.user.id);
+      } catch (dErr) {
+        logger.error('Failed to decode token for current user exclusion', String((dErr as any)?.message || dErr));
+      }
+
       // Query monthly_attendances for those userIds
-      const baseQuery = MonthlySummaryModel.query().whereIn('userId', userIds);
-      if (pager?.month) baseQuery.andWhere('month', pager.month);
+      const baseQuery = MonthlySummaryModel.query()
+        .whereIn('userId', userIds)
+      if (currentUserId) baseQuery.whereNot('userId', currentUserId);
 
       const [countResult] = await baseQuery.clone().count('* as count') as any;
       const total = Number(countResult.count || 0);

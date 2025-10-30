@@ -39,6 +39,13 @@ router.post('/users/:userId/salary-profiles', employeeSalaryCtrl.createForUser a
 
 // Generate monthly payslip from employee profile and its allowances
 router.post('/payslips/generate-from-profile/:userId', payslipCtrl.generateFromProfile as express.RequestHandler);
+// Generate payslip from attendance summary (monthly-full)
+router.post('/payslips/generate-from-attendance/:userId', payslipCtrl.generateFromAttendance as express.RequestHandler);
+// Bulk calculate payslips for a month from approved attendances
+router.post('/payslips/calculate-from-attendance', payslipCtrl.calculateFromAttendanceBulk as express.RequestHandler);
+
+// Admin: list payslips for a given year+month (for debugging/inspection)
+router.get('/payslips/admin/list-by-month', payslipCtrl.listPayslipsByMonth as express.RequestHandler);
 
 // Settings endpoints (for salary-related configs)
 router.get('/settings', asyncHandler(settingsCtrl.getSettings));

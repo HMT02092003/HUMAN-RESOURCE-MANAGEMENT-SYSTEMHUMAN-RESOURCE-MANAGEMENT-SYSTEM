@@ -2,7 +2,7 @@
 
 import React from 'react';
 import MainLayout from '@/components/main-layout';
-import AllowanceForm from '@/components/salary/AllowanceForm';
+import AllowanceForm from '@/components/salary/allowanceForm';
 import { HomeOutlined } from '@ant-design/icons';
 
 const Page = () => {

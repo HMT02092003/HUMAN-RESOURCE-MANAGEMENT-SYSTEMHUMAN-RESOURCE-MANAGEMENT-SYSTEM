@@ -14,8 +14,9 @@ export const otpService = {
   generateToken: (email: string) => {
     const payload = { email };
     const secret = process.env.JWT_SECRET || 'c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1'; // Sử dụng một khóa bí mật an toàn
-    const options = { expiresIn: '1h' }; // Token hết hạn sau 1 giờ
-    return jwt.sign(payload, secret, options);
+  const options = { expiresIn: '1h' }; // Token hết hạn sau 1 giờ
+  // cast options to any to satisfy jwt typings in this codebase
+  return jwt.sign(payload, secret as any, options as any);
   },
 
   sendResetPasswordLink: async (email: string) => {

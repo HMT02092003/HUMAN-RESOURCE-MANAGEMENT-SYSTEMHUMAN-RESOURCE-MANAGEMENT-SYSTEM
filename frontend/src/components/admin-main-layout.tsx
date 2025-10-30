@@ -160,7 +160,8 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         'salary_parent',
         <ProfileOutlined />,
         [
-            getItem('Cấu hình phụ cấp', 'salary_allowances', <ContainerOutlined />, 'salary_allowances')
+            getItem('Cấu hình phụ cấp', 'salary_allowances', <ContainerOutlined />, 'salary_allowances'),
+            getItem('Quản lý bảng lương', 'salary_management', <FileTextOutlined />, 'salary_allowances'),
         ],
         ['salary_allowances']
     ),
@@ -343,6 +344,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
         if (pathname === '/user') return ['users'];
         if (pathname === '/roles') return ['roles'];
     if (pathname.startsWith('/salary/allowances')) return ['salary_allowances'];
+    if (pathname === '/salary/management') return ['salary_management'];
 
         const pathSegment = pathname.split('/')[1];
         return [pathSegment || 'home'];
@@ -385,6 +387,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                 break;
             case 'salary_allowances':
                 router.push('/salary/allowances');
+                break;
+            case 'salary_management':
+                router.push('/salary/management');
                 break;
             case 'account_management_parent':
             case 'applications_parent':

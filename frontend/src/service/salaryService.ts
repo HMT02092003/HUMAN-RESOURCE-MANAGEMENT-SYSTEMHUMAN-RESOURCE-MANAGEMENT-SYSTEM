@@ -1,3 +1,4 @@
+import { calculateOverrideValues } from 'next/dist/server/font-utils';
 import api from './apiService';
 
 export default {
@@ -47,5 +48,20 @@ export default {
   // create a new salary profile for a user
   createEmployeeSalaryProfile(userId: number | string, payload: any) {
     return api.post(`/api/salary/users/${userId}/salary-profiles`, payload).then(r => r.data);
+  }
+,
+
+  // List payslips for a given month (normalize response)
+  listPayslips(month: string) {
+    return api.get('/api/salary/payslips', { params: { month } })
+      .then(r => ({ success: r.data?.success ?? true, data: r.data?.data ?? r.data ?? [], message: r.data?.message }))
+      .catch(err => ({ success: false, data: [], message: err?.response?.data?.message || err.message }));
+  },
+
+  // Trigger bulk calculation on the server for a month
+  calculateFromAttendance(month: string) {
+    return api.post('/api/salary/payslips/calculate-from-attendance', { month })
+      .then(r => ({ success: r.data?.success ?? true, data: r.data?.data ?? r.data ?? null, message: r.data?.message }))
+      .catch(err => ({ success: false, data: null, message: err?.response?.data?.message || err.message }));
   }
 };

@@ -71,18 +71,8 @@ export class MonthlyPayslip extends Model {
   };
 
   static get relationMappings(): any {
-  const requireFrom = createRequire(import.meta.url);
-  const PayslipAllowance = requireFrom('../Model/PayslipAllowance').default;
-    return {
-      allowancesList: {
-        relation: Model.HasManyRelation,
-        modelClass: PayslipAllowance,
-        join: {
-          from: 'monthly_payslips.id',
-          to: 'payslip_allowances.monthly_payslip_id',
-        },
-      },
-    };
+  // No relation mappings: this DB schema stores allowances on the monthly_payslips table
+  return {};
   }
 }
 

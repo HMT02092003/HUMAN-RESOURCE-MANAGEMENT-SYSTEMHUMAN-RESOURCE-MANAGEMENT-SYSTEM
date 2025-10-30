@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Table, Button, message, Tag, Grid, ConfigProvider, Tooltip, Input } from 'antd';
-import { SearchOutlined } from '@ant-design/icons';
+import { Table, Button, message, Tag, Grid, ConfigProvider, Tooltip, Input, Space } from 'antd';
+import { FileProtectOutlined, SearchOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import { CheckCircleOutlined, CheckOutlined, HomeOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -301,12 +301,8 @@ const AttendanceApprovalManagement = () => {
             },
           }}
         >
-          {/* Hide approve button if already approved */}
-          {record.isApproved ? (
-            <Tooltip title="Đã duyệt">
-              <Button type="text" icon={<CheckCircleOutlined style={{ color: 'gray' }} />} disabled />
-            </Tooltip>
-          ) : (
+          {/* If not approved - show approve attendance button. If approved - show payroll approval button */}
+          {!record.isApproved ? (
             <Tooltip title="Duyệt bảng chấm công">
               <Button
                 type="text"
@@ -314,6 +310,12 @@ const AttendanceApprovalManagement = () => {
                 onClick={() => handleApproveAttendance(record.id)}
               />
             </Tooltip>
+          ) : (
+            <Space>
+              <Tooltip title="Đã duyệt">
+                <Button type="text" icon={<CheckCircleOutlined style={{ color: 'gray' }} />} disabled />
+              </Tooltip>
+            </Space>
           )}
         </ConfigProvider>
       ),
@@ -408,6 +410,11 @@ const AttendanceApprovalManagement = () => {
   const rowSelection = {
     selectedRowKeys,
     onChange: (newKeys: React.Key[]) => setSelectedRowKeys(newKeys),
+    // Disable checkbox for rows that are already approved
+    getCheckboxProps: (record: any) => ({
+      disabled: Boolean(record?.isApproved),
+      name: `select-${record?.id}`,
+    }),
   };
 
   const handleApproveSelected = async () => {

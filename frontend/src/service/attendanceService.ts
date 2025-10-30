@@ -199,6 +199,21 @@ class AttendanceService {
       throw new Error(error.response?.data?.message || error.message || 'Lỗi khi lấy dữ liệu');
     }
   }
+
+  // Generate payslip for a user from their profile (calls salary-service)
+  async generatePayslipFromProfile(userId: number, year: number, month: number) {
+    try {
+    // send empty object instead of `null` so axios doesn't serialize to the literal JSON "null"
+    const response = await apiService.post(`/api/salary/payslips/generate-from-profile/${userId}`, {}, { params: { year, month } });
+      if (response.data && (response.status === 201 || response.data)) {
+        return response.data;
+      }
+      throw new Error(response.data?.message || 'Không thể tạo bảng lương');
+    } catch (error: any) {
+      console.error('Error generating payslip:', error);
+      throw new Error(error.response?.data?.message || error.message || 'Lỗi khi tạo bảng lương');
+    }
+  }
 }
 
 export const attendanceService = new AttendanceService();

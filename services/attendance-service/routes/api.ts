@@ -3,7 +3,7 @@
  * Chỉ giữ các API đang được sử dụng bởi frontend
  */
 import { Router, Request, Response } from 'express';
-import { getAllMonthlyAttendance, getUserMonthlyFull, recordAttendance, approveMonthlyAttendance } from '@/controller/AttendanceController';
+import { getAllMonthlyAttendance, getUserMonthlyFull, recordAttendance, approveMonthlyAttendance, calculateAndSaveMonthly } from '@/controller/AttendanceController';
 import {
   getSettings,
   updateSettings,
@@ -29,9 +29,22 @@ router.post('/record', async (req: Request, res: Response) => {
   await recordAttendance(req, res);
 });
 
+// Admin helper: calculate and upsert monthly_attendances for a user/month
+router.post('/admin/calculate-monthly/:userId', async (req: Request, res: Response) => {
+  await calculateAndSaveMonthly(req, res as any);
+});
+
 
 router.get('/monthly-attendance', async (req: Request, res: Response) => {
   await getAllMonthlyAttendance(req, res);
+});
+
+// Fast endpoint: get monthly attendance rows filtered by month and approval flag
+router.get('/monthly-attendance/by-month', (req: Request, res: Response, next) => {
+  (async () => {
+    const controller = await import('@/controller/AttendanceController');
+    return controller.getMonthlyAttendanceByMonth(req, res);
+  })().catch(next);
 });
 
 router.post('/approve-monthly', async (req: Request, res: Response) => {

@@ -178,6 +178,14 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
     };
   };
 
+  // format small rates reliably (trim trailing zeros but preserve small precision)
+  const formatRate = (val: any) => {
+    const n = Number(val ?? 0);
+    if (Number.isNaN(n)) return '0';
+    // keep up to 6 decimal places, trim trailing zeros
+    return n.toFixed(6).replace(/\.0+$|(?<=\.[0-9]*?)0+$/,'').replace(/\.$/, '');
+  };
+
   const fetchSettings = async () => {
     try {
       setFetchLoading(true);
@@ -186,11 +194,16 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       const response = await SettingsService.getAllSettings();
       console.log('Raw settings data từ backend:', response);
 
+      let transformedData: any = null;
       if (response && Array.isArray(response) && response.length > 0) {
-        // Transform dữ liệu từ backend format
-        const transformedData = transformBackendData(response);
-        console.log('Transformed settings data:', transformedData);
+        transformedData = transformBackendData(response);
+      } else if (response && typeof response === 'object') {
+        // service returns merged object map { key: value }
+        transformedData = validateAndMergeSettings(response);
+      }
 
+      if (transformedData) {
+        console.log('Transformed settings data:', transformedData);
         setSettingsData(transformedData);
         updateFormFields(transformedData);
       } else {
@@ -1259,7 +1272,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
                 Tỉ lệ hiện tại
               </p>
               <p style={{ margin: 0, fontSize: '24px', fontWeight: 'bold', color: '#f5222d' }}>
-                {settingsData?.PenaltyRate?.rate || defaultSettings.PenaltyRate.rate}%
+                {formatRate(settingsData?.PenaltyRate?.rate || 0)}%
               </p>
             </div>
           </div>

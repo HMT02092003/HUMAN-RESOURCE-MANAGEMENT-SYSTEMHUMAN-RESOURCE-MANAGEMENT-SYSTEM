@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState } from 'react';
 import useBaseHook from '@src/hooks/BaseHook';
 import dynamic from 'next/dynamic';

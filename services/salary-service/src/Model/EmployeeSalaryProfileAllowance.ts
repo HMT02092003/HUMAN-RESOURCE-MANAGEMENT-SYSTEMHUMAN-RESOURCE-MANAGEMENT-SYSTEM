@@ -5,6 +5,7 @@ export class EmployeeSalaryProfileAllowance extends Model {
   id!: number;
   employee_salary_profile_id!: number;
   allowance_type_id!: number;
+  amount?: number;
   created_at?: string;
   updated_at?: string | null;
 
@@ -17,10 +18,11 @@ export class EmployeeSalaryProfileAllowance extends Model {
   static jsonSchema = {
     type: 'object',
     required: ['employee_salary_profile_id', 'allowance_type_id'],
-    properties: {
+      properties: {
       id: { type: 'integer' },
       employee_salary_profile_id: { type: 'integer' },
       allowance_type_id: { type: 'integer' },
+      amount: { type: ['number', 'string'] },
       created_at: { type: 'string', format: 'date-time' },
       updated_at: { type: ['string', 'null'], format: 'date-time' },
     },

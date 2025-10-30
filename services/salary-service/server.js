@@ -11,8 +11,18 @@ const PORT = process.env.PORT || 4005;
 const serviceName = process.env.SERVICE_NAME || 'salary-service';
 
 app.use(cors({ origin: true, credentials: true }));
+// parse JSON with default strict parser
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Friendly JSON parse error handler: body-parser throws SyntaxError on invalid JSON
+app.use((err, req, res, next) => {
+  if (err && err.type === 'entity.parse.failed' && err instanceof SyntaxError) {
+    // Return a 400 with a clear message rather than exposing full stack
+    return res.status(400).json({ success: false, message: 'Invalid JSON body' });
+  }
+  return next(err);
+});
 
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', service: 'salary-service', port: PORT });

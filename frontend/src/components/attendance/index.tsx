@@ -1161,7 +1161,7 @@ const AttendanceSimplePage = () => {
                 <Text style={{ fontSize: isMobile ? 11 : 12, color: '#8c8c8c' }}>Tổng cộng</Text>
                 <div>
                   <Text strong style={{ color: '#ff4d4f', fontSize: isMobile ? 16 : 18 }}>
-                    {formatVND((monthlyStats.totalPenalty || 0) + (monthlyStats.totalUnauthorizedAbsencePenalty || 0))}đ
+                    {formatVND((monthlyStats.totalPenalty || 0))}đ
                   </Text>
                 </div>
               </div>
