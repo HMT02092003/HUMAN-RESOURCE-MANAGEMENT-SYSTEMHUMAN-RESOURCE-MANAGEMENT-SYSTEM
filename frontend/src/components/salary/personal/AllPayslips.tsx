@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { DatePicker, Button, Table, message, Space, Input } from 'antd';
+import { DatePicker, Button, Table, message, Space, Input, Modal, Descriptions, Row, Col } from 'antd';
 import type { InputRef } from 'antd';
 import type { ColumnType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -41,6 +41,10 @@ const AllPayslips: React.FC = () => {
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(25);
   const [total, setTotal] = useState(0);
+
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [selectedPayslip, setSelectedPayslip] = useState<any>(null);
 
   const searchInput = useRef<InputRef>(null);
 
@@ -89,6 +93,22 @@ const AllPayslips: React.FC = () => {
 
   const formatDate = (text: string | undefined | null) => { if (!text) return ''; return dayjs(text).format('DD/MM/YYYY HH:mm:ss'); };
 
+  const openDetail = async (id: number | string) => {
+    setDetailLoading(true);
+    try {
+      const res = await salaryService.getPayslipById(id);
+      if (res.success) {
+        setSelectedPayslip(res.data);
+        setDetailModalVisible(true);
+      } else {
+        message.error(res.message || 'Không thể tải thông tin phiếu lương');
+      }
+    } catch (err: any) {
+      console.error(err);
+      message.error(err?.message || 'Lỗi khi tải chi tiết');
+    } finally { setDetailLoading(false); }
+  };
+
   const columns: ColumnType<PayslipDataType>[] = [
     { title: 'Tên nhân viên', dataIndex: 'user', key: 'user', render: (_v, r:any) => r.fullName || r.username || 'N/A' },
     { title: 'Phòng ban', dataIndex: ['department','name'], key: 'department', render: (_,_r:any) => {
@@ -99,7 +119,7 @@ const AllPayslips: React.FC = () => {
     { title: 'Tháng', dataIndex: 'month', key: 'month' },
     { title: 'Lương cơ bản', dataIndex: 'base_salary', key: 'base_salary', render: (t)=> formatCurrency(t) + ' VNĐ' },
     { title: 'Phụ cấp', dataIndex: 'allowances', key: 'allowances', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Lương tăng ca', dataIndex: 'overtime_pay', key: 'overtime_pay', render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'Lương tăng ca', dataIndex: 'overtime_pay', key: 'overtime_pay', render: (t)=> formatCurrency(t) + ' VNĐ' }, 
     { title: 'Tổng lương (Chưa khấu trừ)', dataIndex: 'gross_salary', key: 'gross_salary', render: (t)=> formatCurrency(t) + ' VNĐ' },
     { title: 'BHXH', dataIndex: 'social_insurance', key: 'social_insurance', render: (t)=> formatCurrency(t) + ' VNĐ' },
     { title: 'BHYT', dataIndex: 'health_insurance', key: 'health_insurance', render: (t)=> formatCurrency(t) + ' VNĐ' },
@@ -110,6 +130,12 @@ const AllPayslips: React.FC = () => {
     { title: 'Ghi chú', dataIndex: 'notes', key: 'notes' },
     { title: 'Ngày tạo', dataIndex: 'created_at', key: 'created_at', render: (t)=> formatDate(t) },
     { title: 'Ngày cập nhật', dataIndex: 'updated_at', key: 'updated_at', render: (t)=> formatDate(t) },
+    { title: 'Thao tác', key: 'actions', fixed: 'right', width: 80, render: (_,_r:any) => (
+      <Button type="text" onClick={() => openDetail(_r.id)} aria-label="Xem chi tiết">
+        {/* eye outline icon */}
+        <svg style={{ width: 18, height: 18 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+      </Button>
+    ) },
   ];
 
   return (
@@ -123,6 +149,83 @@ const AllPayslips: React.FC = () => {
         onChange={(pagination) => handleTableChange(pagination)}
         scroll={{ x: 'max-content' }}
       />
+
+      <Modal
+        title={selectedPayslip ? `Phiếu lương - ${selectedPayslip.fullName || selectedPayslip.username || ''} (${selectedPayslip.year || ''}-${String(selectedPayslip.month || '').padStart(2,'0')})` : 'Phiếu lương'}
+        open={detailModalVisible}
+        onCancel={() => { setDetailModalVisible(false); setSelectedPayslip(null); }}
+        footer={null}
+        width={900}
+        centered
+      >
+        {selectedPayslip ? (
+          <div style={{ padding: 16, border: '1px solid #f0f0f0', borderRadius: 6, background: '#fff' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{selectedPayslip.fullName || selectedPayslip.username}</div>
+                <div style={{ color: '#666' }}>{selectedPayslip.departmentName || (selectedPayslip.department && selectedPayslip.department.name) || 'N/A'}</div>
+              </div>
+              <div style={{ textAlign: 'right', color: '#444' }}>
+                <div>Kỳ: {selectedPayslip.year} - {String(selectedPayslip.month).padStart(2, '0')}</div>
+                <div style={{ fontSize: 12, color: '#888' }}>{formatDate(selectedPayslip.created_at)}</div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 24 }}>
+              <div style={{ flex: 1, borderRight: '1px dashed #eee', paddingRight: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                  <div>Lương cơ bản</div>
+                  <div>{formatCurrency(selectedPayslip.base_salary)} VNĐ</div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                  <div>Phụ cấp</div>
+                  <div>{formatCurrency(selectedPayslip.allowances)} VNĐ</div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                  <div>Tăng ca</div>
+                  <div>{formatCurrency(selectedPayslip.overtime_pay)} VNĐ</div>
+                </div>
+                <div style={{ borderTop: '1px solid #f0f0f0', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
+                  <div>Tổng thu nhập (Gross)</div>
+                  <div>{formatCurrency(selectedPayslip.gross_salary)} VNĐ</div>
+                </div>
+              </div>
+
+              <div style={{ flex: 1, paddingLeft: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                  <div>BHXH</div>
+                  <div>{formatCurrency(selectedPayslip.social_insurance)} VNĐ</div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                  <div>BHYT</div>
+                  <div>{formatCurrency(selectedPayslip.health_insurance)} VNĐ</div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                  <div>Tiền phạt</div>
+                  <div>{formatCurrency(selectedPayslip.penalty_total)} VNĐ</div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0' }}>
+                  <div>Thuế TNCN</div>
+                  <div>{formatCurrency(selectedPayslip.personal_income_tax)} VNĐ</div>
+                </div>
+                <div style={{ borderTop: '1px solid #f0f0f0', marginTop: 8, paddingTop: 8, display: 'flex', justifyContent: 'space-between', fontWeight: 600 }}>
+                  <div>Tổng khấu trừ</div>
+                  <div>{formatCurrency(selectedPayslip.total_deductions)} VNĐ</div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ color: '#666' }}>{selectedPayslip.notes || '---'}</div>
+              <div style={{ textAlign: 'right' }}>
+                <br /><br />
+                <div style={{ marginBottom: 6 }}>Tổng khấu trừ: {formatCurrency(selectedPayslip.total_deductions)} VNĐ</div>
+                <div style={{ fontSize: 20, color: 'green', fontWeight: 800 }}>Lương thực nhận: {formatCurrency(selectedPayslip.net_salary)} VNĐ</div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 };

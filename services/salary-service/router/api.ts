@@ -59,6 +59,8 @@ router.get('/payslips', payslipCtrl.listPaginatedPayslips as express.RequestHand
 
 // Admin: list payslips for a given year+month (for debugging/inspection)
 router.get('/payslips/admin/list-by-month', payslipCtrl.listPayslipsByMonth as express.RequestHandler);
+// Get single payslip by id (enriched with user and department)
+router.get('/payslips/:id', payslipCtrl.getPayslipById as express.RequestHandler);
 
 // Settings endpoints (for salary-related configs)
 router.get('/settings', asyncHandler(settingsCtrl.getSettings));

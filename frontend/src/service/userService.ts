@@ -132,5 +132,15 @@ const UserService = {
       throw error;
     }
   },
+
+  // Lấy tất cả users không phân trang (một lần) - useful for selects
+  getAllUsersAll: async (params?: { scope?: string }) => {
+    try {
+      const response = await api.get('/api/auth/users/all', { params: { ...(params || {}), _t: Date.now() } });
+      return response.data; // array of users
+    } catch (error) {
+      throw error;
+    }
+  },
 };
 export default UserService;

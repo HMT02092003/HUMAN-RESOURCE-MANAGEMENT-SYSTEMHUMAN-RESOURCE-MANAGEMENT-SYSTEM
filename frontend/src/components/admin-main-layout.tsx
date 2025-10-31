@@ -166,6 +166,16 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         ],
         ['salary_allowances']
     ),
+
+        getItem(
+        'Quản lý công việc',
+        'job_management_parent',
+        <ProfileOutlined />,
+        [
+            getItem('Quản lí hồ sơ', 'jobs', <FileTextOutlined />),
+        ],
+    ),
+    
 ];
 
 const isDeepEqual = (obj1: any, obj2: any): boolean => {
@@ -378,6 +388,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
             case 'roles':
                 router.push('/roles');
                 break;
+            case 'jobs':
+                router.push('/jobs');
+                break;
             case 'settings':
                 router.push('/settings');
                 break;
@@ -498,7 +511,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                         onClick={handleMenuClick}
                         selectedKeys={getSelectedKeys()}
                         // Ensure salary section is open on initial load in addition to other defaults
-                        defaultOpenKeys={[ 'applications_parent', 'account_management_parent', 'attendance_parent', 'salary_parent', pathname && pathname.startsWith('/salary') ? 'salary_parent' : '' ].filter(Boolean)}
+                        defaultOpenKeys={[ 'applications_parent', 'account_management_parent', 'attendance_parent', 'salary_parent', 'job_management_parent', pathname && pathname.startsWith('/salary') ? 'salary_parent' : '' ].filter(Boolean)}
                     />
                 </Sider>
 

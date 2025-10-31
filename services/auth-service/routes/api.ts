@@ -37,6 +37,7 @@ import {
   createContract,
   getUsersByDepartment,
   getUsersByChevron,
+  getAllUsersAll,
   getUserByUsername,
   getSalaryInfo,
   updateSalaryInfo,
@@ -127,6 +128,7 @@ const roleRoutes = [
 // ===================================
 const userRoutes = [
   { method: 'get', path: '/users', handler: getAllUsers, auth: true },
+  { method: 'get', path: '/users/all', handler: getAllUsersAll, auth: true },
   { method: 'get', path: '/users/by-department', handler: getUsersByDepartment, auth: true },
   { method: 'get', path: '/users/by-chevron', handler: getUsersByChevron, auth: true },
   { method: 'post', path: '/users/bulk', handler: getUsersByIds, auth: false }, // Internal bulk fetch

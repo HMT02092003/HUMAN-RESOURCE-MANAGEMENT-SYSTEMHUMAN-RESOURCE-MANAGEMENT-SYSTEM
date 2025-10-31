@@ -439,6 +439,58 @@ export const getPayslipsByUser = async (req: Request, res: Response, next: NextF
 };
 
 /**
+ * GET /payslips/:id
+ * Return a single payslip row enriched with user info and department name if available.
+ */
+export const getPayslipById = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ success: false, message: 'Invalid id' });
+
+    const rowRaw = await MonthlyPayslip.query().findById(id);
+    if (!rowRaw) return res.status(404).json({ success: false, message: 'Payslip not found' });
+
+    // copy to plain object so we can attach dynamic fields without TS errors
+    const row: any = Object.assign({}, rowRaw);
+
+    try {
+      const apiGateway = process.env.API_GATEWAY_URL || `http://localhost:${process.env.API_GATEWAY_PORT || 4000}`;
+      // fetch user info
+      const usersResp = await axios.post(`${apiGateway}/api/auth/users/bulk`, { userIds: [Number(row.user_id)] });
+      const users = (usersResp && usersResp.data && Array.isArray(usersResp.data.data)) ? usersResp.data.data : (usersResp && Array.isArray(usersResp.data) ? usersResp.data : []);
+      const user = users.length > 0 ? users[0] : null;
+      row.user = user || null;
+      row.username = user ? user.username : null;
+      row.fullName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : null;
+
+      // fetch department name if departmentId present
+      if (user && user.departmentId) {
+        try {
+          const dresp = await axios.get(`${apiGateway}/api/employee/departments/${Number(user.departmentId)}`);
+          const dname = dresp && dresp.data && dresp.data.data ? dresp.data.data.name : (dresp && dresp.data && dresp.data.name ? dresp.data.name : null);
+          row.department = { id: Number(user.departmentId), name: dname };
+          row.departmentName = dname;
+          if (row.user) row.user.department = { id: Number(user.departmentId), name: dname };
+        } catch (e) {
+          // ignore department fetch error
+          row.department = null;
+          row.departmentName = null;
+        }
+      } else {
+        row.department = null;
+        row.departmentName = null;
+      }
+    } catch (e) {
+      // ignore enrichment errors
+    }
+
+    return res.status(200).json({ success: true, data: row });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * Get payslips for the authenticated user across months. Uses req.user.id set by auth middleware.
  * GET /payslips/me?month=YYYY-MM
  */

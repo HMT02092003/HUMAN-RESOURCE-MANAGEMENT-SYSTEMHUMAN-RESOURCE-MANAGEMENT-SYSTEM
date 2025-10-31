@@ -92,4 +92,11 @@ export default {
       .then(r => ({ success: r.data?.success ?? true, data: r.data?.data ?? r.data ?? null, message: r.data?.message }))
       .catch(err => ({ success: false, data: null, message: err?.response?.data?.message || err.message }));
   }
+,
+
+  // Get a single payslip by id (enriched)
+  getPayslipById(id: number | string) {
+    return api.get(`/api/salary/payslips/${id}`).then(r => ({ success: r.data?.success ?? true, data: r.data?.data ?? null, message: r.data?.message }))
+      .catch(err => ({ success: false, data: null, message: err?.response?.data?.message || err.message }));
+  }
 };

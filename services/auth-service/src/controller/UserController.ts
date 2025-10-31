@@ -183,6 +183,66 @@ export const getAllUsers = async (req: any, res: Response) => {
 }
 
 /**
+ * Get all users without pagination (optionally filtered by scope)
+ * Returns an array of user objects instead of a paginated result.
+ */
+export const getAllUsersAll = async (req: any, res: Response) => {
+  try {
+    const { auth } = req as any;
+    const scope = req.query.scope || 'users';
+
+    // Determine which user IDs are visible under the provided scope
+    let userIds: number[] = await UserModel.checkScope(scope, req);
+
+    // Fetch users (no pagination)
+    let users: any[] = await UserModel.query()
+      .select(['users.*'])
+      .whereIn('users.id', userIds)
+      .whereNot('users.id', auth?.id)
+      .where('users.status', 1)
+      .withGraphJoined('[role]');
+
+    // Enrich with department and chevron details (reuse same logic as paginated endpoint)
+    const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
+    const headers: any = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const usersWithDetails = await Promise.all(users.map(async (user: any) => {
+      let department = null;
+      let chevron = null;
+      try {
+        if (user.departmentId) {
+          const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${user.departmentId}`, { headers });
+          department = depRes.data || null;
+        }
+      } catch (e: any) {
+        console.error(`Error fetching department ${user.departmentId}:`, e.message || 'Unknown error');
+      }
+      try {
+        if (user.chevronId) {
+          const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: user.chevronId }, { headers });
+          chevron = chvRes.data || null;
+        }
+      } catch (e: any) {
+        console.error(`Error fetching chevron ${user.chevronId}:`, e.message || 'Unknown error');
+      }
+      return {
+        ...user,
+        department,
+        chevron,
+      };
+    }));
+
+    return res.status(200).json(usersWithDetails);
+  } catch (error) {
+    console.error("Error fetching users (all):", error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : "Internal Server Error",
+    });
+  }
+}
+
+/**
  * Create a new user
  */
 export const createUser = async (req: Request, res: Response) => {
