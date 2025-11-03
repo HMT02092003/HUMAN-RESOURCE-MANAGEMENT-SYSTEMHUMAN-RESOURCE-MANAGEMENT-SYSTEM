@@ -7,14 +7,12 @@ import {
   CloudUploadOutlined,
   EyeOutlined,
   FormOutlined,
-  DownloadOutlined,
-  DollarOutlined
+  DownloadOutlined
 } from "@ant-design/icons";
 import dayjs from 'dayjs';
 import UserService from '@/service/userService'; // Ensure this path is correct
 import { useRouter } from "next/navigation";
 import constantConfig from "@/config/constant";
-// SalaryModal was used previously for inline editing; we now navigate to a dedicated edit page
 
 const { statusOptions, Gender } = constantConfig;
 
@@ -36,10 +34,7 @@ const UserTable = () => {
   const [userData, setUserData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
-  const [isSalaryModalVisible, setIsSalaryModalVisible] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
-  const [salaryInfo, setSalaryInfo] = useState<any>(null);
-  const [salaryLoading, setSalaryLoading] = useState(false);
   
   // 💡 KHỞI TẠO SẮP XẾP MẶC ĐỊNH: ID giảm dần (mới nhất lên đầu)
   const [sorter, setSorter] = useState<SorterState>({
@@ -136,48 +131,6 @@ const UserTable = () => {
     } else {
       // Nếu không có sắp xếp, trở về mặc định
       setSorter({ field: 'id', order: 'descend' });
-    }
-  };
-
-  // Xử lý mở modal lương
-  const handleOpenSalaryModal = async (userId: number) => {
-    setSelectedUserId(userId);
-    setIsSalaryModalVisible(true);
-    setSalaryLoading(true);
-
-    try {
-      const response = await UserService.getSalaryInfo(userId);
-      setSalaryInfo(response.data);
-    } catch (error: any) {
-      message.error("Không thể lấy thông tin lương");
-      console.error(error);
-    } finally {
-      setSalaryLoading(false);
-    }
-  };
-
-  // Xử lý đóng modal lương
-  const handleCloseSalaryModal = () => {
-    setIsSalaryModalVisible(false);
-    setSelectedUserId(null);
-    setSalaryInfo(null);
-  };
-
-  // Xử lý cập nhật lương
-  const handleUpdateSalary = async (values: any) => {
-    if (!selectedUserId) return;
-
-    setSalaryLoading(true);
-    try {
-      await UserService.updateSalaryInfo(selectedUserId, values);
-      message.success("Cập nhật thông tin lương thành công!");
-      handleCloseSalaryModal();
-      loadData(); // Refresh table data
-    } catch (error: any) {
-      const data = error?.response?.data;
-      message.error(data?.message || "Có lỗi xảy ra khi cập nhật lương");
-    } finally {
-      setSalaryLoading(false);
     }
   };
 
@@ -389,21 +342,6 @@ const UserTable = () => {
                 minWidth: 'auto',
                 height: '26px',
                 color: '#722ed1'
-              }}
-            />
-          </Tooltip>
-          <Tooltip title="Chỉnh lương">
-            <Button
-              type="text"
-              icon={<DollarOutlined />}
-              size="small"
-              onClick={() => router.push(`/user/edit-salary/${record.id}`)}
-              hidden={!updatePer}
-              style={{
-                padding: '4px 6px',
-                minWidth: 'auto',
-                height: '26px',
-                color: '#fa8c16'
               }}
             />
           </Tooltip>

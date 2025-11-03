@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Form, Row, Col, Select, DatePicker, Input, InputNumber, Button } from "antd";
+import { Form, Row, Col, Select, DatePicker, Input, InputNumber, Button, Divider } from "antd";
 import dayjs from "dayjs"; // Thư viện để xử lý ngày
 import { LeftCircleFilled, SaveFilled } from "@ant-design/icons";
 import { contractTypeService } from "@/service/contractTypeService";
+import salaryService from "@/service/salaryService";
 
 const { Option } = Select;
 
@@ -14,6 +15,12 @@ interface ContractType {
   insurance?: number;
 }
 
+interface AllowanceType {
+  id: number;
+  name: string;
+  default_amount: number;
+}
+
 interface ContractFormProps {
   initialValues?: any;
   onFinish: (values: any) => void;
@@ -21,16 +28,18 @@ interface ContractFormProps {
   loading?: boolean;
 }
 
-const ContractForm: React.FC<ContractFormProps> = ({ 
-  initialValues, 
-  onFinish, 
+const ContractForm: React.FC<ContractFormProps> = ({
+  initialValues,
+  onFinish,
   onBack,
-  loading 
+  loading
 }) => {
   const [form] = Form.useForm();
   const [contractDescription, setContractDescription] = useState("");
   const [contractTypes, setContractTypes] = useState<ContractType[]>([]);
+  const [allowanceTypes, setAllowanceTypes] = useState<AllowanceType[]>([]);
   const [loadingTypes, setLoadingTypes] = useState(false);
+  const [loadingAllowances, setLoadingAllowances] = useState(false);
 
   // Hàm để tính toán ngày kết thúc hợp đồng
   const calculateEndDate = (startDate: dayjs.Dayjs, contractTerm: number) => {
@@ -38,26 +47,26 @@ const ContractForm: React.FC<ContractFormProps> = ({
 
     let endDate = dayjs(startDate).add(contractTerm, 'month');
 
-    if (dayjs(startDate).date() === 29 && dayjs(startDate).month() === 1) { 
+    if (dayjs(startDate).date() === 29 && dayjs(startDate).month() === 1) {
       if (endDate.date() !== 29) {
-        endDate = endDate.add(1, 'day'); 
+        endDate = endDate.add(1, 'day');
       }
     }
 
     return endDate.startOf('day');
   };
-  
+
 
   const handleStartDateChange = (date: dayjs.Dayjs) => {
     const selectedContractId = form.getFieldValue("contractTypeId");
     const selectedContract = contractTypes.find(item => item.id === selectedContractId);
-    
+
     if (date && selectedContract) {
-      const contractTerm = selectedContract.contractTerm; 
-      const endDate = calculateEndDate(date, contractTerm); 
-      form.setFieldsValue({ endDate }); 
+      const contractTerm = selectedContract.contractTerm;
+      const endDate = calculateEndDate(date, contractTerm);
+      form.setFieldsValue({ endDate });
     } else {
-      form.setFieldsValue({ endDate: null }); 
+      form.setFieldsValue({ endDate: null });
     }
   };
 
@@ -91,6 +100,10 @@ const ContractForm: React.FC<ContractFormProps> = ({
       activeDay: values.activeDay?.toISOString(),
       endDate: values.endDate?.toISOString(),
     };
+    // Debug: log what will be sent to server
+    // Remove this after debugging
+    // eslint-disable-next-line no-console
+    console.log('ContractForm - formattedValues ->', formattedValues);
     onFinish(formattedValues);
   };
 
@@ -100,7 +113,7 @@ const ContractForm: React.FC<ContractFormProps> = ({
         ...initialValues,
         startDate: initialValues.startDate ? dayjs(initialValues.startDate) : null,
         activeDay: initialValues.activeDay ? dayjs(initialValues.activeDay) : null,
-        endDate: initialValues.endDate ? dayjs(initialValues.endDate) : null
+        endDate: initialValues.endDate ? dayjs(initialValues.endDate) : null,
       });
     }
   }, [initialValues, form]);
@@ -121,8 +134,24 @@ const ContractForm: React.FC<ContractFormProps> = ({
     loadTypes();
   }, []);
 
+  // Load allowance types from API
+  useEffect(() => {
+    const loadAllowances = async () => {
+      try {
+        setLoadingAllowances(true);
+        const types = await salaryService.getAllowanceTypes();
+        setAllowanceTypes(types || []);
+      } catch (_) {
+        setAllowanceTypes([]);
+      } finally {
+        setLoadingAllowances(false);
+      }
+    };
+    loadAllowances();
+  }, []);
+
   return (
-    <Form 
+    <Form
       form={form}
       name="Contract"
       layout="vertical"
@@ -135,15 +164,16 @@ const ContractForm: React.FC<ContractFormProps> = ({
             label="Loại hợp đồng"
             name="contractTypeId"
           >
-              <Select
+            <Select
               placeholder="Chọn loại hợp đồng"
               allowClear
               showSearch
-                onChange={handleContractChange}
-                loading={loadingTypes}
+              onChange={handleContractChange}
+              loading={loadingTypes}
+              optionLabelProp="label"
             >
               {contractTypes.map((item) => (
-                <Option value={item.id} key={item.id} title={item.description}>
+                <Option value={item.id} key={item.id} label={item.name} title={item.description}>
                   <div>
                     <strong>{item.name}</strong>
                     <br />
@@ -159,21 +189,9 @@ const ContractForm: React.FC<ContractFormProps> = ({
             label="Thời hạn hợp đồng"
             name="contractTerm"
           >
-            <Input 
-              disabled 
+            <Input
+              disabled
               addonAfter="Tháng"
-            />
-          </Form.Item>
-        </Col>
-        <Col xs={24} md={12}>
-          <Form.Item
-            label="Bảo hiểm"
-            name="insurance"
-          >
-            <InputNumber
-              style={{ width: '100%' }}
-              addonAfter="VND"
-              formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
             />
           </Form.Item>
         </Col>
@@ -225,6 +243,58 @@ const ContractForm: React.FC<ContractFormProps> = ({
             name="endDate"
           >
             <DatePicker style={{ width: '100%' }} format="DD/MM/YYYY" disabled />
+          </Form.Item>
+        </Col>
+
+
+        <Col xs={24} md={12}>
+          <Form.Item
+            label="Lương cơ bản (VNĐ)"
+            name="salary"
+            rules={[
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!getFieldValue("contractTypeId")) {
+                    return Promise.resolve();
+                  }
+                  if (!value || value <= 0) {
+                    return Promise.reject(new Error("Vui lòng nhập lương cơ bản"));
+                  }
+                  return Promise.resolve();
+                },
+              }),
+            ]}
+          >
+            <InputNumber
+              style={{ width: '100%' }}
+              min={0}
+              formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+              parser={(value) => {
+                const parsed = value!.replace(/\$\s?|(,*)/g, '');
+                return parsed ? Number(parsed) as any : 0 as any;
+              }}
+              placeholder="Nhập lương cơ bản"
+            />
+          </Form.Item>
+        </Col>
+
+        <Col xs={24} md={24}>
+          <Form.Item
+            label="Chọn loại phụ cấp"
+            name="allowance_type_ids"
+          >
+            <Select
+              mode="multiple"
+              placeholder="Chọn các loại phụ cấp"
+              allowClear
+              loading={loadingAllowances}
+            >
+              {allowanceTypes.map((type) => (
+                <Option key={type.id} value={type.id}>
+                  {type.name} - {type.default_amount.toLocaleString()} VNĐ
+                </Option>
+              ))}
+            </Select>
           </Form.Item>
         </Col>
       </Row>

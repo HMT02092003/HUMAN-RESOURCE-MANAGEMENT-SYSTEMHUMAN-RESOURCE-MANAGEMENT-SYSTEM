@@ -34,9 +34,12 @@ const CreateContract = () => {
   const handleFinish = async (values: any) => {
     try {
       setLoading(true);
+      // Debug: log payload before sending to backend
+      // eslint-disable-next-line no-console
+      console.log('CreateContract - payload ->', values);
       await UserService.createContract(userData.id, values);
       message.success('Tạo hợp đồng thành công');
-      router.push('/user');
+      // router.push('/user');
     } catch (error: any) {
       const data = error?.response?.data;
       message.destroy();

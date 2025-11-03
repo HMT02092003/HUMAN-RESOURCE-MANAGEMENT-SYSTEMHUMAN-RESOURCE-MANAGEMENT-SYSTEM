@@ -98,5 +98,10 @@ export default {
   getPayslipById(id: number | string) {
     return api.get(`/api/salary/payslips/${id}`).then(r => ({ success: r.data?.success ?? true, data: r.data?.data ?? null, message: r.data?.message }))
       .catch(err => ({ success: false, data: null, message: err?.response?.data?.message || err.message }));
+  },
+
+  // Update bank and tax info for a user
+  updateBankTaxInfo(userId: number | string, payload: any) {
+    return api.put(`/api/salary/users/${userId}/bank-tax-info`, payload).then(r => r.data);
   }
 };

@@ -24,6 +24,12 @@ export async function seed(knex) {
       description: "Kế toán",
       key: "accountant",
     },
+    {
+      id: 5,
+      name: "Nhân sự",
+      description: "Nhân sự",
+      key: "hr",
+    },
   ];
 
   // Deletes ALL existing entries

@@ -39,8 +39,6 @@ import {
   getUsersByChevron,
   getAllUsersAll,
   getUserByUsername,
-  getSalaryInfo,
-  updateSalaryInfo,
   getNumberOfDaysOff,
   checkUserScope,
   getUsersByIds,
@@ -139,9 +137,7 @@ const userRoutes = [
   { method: 'get', path: '/users/detail/:id', handler: getUserDetail, auth: true },
   { method: 'get', path: '/users/:id', handler: getUserDetail, auth: true },
   { method: 'delete', path: '/users/:id', handler: deleteUser, auth: true },
-  { method: 'get', path: '/users/:id/salary', handler: getSalaryInfo, auth: true },
-  { method: 'put', path: '/users/:id/salary', handler: updateSalaryInfo, auth: true },
-  { method: 'get', path: '/internal/users/:id/salary', handler: getSalaryInfo, auth: false }, // Internal
+  // Salary endpoints removed (salary/allowance/vacationDay were dropped from DB)
   { method: 'get', path: '/users/:id/number-of-days-off', handler: getNumberOfDaysOff, auth: false }, // Internal
   { method: 'post', path: '/users/check-scope', handler: checkUserScope, auth: true }, // Internal scope check
   // { method: 'post', path: '/users/update-status-resignation', handler: updateUserStatusForResignation, auth: false }, // Internal resignation status update

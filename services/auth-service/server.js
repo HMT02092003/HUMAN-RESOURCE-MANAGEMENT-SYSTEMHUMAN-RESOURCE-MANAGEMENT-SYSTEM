@@ -28,9 +28,6 @@ app.use(cookieParser());
 
 // Smart request logging (development only)
 app.use((req, res, next) => {
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-  }
   next();
 });
 

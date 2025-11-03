@@ -102,7 +102,7 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
       children: getGenderLabel(userData?.gender),
     },
   ];
-  
+
   const jobItems: DescriptionsProps['items'] = [
     {
       key: '1',
@@ -152,7 +152,7 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
         labelStyle={{ fontWeight: 700, color: '#000', minWidth: 120 }}
         contentStyle={{ backgroundColor: token.colorBgContainer }}
       />
-
+      <br /><br /><br />
       <Descriptions
         title="Công việc"
         items={jobItems}
@@ -160,6 +160,7 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
         labelStyle={{ fontWeight: 700, color: '#000', minWidth: 120 }}
         contentStyle={{ backgroundColor: token.colorBgContainer }}
       />
+      <br /><br /><br />
       <Descriptions
         title="Thông tin gia đình"
       />

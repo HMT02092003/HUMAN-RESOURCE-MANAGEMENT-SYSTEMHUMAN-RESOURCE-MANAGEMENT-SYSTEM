@@ -38,6 +38,9 @@ router.put('/users/:userId/salary', employeeSalaryCtrl.upsertByUserId as express
 router.get('/users/:userId/salary-profiles', employeeSalaryCtrl.listByUserId as express.RequestHandler);
 router.post('/users/:userId/salary-profiles', employeeSalaryCtrl.createForUser as express.RequestHandler);
 
+// Create salary profile from contract (called by employee-service)
+router.post('/contracts/:contractId/salary-profile', employeeSalaryCtrl.createFromContract as express.RequestHandler);
+
 // Generate monthly payslip from employee profile and its allowances
 router.post('/payslips/generate-from-profile/:userId', payslipCtrl.generateFromProfile as express.RequestHandler);
 // Generate payslip from attendance summary (monthly-full)

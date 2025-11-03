@@ -62,21 +62,78 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
 
   const newUserIds = [...new Set(newRecords.map((r: any) => String(r.userId || r.user_id)))];
 
-  // Lấy salary profiles
-  const monthEnd = new Date(year, month, 0).toISOString().split('T')[0];
+  // Lấy hợp đồng đang hiệu lực cho mỗi user
+  // Date to check: cuối tháng (hoặc ngày cụ thể trong tháng)
+  const checkDate = new Date(year, month, 0).toISOString().split('T')[0]; // Last day of month
+  
+  const activeContractsMap = new Map();
+  const EMPLOYEE_SERVICE_URL = process.env.EMPLOYEE_SERVICE_URL || 'http://localhost:4001/api';
+  
+  console.log('[salary-service] Fetching active contracts for users:', newUserIds.length);
+  
+  // Gọi sang employee-service để lấy hợp đồng đang hiệu lực
+  await Promise.all(newUserIds.map(async (userId) => {
+    try {
+      const contractResp = await axios.get(
+        `${EMPLOYEE_SERVICE_URL}/contracts/user/${userId}/active`,
+        { params: { date: checkDate } }
+      );
+      if (contractResp.data && contractResp.data.id) {
+        activeContractsMap.set(userId, contractResp.data);
+      }
+    } catch (err: any) {
+      if (err.response?.status !== 404) {
+        console.error(`[salary-service] Error fetching active contract for user ${userId}:`, err.message);
+      }
+    }
+  }));
+
+  // Lấy salary profiles theo contract_id
+  const contractIds = [...activeContractsMap.values()].map((c: any) => c.id).filter(Boolean);
+  
+  if (contractIds.length === 0) {
+    const usersWithoutContracts = newUserIds;
+    console.warn('[salary-service] No active contracts found for users:', usersWithoutContracts);
+    
+    try {
+      const usersResp = await axios.post(`${apiGateway}/api/auth/users/bulk`, { userIds: usersWithoutContracts.map(id => Number(id)) });
+      const usersList = (usersResp?.data?.data && Array.isArray(usersResp.data.data)) ? usersResp.data.data : [];
+      
+      const missingInfo = usersWithoutContracts.map(id => {
+        const found = usersList.find((u: any) => String(u.id) === String(id));
+        if (found) return { id: found.id, username: found.username, fullName: `${found.firstName || ''} ${found.lastName || ''}`.trim() };
+        return { id, username: null, fullName: null };
+      });
+      
+      return {
+        success: false,
+        inserted: 0,
+        message: 'Không tìm thấy hợp đồng đang hiệu lực cho một số người dùng',
+        missingUsers: missingInfo
+      };
+    } catch (err) {
+      return {
+        success: false,
+        inserted: 0,
+        message: 'Không tìm thấy hợp đồng đang hiệu lực cho người dùng',
+        missingUsers: usersWithoutContracts.map(id => ({ id }))
+      };
+    }
+  }
+
+  console.log('[salary-service] Found', contractIds.length, 'active contracts, fetching salary profiles...');
+
   const profiles = await EmployeeSalaryProfile.query()
-    .whereIn('user_id', newUserIds as any)
-    .where('effective_from', '<=', monthEnd)
-    .orderBy('user_id')
-    .orderBy('effective_from', 'desc');
+    .whereIn('contract_id', contractIds)
+    .whereIn('user_id', newUserIds as any);
 
   const profileMap = new Map();
   profiles.forEach(p => {
     const key = String(p.user_id);
-    if (!profileMap.has(key)) profileMap.set(key, p);
+    profileMap.set(key, p);
   });
 
-  // Detect users that don't have a salary profile
+  // Detect users that don't have a salary profile for their active contract
   const missingProfileUserIds = newUserIds.filter(uid => !profileMap.has(uid));
   if (missingProfileUserIds.length > 0) {
     console.warn('[salary-service] Missing salary profiles for userIds:', missingProfileUserIds);
@@ -99,7 +156,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
         missingUsers: missingInfo
       };
     } catch (err) {
-      console.error('[salary-service] Error fetching missing users from auth-service:', err?.message || err);
+      console.error('[salary-service] Error fetching missing users from auth-service:', (err as any)?.message || err);
       // If we cannot fetch user info, still return ids
       return {
         success: false,
@@ -262,7 +319,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
       });
     }
   } catch (err) {
-    console.warn('[salary-service] Failed to enrich created payslips with user info:', err?.message || err);
+    console.warn('[salary-service] Failed to enrich created payslips with user info:', (err as any)?.message || err);
   }
 
   return {

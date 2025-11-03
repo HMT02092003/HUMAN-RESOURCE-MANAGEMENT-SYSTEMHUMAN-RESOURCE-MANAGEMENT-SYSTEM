@@ -4,11 +4,8 @@ import { createRequire } from 'module';
 export class EmployeeSalaryProfile extends Model {
   id!: number;
   user_id!: string;
+  contract_id?: number | null;
   base_salary!: string;
-  insurance_salary!: string;
-  tax_code?: string | null;
-  bank_info?: any;
-  effective_from?: string | null;
   created_at?: string;
   updated_at?: string | null;
 
@@ -19,15 +16,12 @@ export class EmployeeSalaryProfile extends Model {
 
   static jsonSchema = {
     type: 'object',
-    required: ['user_id', 'base_salary', 'insurance_salary'],
+    required: ['user_id', 'base_salary'],
     properties: {
       id: { type: 'integer' },
       user_id: { type: 'string' },
+      contract_id: { type: ['integer', 'null'] },
       base_salary: { type: 'string' },
-      insurance_salary: { type: 'string' },
-      tax_code: { type: ['string', 'null'] },
-      bank_info: { type: ['object', 'null'] },
-      effective_from: { type: ['string', 'null'], format: 'date' },
       created_at: { type: 'string', format: 'date-time' },
       updated_at: { type: ['string', 'null'], format: 'date-time' },
     },

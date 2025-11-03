@@ -27,14 +27,10 @@ class UserModel extends Model {
   chevronId!: number;
   departmentId!: number;
   status!: string;
-  vacationDay!: number;
-  baseSalary!: number;
   createdBy!: number;
   updatedBy!: number;
   birthday!: string;
   identificationPhoto?: string;
-  salary?: number;
-  allowance?: number;
   monthly_leave_balance?: number;
 
   // Optional relation fields
@@ -72,8 +68,7 @@ class UserModel extends Model {
             { type: 'integer' }
           ]
         },
-        vacationDay: { type: 'number' },
-        baseSalary: { type: 'number' },
+        
         createdBy: { type: 'integer' },
         updatedBy: { type: 'integer' },
         birthday: { 
@@ -86,8 +81,7 @@ class UserModel extends Model {
         gender: { type: 'integer' },
         phone: { type: 'string' },
         identificationPhoto: { type: ['string', 'null'] },
-        salary: { type: ['number', 'null'] },
-        allowance: { type: ['number', 'null'] },
+        
       },
     };
   }

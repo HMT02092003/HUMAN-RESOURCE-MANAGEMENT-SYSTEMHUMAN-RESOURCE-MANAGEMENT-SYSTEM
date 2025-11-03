@@ -2,18 +2,15 @@ import { Request, Response, NextFunction } from 'express';
 import EmployeeSalaryProfile from '../Model/EmployeeSalaryProfile';
 import EmployeeSalaryProfileAllowance from '../Model/EmployeeSalaryProfileAllowance';
 
-// Get salary profile by user id - only return the record with effective_from closest to today
+// Get salary profile by user id - return the most recent profile
 export const getByUserId = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = String(req.params.userId);
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
     
-    // Get the record with effective_from <= today, ordered by effective_from descending (most recent first)
+    // Get the most recent salary profile for this user (ordered by created_at)
     const item = await EmployeeSalaryProfile.query()
       .withGraphFetched('[allowances.allowanceType]')
       .where('user_id', userId)
-      .where('effective_from', '<=', today)
-      .orderBy('effective_from', 'desc')
       .orderBy('created_at', 'desc')
       .first();
     
@@ -24,10 +21,7 @@ export const getByUserId = async (req: Request, res: Response, next: NextFunctio
       id: item.id,
       user_id: item.user_id,
       salary: Number(item.base_salary || 0),
-      allowance: Number(item.insurance_salary || 0),
-      tax_code: item.tax_code,
-      bank_info: item.bank_info,
-      effective_from: item.effective_from,
+      allowance: 0,
       allowances: ((item as any).allowances || []).map((a: any) => ({
         id: a.id,
         allowance_type_id: a.allowance_type_id,
@@ -41,51 +35,15 @@ export const getByUserId = async (req: Request, res: Response, next: NextFunctio
   }
 };
 
-// Create new salary profile (always insert, never update)
+// Create new salary profile (always insert, never update) - DEPRECATED, use createFromContract instead
 export const upsertByUserId = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = String(req.params.userId);
-    const { salary, allowance_type_ids, bank_account, bank_name, tax_code, effective_from } = req.body;
-
-    // Build bank_info object from separate fields
-    // If incoming fields are empty strings or undefined, prefer preserving the most recent stored values
-    let bank_info: any = null;
-    // Fetch latest profile for this user to get previous bank_info as defaults
-    const latestProfile = await EmployeeSalaryProfile.query()
-      .where('user_id', userId)
-      .orderBy('effective_from', 'desc')
-      .first();
-    const prevBankInfo = latestProfile ? latestProfile.bank_info : null;
-
-    const hasBankAccount = bank_account !== undefined && bank_account !== null && String(bank_account).trim() !== '';
-    const hasBankName = bank_name !== undefined && bank_name !== null && String(bank_name).trim() !== '';
-
-    if (hasBankAccount || hasBankName) {
-      bank_info = {
-        bank_account: hasBankAccount ? String(bank_account) : (prevBankInfo ? prevBankInfo.bank_account || '' : ''),
-        bank_name: hasBankName ? String(bank_name) : (prevBankInfo ? prevBankInfo.bank_name || '' : ''),
-      };
-    } else if (prevBankInfo) {
-      // No bank fields provided in request — inherit previous bank info
-      bank_info = prevBankInfo;
-    }
-
-    // Always create new record
-    const effDate = effective_from 
-      ? new Date(effective_from).toISOString().split('T')[0]
-      : new Date().toISOString().split('T')[0];
-
-  // Previously we rejected creating a profile with the same effective_from.
-  // Allow inserting profiles even if a record with the same effective_from exists.
-  // If duplicate handling is desired later, implement merging or versioning instead of blocking the request.
+    const { salary, allowance_type_ids } = req.body;
 
     const payload: any = {
       user_id: userId,
       base_salary: salary != null ? String(salary) : '0',
-      insurance_salary: '0',
-      tax_code: tax_code || null,
-      bank_info: bank_info,
-      effective_from: effDate,
     };
 
     console.log('Inserting new salary profile for user', userId, payload);
@@ -133,17 +91,13 @@ export const listByUserId = async (req: Request, res: Response, next: NextFuncti
     const items = await EmployeeSalaryProfile.query()
       .withGraphFetched('[allowances.allowanceType]')
       .where('user_id', userId)
-      .orderBy('effective_from', 'desc')
       .orderBy('created_at', 'desc');
 
     const mapped = (items || []).map((item: any) => ({
       id: item.id,
       user_id: item.user_id,
+      contract_id: item.contract_id,
       salary: Number(item.base_salary || 0),
-      allowance: Number(item.insurance_salary || 0),
-      tax_code: item.tax_code,
-      bank_info: item.bank_info,
-      effective_from: item.effective_from,
       allowances: (item.allowances || []).map((a: any) => ({
         id: a.id,
         allowance_type_id: a.allowance_type_id,
@@ -169,4 +123,64 @@ export const createForUser = async (req: Request, res: Response, next: NextFunct
     next(err);
   }
 };
+
+// Create salary profile linked to a contract
+export const createFromContract = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const contractId = Number(req.params.contractId);
+    const { 
+      user_id, 
+      salary, 
+      allowance_type_ids
+    } = req.body;
+
+    if (!user_id) {
+      return res.status(400).json({ error: 'user_id is required' });
+    }
+
+    if (!contractId || isNaN(contractId)) {
+      return res.status(400).json({ error: 'Invalid contract_id' });
+    }
+
+    const payload: any = {
+      user_id: String(user_id),
+      contract_id: contractId,
+      base_salary: salary != null ? String(salary) : '0',
+    };
+
+    console.log('Creating salary profile from contract:', contractId, payload);
+
+    // Insert profile with allowances in transaction
+    const result = await EmployeeSalaryProfile.transaction(async (trx) => {
+      const profile = await EmployeeSalaryProfile.query(trx).insertAndFetch(payload);
+
+      console.log('Salary profile created with ID:', profile.id, 'for contract:', contractId);
+
+      // Insert allowances if provided
+      if (Array.isArray(allowance_type_ids) && allowance_type_ids.length > 0) {
+        const allowanceInserts = allowance_type_ids
+          .filter((id: any) => id != null && !isNaN(Number(id)))
+          .map((id: any) => ({
+            employee_salary_profile_id: Number(profile.id),
+            allowance_type_id: Number(id)
+          }));
+        
+        if (allowanceInserts.length > 0) {
+          await EmployeeSalaryProfileAllowance.query(trx).insert(allowanceInserts);
+        }
+      }
+
+      // Return complete result with relations
+      return await EmployeeSalaryProfile.query(trx)
+        .findById(profile.id)
+        .withGraphFetched('[allowances.allowanceType]');
+    });
+
+    res.status(201).json(result);
+  } catch (err) {
+    console.error('Error in createFromContract:', err);
+    next(err);
+  }
+};
+
 export default { getByUserId, upsertByUserId };

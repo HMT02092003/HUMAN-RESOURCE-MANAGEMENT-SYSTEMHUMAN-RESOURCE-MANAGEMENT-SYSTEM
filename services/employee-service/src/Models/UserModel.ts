@@ -28,7 +28,6 @@ class UserModel extends Model {
   departmentId!: number;
   status!: string;
   vacationDay!: number;
-  baseSalary!: number;
   createdBy!: number;
   updatedBy!: number;
   birthday!: string;
@@ -58,7 +57,6 @@ class UserModel extends Model {
         departmentId: { type: 'integer' },
         status: { type: 'string' },
         vacationDay: { type: 'number' },
-        baseSalary: { type: 'number' },
         createdBy: { type: 'integer' },
         updatedBy: { type: 'integer' },
         birthday: { type: 'string', format: 'date' },

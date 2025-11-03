@@ -2,6 +2,9 @@ import dotenv from 'dotenv';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+// Serve uploaded files statically at /uploads
+import path from 'path';
+import fs from 'fs';
 import routes from './routes/api.ts';
 
 dotenv.config();
@@ -21,9 +24,6 @@ app.get('/health', (_req: Request, res: Response) => {
 
 app.use('/api', routes);
 
-// Serve uploaded files statically at /uploads
-import path from 'path';
-import fs from 'fs';
 const uploadsDir = path.resolve(process.cwd(), 'uploads');
 try {
   fs.mkdirSync(uploadsDir, { recursive: true });

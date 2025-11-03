@@ -8,7 +8,7 @@ dotenv.config();
 
 import express from 'express';
 import cors from 'cors';
-import employeeRoutes from './routes/api';
+import employeeRoutes from './routes/api.ts';
 
 const app = express();
 const PORT = process.env.PORT || 4002;
@@ -25,11 +25,8 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Smart request logging (development only)
+// Request logging disabled: only explicit console.log calls inside controllers will produce output.
 app.use((req, res, next) => {
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-  }
   next();
 });
 
