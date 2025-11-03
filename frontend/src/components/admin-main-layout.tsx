@@ -27,6 +27,7 @@ import TopBarProgress from 'react-topbar-progress-indicator';
 import { decodePermissions } from '@/utils/decode-permisison';
 import LoadingProgress from '@/components/LoadingProgress';
 import { authService } from '@/service/authService';
+import { get } from 'lodash';
 
 const { Header, Content, Footer, Sider } = Layout;
 
@@ -172,7 +173,8 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         'job_management_parent',
         <ProfileOutlined />,
         [
-            getItem('Quản lí hồ sơ', 'jobs', <FileTextOutlined />),
+            getItem('Quản lí hồ sơ', 'CV', <FileTextOutlined />),
+            getItem('Danh sách công việc', 'jobs', <FileTextOutlined />),
         ],
     ),
     
@@ -409,9 +411,11 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
             case 'personal_salary_info':
                 router.push('/salary/personal');
                 break;
-            case 'account_management_parent':
-            case 'applications_parent':
-            case 'attendance_parent':
+            case 'CV':
+                router.push('/CV');
+                break;
+            case 'jobs':
+                router.push('/jobs');
                 break;
             default:
                 break;

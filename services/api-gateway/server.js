@@ -8,7 +8,7 @@ const configEnvPath = path.resolve(process.cwd(), 'config.env');
 dotenv.config({ path: envPath });
 dotenv.config({ path: configEnvPath, override: false });
 
-// Import sau khi đã load env
+// Import sau khi đã load env 
 import express from 'express';
 import cors from 'cors';
 import { getServices, ROUTE_CONFIG } from './config/services.js';

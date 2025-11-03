@@ -7,6 +7,7 @@ const getServices = () => ({
   auth: process.env.AUTH_SERVICE_URL,
   salary: process.env.SALARY_SERVICE_URL,
   employee: process.env.EMPLOYEE_SERVICE_URL,
+  job: process.env.JOB_SERVICE_URL,
   attendance: process.env.ATTENDANCE_SERVICE_URL,
   application: process.env.APPLICATION_SERVICE_URL,
   ai: process.env.AI_FACE_RECOGNITION_SERVICE_URL,
@@ -23,6 +24,13 @@ const ROUTE_CONFIG = [
     path: '/api/refresh-token',
     target: 'auth',
     pathRewrite: { '^/api/refresh-token': '/api/refresh-token' }
+  },
+  // Job service - CV upload and job CRUD
+  {
+    path: '/jobs',
+    target: 'job',
+    pathRewrite: { '^/jobs': '/api' },
+    handleMultipart: true
   },
   {
     path: '/api/auth',

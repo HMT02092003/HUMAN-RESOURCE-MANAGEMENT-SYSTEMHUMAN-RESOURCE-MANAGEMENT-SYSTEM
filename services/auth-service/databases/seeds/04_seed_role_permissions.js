@@ -111,7 +111,23 @@ export async function seed(knex) {
       "value": 31,
       "key": "personal_salary_info",
       "scope": 1,
-    }
+    },
+    {
+      "id": 15,
+      "roleId": 1,
+      "permissionId": 15,
+      "value": 31,
+      "key": "CV",
+      "scope": 1,
+    },
+    {
+      "id": 16,
+      "roleId": 1,
+      "permissionId": 16,
+      "value": 31,
+      "key": "jobs",
+      "scope": 1,
+    },
   ];
 
   // Deletes ALL existing entries

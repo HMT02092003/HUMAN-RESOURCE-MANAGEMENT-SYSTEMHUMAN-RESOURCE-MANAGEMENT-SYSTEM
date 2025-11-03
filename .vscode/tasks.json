@@ -100,7 +100,8 @@
 				"Application Service",
 				"AI Face Recognition Service",
 				"Mobile App (Face Recognition)",
-				"Salary Service"
+				"Salary Service",
+				"Job Service"
 			],
 			"dependsOrder": "parallel",
 			"problemMatcher": [],
@@ -163,6 +164,16 @@
 			"command": "yarn dev",
 			"options": {
 				"cwd": "services/salary-service"
+			},
+			"isBackground": true,
+			"group": "none"
+		},
+		{
+			"label": "Job Service",
+			"type": "shell",
+			"command": "yarn dev",
+			"options": {
+				"cwd": "services/job-service"
 			},
 			"isBackground": true,
 			"group": "none"

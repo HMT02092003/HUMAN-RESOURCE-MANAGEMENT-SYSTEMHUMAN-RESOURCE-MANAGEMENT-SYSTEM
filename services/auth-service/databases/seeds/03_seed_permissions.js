@@ -97,6 +97,20 @@ export async function seed(knex) {
       "description": "Thông tin lương cá nhân",
       "value": 31,
       "key": "personal_salary_info",
+    },
+    {
+      "id": 15,
+      "name": "Quản lý hò sơ nhân viên",
+      "description": "Quản lý hò sơ nhân viên",
+      "value": 31,
+      "key": "CV",
+    },
+    {
+      "id": 16,
+      "name": "Quản lý công việc",
+      "description": "Quản lý công việc",
+      "value": 31,
+      "key": "jobs",
     }
   ];
 
