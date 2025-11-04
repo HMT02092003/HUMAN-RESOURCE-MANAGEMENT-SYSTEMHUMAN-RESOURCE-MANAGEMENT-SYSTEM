@@ -5,6 +5,7 @@ import { Col, Row, message } from 'antd';
 import { useRouter, useParams } from 'next/navigation';
 import ContractForm from './Users/ContractForm';
 import UserService from '@/service/userService';
+import ContractService from '@/service/contractService';
 
 const CreateContract = () => {
   const router = useRouter();
@@ -34,12 +35,13 @@ const CreateContract = () => {
   const handleFinish = async (values: any) => {
     try {
       setLoading(true);
-      // Debug: log payload before sending to backend
-      // eslint-disable-next-line no-console
       console.log('CreateContract - payload ->', values);
-      await UserService.createContract(userData.id, values);
-      message.success('Tạo hợp đồng thành công');
-      // router.push('/user');
+      
+      // Gọi trực tiếp tới employee-service để tạo contract và salary
+      await ContractService.createContract(userData.id, values);
+      
+      message.success('Tạo hợp đồng và lương thành công');
+      router.push('/user');
     } catch (error: any) {
       const data = error?.response?.data;
       message.destroy();

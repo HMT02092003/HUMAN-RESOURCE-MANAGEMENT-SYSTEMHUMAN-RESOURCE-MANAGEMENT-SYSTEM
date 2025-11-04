@@ -135,11 +135,11 @@ export const createFromContract = async (req: Request, res: Response, next: Next
     } = req.body;
 
     if (!user_id) {
-      return res.status(400).json({ error: 'user_id is required' });
+      return res.status(400).json({ error: 'Vui lòng cung cấp user_id' });
     }
 
     if (!contractId || isNaN(contractId)) {
-      return res.status(400).json({ error: 'Invalid contract_id' });
+      return res.status(400).json({ error: 'ID hợp đồng không hợp lệ' });
     }
 
     const payload: any = {
@@ -179,6 +179,45 @@ export const createFromContract = async (req: Request, res: Response, next: Next
     res.status(201).json(result);
   } catch (err) {
     console.error('Error in createFromContract:', err);
+    next(err);
+  }
+};
+
+// Get salary profile by contract ID
+export const getByContractId = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const contractId = Number(req.params.contractId);
+
+    if (!contractId || isNaN(contractId)) {
+      return res.status(400).json({ error: 'ID hợp đồng không hợp lệ' });
+    }
+
+    const profile = await EmployeeSalaryProfile.query()
+      .withGraphFetched('[allowances.allowanceType]')
+      .where('contract_id', contractId)
+      .first();
+
+    if (!profile) {
+      return res.status(404).json({ error: 'Không tìm thấy hồ sơ lương cho hợp đồng này' });
+    }
+
+    // Map to frontend-friendly format
+    const result = {
+      id: profile.id,
+      user_id: profile.user_id,
+      contract_id: profile.contract_id,
+      salary: Number(profile.base_salary || 0),
+      allowances: ((profile as any).allowances || []).map((a: any) => ({
+        id: a.id,
+        allowance_type_id: a.allowance_type_id,
+        name: a.allowanceType?.name || '',
+        amount: Number(a.allowanceType?.default_amount || 0),
+      })),
+    };
+
+    res.json(result);
+  } catch (err) {
+    console.error('Error in getByContractId:', err);
     next(err);
   }
 };

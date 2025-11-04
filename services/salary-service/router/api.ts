@@ -40,6 +40,7 @@ router.post('/users/:userId/salary-profiles', employeeSalaryCtrl.createForUser a
 
 // Create salary profile from contract (called by employee-service)
 router.post('/contracts/:contractId/salary-profile', employeeSalaryCtrl.createFromContract as express.RequestHandler);
+router.get('/contracts/:contractId/salary-profile', employeeSalaryCtrl.getByContractId as express.RequestHandler);
 
 // Generate monthly payslip from employee profile and its allowances
 router.post('/payslips/generate-from-profile/:userId', payslipCtrl.generateFromProfile as express.RequestHandler);

@@ -293,7 +293,7 @@ export const createUser = async (req: Request, res: Response) => {
       phone: "string",
       birthday: "date",
       startDate: "date",
-  identificationPhoto: "string", // saved file relative path
+      identificationPhoto: "string", // saved file relative path
       profileFamily: [
         {
           name: "string",
@@ -308,10 +308,10 @@ export const createUser = async (req: Request, res: Response) => {
         endDate: "date",
         activeDay: "date",
         insurance: "number",
+        salary: "number",
+        allowance_type_ids: ["number"],
       },
     };
-
-  // Note: salary/allowance fields were removed from DB; they are not validated here
 
     const params = validate(inputs, allowFields, {
       removeNotAllow: true,
@@ -419,217 +419,169 @@ export const createUser = async (req: Request, res: Response) => {
 
     // Insert the new user into the database
     const newUser = await UserModel.query().insert(userData);
+    console.log('✅ User created with ID:', newUser.id);
 
-    // Gọi AI service để lưu face embedding nếu có ảnh
-    if (req.file || (req as any).files?.identificationPhoto) {
-      const photoFile = req.file || (req as any).files?.identificationPhoto;
-      console.log('🔍 [CREATE USER] Found photo file for AI processing:', {
-        hasReqFile: !!req.file,
-        hasFilesPhoto: !!(req as any).files?.identificationPhoto,
-        fileName: photoFile?.originalname || photoFile?.name,
-        fileSize: photoFile?.size || photoFile?.buffer?.length,
-        mimeType: photoFile?.mimetype,
-        hasBuffer: !!photoFile?.buffer,
-        hasPath: !!photoFile?.path
-      });
+    // Track what needs to be rolled back if any step fails
+    let createdContractId: number | null = null;
+    let needsUserRollback = false;
 
-      if (photoFile) {
+    try {
+      // Step 1: Process AI face recognition if photo provided
+      if (req.file || (req as any).files?.identificationPhoto) {
+        const photoFile = req.file || (req as any).files?.identificationPhoto;
+        console.log('🔍 [CREATE USER] Found photo file for AI processing');
+
+        if (photoFile) {
+          try {
+            const aiServiceUrl = `${API_GATEWAY_URL}/api/ai/register-face`;
+            const formData = new FormData();
+            let imageBuffer = null;
+            let imageName = photoFile.originalname || 'face.jpg';
+
+            if (userData.identificationPhoto) {
+              const savedPhotoPath = resolvePhotoAbsolutePath(userData.identificationPhoto);
+              if (fs.existsSync(savedPhotoPath)) {
+                imageBuffer = fs.readFileSync(savedPhotoPath);
+                imageName = path.basename(savedPhotoPath);
+              }
+            }
+
+            if (!imageBuffer) {
+              if (photoFile.buffer) {
+                imageBuffer = photoFile.buffer;
+              } else if (photoFile.path && fs.existsSync(photoFile.path)) {
+                imageBuffer = fs.readFileSync(photoFile.path);
+              }
+            }
+
+            if (imageBuffer) {
+              const blob = new Blob([imageBuffer], { type: photoFile.mimetype || 'image/jpeg' });
+              formData.append('image', blob, imageName);
+              formData.append('user_id', newUser.id.toString());
+              formData.append('username', params.username);
+
+              const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
+              const aiHeaders: any = {};
+              if (token) aiHeaders['Authorization'] = `Bearer ${token}`;
+
+              const aiResponse = await axios.post(aiServiceUrl, formData, { headers: aiHeaders });
+              if (aiResponse.data.success) {
+                console.log('✅ [CREATE USER] Face embedding saved successfully');
+              }
+            }
+          } catch (aiError: any) {
+            console.error('❌ [CREATE USER] Error saving face embedding:', aiError.message);
+            // Don't fail user creation if AI service fails
+          }
+        }
+      }
+
+      // Step 2: Handle contract creation if contract data is provided
+      if (params.contract && params.contract.contractTypeId) {
+        needsUserRollback = true; // Enable rollback from this point
+
+        // Coerce date strings to Date objects
+        if (params.contract.startDate && typeof params.contract.startDate === 'string') {
+          params.contract.startDate = new Date(params.contract.startDate);
+        }
+        if (params.contract.endDate && typeof params.contract.endDate === 'string') {
+          params.contract.endDate = new Date(params.contract.endDate);
+        }
+        if (params.contract.activeDay && typeof params.contract.activeDay === 'string') {
+          params.contract.activeDay = new Date(params.contract.activeDay);
+        }
+
+        // Validate contract dates
+        if (params.contract.endDate && new Date(params.contract.endDate) <= new Date(params.contract.startDate)) {
+          throw new Error("Ngày kết thúc phải sau ngày ký!");
+        }
+        if (new Date(params.contract.activeDay) < new Date(params.contract.startDate)) {
+          throw new Error("Ngày bắt đầu phải sau hoặc bằng ngày ký!");
+        }
+
+        // Verify contract type exists
         try {
-          const aiServiceUrl = `${API_GATEWAY_URL}/api/ai/register-face`;
-          console.log('📡 [CREATE USER] AI Service URL:', aiServiceUrl);
-
-          const formData = new FormData();
-
-          // Đọc file từ vị trí đã lưu nếu có identificationPhoto path
-          let imageBuffer = null;
-          let imageName = photoFile.originalname || 'face.jpg';
-
-          if (userData.identificationPhoto) {
-            // Đọc từ file đã lưu
-            const savedPhotoPath = resolvePhotoAbsolutePath(userData.identificationPhoto);
-            console.log('� [CREATE USER] Reading saved photo from:', savedPhotoPath);
-
-            if (fs.existsSync(savedPhotoPath)) {
-              console.log('📎 [CREATE USER] Adding image from saved path');
-              imageBuffer = fs.readFileSync(savedPhotoPath);
-              imageName = path.basename(savedPhotoPath);
-            }
+          const contractTypeRes = await axios.get(
+            `${API_GATEWAY_URL}/api/employee/contractTypes/${params.contract.contractTypeId}`, 
+            { headers }
+          );
+          if (!contractTypeRes.data) {
+            throw new Error("Loại hợp đồng không tồn tại!");
           }
-
-          // Fallback to original file methods
-          if (!imageBuffer) {
-            if (photoFile.buffer) {
-              console.log('📎 [CREATE USER] Adding image from buffer, size:', photoFile.buffer.length);
-              imageBuffer = photoFile.buffer;
-            } else if (photoFile.path && fs.existsSync(photoFile.path)) {
-              console.log('📎 [CREATE USER] Adding image from file path:', photoFile.path);
-              imageBuffer = fs.readFileSync(photoFile.path);
-            }
-          }
-
-          if (imageBuffer) {
-            console.log('📎 [CREATE USER] Final image buffer size:', imageBuffer.length);
-            const blob = new Blob([imageBuffer], { type: photoFile.mimetype || 'image/jpeg' });
-            formData.append('image', blob, imageName);
-          } else {
-            console.error('❌ [CREATE USER] No valid image source found');
-            throw new Error('No valid image source found');
-          }
-
-          formData.append('user_id', newUser.id.toString());
-          formData.append('username', params.username);
-
-          console.log('📦 [CREATE USER] FormData contents:', {
-            user_id: newUser.id.toString(),
-            username: params.username,
-            hasImageField: formData.has('image')
-          });
-
-          const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
-          const aiHeaders: any = {};
-          if (token) {
-            aiHeaders['Authorization'] = `Bearer ${token}`;
-          }
-
-          console.log('🔑 [CREATE USER] Request headers:', {
-            hasToken: !!token,
-            authHeader: aiHeaders['Authorization'] ? 'Bearer [HIDDEN]' : 'None'
-          });
-
-          console.log('🚀 [CREATE USER] Calling AI service...');
-
-          // Gọi AI service
-          const aiResponse = await axios.post(aiServiceUrl, formData, {
-            headers: {
-              ...aiHeaders
-            }
-          });
-
-          console.log('📥 [CREATE USER] AI service response:', {
-            status: aiResponse.status,
-            success: aiResponse.data?.success,
-            message: aiResponse.data?.message,
-            data: aiResponse.data?.data
-          });
-
-          if (aiResponse.data.success) {
-            console.log('✅ [CREATE USER] Face embedding saved successfully for user:', params.username);
-          } else {
-            console.warn('⚠️ [CREATE USER] AI service returned error:', aiResponse.data.message);
-          }
-        } catch (aiError: any) {
-          console.error('❌ [CREATE USER] Error saving face embedding:', {
-            message: aiError.message,
-            status: aiError.response?.status,
-            statusText: aiError.response?.statusText,
-            responseData: aiError.response?.data,
-            url: aiError.config?.url,
-            method: aiError.config?.method
-          });
-
-          if (aiError.response) {
-            console.error('❌ [CREATE USER] AI service detailed response:', aiError.response.data);
-          }
-          // Không fail user creation nếu AI service lỗi
+        } catch (e) {
+          throw new Error("Loại hợp đồng không tồn tại!");
         }
-      } else {
-        console.log('⚠️ [CREATE USER] No photo file found despite file detection');
-      }
-    } else {
-      console.log('ℹ️ [CREATE USER] No photo file provided for AI processing');
-    }
 
-    // Remove password from the response object for security
-    const { password: _, ...userWithoutPassword } = newUser;
-    const newUserResponse = userWithoutPassword;
+        // Prepare contract parameters
+        // Salary and allowance_type_ids might be at top level or inside contract object
+        const salary = params.contract.salary || params.salary;
+        const allowance_type_ids = params.contract.allowance_type_ids || params.allowance_type_ids;
 
-    // Prepare email variables (commented out as per original code) 
-    const emailVariables = {
-      fullname: `${params.lastName || ""} ${params.firstName || ""}`.trim(),
-      username: params.username,
-      password: params.password, // Be cautious sending plain passwords, consider a password reset flow
-    };
+        const contractParams: any = {
+          contractTypeId: params.contract.contractTypeId,
+          startDate: params.contract.startDate instanceof Date 
+            ? params.contract.startDate.toISOString() 
+            : params.contract.startDate,
+          endDate: params.contract.endDate instanceof Date 
+            ? params.contract.endDate.toISOString() 
+            : params.contract.endDate,
+          activeDay: params.contract.activeDay instanceof Date 
+            ? params.contract.activeDay.toISOString() 
+            : params.contract.activeDay,
+          insurance: params.contract.insurance,
+          salary: salary, // Use extracted value
+          allowance_type_ids: allowance_type_ids, // Use extracted value
+          userId: newUser.id,
+          created_at: new Date(),
+        };
 
-    // await MailService.send({
-    //   to: params.email,
-    //   templateKey: "createUser",
-    //   variables: emailVariables,
-    // });
+        console.log('📝 Creating contract with params:', contractParams);
 
-    // Handle contract creation if contract data is provided (SAGA compensation for cross-service atomicity)
-    // Only create contract when there is a valid contractTypeId
-    if (params.contract && params.contract.contractTypeId) {
-      // Coerce primitive date strings to Date where needed for comparisons
-      if (params.contract.startDate && typeof params.contract.startDate === 'string') {
-        params.contract.startDate = new Date(params.contract.startDate);
-      }
-      if (params.contract.endDate && typeof params.contract.endDate === 'string') {
-        params.contract.endDate = new Date(params.contract.endDate);
-      }
-      if (params.contract.activeDay && typeof params.contract.activeDay === 'string') {
-        params.contract.activeDay = new Date(params.contract.activeDay);
-      }
-      // Validate contract dates
-      if (
-        params.contract.endDate &&
-        new Date(params.contract.endDate) <= new Date(params.contract.startDate)
-      ) {
-        return res.status(400).json({ message: "Ngày kết thúc phải sau ngày ký!", code: 5009 });
+        // Call employee-service to create contract and salary
+        const contractResponse = await axios.post(
+          `${API_GATEWAY_URL}/api/employee/users/${newUser.id}/contracts`, 
+          contractParams, 
+          { headers }
+        );
+        
+        console.log('✅ Contract and salary created successfully');
+        createdContractId = contractResponse.data?.id || null;
       }
 
-      if (
-        new Date(params.contract.activeDay) < new Date(params.contract.startDate)
-      ) {
-        return res.status(400).json({
-          message: "Ngày bắt đầu phải sau hoặc bằng ngày ký!",
-          code: 5010
-        });
-      }
+      // Success! Return the newly created user (without password)
+      const { password: _, ...userWithoutPassword } = newUser;
+      return res.status(201).json(newUser);
 
-      // Check if contract type exists using employee-service
-      try {
-        const contractTypeRes = await axios.get(`${API_GATEWAY_URL}/api/employee/contractTypes/${params.contract.contractTypeId}`, { headers });
-        console.log("contractTypeRes", contractTypeRes);
-        if (!contractTypeRes.data) {
-          return res.status(400).json({ message: "Loại hợp đồng không tồn tại!", code: 5011 });
-        }
-      } catch (e) {
-        return res.status(400).json({ message: "Loại hợp đồng không tồn tại!", code: 5011 });
-      }
-
-      // Prepare contract parameters (userId will be taken from URL on employee-service)
-      const contractParams: any = {
-        ...params.contract,
-        created_at: new Date(),
-      };
-
-      // Convert Date objects to ISO strings for contract data
-      if (contractParams.startDate && contractParams.startDate instanceof Date) {
-        contractParams.startDate = contractParams.startDate.toISOString();
-      }
-      if (contractParams.endDate && contractParams.endDate instanceof Date) {
-        contractParams.endDate = contractParams.endDate.toISOString();
-      }
-      if (contractParams.activeDay && contractParams.activeDay instanceof Date) {
-        contractParams.activeDay = contractParams.activeDay.toISOString();
-      }
-
-      try {
-        await axios.post(`${API_GATEWAY_URL}/api/employee/users/${newUser.id}/contracts`, contractParams, { headers });
-      } catch (contractErr: any) {
-        // Compensation: rollback created user to keep consistency
+    } catch (innerError: any) {
+      // Something failed after user creation - perform rollback
+      console.error('❌ Error after user creation:', innerError.response?.data || innerError.message);
+      
+      // ROLLBACK: Delete the created user if contract creation was attempted
+      if (needsUserRollback) {
         try {
           await UserModel.query().findById(newUser.id).delete();
+          console.log('✅ User rollback successful (deleted user ID:', newUser.id, ')');
         } catch (rollbackErr) {
-          console.error('Rollback user failed after contract error:', rollbackErr);
+          console.error('❌ CRITICAL: User rollback failed:', rollbackErr);
         }
-        const msg = contractErr?.response?.data?.message || contractErr?.response?.data?.error || contractErr?.message || 'Tạo hợp đồng thất bại';
-        return res.status(400).json({ message: msg, code: 7001, details: { stage: 'contract', rolledBackUserId: newUser.id } });
       }
-    }
 
-    // Return the newly created user (without password)
-    return res.status(201).json(newUser);
+      // Determine error message
+      const errorMsg = innerError?.response?.data?.error 
+        || innerError?.response?.data?.message 
+        || innerError?.message 
+        || 'Tạo hợp đồng hoặc lương thất bại';
+      
+      return res.status(400).json({ 
+        message: errorMsg, 
+        code: 7001, 
+        details: { 
+          stage: createdContractId ? 'salary' : 'contract',
+          rolledBackUserId: newUser.id,
+          contractId: createdContractId
+        } 
+      });
+    }
   } catch (error) {
     console.error("Error creating user:", error);
 

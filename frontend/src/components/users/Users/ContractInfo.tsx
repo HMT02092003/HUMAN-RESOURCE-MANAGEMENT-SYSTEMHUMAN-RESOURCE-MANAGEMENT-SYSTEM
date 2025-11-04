@@ -1,14 +1,16 @@
-import React from "react";
-import { Space, Table, Tag } from "antd";
+import React, { useEffect, useState } from "react";
+import { Space, Table, Tag, Spin } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
 import isBetween from "dayjs/plugin/isBetween";
+import SalaryService from "@/service/salaryService";
 
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isBetween);
 
 interface ContractData {
+  id?: number;
   contractType: {
     name: string;
     contractTerm: number;
@@ -18,6 +20,15 @@ interface ContractData {
   endDate: string;
   insurance: number;
   status: 'current' | 'upcoming' | 'past';
+}
+
+interface SalaryData {
+  salary: number;
+  allowances: Array<{
+    id: number;
+    name: string;
+    amount: number;
+  }>;
 }
 
 interface ContractInfoProps {
@@ -30,6 +41,41 @@ interface ContractInfoProps {
 const ContractInfo: React.FC<ContractInfoProps> = ({ data }) => {
   const contractData = data?.contract ?? null;
   const contracts = (data?.contracts ?? (contractData ? [contractData] : [])) as ContractData[];
+  const [salaryData, setSalaryData] = useState<Record<number, SalaryData>>({});
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchSalaryData = async () => {
+      if (!contracts || contracts.length === 0) return;
+
+      setLoading(true);
+      const salaryPromises = contracts
+        .filter(c => c.id)
+        .map(async (contract) => {
+          try {
+            const salary = await SalaryService.getSalaryByContractId(contract.id!);
+            return { contractId: contract.id!, salary };
+          } catch (error) {
+            console.warn(`Failed to fetch salary for contract ${contract.id}`, error);
+            return { contractId: contract.id!, salary: null };
+          }
+        });
+
+      const results = await Promise.all(salaryPromises);
+      const salaryMap: Record<number, SalaryData> = {};
+      
+      results.forEach(({ contractId, salary }) => {
+        if (salary) {
+          salaryMap[contractId] = salary;
+        }
+      });
+
+      setSalaryData(salaryMap);
+      setLoading(false);
+    };
+
+    fetchSalaryData();
+  }, [contracts]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -72,6 +118,38 @@ const ContractInfo: React.FC<ContractInfoProps> = ({ data }) => {
       render: (date: string) => date ? dayjs(date).format("DD/MM/YYYY") : " ",
     },
     {
+      title: "Lương cơ bản",
+      dataIndex: "id",
+      key: "salary",
+      render: (contractId: number) => {
+        if (!contractId) return "—";
+        const salary = salaryData[contractId];
+        if (!salary) return "Chưa có thông tin";
+        return `${salary.salary.toLocaleString('vi-VN')} VND`;
+      },
+    },
+    {
+      title: "Phụ cấp",
+      dataIndex: "id",
+      key: "allowances",
+      render: (contractId: number) => {
+        if (!contractId) return "—";
+        const salary = salaryData[contractId];
+        if (!salary || !salary.allowances || salary.allowances.length === 0) {
+          return "Không có";
+        }
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {salary.allowances.map((allowance) => (
+              <Tag key={allowance.id} color="blue">
+                {allowance.name}: {allowance.amount.toLocaleString('vi-VN')} VND
+              </Tag>
+            ))}
+          </div>
+        );
+      },
+    },
+    {
       title: "Bảo hiểm",
       dataIndex: ["insurance"],
       key: "insurance",
@@ -101,14 +179,16 @@ const ContractInfo: React.FC<ContractInfoProps> = ({ data }) => {
   return (
     <div className="contract-info-container">
       <h2 className="mb-4 text-lg font-semibold">Thông tin hợp đồng</h2>
-      <Table
-        columns={columns}
-        dataSource={contracts}
-        pagination={false}
-        rowClassName={(_, index) => (index % 2 === 0 ? "row-even" : "row-odd")}
-        locale={{ emptyText: "Chưa có hợp đồng" }}
-        rowKey={(record) => `${record.contractType?.name}-${record.startDate}-${record.activeDay}`}
-      />
+      <Spin spinning={loading}>
+        <Table
+          columns={columns}
+          dataSource={contracts}
+          pagination={false}
+          rowClassName={(_, index) => (index % 2 === 0 ? "row-even" : "row-odd")}
+          locale={{ emptyText: "Chưa có hợp đồng" }}
+          rowKey={(record) => record.id ? `contract-${record.id}` : `${record.contractType?.name}-${record.startDate}-${record.activeDay}`}
+        />
+      </Spin>
       <div className="mt-4">
         <Space>
           <Tag color="green">Đang hiệu lực</Tag>
