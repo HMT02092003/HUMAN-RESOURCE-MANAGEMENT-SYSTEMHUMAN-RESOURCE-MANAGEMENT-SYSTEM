@@ -15,6 +15,7 @@ import {
   checkDateHasBusinessTrip as helpersCheckDateHasBusinessTrip
 } from './AttendanceHelpers';
 import HolidayModel from '@/Models/HolidayModel';
+import knex from 'knex';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -31,6 +32,45 @@ function getLocalIpAddress(): string {
     }
   }
   return '127.0.0.1';
+}
+
+// Helper function to get user startDate from auth-service database directly
+async function getUserStartDate(userId: number): Promise<string | null> {
+  let authDbConnection: any = null;
+  try {
+    // Create direct connection to auth-service database
+    authDbConnection = knex({
+      client: 'pg',
+      connection: {
+        host: process.env['DB_HOST'] || 'localhost',
+        port: Number(process.env['DB_PORT']) || 5432,
+        database: 'auth_service', // Auth service database name
+        user: process.env['DB_USER'] || 'postgres',
+        password: process.env['DB_PASSWORD'] || '123456'
+      }
+    });
+
+    const user = await authDbConnection('users')
+      .where('id', userId)
+      .select('startDate')
+      .first();
+
+    if (user && user.startDate) {
+      const startDate = dayjs(user.startDate).format('YYYY-MM-DD');
+      console.log(`✅ [getUserStartDate] User ${userId} startDate from DB: ${startDate}`);
+      return startDate;
+    }
+
+    console.log(`⚠️ [getUserStartDate] User ${userId} has no startDate in database`);
+    return null;
+  } catch (e) {
+    console.error(`❌ [getUserStartDate] Error fetching user startDate:`, (e as any)?.message);
+    return null;
+  } finally {
+    if (authDbConnection) {
+      await authDbConnection.destroy();
+    }
+  }
 }
 
 const API_GATEWAY_URL = `http://${getLocalIpAddress()}:${process.env['API_GATEWAY_PORT'] || 4000}`;
@@ -122,6 +162,12 @@ export class AttendanceCalculationService {
     try {
       const startDate = dayjs(`${month}-01`).startOf('month').format('YYYY-MM-DD');
       const endDate = dayjs(`${month}-01`).endOf('month').format('YYYY-MM-DD');
+
+      // ✨ Lấy thông tin user startDate trực tiếp từ database của auth-service
+      const userStartDate = await getUserStartDate(userId);
+      if (userStartDate) {
+        console.log(`👤 [getUserMonthlyAttendance] User ${userId} started working on: ${userStartDate}`);
+      }
 
       const monthlyRecord = await MonthlySummaryModel.getByUserAndMonth(userId, month);
       // If caller explicitly requests to use the monthly summary only and a snapshot exists,
@@ -221,6 +267,11 @@ export class AttendanceCalculationService {
       for (let day = 1; day <= daysInMonth; day++) {
         const currentDate = dayjs(`${month}-${String(day).padStart(2, '0')}`);
         const dateKey = currentDate.format('YYYY-MM-DD');
+
+        // ✨ Bỏ qua những ngày trước startDate
+        if (userStartDate && dayjs(dateKey).isBefore(userStartDate, 'day')) {
+          continue;
+        }
 
         const isWork = helpersIsWorkingDay(dateKey, workingDaysConfig);
         const isFuture = currentDate.isAfter(dayjs(), 'day');

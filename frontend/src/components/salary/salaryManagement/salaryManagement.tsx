@@ -7,8 +7,9 @@ import type { ColumnType } from 'antd/es/table';
 import type { FilterConfirmProps } from 'antd/es/table/interface';
 import dayjs from 'dayjs';
 import salaryService from '@/service/salaryService';
-import { CalculatorOutlined, SearchOutlined } from '@ant-design/icons';
+import { CalculatorOutlined, SearchOutlined, WarningOutlined } from '@ant-design/icons';
 import constant from '@/config/constant';
+import InvalidUsersModal from '../InvalidUsersModal';
 
 const {TypeOfStatusSalary} = constant;
 
@@ -40,6 +41,18 @@ const SalaryManagement: React.FC = () => {
   const [month, setMonth] = useState(dayjs());
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<PayslipDataType[]>([]);
+
+  // State cho modal hiển thị người dùng không hợp lệ
+  const [invalidUsersModalOpen, setInvalidUsersModalOpen] = useState(false);
+  const [invalidUsersData, setInvalidUsersData] = useState<{
+    usersWithoutContracts: any[];
+    usersWithoutApprovedAttendance: any[];
+    usersWithoutSalaryProfile: any[];
+  }>({
+    usersWithoutContracts: [],
+    usersWithoutApprovedAttendance: [],
+    usersWithoutSalaryProfile: []
+  });
 
   // State cho việc tìm kiếm
   const [searchText, setSearchText] = useState('');
@@ -74,7 +87,28 @@ const SalaryManagement: React.FC = () => {
       if (res.success) {
         message.success('Đã tính bảng lương cho tháng');
         fetchPayslipsForMonth(month);
+        // Reset invalid users data nếu thành công
+        setInvalidUsersData({
+          usersWithoutContracts: [],
+          usersWithoutApprovedAttendance: [],
+          usersWithoutSalaryProfile: []
+        });
       } else {
+        // Kiểm tra xem có người dùng không hợp lệ không
+        const hasInvalidUsers = 
+          (res.usersWithoutContracts && res.usersWithoutContracts.length > 0) ||
+          (res.usersWithoutApprovedAttendance && res.usersWithoutApprovedAttendance.length > 0) ||
+          (res.usersWithoutSalaryProfile && res.usersWithoutSalaryProfile.length > 0);
+        
+        if (hasInvalidUsers) {
+          // Lưu dữ liệu người dùng không hợp lệ
+          setInvalidUsersData({
+            usersWithoutContracts: res.usersWithoutContracts || [],
+            usersWithoutApprovedAttendance: res.usersWithoutApprovedAttendance || [],
+            usersWithoutSalaryProfile: res.usersWithoutSalaryProfile || []
+          });
+        }
+        
         message.error(res.message || 'Không thể tính bảng lương');
       }
     } catch (err: any) {
@@ -319,11 +353,29 @@ const SalaryManagement: React.FC = () => {
     },
   ];
 
+  // Kiểm tra xem có người dùng không hợp lệ không
+  const hasInvalidUsers = 
+    invalidUsersData.usersWithoutContracts.length > 0 ||
+    invalidUsersData.usersWithoutApprovedAttendance.length > 0 ||
+    invalidUsersData.usersWithoutSalaryProfile.length > 0;
+
   return (
     <div style={{ padding: 24 }}>
       <Space style={{ marginBottom: 16 }}>
         <MonthPicker value={month} onChange={(d) => d && setMonth(d)} format="MM/YYYY" />
-        <Button onClick={handleCalculate} type="primary" disabled={loading}><CalculatorOutlined />Tính dữ liệu chấm công</Button>
+        <Button onClick={handleCalculate} type="primary" disabled={loading}>
+          <CalculatorOutlined />Tính dữ liệu chấm công
+        </Button>
+        {hasInvalidUsers && (
+          <Button 
+            onClick={() => setInvalidUsersModalOpen(true)} 
+            type="default"
+            danger
+            icon={<WarningOutlined />}
+          >
+            Xem người dùng không hợp lệ
+          </Button>
+        )}
       </Space>
       <Table
         columns={columns}
@@ -331,6 +383,15 @@ const SalaryManagement: React.FC = () => {
         loading={loading}
         rowKey={(r) => r.id || `${r.user_id}-${r.year}-${r.month}`}
         scroll={{ x: 'max-content' }} // Yêu cầu: Thêm thanh cuộn ngang
+      />
+
+      {/* Modal hiển thị người dùng không hợp lệ */}
+      <InvalidUsersModal
+        open={invalidUsersModalOpen}
+        onClose={() => setInvalidUsersModalOpen(false)}
+        usersWithoutContracts={invalidUsersData.usersWithoutContracts}
+        usersWithoutApprovedAttendance={invalidUsersData.usersWithoutApprovedAttendance}
+        usersWithoutSalaryProfile={invalidUsersData.usersWithoutSalaryProfile}
       />
     </div>
   );

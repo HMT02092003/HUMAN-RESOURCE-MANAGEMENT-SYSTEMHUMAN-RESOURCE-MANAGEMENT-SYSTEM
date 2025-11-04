@@ -157,7 +157,8 @@ const UserForm: React.FC<UserFormProps> = ({
       layout="vertical"
       onFinish={handleFinish}
       scrollToFirstError
-      initialValues={{ status: 1 }} // Set default status to "Hoạt động" (Active)
+      // For create mode, default certain date fields to today. For edit mode, existing values (initialValues) will be used.
+      initialValues={isEdit ? { status: 1 } : { status: 1, birthday: dayjs(), startDate: dayjs() }}
     >
       <Row gutter={[24, 0]}>
         <Col xs={24} md={24}>
@@ -176,14 +177,39 @@ const UserForm: React.FC<UserFormProps> = ({
               },
             ]}
           >
-            <Upload
-              listType="picture-card"
-              accept="image/*"
-              beforeUpload={beforeUpload}
-              maxCount={1}
-            >
-              <div>Chọn ảnh</div>
-            </Upload>
+            {/* Use a noStyle nested Form.Item with shouldUpdate so we can react to changes
+                in the form value for `identificationPhoto` and hide the upload button
+                once a file exists. This preserves the form binding on the outer Form.Item. */}
+            <Form.Item noStyle shouldUpdate={(prev, cur) => prev.identificationPhoto !== cur.identificationPhoto}>
+              {() => {
+                const fileList: any[] = form.getFieldValue('identificationPhoto') || [];
+                return (
+                  <Upload
+                    listType="picture-card"
+                    accept="image/*"
+                    multiple={false}
+                    beforeUpload={beforeUpload}
+                    // Control the Upload's fileList from the form so UI always shows the single file we keep
+                    fileList={fileList}
+                    onChange={(info) => {
+                      const newList = info && Array.isArray(info.fileList) ? info.fileList.slice(-1) : [];
+                      // Update form value so outer Form.Item receives the trimmed file list
+                      form.setFieldsValue({ identificationPhoto: newList });
+                      // Return modified event (not strictly required when controlled) for compatibility
+                      return { ...info, fileList: newList } as any;
+                    }}
+                    onRemove={(file) => {
+                      // Remove from the form value
+                      const current: any[] = form.getFieldValue('identificationPhoto') || [];
+                      const updated = current.filter((f: any) => f.uid !== file.uid);
+                      form.setFieldsValue({ identificationPhoto: updated });
+                    }}
+                  >
+                    {fileList.length === 0 && <div>Chọn ảnh</div>}
+                  </Upload>
+                );
+              }}
+            </Form.Item>
           </Form.Item>
         </Col>
         <Col xs={24} md={24}>
@@ -305,8 +331,9 @@ const UserForm: React.FC<UserFormProps> = ({
             <DatePicker
               placeholder="Chọn ngày sinh"
               style={{ width: "100%" }}
-              format="YYYY-MM-DD"
+              format="DD/MM/YYYY"
               disabledDate={(current) => current && current > dayjs().endOf("day")}
+              // allow manual input in DD/MM/YYYY and parse using dayjs customParseFormat
             />
           </Form.Item>
         </Col>
@@ -397,7 +424,7 @@ const UserForm: React.FC<UserFormProps> = ({
             <DatePicker
               placeholder="Chọn ngày bắt đầu"
               style={{ width: "100%" }}
-              format="YYYY-MM-DD"
+              format="DD/MM/YYYY"
               disabledDate={(current) => current && current > dayjs().endOf("day")}
             />
           </Form.Item>
@@ -514,7 +541,7 @@ const UserForm: React.FC<UserFormProps> = ({
                           <DatePicker
                             placeholder="Chọn ngày sinh"
                             style={{ width: "100%" }}
-                            format="YYYY-MM-DD"
+                            format="DD/MM/YYYY"
                             disabledDate={(current) => current && current > dayjs().endOf("day")}
                           />
                         </Form.Item>

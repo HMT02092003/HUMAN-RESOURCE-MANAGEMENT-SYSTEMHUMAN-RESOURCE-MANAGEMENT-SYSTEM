@@ -87,11 +87,24 @@ export default {
   },
 
   // Trigger bulk calculation on the server for a month
-  // Trigger bulk calculation on the server for a month
   calculateFromAttendance(month: string) {
     return api.post('/api/salary/payslips/calculate-from-attendance', { month })
-      .then(r => ({ success: r.data?.success ?? true, data: r.data?.data ?? r.data ?? null, message: r.data?.message }))
-      .catch(err => ({ success: false, data: null, message: err?.response?.data?.message || err.message }));
+      .then(r => ({ 
+        success: r.data?.success ?? true, 
+        data: r.data?.data ?? r.data ?? null, 
+        message: r.data?.message,
+        usersWithoutContracts: r.data?.usersWithoutContracts || [],
+        usersWithoutApprovedAttendance: r.data?.usersWithoutApprovedAttendance || [],
+        usersWithoutSalaryProfile: r.data?.usersWithoutSalaryProfile || []
+      }))
+      .catch(err => ({ 
+        success: false, 
+        data: null, 
+        message: err?.response?.data?.message || err.message,
+        usersWithoutContracts: err?.response?.data?.usersWithoutContracts || [],
+        usersWithoutApprovedAttendance: err?.response?.data?.usersWithoutApprovedAttendance || [],
+        usersWithoutSalaryProfile: err?.response?.data?.usersWithoutSalaryProfile || []
+      }));
   },
 
   // Get a single payslip by id (enriched)

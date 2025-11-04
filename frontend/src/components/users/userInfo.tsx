@@ -145,22 +145,55 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
 
   return (
     <div style={{ padding: token.padding }}>
-      <Descriptions
-        title="Thông tin cá nhân"
-        items={userItems}
-        column={screens.lg ? 3 : 1}
-        labelStyle={{ fontWeight: 700, color: '#000', minWidth: 120 }}
-        contentStyle={{ backgroundColor: token.colorBgContainer }}
-      />
-      <br /><br /><br />
-      <Descriptions
-        title="Công việc"
-        items={jobItems}
-        column={screens.lg ? 3 : 1}
-        labelStyle={{ fontWeight: 700, color: '#000', minWidth: 120 }}
-        contentStyle={{ backgroundColor: token.colorBgContainer }}
-      />
-      <br /><br /><br />
+      {/* Top area: avatar on left (~1/3) and details on right (~2/3) */}
+      <Row gutter={[24, 24]} align="middle">
+        <Col xs={24} md={8} style={{ textAlign: screens.lg ? 'left' : 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: screens.lg ? 'flex-start' : 'center' }}>
+            {userData?.identificationPhoto ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                alt="avatar"
+                src={userData.identificationPhoto.startsWith('/')
+                  ? userData.identificationPhoto
+                  : `${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${userData.identificationPhoto}`}
+                style={{ width: '100%', maxWidth: 240, height: 240, objectFit: 'cover', borderRadius: 8 }}
+              />
+            ) : (
+              <div style={{ width: '100%', maxWidth: 240, height: 240, background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}>
+                <span style={{ color: '#999' }}>No image</span>
+              </div>
+            )}
+
+            <div style={{ marginTop: 16, textAlign: screens.lg ? 'left' : 'center' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2 }}>
+                {`${userData?.lastName || ''} ${userData?.firstName || ''}`.trim() || '-'}
+              </div>
+              <div style={{ color: '#666', marginTop: 6 }}>{userData?.username || '-'}</div>
+            </div>
+          </div>
+        </Col>
+
+        <Col xs={24} md={16}>
+          <Descriptions
+            title="Thông tin cơ bản"
+            items={userItems.filter(i => i.key !== 'avatar' && i.key !== '2')}
+            column={screens.lg ? 2 : 1}
+            labelStyle={{ fontWeight: 700, color: '#000', minWidth: 120 }}
+            contentStyle={{ backgroundColor: token.colorBgContainer }}
+          />
+
+          <br />
+
+          <Descriptions
+            title="Công việc"
+            items={jobItems}
+            column={screens.lg ? 2 : 1}
+            labelStyle={{ fontWeight: 700, color: '#000', minWidth: 120 }}
+            contentStyle={{ backgroundColor: token.colorBgContainer }}
+          />
+        </Col>
+      </Row>
+      <br /><br />
       <Descriptions
         title="Thông tin gia đình"
       />

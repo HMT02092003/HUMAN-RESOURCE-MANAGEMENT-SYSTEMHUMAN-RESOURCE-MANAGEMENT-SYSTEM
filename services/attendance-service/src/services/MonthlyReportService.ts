@@ -6,6 +6,46 @@ import HolidayModel from '@/Models/HolidayModel';
 import SettingsService from './SettingsService';
 import SalaryService from './SalaryService';
 import AttendanceCalculationService from './attendance/AttendanceCalculationService';
+import knex from 'knex';
+
+// Helper function to get user startDate from auth-service database directly
+async function getUserStartDate(userId: number): Promise<string | null> {
+  let authDbConnection: any = null;
+  try {
+    // Create direct connection to auth-service database
+    authDbConnection = knex({
+      client: 'pg',
+      connection: {
+        host: process.env['DB_HOST'] || 'localhost',
+        port: Number(process.env['DB_PORT']) || 5432,
+        database: 'auth_service', // Auth service database name
+        user: process.env['DB_USER'] || 'postgres',
+        password: process.env['DB_PASSWORD'] || '123456'
+      }
+    });
+
+    const user = await authDbConnection('users')
+      .where('id', userId)
+      .select('startDate')
+      .first();
+
+    if (user && user.startDate) {
+      const startDate = dayjs(user.startDate).format('YYYY-MM-DD');
+      console.log(`✅ [getUserStartDate] User ${userId} startDate from DB: ${startDate}`);
+      return startDate;
+    }
+
+    console.log(`⚠️ [getUserStartDate] User ${userId} has no startDate in database`);
+    return null;
+  } catch (e) {
+    console.error(`❌ [getUserStartDate] Error fetching user startDate:`, (e as any)?.message);
+    return null;
+  } finally {
+    if (authDbConnection) {
+      await authDbConnection.destroy();
+    }
+  }
+}
 
 /**
  * Builds the "monthly-full" payload expected by frontend.
@@ -443,6 +483,12 @@ export class MonthlyReportService {
       const startDate = dayjs(`${m}-01`).startOf('month').format('YYYY-MM-DD');
       const endDate = dayjs(`${m}-01`).endOf('month').format('YYYY-MM-DD');
 
+      // ✨ Lấy thông tin user startDate trực tiếp từ database của auth-service
+      const userStartDate = await getUserStartDate(userId);
+      if (userStartDate) {
+        console.log(`👤 [attendance] User ${userId} started working on: ${userStartDate}`);
+      }
+
       // 1️⃣ Load attendance rows for the month
       const rows: any[] = await TimeAttendanceModel.query()
         .where('userId', userId)
@@ -505,6 +551,13 @@ export class MonthlyReportService {
 
       for (let d = 1; d <= daysInMonth; d++) {
         const dateKey = dayjs(`${m}-${String(d).padStart(2, '0')}`).format('YYYY-MM-DD');
+        
+        // ✨ Chỉ tính những ngày từ startDate trở đi
+        if (userStartDate && dayjs(dateKey).isBefore(userStartDate, 'day')) {
+          console.log(`⏭️ [attendance] Skipping ${dateKey} (before startDate ${userStartDate})`);
+          continue; // Bỏ qua những ngày trước khi user bắt đầu làm việc
+        }
+        
         const dow = dayjs(dateKey).day(); // 0-6 Sun-Sat
         const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const dayKey = dayNames[dow] || 'monday';
@@ -523,7 +576,7 @@ export class MonthlyReportService {
         }
       }
 
-      console.log(`📅 [attendance] Total scheduled working days in ${m}: ${totalScheduledDays} (excluding holidays and weekend)`);
+      console.log(`📅 [attendance] Total scheduled working days in ${m}: ${totalScheduledDays} (excluding holidays, weekend, and days before startDate)`);
       console.log(`📅 [attendance] Scheduled working days up to today in ${m}: ${totalScheduledDaysUpToToday}`);
 
       // 5️⃣ Map applications to days
@@ -661,6 +714,11 @@ export class MonthlyReportService {
 
       // ✨ Bổ sung công cho các ngày nghỉ phép, công tác, ngày lễ có đơn công tác (không có chấm công)
       for (const dateKey of allDaysInMonth) {
+        // ✨ Bỏ qua những ngày trước startDate
+        if (userStartDate && dayjs(dateKey).isBefore(userStartDate, 'day')) {
+          continue;
+        }
+        
         // Chỉ cộng 1 công cho các ngày nghỉ phép, công tác, hoặc ngày lễ có đơn công tác nếu KHÔNG có chấm công
         if (!attendanceDaysSet.has(dateKey) && isScheduledWorkingDay(dateKey) && dayjs(dateKey).isSameOrBefore(todayStr, 'day')) {
           if (leaveDaysSet.has(dateKey)) {
@@ -711,6 +769,13 @@ export class MonthlyReportService {
       const unauthorizedAbsenceDates: string[] = [];
       for (let d = 1; d <= daysInMonth; d++) {
         const dateKey = dayjs(`${m}-${String(d).padStart(2, '0')}`).format('YYYY-MM-DD');
+        
+        // ✨ Bỏ qua những ngày trước startDate
+        if (userStartDate && dayjs(dateKey).isBefore(userStartDate, 'day')) {
+          console.log(`⏭️ [attendance] Skipping unauthorized check for ${dateKey} (before startDate ${userStartDate})`);
+          continue;
+        }
+        
         if (
           isScheduledWorkingDay(dateKey)
           && dayjs(dateKey).isSameOrBefore(todayStr, 'day')
@@ -718,6 +783,7 @@ export class MonthlyReportService {
           && !approvedLeaveDaysSetCombined.has(dateKey)
           && !businessTripDaysSetCombined.has(dateKey)
         ) {
+          console.log(`❗ [attendance] ${dateKey} marked as unauthorized absence`);
           unauthorizedAbsenceDates.push(dateKey);
         }
       }

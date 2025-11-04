@@ -139,28 +139,64 @@ export const createContract = async (req: Request, res: Response) => {
 export const getActiveContract = async (req: Request, res: Response) => {
   try {
     const userId = Number(req.params.userId);
-    const date = req.query.date ? new Date(req.query.date as string) : new Date();
+    const dateStr = req.query.date as string;
+    const checkDate = dateStr ? new Date(dateStr) : new Date();
+    const checkDateStr = checkDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+
+    console.log(`[employee-service] getActiveContract: userId=${userId}, dateStr=${dateStr}, checkDateStr=${checkDateStr}`);
 
     if (!userId) {
       return res.status(400).json({ error: 'Thiếu ID người dùng' });
     }
 
-    // Find contract where activeDay <= date and (endDate is null or endDate >= date)
-    const contract = await ContractModel.query()
+    // Get all contracts for this user
+    const contracts = await ContractModel.query()
       .where('userId', userId)
-      .where('activeDay', '<=', date)
-      .where(function () {
-        this.whereNull('endDate').orWhere('endDate', '>=', date);
-      })
       .withGraphFetched('contractType')
-      .orderBy('activeDay', 'desc')
-      .first();
+      .orderBy('activeDay', 'desc');
 
-    if (!contract) {
+    if (!contracts || contracts.length === 0) {
+      console.log(`[employee-service] getActiveContract: userId=${userId}, no contracts found`);
+      return res.status(404).json({ error: 'Không tìm thấy hợp đồng cho người dùng này' });
+    }
+
+    console.log(`[employee-service] getActiveContract: userId=${userId}, total contracts=${contracts.length}`);
+
+    // Find active contract using the same logic as getUserDetail
+    const nowMs = checkDate.getTime();
+    let currentContract = null;
+    let maxActiveMs = -Infinity;
+
+    for (const c of contracts) {
+      if (!c.activeDay) continue; // Skip if no activeDay
+
+      const activeMs = new Date(c.activeDay).getTime();
+      const endMs = c.endDate ? new Date(c.endDate).getTime() : Infinity;
+
+      console.log(`[employee-service] Contract ${c.id}: activeDay=${c.activeDay} (${activeMs}), endDate=${c.endDate || 'null'} (${endMs}), checkMs=${nowMs}`);
+
+      // Check if contract is in effective window: activeDay <= checkDate <= endDate (or endDate is null)
+      if (activeMs <= nowMs && nowMs <= endMs) {
+        // Among all effective contracts, pick the one with the latest activeDay
+        if (activeMs > maxActiveMs) {
+          maxActiveMs = activeMs;
+          currentContract = c;
+          console.log(`[employee-service] Contract ${c.id} is currently active (best match so far)`);
+        }
+      } else if (activeMs > nowMs) {
+        console.log(`[employee-service] Contract ${c.id} is upcoming (activeDay > checkDate)`);
+      } else if (endMs < nowMs) {
+        console.log(`[employee-service] Contract ${c.id} is past (endDate < checkDate)`);
+      }
+    }
+
+    if (!currentContract) {
+      console.log(`[employee-service] getActiveContract: userId=${userId}, no active contract found on date ${checkDateStr}`);
       return res.status(404).json({ error: 'Không tìm thấy hợp đồng đang hoạt động cho người dùng này' });
     }
 
-    return res.status(200).json(contract);
+    console.log(`[employee-service] getActiveContract result: userId=${userId}, found contract=${currentContract.id}`);
+    return res.status(200).json(currentContract);
   } catch (error) {
     console.error('Error fetching active contract:', error);
     return res.status(500).json({ error: 'Lỗi máy chủ nội bộ' });
