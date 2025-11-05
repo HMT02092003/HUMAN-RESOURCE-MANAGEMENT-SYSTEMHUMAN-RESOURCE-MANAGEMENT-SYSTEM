@@ -7,6 +7,7 @@ const router = Router();
 // CV endpoints (register before generic job endpoints to avoid route conflicts)
 router.post('/cvs/upload', upload.single('file') as any, CvController.uploadCv);
 router.get('/cvs', CvController.listCvs);
+router.get('/cvs/:id/file', CvController.serveCvFile);
 router.delete('/cvs/:id', CvController.deleteCv);
 router.post('/cvs/bulk-delete', CvController.bulkDeleteCvs);
 

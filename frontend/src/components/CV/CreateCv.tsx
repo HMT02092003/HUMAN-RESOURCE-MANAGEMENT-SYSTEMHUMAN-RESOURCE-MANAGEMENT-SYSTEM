@@ -176,31 +176,23 @@ const CreateCv: React.FC = () => {
           </Form.Item>
         </Col>
       </Row>
-      {/* Fullscreen overlay shown while submitting */}
+      {/* Fullscreen overlay shown while submitting (minimal: single white icon + text) */}
       {submitting && (
         <div className="cv-fullscreen-overlay">
           <div className="cv-overlay-content">
-            {/* Fullscreen overlay shown while submitting (uses CVAnalysisAnimation) */}
             {canRenderAnalysisComp ? (
               <AnalysisComp size={84} />
             ) : (
-              // fallback inline SVG (previously used) to avoid crashing while we debug
               <svg width="84" height="84" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 2l1.8 3.6L17.6 7l-3.8 1.4L12 12l-1.8-3.6L6.4 7l3.8-1.4L12 2z" fill="#fff" />
-                <path d="M19 8.5l.6 1.2 1.2.6-1.2.6L19 12l-.6-1.2L17 10.2l1.2-.6L19 8.5z" fill="#fff" opacity="0.95" />
-                <path d="M4.5 13.5l.4.8.8.4-.8.4-.4.8-.4-.8-.8-.4.8-.4.4-.8z" fill="#fff" opacity="0.9" />
               </svg>
             )}
-            <div style={{ color: '#fff', fontWeight: 700, fontSize: 18 }}>Đang phân tích CV</div>
+            <div className="cv-overlay-text">Đang phân tích CV</div>
           </div>
           <style>{`
             .cv-fullscreen-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:1200;background:rgba(0,0,0,0.5)}
-            .cv-overlay-content{display:flex;flex-direction:column;align-items:center;gap:12px;padding:24px;border-radius:8px}
-              /* Slight blur behind overlay for polish */
-              .cv-fullscreen-overlay::backdrop{backdrop-filter:blur(4px)}
-              @supports ((-webkit-backdrop-filter: blur(4px)) or (backdrop-filter: blur(4px))) {
-                .cv-fullscreen-overlay{backdrop-filter: blur(4px)}
-              }
+            .cv-overlay-content{display:flex;flex-direction:column;align-items:center;justify-content:center}
+            .cv-overlay-text{color:#fff;font-weight:700;font-size:18px;margin-top:12px}
           `}</style>
         </div>
       )}

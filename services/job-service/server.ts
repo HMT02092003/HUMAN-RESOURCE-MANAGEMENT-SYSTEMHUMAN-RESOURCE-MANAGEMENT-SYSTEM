@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 // Serve uploaded files statically at /uploads
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import routes from './routes/api.ts';
 
 dotenv.config();
@@ -24,10 +25,24 @@ app.get('/health', (_req: Request, res: Response) => {
 
 app.use('/api', routes);
 
-const uploadsDir = path.resolve(process.cwd(), 'uploads');
+// Resolve uploads directory relative to this file so static serving works
+// regardless of the working directory used to start the process.
+let uploadsDir: string;
+try {
+  // Use fileURLToPath to convert import.meta.url to a proper filesystem path
+  const __filename = fileURLToPath(import.meta.url);
+  const srcDir = path.dirname(__filename);
+  uploadsDir = path.resolve(srcDir, 'uploads');
+} catch (err) {
+  // Fallback to process.cwd()
+  uploadsDir = path.resolve(process.cwd(), 'uploads');
+}
+
 try {
   fs.mkdirSync(uploadsDir, { recursive: true });
 } catch (e) {}
+
+console.log('[job-service] Serving uploads from:', uploadsDir);
 app.use('/uploads', express.static(uploadsDir));
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {

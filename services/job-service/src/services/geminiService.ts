@@ -2,7 +2,7 @@
 import { GoogleGenAI } from '@google/genai';
 
 // 2. Model MỚI (bạn đã test thành công)
-const MODEL_NAME = 'gemini-2.5-pro';
+const MODEL_NAME = 'gemini-2.5-flash';
 
 export interface GeminiSkill {
   name: string;

@@ -11,7 +11,10 @@ import { UserSkillModel } from '../Models/UserSkillModel.ts';
 import { getTextFromPdf } from '../services/pdfParser.ts';
 import { analyzeCvText } from '../services/geminiService.ts';
 import { validate, ValidationException } from '../ulitis/validation-utility.ts';
-import jwt from 'jsonwebtoken';
+import checkScopeService from 'src/services/checkScope.ts';
+import { getDecodedToken } from 'src/ulitis/decode-token.ts';
+import getTokensFromRequest from 'src/ulitis/get-token.ts';
+import { fileURLToPath } from 'url';
 
 const uploadDir = path.resolve(process.cwd(), 'uploads');
 
@@ -73,7 +76,7 @@ export const CvController = {
 
       // Extract text from PDF and analyze before saving to DB
       const text = await getTextFromPdf(fileBuffer);
-      
+
       if (!text || text.trim().length === 0) {
         res.status(400).json({ error: 'Unable to extract text from PDF' });
         return;
@@ -89,18 +92,18 @@ export const CvController = {
       // Validate that AI returned skills before saving to DB
       if (!analysis || !analysis.skills || analysis.skills.length === 0) {
         console.error('[uploadCv] Gemini did not return any skills');
-        res.status(500).json({ 
+        res.status(500).json({
           error: 'AI analysis failed: no skills detected',
           details: 'The AI service could not extract skills from the CV'
         });
         return;
       }
 
-      console.log(`[uploadCv] AI detected ${analysis.skills.length} skills:`, 
+      console.log(`[uploadCv] AI detected ${analysis.skills.length} skills:`,
         analysis.skills.map(s => `${s.name} (${s.level})`).join(', '));
 
       // Persist CV and user skills in a transaction (only after successful AI analysis)
-  // Persist CV and user skills in a transaction (only after successful AI analysis)
+      // Persist CV and user skills in a transaction (only after successful AI analysis)
       const cv = await transaction(knex, async (trx) => {
         // find existing cv for this user
         const existing = await CvModel.query(trx).where('user_id', userId).first();
@@ -172,209 +175,170 @@ export const CvController = {
       });
     } catch (err) {
       console.error('[uploadCv] Error:', err);
-      
+
       const errorMessage = err instanceof Error ? err.message : 'Internal error';
-      
+
       // Return specific error messages based on error type
       if (errorMessage.includes('Gemini') || errorMessage.includes('AI')) {
-        res.status(500).json({ 
-          error: 'AI analysis failed', 
-          details: errorMessage 
+        res.status(500).json({
+          error: 'AI analysis failed',
+          details: errorMessage
         });
       } else if (errorMessage.includes('PDF') || errorMessage.includes('extract')) {
-        res.status(400).json({ 
-          error: 'Failed to process PDF file', 
-          details: errorMessage 
+        res.status(400).json({
+          error: 'Failed to process PDF file',
+          details: errorMessage
         });
       } else {
-        res.status(500).json({ 
-          error: 'Internal server error', 
-          details: errorMessage 
+        res.status(500).json({
+          error: 'Internal server error',
+          details: errorMessage
         });
       }
     }
   }) as RequestHandler,
 
-  listCvs: (async (req: Request, res: Response): Promise<any> => {
-    try {
-      console.log('[listCvs] Starting...');
-      const { page = '1', pageSize = '10', sortField = 'uploaded_at', sortOrder = 'desc', search = '' } = req.query;
-      
-      const pageNum = Math.max(1, parseInt(page as string, 10));
-      const pageSizeNum = Math.min(100, Math.max(1, parseInt(pageSize as string, 10)));
-      const offset = (pageNum - 1) * pageSizeNum;
+listCvs: (async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { page = '1', pageSize = '10', sortField = 'uploaded_at', sortOrder = 'desc' } = req.query;
+    
+    const pageNum = Math.max(1, parseInt(page as string, 10));
+    const pageSizeNum = Math.min(100, Math.max(1, parseInt(pageSize as string, 10)));
+    const offset = (pageNum - 1) * pageSizeNum;
 
-      const validSortFields = ['cv_id', 'user_id', 'file_path', 'uploaded_at'];
-      const safeSortField = validSortFields.includes(sortField as string) ? (sortField as string) : 'uploaded_at';
-      const safeSortOrder = (sortOrder === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc';
+    const validSortFields = ['cv_id', 'user_id', 'file_path', 'uploaded_at'];
+    const safeSortField = validSortFields.includes(sortField as string) ? (sortField as string) : 'uploaded_at';
+    const safeSortOrder = sortOrder === 'asc' ? 'asc' : 'desc';
 
-      console.log('[listCvs] Query params:', { pageNum, pageSizeNum, safeSortField, safeSortOrder });
+    // Lấy token sử dụng helper (cookie token được ưu tiên để đảm bảo token mới nhất)
+  const { accessToken: token, refreshToken } = getTokensFromRequest(req);
+  console.debug('[listCvs] token presence', { hasAccessToken: !!token, hasRefreshToken: !!refreshToken });
+    if (!token) {
+      console.warn('[listCvs] No token provided in cookie or Authorization header');
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Access token required' 
+      });
+    }
 
-      // Step 1: Get current user ID from token (decode locally to avoid 401 on expired token)
-      let currentUserId: number | null = null;
-      
-      // Get token from request
-      const token = (req as any).cookies?.token ||
-        (req.headers.authorization && req.headers.authorization.split(' ')[1]);
+    // Check scope quyền quản lý CV từ Auth Service
+  const scopeResult = await checkScopeService.checkUserScope('CV', token, refreshToken);
+    console.log('DEBUG - User scope result:', scopeResult);
 
-      if (!token) {
-        return res.status(401).json({
-          success: false,
-          message: 'Access token required'
-        });
-      }
+    // Lấy danh sách user IDs được phép truy cập
+    const allowedUserIds = scopeResult?.userIds || [];
+    
+    if (allowedUserIds.length === 0) {
+      // Không có quyền truy cập bất kỳ CV nào
+      return res.json({
+        success: true,
+        data: [],
+        pagination: {
+          page: pageNum,
+          pageSize: pageSizeNum,
+          total: 0,
+          totalPages: 0
+        },
+        total: 0
+      });
+    }
 
-      // Decode token to get user ID (no verification needed, trust gateway)
+    console.log(`User has ${scopeResult.scope} scope access to ${allowedUserIds.length} users:`, allowedUserIds);
+
+    // Query CVs với scope filter
+    const rows = await knex('cvs')
+      .select('cv_id', 'user_id', 'file_path', 'original_text', 'uploaded_at')
+      .whereIn('user_id', allowedUserIds)
+      .orderBy(safeSortField, safeSortOrder)
+      .limit(pageSizeNum)
+      .offset(offset);
+
+    // Đếm tổng số với cùng filter
+    const countResult = await knex('cvs')
+      .whereIn('user_id', allowedUserIds)
+      .count('* as count')
+      .first();
+    const total = parseInt(String(countResult?.count || 0), 10);
+
+    // Lấy thông tin user
+    const userIds = [...new Set(rows.map((r: any) => r.user_id))];
+    let rowsWithUsers = rows;
+
+    if (userIds.length > 0) {
       try {
-        const decoded = jwt.decode(token) as any;
-        if (decoded && (decoded.user?.id || decoded.sub)) {
-          currentUserId = decoded.user?.id || decoded.sub;
-          console.log('[listCvs] Current user ID:', currentUserId);
-        } else {
-          console.warn('[listCvs] Token decode failed or missing user ID');
-          return res.status(401).json({
-            success: false,
-            message: 'Invalid token format'
-          });
-        }
-      } catch (decodeErr) {
-        console.error('[listCvs] Error decoding token:', decodeErr);
-        return res.status(401).json({
-          success: false,
-          message: 'Invalid token'
-        });
-      }
-
-      // At this point currentUserId is guaranteed to be a number (not null)
-      const userId: number = currentUserId!;
-
-      // Step 2: Check scope via auth service using same method as application-service
-      let allowedUserIds: number[] = [];
-      
-      try {
-        console.log('[listCvs] Checking scope for permission: cvs');
-        const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || `http://localhost:${process.env.AUTH_SERVICE_PORT || 4001}`;
+        const usersInfo = await checkScopeService.getUsersByIds(userIds);
         
-        // Call auth service check-scope endpoint with token (same as application-service does)
-        const scopeResp = await fetch(`${AUTH_SERVICE_URL}/api/users/check-scope`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Cookie': `token=${token}` // Send token in cookie as auth-service reads from cookie first
-          },
-          body: JSON.stringify({ permissionKey: 'cvs' })
-        });
-
-        if (scopeResp.ok) {
-          const scopeResult = await scopeResp.json();
-          console.log('[listCvs] Scope check result:', scopeResult);
-          
-          if (scopeResult.success && scopeResult.userIds) {
-            allowedUserIds = scopeResult.userIds;
-            console.log(`[listCvs] User has ${scopeResult.scope} scope access to ${allowedUserIds.length} users`);
-          } else {
-            // No access or scope check failed, show only personal CVs
-            allowedUserIds = [userId];
-            console.log('[listCvs] No scope access, showing only personal CVs for user:', userId);
+        const usersById = new Map(usersInfo.map((u: any) => [
+          u.id, 
+          {
+            id: u.id,
+            username: u.username,
+            fullName: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+            email: u.email,
+            identificationPhoto: u.identificationPhoto
           }
-        } else {
-          const errorText = await scopeResp.text();
-          console.warn('[listCvs] Scope check failed, status:', scopeResp.status, 'response:', errorText);
-          
-          // Fallback to personal scope
-          allowedUserIds = [userId];
-          console.log('[listCvs] Falling back to personal scope for user:', userId);
-        }
-      } catch (scopeErr) {
-        console.error('[listCvs] Error checking scope:', scopeErr);
-        // Fallback to personal scope on error
-        allowedUserIds = [userId];
+        ]));
+        
+        rowsWithUsers = rows.map((r: any) => ({ 
+          ...r, 
+          userInfo: usersById.get(r.user_id) || null 
+        }));
+      } catch (err) {
+        console.error('Failed to fetch users:', err);
+        rowsWithUsers = rows.map((r: any) => ({ ...r, userInfo: null }));
+      }
+    }
+
+    return res.json({
+      success: true,
+      data: rowsWithUsers,
+      pagination: {
+        page: pageNum,
+        pageSize: pageSizeNum,
+        total,
+        totalPages: Math.ceil(total / pageSizeNum)
+      },
+      total
+    });
+
+  } catch (err: any) {
+    console.error('[listCvs] Error:', err);
+    return res.status(500).json({ 
+      success: false, 
+      message: err?.message || 'Có lỗi xảy ra khi lấy danh sách CV' 
+    });
+  }
+}) as RequestHandler,
+
+  // Serve CV file by cv_id (looks up DB and streams file from uploads folder)
+  serveCvFile: (async (req: Request, res: Response): Promise<any> => {
+    try {
+      const { id } = req.params;
+      const cv = await CvModel.query().findById(id);
+      if (!cv || !cv.file_path) {
+        return res.status(404).json({ success: false, message: 'CV not found' });
       }
 
-      // Step 2: Build query with scope filter if we have allowed user IDs
-      let query = knex('cvs')
-        .select('cv_id', 'user_id', 'file_path', 'original_text', 'uploaded_at');
+      // Normalize and extract filename
+      const normalized = cv.file_path.replace(/\\/g, '/').replace(/^\/+/, '');
+      const parts = normalized.split('/');
+      const filename = parts.pop();
+      if (!filename) return res.status(404).json({ success: false, message: 'File not found' });
 
-      // Apply filter only for personal/department scope
-      if (allowedUserIds.length > 0) {
-        query = query.whereIn('user_id', allowedUserIds);
+      // Resolve uploads folder relative to this file (safe regardless of cwd)
+      const __filename = fileURLToPath(import.meta.url);
+      const controllerDir = path.dirname(__filename); // src/controller
+      const uploadsDir = path.resolve(controllerDir, '..', '..', 'uploads');
+      const filePath = path.join(uploadsDir, filename);
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ success: false, message: 'File not found on disk' });
       }
-      // For global scope (allowedUserIds.length === 0), no filter is applied
 
-      // Apply ordering, pagination
-      const rows = await query
-        .orderBy(safeSortField, safeSortOrder)
-        .limit(pageSizeNum)
-        .offset(offset);
-
-      console.log('[listCvs] Fetched', rows.length, 'rows (after scope filter)');
-
-      // Get total count with same filter
-      let countQuery = knex('cvs').count('* as count');
-      if (allowedUserIds.length > 0) {
-        countQuery = countQuery.whereIn('user_id', allowedUserIds);
-      }
-      const countResult = await countQuery.first();
-      const total = countResult ? parseInt(String(countResult.count), 10) : 0;
-
-      console.log('[listCvs] Total (filtered):', total);
-
-      // Enrich rows with user info by calling Auth Service bulk endpoint
-      try {
-        const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || `http://localhost:${process.env.AUTH_SERVICE_PORT || 4001}`;
-        const userIds = Array.from(new Set(rows.map((r: any) => r.user_id))).filter(Boolean);
-
-        let rowsWithUsers = rows;
-
-        if (userIds.length > 0) {
-          const resp = await fetch(`${AUTH_SERVICE_URL}/api/users/bulk`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userIds })
-          });
-
-          if (resp.ok) {
-            const json = await resp.json();
-            const users = json?.data || [];
-            const usersById = new Map(users.map((u: any) => [u.id, u]));
-
-            rowsWithUsers = rows.map((r: any) => ({
-              ...r,
-              user: usersById.get(r.user_id) || null
-            }));
-          } else {
-            console.warn('[listCvs] Auth service returned non-OK status', resp.status);
-            // attach null users
-            rowsWithUsers = rows.map((r: any) => ({ ...r, user: null }));
-          }
-        }
-
-        return res.json({
-          success: true,
-          data: rowsWithUsers,
-          pagination: {
-            current: pageNum,
-            pageSize: pageSizeNum,
-            total
-          }
-        });
-      } catch (authErr) {
-        console.error('[listCvs] Failed to fetch user info from auth service:', authErr);
-        // Return rows without user enrichment if auth service call fails
-        return res.json({ 
-          success: true, 
-          data: rows,
-          pagination: {
-            current: pageNum,
-            pageSize: pageSizeNum,
-            total
-          }
-        });
-      }
+      return res.sendFile(filePath);
     } catch (err: any) {
-      console.error('[listCvs] Error:', err);
-      res.status(500).json({ success: false, error: err?.message || 'Internal error' });
+      console.error('serveCvFile error', err);
+      return res.status(500).json({ success: false, message: err?.message || 'Internal error' });
     }
   }) as RequestHandler,
 
@@ -396,16 +360,16 @@ export const CvController = {
   bulkDeleteCvs: (async (req: Request, res: Response): Promise<any> => {
     try {
       const { ids } = req.body;
-      
+
       if (!Array.isArray(ids) || ids.length === 0) {
         res.status(400).json({ error: 'ids array is required' });
         return;
       }
 
       const deleted = await CvModel.query().delete().whereIn('cv_id', ids);
-      
-      res.json({ 
-        success: true, 
+
+      res.json({
+        success: true,
         deleted,
         message: `Deleted ${deleted} CV record(s)`
       });

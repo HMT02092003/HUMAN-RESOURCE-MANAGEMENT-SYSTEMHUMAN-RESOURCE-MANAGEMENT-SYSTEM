@@ -111,6 +111,17 @@ const CvManager: React.FC = () => {
 		return 'http://localhost:4000';
 	};
 
+	// Helper: direct Job Service base (used for serving static uploads)
+	const getJobServiceBase = () => {
+		if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_JOB_SERVICE_URL) {
+			return process.env.NEXT_PUBLIC_JOB_SERVICE_URL.replace(/\/$/, '');
+		}
+		if (typeof window !== 'undefined') {
+			return `${window.location.protocol}//${window.location.hostname}:4008`;
+		}
+		return 'http://localhost:4008';
+	};
+
 	useEffect(() => {
 		load();
 	}, []);
@@ -237,8 +248,8 @@ const CvManager: React.FC = () => {
 				if (!v) return 'N/A';
 				// Normalize Windows backslashes to forward slashes
 				const normalized = v.replace(/\\/g, '/').replace(/^\/+/, '');
-				// Use API Gateway jobs prefix so request goes via gateway to job-service
-				const url = `${getGatewayBase()}/jobs/${normalized}`;
+				// Use direct Job Service URL for static files so we hit the /uploads static handler
+				const url = `${getJobServiceBase()}/${normalized}`;
 				const fileName = normalized.split('/').pop() || 'CV';
 				return (
 					<a href={url} target="_blank" rel="noreferrer" download={fileName}>
