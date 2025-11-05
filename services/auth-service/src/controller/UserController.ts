@@ -280,8 +280,7 @@ export const createUser = async (req: Request, res: Response) => {
     console.log("Inputs:", inputs);
 
     const allowFields = {
-      firstName: "string!",
-      lastName: "string!",
+      fullName: "string!",
       username: "string!",
       password: "string!",
       roleId: "number!",
@@ -700,8 +699,7 @@ export const getUserDetail = async (req: Request, res: Response) => {
       .select([
         "users.id as id",
         "users.username",
-        "users.firstName",
-        "users.lastName",
+        "users.fullName",
         "users.email",
         "users.roleId",
         "users.createdAt",
@@ -850,8 +848,7 @@ export const updateUser = async (req: Request, res: Response) => {
 
     const allowFields = {
       id: "number!",
-      firstName: "string!",
-      lastName: "string!",
+      fullName: "string!",
       username: "string!",
       email: "string!",
       roleId: "number",
@@ -1427,8 +1424,7 @@ export const getUserByUsername = async (req: Request, res: Response) => {
         'id',
         'username',
         'email',
-        'firstName',
-        'lastName',
+        'fullName',
         'status',
         'identificationPhoto',
         'departmentId',
@@ -1479,7 +1475,7 @@ export const getUserByUsername = async (req: Request, res: Response) => {
       id: user.id,
       username: user.username,
       email: user.email,
-      fullName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+      fullName: user.fullName || 'N/A',
       employeeId,
       department: department || 'N/A',
       position: chevron || 'N/A',

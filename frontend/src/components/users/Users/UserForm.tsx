@@ -89,12 +89,13 @@ const UserForm: React.FC<UserFormProps> = ({
 
     const formattedValues = {
       ...values,
-      birthday: values.birthday ? values.birthday.toISOString() : null,
-      startDate: values.startDate ? values.startDate.toISOString() : null,
+      // Use date-only format to avoid timezone shifts when converting to ISO (dayjs/toISOString can shift day depending on TZ)
+      birthday: values.birthday ? values.birthday.format('YYYY-MM-DD') : null,
+      startDate: values.startDate ? values.startDate.format('YYYY-MM-DD') : null,
       gender: values.gender === undefined || values.gender === "" ? null : values.gender, // Ensure gender is null if not selected
       profileFamily: values.profileFamily ? values.profileFamily?.map((member: any) => ({
         ...member,
-        birthday: member.birthday ? member.birthday.toISOString() : null // Check null before calling toISOString
+        birthday: member.birthday ? member.birthday.format('YYYY-MM-DD') : null // Use date-only string
       })) : [],
       identificationPhoto,
     };
@@ -279,33 +280,19 @@ const UserForm: React.FC<UserFormProps> = ({
 
         <Col xs={24} md={12}>
           <Form.Item
-            label="Họ"
-            name="lastName"
+            label="Họ và Tên"
+            name="fullName"
             rules={[
-              { required: true, message: "Vui lòng nhập họ" },
-              { whitespace: true, message: "Họ không được để trống" },
-              { max: 50, message: "Họ không được vượt quá 50 ký tự" },
+              { required: true, message: "Vui lòng nhập họ và tên" },
+              { whitespace: true, message: "Họ và tên không được để trống" },
+              { max: 100, message: "Họ và tên không được vượt quá 100 ký tự" },
             ]}
           >
-            <Input placeholder="Nhập họ" maxLength={50} />
+            <Input placeholder="Nhập họ và tên đầy đủ (VD: Nguyễn Văn An)" maxLength={100} />
           </Form.Item>
         </Col>
 
         <Col xs={24} md={12}>
-          <Form.Item
-            label="Tên"
-            name="firstName"
-            rules={[
-              { required: true, message: "Vui lòng nhập tên" },
-              { whitespace: true, message: "Tên không được để trống" },
-              { max: 50, message: "Tên không được vượt quá 50 ký tự" },
-            ]}
-          >
-            <Input placeholder="Nhập tên" maxLength={50} />
-          </Form.Item>
-        </Col>
-
-        <Col xs={24} md={24}>
           <Form.Item
             label="Email"
             name="email"

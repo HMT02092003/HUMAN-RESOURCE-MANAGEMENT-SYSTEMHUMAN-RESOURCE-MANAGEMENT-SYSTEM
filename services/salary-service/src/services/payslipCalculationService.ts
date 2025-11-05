@@ -127,7 +127,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
       
       const missingContractUsers = usersWithoutContracts.map(id => {
         const found = usersList.find((u: any) => String(u.id) === String(id));
-        if (found) return { userId: found.id, username: found.username, fullName: `${found.firstName || ''} ${found.lastName || ''}`.trim() };
+        if (found) return { userId: found.id, username: found.username, fullName: found.fullName || '' };
         return { userId: id, username: `User ${id}`, fullName: '' };
       });
       
@@ -173,7 +173,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
       // Build readable missing info: if auth-service returned details use them, otherwise fallback to id only
       const missingInfo = missingProfileUserIds.map(id => {
         const found = missingUsers.find((u: any) => String(u.id) === String(id));
-        if (found) return { userId: found.id, username: found.username, fullName: `${found.firstName || ''} ${found.lastName || ''}`.trim() };
+        if (found) return { userId: found.id, username: found.username, fullName: found.fullName || '' };
         return { userId: id, username: `User ${id}`, fullName: '' };
       });
 

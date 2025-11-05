@@ -19,7 +19,7 @@
     "routes/**/*.ts",
     "src/**/*.ts",
     "src/**/*.d.ts",
-    "knexfile.ts"
+    "knexfile.js"
   ],
   "exclude": [
     "node_modules",

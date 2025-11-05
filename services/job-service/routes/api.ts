@@ -11,6 +11,11 @@ router.get('/cvs/:id/file', CvController.serveCvFile);
 router.delete('/cvs/:id', CvController.deleteCv);
 router.post('/cvs/bulk-delete', CvController.bulkDeleteCvs);
 
+// Job AI Analysis endpoints
+router.post('/jobs/analyze', JobController.analyzeJob);
+router.post('/jobs/find-candidates', JobController.findCandidates);
+router.post('/jobs/create-with-analysis', JobController.createJobWithAnalysis);
+
 // Job endpoints
 router.get('/', JobController.getAll);
 router.get('/:id', JobController.getById);

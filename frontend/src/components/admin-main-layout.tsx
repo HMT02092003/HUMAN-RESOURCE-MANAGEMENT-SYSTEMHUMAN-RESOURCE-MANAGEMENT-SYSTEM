@@ -174,7 +174,7 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         <ProfileOutlined />,
         [
             getItem('Quản lí hồ sơ', 'CV', <FileTextOutlined />),
-            getItem('Danh sách công việc', 'jobs', <FileTextOutlined />),
+            getItem('Danh sách dự án', 'projects', <FileTextOutlined />),
         ],
     ),
     
@@ -414,8 +414,8 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
             case 'CV':
                 router.push('/CV');
                 break;
-            case 'jobs':
-                router.push('/jobs');
+            case 'projects':
+                router.push('/projects');
                 break;
             default:
                 break;
@@ -673,7 +673,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
             >
                 <Descriptions column={1}>
                     <Descriptions.Item label="Tên đăng nhập">{userData?.user?.username || 'N/A'}</Descriptions.Item>
-                    <Descriptions.Item label="Họ và tên">{userData?.user?.lastName || 'N/A'} {userData?.user?.firstName || 'N/A'}</Descriptions.Item>
+                    <Descriptions.Item label="Họ và tên">{userData?.user?.fullName || 'N/A'}</Descriptions.Item>
                     <Descriptions.Item label="Email">{userData?.user?.email || 'N/A'}</Descriptions.Item>
                     <Descriptions.Item label="Ngày tạo">{userData?.user?.createdAt ? new Date(userData.user.createdAt).toLocaleDateString() : 'N/A'}</Descriptions.Item>
                     <Descriptions.Item label="Số điện thoại">{userData?.user?.phone || 'N/A'}</Descriptions.Item>

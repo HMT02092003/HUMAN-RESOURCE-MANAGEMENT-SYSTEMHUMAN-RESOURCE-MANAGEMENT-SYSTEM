@@ -53,7 +53,7 @@ export const generateFromProfile = async (req: Request, res: Response, next: Nex
     } as any).returning('*');
 
     res.status(201).json(created);
-  } catch (err) {
+  } catch (err: any) {
     next(err);
   }
 };
@@ -113,8 +113,8 @@ export const generateFromAttendance = async (req: Request, res: Response, next: 
       for (const t of types) map.set(Number(t.id), Number(t.default_amount || 0));
       allowancesSum = atIds.reduce((s: number, id: number) => s + (map.get(id) || 0), 0);
     }
-  } catch (e) {
-    console.error('[salary-service] error computing allowances in controller generateFromAttendance:', e && e.message ? e.message : e);
+  } catch (e: any) {
+    console.error('[salary-service] error computing allowances in controller generateFromAttendance:', e?.message || e);
   }
 
     const gross = baseSalary + allowancesSum + Number(monthlyStats.totalOvertimePay || monthlyStats.totalOvertimeSalary || 0);
@@ -124,7 +124,7 @@ export const generateFromAttendance = async (req: Request, res: Response, next: 
     try {
       const bh = await SettingsService.getSettingValue('BHRates');
       if (bh && typeof bh === 'object') {
-        const insBase = Number(profile?.insurance_salary || baseSalary) || baseSalary;
+        const insBase = Number((profile as any)?.insurance_salary || baseSalary) || baseSalary;
         socialInsurance = Math.round((Number(bh.social || 0) / 100) * insBase);
         healthInsurance = Math.round((Number(bh.health || 0) / 100) * insBase);
         unemploymentInsurance = Math.round((Number(bh.unemployment || 0) / 100) * insBase);
@@ -157,7 +157,7 @@ export const generateFromAttendance = async (req: Request, res: Response, next: 
     } as any).returning('*');
 
     res.status(201).json({ success: true, data: created });
-  } catch (err) {
+  } catch (err: any) {
     next(err);
   }
 };
@@ -176,7 +176,7 @@ export const calculateFromAttendanceBulk = async (req: Request, res: Response, n
     return res.status(400).json({ success: false, message: result?.message || 'Calculation failed' });
   }
   return res.status(201).json(result);
-  } catch (err) {
+  } catch (err: any) {
     next(err);
   }
 };
@@ -211,7 +211,7 @@ export const listPayslipsByMonth = async (req: Request, res: Response, next: Nex
               } else if (dresp && dresp.data && dresp.data.name) {
                 deptMap.set(Number(did), dresp.data.name || null);
               }
-            } catch (e) {
+            } catch (e: any) {
               console.warn('[salary-service] Failed to fetch department', did, e?.message || e);
             }
           }));
@@ -220,7 +220,7 @@ export const listPayslipsByMonth = async (req: Request, res: Response, next: Nex
             const u = users.find((x: any) => Number(x.id) === Number(row.user_id));
             row.user = u || null;
             row.username = u ? u.username : null;
-            row.fullName = u ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : null;
+            row.fullName = u ? u.fullName || '' : null;
             if (u && u.departmentId) {
               const did = Number(u.departmentId);
               const dname = deptMap.has(did) ? deptMap.get(did) : null;
@@ -232,24 +232,24 @@ export const listPayslipsByMonth = async (req: Request, res: Response, next: Nex
               row.departmentName = null;
             }
           });
-        } catch (e) {
+        } catch (e: any) {
           // fallback: attach users without department enrichment
           rows.forEach((row: any) => {
             const u = users.find((x: any) => Number(x.id) === Number(row.user_id));
             row.user = u || null;
             row.username = u ? u.username : null;
-            row.fullName = u ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : null;
+            row.fullName = u ? (u.fullName || '') : null;
             row.department = null;
             row.departmentName = null;
           });
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[salary-service] Failed to enrich payslips list with user info:', err?.message || err);
     }
 
     return res.status(200).json({ success: true, data: rows });
-  } catch (err) {
+  } catch (err: any) {
     next(err);
   }
 };
@@ -305,7 +305,7 @@ export const listPaginatedPayslips = async (req: Request, res: Response, next: N
               } else if (dresp && dresp.data && dresp.data.name) {
                 deptMap.set(Number(did), dresp.data.name || null);
               }
-            } catch (e) {
+            } catch (e: any) {
               console.warn('[salary-service] Failed to fetch department', did, e?.message || e);
             }
           }));
@@ -314,7 +314,7 @@ export const listPaginatedPayslips = async (req: Request, res: Response, next: N
             const u = users.find((x: any) => Number(x.id) === Number(row.user_id));
             row.user = u || null;
             row.username = u ? u.username : null;
-            row.fullName = u ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : null;
+            row.fullName = u ? u.fullName || '' : null;
             if (u && u.departmentId) {
               const did = Number(u.departmentId);
               const dname = deptMap.has(did) ? deptMap.get(did) : null;
@@ -326,18 +326,18 @@ export const listPaginatedPayslips = async (req: Request, res: Response, next: N
               row.departmentName = null;
             }
           });
-        } catch (e) {
+        } catch (e: any) {
           rows.forEach((row: any) => {
             const u = users.find((x: any) => Number(x.id) === Number(row.user_id));
             row.user = u || null;
             row.username = u ? u.username : null;
-            row.fullName = u ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : null;
+            row.fullName = u ? u.fullName || '' : null;
             row.department = null;
             row.departmentName = null;
           });
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[salary-service] Failed to enrich paginated payslips with user info:', err?.message || err);
     }
 
@@ -348,7 +348,7 @@ export const listPaginatedPayslips = async (req: Request, res: Response, next: N
       pageSize,
       total
     });
-  } catch (err) {
+  } catch (err: any) {
     next(err);
   }
 };
@@ -396,7 +396,7 @@ export const getPayslipsByUser = async (req: Request, res: Response, next: NextF
               } else if (dresp && dresp.data && dresp.data.name) {
                 deptMap.set(Number(did), dresp.data.name || null);
               }
-            } catch (e) {
+            } catch (e: any) {
               console.warn('[salary-service] Failed to fetch department', did, e?.message || e);
             }
           }));
@@ -405,7 +405,7 @@ export const getPayslipsByUser = async (req: Request, res: Response, next: NextF
             const u = users.find((x: any) => Number(x.id) === Number(row.user_id));
             row.user = u || null;
             row.username = u ? u.username : null;
-            row.fullName = u ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : null;
+            row.fullName = u ? u.fullName || '' : null;
             if (u && u.departmentId) {
               const did = Number(u.departmentId);
               const dname = deptMap.has(did) ? deptMap.get(did) : null;
@@ -417,23 +417,23 @@ export const getPayslipsByUser = async (req: Request, res: Response, next: NextF
               row.departmentName = null;
             }
           });
-        } catch (e) {
+        } catch (e: any) {
           rows.forEach((row: any) => {
             const u = users.find((x: any) => Number(x.id) === Number(row.user_id));
             row.user = u || null;
             row.username = u ? u.username : null;
-            row.fullName = u ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : null;
+            row.fullName = u ? u.fullName || '' : null;
             row.department = null;
             row.departmentName = null;
           });
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('[salary-service] Failed to enrich payslips for user with user info:', err?.message || err);
     }
 
     return res.status(200).json({ success: true, data: rows });
-  } catch (err) {
+  } catch (err: any) {
     next(err);
   }
 };
@@ -461,7 +461,7 @@ export const getPayslipById = async (req: Request, res: Response, next: NextFunc
       const user = users.length > 0 ? users[0] : null;
       row.user = user || null;
       row.username = user ? user.username : null;
-      row.fullName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : null;
+      row.fullName = user ? (user.fullName || '') : null;
 
       // fetch department name if departmentId present
       if (user && user.departmentId) {
@@ -471,7 +471,7 @@ export const getPayslipById = async (req: Request, res: Response, next: NextFunc
           row.department = { id: Number(user.departmentId), name: dname };
           row.departmentName = dname;
           if (row.user) row.user.department = { id: Number(user.departmentId), name: dname };
-        } catch (e) {
+        } catch (e: any) {
           // ignore department fetch error
           row.department = null;
           row.departmentName = null;
@@ -480,12 +480,12 @@ export const getPayslipById = async (req: Request, res: Response, next: NextFunc
         row.department = null;
         row.departmentName = null;
       }
-    } catch (e) {
+    } catch (e: any) {
       // ignore enrichment errors
     }
 
     return res.status(200).json({ success: true, data: row });
-  } catch (err) {
+  } catch (err: any) {
     next(err);
   }
 };
@@ -532,7 +532,7 @@ export const getMyPayslips = async (req: Request, res: Response, next: NextFunct
             if (dresp.data.success && dresp.data.data) deptName = dresp.data.data.name || null;
             else if (dresp.data.name) deptName = dresp.data.name || null;
           }
-        } catch (e) {
+        } catch (e: any) {
           console.warn('[salary-service] Failed to fetch department for current user', u.departmentId, e?.message || e);
         }
       }
@@ -540,7 +540,7 @@ export const getMyPayslips = async (req: Request, res: Response, next: NextFunct
       rows.forEach((row: any) => {
         row.user = u;
         row.username = u ? u.username : null;
-        row.fullName = u ? `${u.firstName || ''} ${u.lastName || ''}`.trim() : null;
+        row.fullName = u ? (u.fullName || '') : null;
         if (u && u.departmentId) {
           row.department = { id: Number(u.departmentId), name: deptName };
           row.departmentName = deptName;
@@ -550,12 +550,12 @@ export const getMyPayslips = async (req: Request, res: Response, next: NextFunct
           row.departmentName = null;
         }
       });
-    } catch (e) {
+    } catch (e: any) {
       // ignore enrichment errors
     }
 
     return res.status(200).json({ success: true, data: rows });
-  } catch (err) {
+  } catch (err: any) {
     next(err);
   }
 };

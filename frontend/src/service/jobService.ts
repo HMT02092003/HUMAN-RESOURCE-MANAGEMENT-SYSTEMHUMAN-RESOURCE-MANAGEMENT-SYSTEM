@@ -2,6 +2,29 @@ import api from './apiService';
 
 const JOB_SERVICE_PREFIX = '/jobs'; // proxied by API Gateway to job-service
 
+// AI Analysis
+export const analyzeJob = (payload: { title: string; description: string; project_id?: string }) => {
+  return api.post(`${JOB_SERVICE_PREFIX}/jobs/analyze`, payload);
+};
+
+export const findCandidates = (payload: {
+  job_id?: string;
+  required_skills: Array<{
+    skill_id: number;
+    proficiency_level: string;
+    importance: string;
+  }>;
+  min_match_score?: number;
+  max_results?: number;
+}) => {
+  return api.post(`${JOB_SERVICE_PREFIX}/jobs/find-candidates`, payload);
+};
+
+export const createJobWithAnalysis = (payload: any) => {
+  return api.post(`${JOB_SERVICE_PREFIX}/jobs/create-with-analysis`, payload);
+};
+
+// CV Management
 export const uploadCv = (payload: Record<string, any>) => {
   return api.post(`${JOB_SERVICE_PREFIX}/cvs/upload`, payload);
 };
@@ -19,6 +42,9 @@ export const bulkDeleteCvs = (ids: string[]) => {
 };
 
 export default {
+  analyzeJob,
+  findCandidates,
+  createJobWithAnalysis,
   uploadCv,
   fetchCvs,
   deleteCv,

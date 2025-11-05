@@ -18,8 +18,7 @@ class UserModel extends Model {
   username!: string;
   password!: string;
   roleId!: number;
-  firstName!: string;
-  lastName!: string;
+  fullName!: string;
   email!: string;
   startDate!: string;
   dayOff!: string;
@@ -42,14 +41,13 @@ class UserModel extends Model {
   static get jsonSchema() {
     return {
       type: 'object',
-      required: ['username', 'password', 'roleId', 'firstName', 'lastName', 'email'],
+      required: ['username', 'password', 'roleId', 'fullName', 'email'],
       properties: {
         id: { type: 'integer' },
         username: { type: 'string' },
         password: { type: 'string' },
         roleId: { type: 'integer' },
-        firstName: { type: 'string' },
-        lastName: { type: 'string' },
+        fullName: { type: 'string' },
         email: { type: 'string' },
         startDate: { 
           anyOf: [

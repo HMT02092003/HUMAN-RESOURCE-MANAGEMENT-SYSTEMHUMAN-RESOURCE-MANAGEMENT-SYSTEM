@@ -1,6 +1,6 @@
 /**
- * Seed file: 50 Employees (Nhân viên)
- * Tạo 50 nhân viên phân bổ đều cho các phòng ban và chức vụ
+ * Seed file: 50 Employees with Realistic Positions
+ * Tạo 50 nhân viên với chức vụ thực tế trong doanh nghiệp
  */
 
 export async function seed(knex) {
@@ -25,108 +25,115 @@ export async function seed(knex) {
     { name: 'Nhung', birthday: '2025-10-28T17:00:00.000Z', relationship: 4 }
   ]);
 
-  // Danh sách tên Việt Nam
-  const firstNames = [
+  // Danh sách họ và tên đệm Việt Nam
+  const lastNames = [
     'Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Huỳnh', 'Phan', 'Vũ', 'Võ', 'Đặng',
     'Bùi', 'Đỗ', 'Hồ', 'Ngô', 'Dương', 'Lý', 'Đinh', 'Trương', 'Tô', 'Mai'
   ];
   
-  const lastNames = [
-    'Anh', 'Bình', 'Chi', 'Dũng', 'Đức', 'Giang', 'Hà', 'Hải', 'Hiếu', 'Hoa',
-    'Hùng', 'Hương', 'Khoa', 'Linh', 'Long', 'Mai', 'Minh', 'Nam', 'Nga', 'Nhung',
-    'Phong', 'Phương', 'Quân', 'Quyên', 'Sơn', 'Thảo', 'Thắng', 'Thủy', 'Trang', 'Tú',
-    'Tuấn', 'Tùng', 'Uyên', 'Văn', 'Vân', 'Vinh', 'Xuân', 'Yến'
+  const firstNames = [
+    'Văn Anh', 'Thị Bình', 'Minh Chi', 'Văn Dũng', 'Hữu Đức', 'Thanh Giang', 
+    'Thu Hà', 'Đức Hải', 'Quang Hiếu', 'Thị Hoa', 'Văn Hùng', 'Thị Hương', 
+    'Minh Khoa', 'Thu Linh', 'Văn Long', 'Thị Mai', 'Quang Minh', 'Văn Nam', 
+    'Thị Nga', 'Thu Nhung', 'Văn Phong', 'Thị Phương', 'Đức Quân', 'Thị Quyên', 
+    'Văn Sơn', 'Thu Thảo', 'Quang Thắng', 'Thị Thủy', 'Thu Trang', 'Văn Tú',
+    'Quang Tuấn', 'Văn Tùng', 'Thị Uyên', 'Minh Văn', 'Thị Vân', 'Quang Vinh', 
+    'Thị Xuân', 'Thu Yến', 'Hồng Anh', 'Đức Bình'
   ];
 
   const users = [];
   
-  // Cấu trúc phòng ban với số lượng từng chức vụ (tổng 49 nhân viên mới, cộng admin = 50)
-  // 6 phòng ban: KT, KD, NS, KeToan, Marketing, HanhChinh
-  // 5 chức vụ: NhanVien(1), TruongNhom(2), PhoPHong(3), TruongPhong(4), GiamDoc(5)
+  /**
+   * Cấu trúc tổ chức thực tế:
+   * - Ban Giám đốc (dept 1): CEO, CFO, CTO
+   * - Phòng Công nghệ (dept 2): CTO, Director, Managers, Team Leaders, Staff
+   * - Phòng Kinh doanh (dept 3): Managers, Team Leaders, Staff
+   * - Phòng Marketing (dept 4): CMO, Manager, Staff
+   * - Phòng Tài chính-Kế toán (dept 5): CFO, Manager, Staff (Accountant role)
+   * - Phòng Nhân sự (dept 6): CHRO, Manager, Staff (HR role)
+   * - Phòng Hành chính (dept 7): Manager, Staff
+   * - Phòng Vận hành (dept 8): COO, Manager, Staff
+   * 
+   * Chevron IDs (from updated seed):
+   * 1=CEO, 2=COO, 3=CFO, 4=CTO, 5=CMO, 6=CHRO,
+   * 7=Director, 8=Head of Dept, 9=Manager,
+   * 10=Team Leader, 11=Supervisor, 12=Specialist, 13=Senior Staff,
+   * 14=Staff, 15=Junior Staff, 16=Intern
+   */
   
   const structure = [
-    // Phòng Kỹ thuật (id=1) - 10 người
-    { deptId: 1, deptName: 'KT', chevronId: 1, count: 6 },  // 6 Nhân viên
-    { deptId: 1, deptName: 'KT', chevronId: 2, count: 2 },  // 2 Trưởng nhóm
-    { deptId: 1, deptName: 'KT', chevronId: 3, count: 1 },  // 1 Phó phòng
-    { deptId: 1, deptName: 'KT', chevronId: 4, count: 1 },  // 1 Trưởng phòng
+    // Ban Giám đốc (dept 1) - 3 người
+    { deptId: 1, deptName: 'BGD', chevronId: 1, count: 1, role: 1 },  // CEO
+    { deptId: 1, deptName: 'BGD', chevronId: 3, count: 1, role: 1 },  // CFO
+    { deptId: 1, deptName: 'BGD', chevronId: 4, count: 1, role: 1 },  // CTO
     
-    // Phòng Kinh doanh (id=2) - 9 người
-    { deptId: 2, deptName: 'KD', chevronId: 1, count: 6 },  // 6 Nhân viên
-    { deptId: 2, deptName: 'KD', chevronId: 2, count: 1 },  // 1 Trưởng nhóm
-    { deptId: 2, deptName: 'KD', chevronId: 3, count: 1 },  // 1 Phó phòng
-    { deptId: 2, deptName: 'KD', chevronId: 4, count: 1 },  // 1 Trưởng phòng
+    // Phòng Công nghệ (dept 2) - 12 người
+    { deptId: 2, deptName: 'Tech', chevronId: 7, count: 1, role: 3 },   // Director
+    { deptId: 2, deptName: 'Tech', chevronId: 9, count: 2, role: 3 },   // 2 Managers
+    { deptId: 2, deptName: 'Tech', chevronId: 10, count: 3, role: 3 },  // 3 Team Leaders
+    { deptId: 2, deptName: 'Tech', chevronId: 13, count: 2, role: 2 },  // 2 Senior Staff
+    { deptId: 2, deptName: 'Tech', chevronId: 14, count: 3, role: 2 },  // 3 Staff
+    { deptId: 2, deptName: 'Tech', chevronId: 15, count: 1, role: 2 },  // 1 Junior
     
-    // Phòng Nhân sự (id=3) - 6 người
-    { deptId: 3, deptName: 'NS', chevronId: 1, count: 3 },  // 3 Nhân viên
-    { deptId: 3, deptName: 'NS', chevronId: 2, count: 1 },  // 1 Trưởng nhóm
-    { deptId: 3, deptName: 'NS', chevronId: 3, count: 1 },  // 1 Phó phòng
-    { deptId: 3, deptName: 'NS', chevronId: 4, count: 1 },  // 1 Trưởng phòng
+    // Phòng Kinh doanh (dept 3) - 10 người
+    { deptId: 3, deptName: 'Sales', chevronId: 9, count: 1, role: 3 },   // Manager
+    { deptId: 3, deptName: 'Sales', chevronId: 10, count: 2, role: 3 },  // 2 Team Leaders
+    { deptId: 3, deptName: 'Sales', chevronId: 13, count: 2, role: 2 },  // 2 Senior Staff
+    { deptId: 3, deptName: 'Sales', chevronId: 14, count: 4, role: 2 },  // 4 Staff
+    { deptId: 3, deptName: 'Sales', chevronId: 16, count: 1, role: 2 },  // 1 Intern
     
-    // Phòng Kế toán (id=4) - 8 người
-    { deptId: 4, deptName: 'Acc', chevronId: 1, count: 5 }, // 5 Nhân viên
-    { deptId: 4, deptName: 'Acc', chevronId: 2, count: 1 }, // 1 Trưởng nhóm
-    { deptId: 4, deptName: 'Acc', chevronId: 3, count: 1 }, // 1 Phó phòng
-    { deptId: 4, deptName: 'Acc', chevronId: 4, count: 1 }, // 1 Trưởng phòng
+    // Phòng Marketing (dept 4) - 6 người
+    { deptId: 4, deptName: 'MKT', chevronId: 5, count: 1, role: 3 },   // CMO
+    { deptId: 4, deptName: 'MKT', chevronId: 9, count: 1, role: 3 },   // Manager
+    { deptId: 4, deptName: 'MKT', chevronId: 13, count: 1, role: 2 },  // Senior Staff
+    { deptId: 4, deptName: 'MKT', chevronId: 14, count: 2, role: 2 },  // 2 Staff
+    { deptId: 4, deptName: 'MKT', chevronId: 15, count: 1, role: 2 },  // Junior
     
-    // Phòng Marketing (id=5) - 8 người
-    { deptId: 5, deptName: 'MKT', chevronId: 1, count: 5 }, // 5 Nhân viên
-    { deptId: 5, deptName: 'MKT', chevronId: 2, count: 1 }, // 1 Trưởng nhóm
-    { deptId: 5, deptName: 'MKT', chevronId: 3, count: 1 }, // 1 Phó phòng
-    { deptId: 5, deptName: 'MKT', chevronId: 4, count: 1 }, // 1 Trưởng phòng
+    // Phòng Tài chính-Kế toán (dept 5) - 7 người
+    { deptId: 5, deptName: 'Finance', chevronId: 9, count: 1, role: 3 },   // Manager
+    { deptId: 5, deptName: 'Finance', chevronId: 10, count: 1, role: 4 },  // Team Leader (Accountant)
+    { deptId: 5, deptName: 'Finance', chevronId: 13, count: 1, role: 4 },  // Senior (Accountant)
+    { deptId: 5, deptName: 'Finance', chevronId: 14, count: 3, role: 4 },  // 3 Staff (Accountant)
+    { deptId: 5, deptName: 'Finance', chevronId: 15, count: 1, role: 4 },  // Junior (Accountant)
     
-    // Phòng Hành chính (id=6) - 7 người
-    { deptId: 6, deptName: 'HC', chevronId: 1, count: 4 },  // 4 Nhân viên
-    { deptId: 6, deptName: 'HC', chevronId: 2, count: 1 },  // 1 Trưởng nhóm
-    { deptId: 6, deptName: 'HC', chevronId: 3, count: 1 },  // 1 Phó phòng
-    { deptId: 6, deptName: 'HC', chevronId: 4, count: 1 },  // 1 Trưởng phòng
+    // Phòng Nhân sự (dept 6) - 5 người
+    { deptId: 6, deptName: 'HR', chevronId: 6, count: 1, role: 3 },   // CHRO
+    { deptId: 6, deptName: 'HR', chevronId: 9, count: 1, role: 5 },   // Manager (HR)
+    { deptId: 6, deptName: 'HR', chevronId: 14, count: 2, role: 5 },  // 2 Staff (HR)
+    { deptId: 6, deptName: 'HR', chevronId: 15, count: 1, role: 5 },  // Junior (HR)
     
-    // Ban Giám đốc - 1 người
-    { deptId: 6, deptName: 'BGD', chevronId: 5, count: 1 }, // 1 Giám đốc
+    // Phòng Hành chính (dept 7) - 4 người
+    { deptId: 7, deptName: 'Admin', chevronId: 9, count: 1, role: 3 },   // Manager
+    { deptId: 7, deptName: 'Admin', chevronId: 14, count: 2, role: 2 },  // 2 Staff
+    { deptId: 7, deptName: 'Admin', chevronId: 15, count: 1, role: 2 },  // Junior
+    
+    // Phòng Vận hành (dept 8) - 5 người
+    { deptId: 8, deptName: 'Ops', chevronId: 2, count: 1, role: 3 },   // COO
+    { deptId: 8, deptName: 'Ops', chevronId: 9, count: 1, role: 3 },   // Manager
+    { deptId: 8, deptName: 'Ops', chevronId: 13, count: 1, role: 2 },  // Senior
+    { deptId: 8, deptName: 'Ops', chevronId: 14, count: 2, role: 2 },  // 2 Staff
   ];
-
-  // Ánh xạ chức vụ -> role
-  const chevronToRole = {
-    1: 2, // Nhân viên -> role employee
-    2: 3, // Trưởng nhóm -> role leader
-    3: 3, // Phó phòng -> role leader
-    4: 3, // Trưởng phòng -> role leader
-    5: 1, // Giám đốc -> role admin
-  };
-  
-  // Vai trò đặc biệt cho phòng Nhân sự và Kế toán
-  const specialRoles = {
-    3: 5, // Phòng Nhân sự -> role hr
-    4: 4, // Phòng Kế toán -> role accountant
-  };
 
   let userId = 2; // Bắt đầu từ 2 (admin có id=1)
   let nameIndex = 0;
 
   for (const group of structure) {
     for (let i = 0; i < group.count; i++) {
+      const lastName = lastNames[nameIndex % lastNames.length];
       const firstName = firstNames[nameIndex % firstNames.length];
-      const lastName = lastNames[Math.floor(nameIndex / firstNames.length) % lastNames.length];
+      const fullName = `${lastName} ${firstName}`;
       const username = `${group.deptName}${userId}`.toLowerCase();
       
-      // Xác định roleId: ưu tiên phòng ban đặc biệt, sau đó theo chức vụ
-      let roleId = chevronToRole[group.chevronId];
-      if (specialRoles[group.deptId] && group.chevronId === 1) {
-        roleId = specialRoles[group.deptId];
-      }
-      
-      // Ngày bắt đầu làm việc ngẫu nhiên trong 2 năm qua
-      const startDate = new Date(2023, Math.floor(Math.random() * 24), 1);
+      // Ngày bắt đầu làm việc ngẫu nhiên trong 3 năm qua
+      const startDate = new Date(2022, Math.floor(Math.random() * 36), 1);
       
       users.push({
         id: userId,
         username: username,
         password: '$2a$12$ihZ5rvWqsxsdBNTeLmjz3uxdtt5Qs3eLbgNE4kRDiCILxVhT4D6vK', // 123456@
-        firstName: firstName,
-        lastName: lastName,
+        fullName: fullName,
         email: `${username}@company.com`,
         startDate: startDate.toISOString().split('T')[0],
-        // Add missing personal info: phone, birthday, gender, profileFamily
         phone: genPhone(userId),
         birthday: randomDateBetween(new Date('1975-01-01'), new Date('1999-12-31')),
         gender: (userId % 2) === 0 ? 1 : 2, // alternate 1 (Nam) and 2 (Nữ)
@@ -135,7 +142,7 @@ export async function seed(knex) {
         chevronId: group.chevronId,
         departmentId: group.deptId,
         status: '1',
-        roleId: roleId,
+        roleId: group.role,
         createdBy: 1,
         updatedBy: 1,
         createdAt: new Date(),
@@ -153,5 +160,5 @@ export async function seed(knex) {
   // Reset sequence
   await knex.raw("SELECT setval('users_id_seq', (SELECT MAX(id) FROM users))");
   
-  console.log(`✅ Đã tạo ${users.length} nhân viên mới (tổng cộng với admin: ${users.length + 1} người)`);
+  console.log(`✅ Đã tạo ${users.length} nhân viên mới với chức vụ thực tế (CEO, CFO, CTO, Manager, Staff, v.v.)`);
 }

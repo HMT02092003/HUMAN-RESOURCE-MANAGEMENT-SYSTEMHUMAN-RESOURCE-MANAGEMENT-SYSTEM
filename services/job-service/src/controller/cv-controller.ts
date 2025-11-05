@@ -273,7 +273,7 @@ listCvs: (async (req: Request, res: Response): Promise<any> => {
           {
             id: u.id,
             username: u.username,
-            fullName: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+            fullName: u.fullName || '',
             email: u.email,
             identificationPhoto: u.identificationPhoto
           }

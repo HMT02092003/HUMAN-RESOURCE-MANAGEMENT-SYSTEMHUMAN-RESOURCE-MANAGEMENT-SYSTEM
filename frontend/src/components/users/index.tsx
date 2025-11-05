@@ -91,7 +91,7 @@ const UserTable = () => {
       const parts: string[] = [];
       parts.push(String(record.id || '').toLowerCase());
       parts.push(String(record.username || '').toLowerCase());
-      parts.push(((record.firstName || '') + ' ' + (record.lastName || '')).toLowerCase());
+      parts.push(String(record.fullName || '').toLowerCase());
       parts.push(String(record.email || '').toLowerCase());
       parts.push(String(record.phone || '').toLowerCase());
       parts.push(String(record.role?.name || '').toLowerCase());
@@ -104,7 +104,7 @@ const UserTable = () => {
       return parts.join(' | ');
     }
     const getVal = (obj: any, f: string) => {
-      if (f === 'fullName') return ((obj.lastName || '') + ' ' + (obj.firstName || '')).toLowerCase();
+      if (f === 'fullName') return (obj.fullName || '').toLowerCase();
       if (f.includes('.')) return f.split('.').reduce((acc, k) => (acc ? acc[k] : undefined), obj);
       return obj[f];
     };
@@ -271,7 +271,7 @@ const UserTable = () => {
       ...getColumnSearchProps('fullName'),
       defaultSortOrder: sorter.field === 'fullName' ? sorter.order : undefined,
       width: 200,
-      render: (_: any, record: any) => `${record.lastName || ''} ${record.firstName || ''}`.trim()
+      render: (_: any, record: any) => record.fullName || '-'
     },
     {
       title: "Ngày sinh",

@@ -21,8 +21,7 @@ interface FamilyMember {
 interface User {
   id: number;
   username: string;
-  firstName: string;
-  lastName: string;
+  fullName: string;
   birthday: Date;
   email: string;
   phone: string;
@@ -84,7 +83,7 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
     {
       key: '2',
       label: 'Họ và tên',
-      children: `${userData?.lastName || ''} ${userData?.firstName || ''}`.trim() || '-',
+      children: userData?.fullName || '-',
     },
     {
       key: '3',
@@ -166,7 +165,7 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
 
             <div style={{ marginTop: 16, textAlign: screens.lg ? 'left' : 'center' }}>
               <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2 }}>
-                {`${userData?.lastName || ''} ${userData?.firstName || ''}`.trim() || '-'}
+                {userData?.fullName || '-'}
               </div>
               <div style={{ color: '#666', marginTop: 6 }}>{userData?.username || '-'}</div>
             </div>

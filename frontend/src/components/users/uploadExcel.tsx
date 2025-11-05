@@ -62,27 +62,19 @@ const UploadExcel = () => {
     },
     {
       index: 2,
-      name: "lastName",
-      width: 20,
-      label: t("pages:users.form.lastName")
-
+      name: "fullName",
+      width: 30,
+      label: "Họ và tên"
     },
     {
       index: 3,
-      name: "firstName",
-      width: 20,
-      label: t("pages:users.form.firstName")
-
-    },
-    {
-      index: 4,
       name: "email",
       width: 30,
       label: t("pages:users.form.email")
 
     },
     {
-      index: 5,
+      index: 4,
       name: "roleName",
       width: 20,
       label: t("pages:users.form.role")
@@ -166,8 +158,7 @@ const UploadExcel = () => {
   const generateExampleData = (column) => {
     switch (column.name) {
       case 'username': return 'nguyen.van.a';
-      case 'lastName': return 'Nguyễn';
-      case 'firstName': return 'Văn A';
+      case 'fullName': return 'Nguyễn Văn A';
       case 'email': return 'nguyen.van.a@example.com';
       case 'status': return 'Đang làm việc';
       default: return '';
