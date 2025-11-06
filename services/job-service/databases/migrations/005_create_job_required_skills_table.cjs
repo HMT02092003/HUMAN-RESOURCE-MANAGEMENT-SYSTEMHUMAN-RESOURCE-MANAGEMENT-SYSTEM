@@ -1,12 +1,12 @@
 exports.up = function(knex) {
-  return knex.schema.createTable('job_required_skills', function(table) {
-    table.uuid('job_id').notNullable().references('job_id').inTable('jobs').onDelete('CASCADE');
+  return knex.schema.createTable('project_required_skills', function(table) {
+    table.uuid('project_id').notNullable().references('project_id').inTable('projects').onDelete('CASCADE');
     table.integer('skill_id').notNullable().references('skill_id').inTable('skills').onDelete('CASCADE');
-    table.string('proficiency_level', 5);
-    table.primary(['job_id', 'skill_id']);
+    table.string('proficiency_level', 50); // e.g., 'beginner', 'intermediate', 'advanced', 'expert'
+    table.primary(['project_id', 'skill_id']);
   });
 };
 
 exports.down = function(knex) {
-  return knex.schema.dropTableIfExists('job_required_skills');
+  return knex.schema.dropTableIfExists('project_required_skills');
 };

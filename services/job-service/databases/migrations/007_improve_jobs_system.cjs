@@ -1,34 +1,28 @@
 exports.up = function(knex) {
   return knex.schema
-    // 1. Add project_id to jobs table
-    .table('jobs', function(table) {
-      table.string('project_id', 50).nullable();
+    // 1. Add AI analysis fields to projects table
+    .table('projects', function(table) {
       table.integer('difficulty_level').nullable(); // 1-5: AI estimated difficulty
-      table.integer('estimated_hours').nullable();
-      table.text('ai_analysis_result').nullable(); // JSON string with AI analysis
+      table.integer('estimated_total_hours').nullable(); // Total estimated hours for entire project
+      table.json('ai_analysis_result').nullable(); // JSON string with AI analysis (recommended tech stack, team size, etc.)
     })
     
-    // 2. Improve job_suggestions table
-    .table('job_suggestions', function(table) {
-      table.text('matched_skills').nullable(); // JSON array of matched skills
-      table.text('missing_skills').nullable(); // JSON array of skills user doesn't have
-      table.integer('skill_match_count').defaultTo(0);
-      table.integer('total_required_skills').defaultTo(0);
+    // 2. Add more fields to project_suggestions table
+    .table('project_suggestions', function(table) {
+      table.text('ai_recommendation').nullable(); // AI-generated recommendation text
+      table.integer('years_experience_required').nullable(); // Estimated years of experience needed
     });
 };
 
 exports.down = function(knex) {
   return knex.schema
-    .table('jobs', function(table) {
-      table.dropColumn('project_id');
+    .table('projects', function(table) {
       table.dropColumn('difficulty_level');
-      table.dropColumn('estimated_hours');
+      table.dropColumn('estimated_total_hours');
       table.dropColumn('ai_analysis_result');
     })
-    .table('job_suggestions', function(table) {
-      table.dropColumn('matched_skills');
-      table.dropColumn('missing_skills');
-      table.dropColumn('skill_match_count');
-      table.dropColumn('total_required_skills');
+    .table('project_suggestions', function(table) {
+      table.dropColumn('ai_recommendation');
+      table.dropColumn('years_experience_required');
     });
 };

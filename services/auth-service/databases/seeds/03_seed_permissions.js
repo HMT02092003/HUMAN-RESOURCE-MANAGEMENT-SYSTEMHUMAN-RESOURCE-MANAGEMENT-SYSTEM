@@ -110,7 +110,7 @@ export async function seed(knex) {
       "name": "Quản lý công việc",
       "description": "Quản lý công việc",
       "value": 31,
-      "key": "jobs",
+      "key": "projects",
     }
   ];
 
