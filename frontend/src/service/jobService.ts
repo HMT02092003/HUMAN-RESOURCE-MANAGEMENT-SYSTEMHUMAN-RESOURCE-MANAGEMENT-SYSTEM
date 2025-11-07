@@ -41,6 +41,27 @@ export const bulkDeleteCvs = (ids: string[]) => {
   return api.post(`${JOB_SERVICE_PREFIX}/cvs/bulk-delete`, { ids });
 };
 
+export const createProject = (payload: any) => {
+  return api.post(`${JOB_SERVICE_PREFIX}/projects`, payload);
+};
+
+export const getAllProjectByScope = (params?: any) => {
+  return api.get(`${JOB_SERVICE_PREFIX}/projects`, { params });
+}
+
+export const getProjectById = (projectId: string) => {
+  return api.get(`${JOB_SERVICE_PREFIX}/projects/${projectId}`);
+};
+
+export const updateProject = (projectId: string, payload: any) => {
+  return api.put(`${JOB_SERVICE_PREFIX}/projects/${projectId}`, payload);
+};
+
+export const deleteProject = (projectIdsOrPayload: string[] | { ids: string[] }) => {
+  const payload = Array.isArray(projectIdsOrPayload) ? { ids: projectIdsOrPayload } : projectIdsOrPayload;
+  return api.delete(`${JOB_SERVICE_PREFIX}/projects`, { data: payload });
+};
+
 export default {
   analyzeJob,
   findCandidates,
@@ -48,5 +69,10 @@ export default {
   uploadCv,
   fetchCvs,
   deleteCv,
-  bulkDeleteCvs
+  bulkDeleteCvs,
+  createProject,
+  getAllProjectByScope,
+  getProjectById,
+  updateProject,
+  deleteProject,
 };

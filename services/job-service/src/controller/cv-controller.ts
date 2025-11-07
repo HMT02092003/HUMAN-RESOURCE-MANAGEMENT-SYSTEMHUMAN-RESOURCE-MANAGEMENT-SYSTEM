@@ -11,9 +11,7 @@ import { UserSkillModel } from '../Models/UserSkillModel.ts';
 import { getTextFromPdf } from '../services/pdfParser.ts';
 import { analyzeCvText } from '../services/geminiService.ts';
 import { validate, ValidationException } from '../ulitis/validation-utility.ts';
-import checkScopeService from 'src/services/checkScope.ts';
-import { getDecodedToken } from 'src/ulitis/decode-token.ts';
-import getTokensFromRequest from 'src/ulitis/get-token.ts';
+import CheckScopeService from '../services/checkScope.ts';
 import { fileURLToPath } from 'url';
 
 const uploadDir = path.resolve(process.cwd(), 'uploads');
@@ -210,23 +208,25 @@ listCvs: (async (req: Request, res: Response): Promise<any> => {
     const safeSortField = validSortFields.includes(sortField as string) ? (sortField as string) : 'uploaded_at';
     const safeSortOrder = sortOrder === 'asc' ? 'asc' : 'desc';
 
-    // Lấy token sử dụng helper (cookie token được ưu tiên để đảm bảo token mới nhất)
-  const { accessToken: token, refreshToken } = getTokensFromRequest(req);
-  console.debug('[listCvs] token presence', { hasAccessToken: !!token, hasRefreshToken: !!refreshToken });
-    if (!token) {
-      console.warn('[listCvs] No token provided in cookie or Authorization header');
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Access token required' 
-      });
+    // Prefer token from Authorization header, fall back to cookie token
+    const headerAuth = (req.headers.authorization as string) || null;
+    const cookieToken = (req as any).cookies?.token;
+    const tokenToSend = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : null);
+
+    if (!tokenToSend) {
+      console.warn('[listCvs] No token provided');
+      res.status(401).json({ success: false, message: 'Access token required' });
+      return;
     }
 
-    // Check scope quyền quản lý CV từ Auth Service
-  const scopeResult = await checkScopeService.checkUserScope('CV', token, refreshToken);
+    // Check scope - auth-service trả về userIds đã filter theo scope
+    const scopeResult = await CheckScopeService.checkUserScope('CV', tokenToSend);
     console.log('DEBUG - User scope result:', scopeResult);
 
-    // Lấy danh sách user IDs được phép truy cập
-    const allowedUserIds = scopeResult?.userIds || [];
+    // Normalize userIds
+    const allowedUserIds: number[] = (scopeResult?.userIds || [])
+      .map((id: any) => Number(id))
+      .filter((n: number) => !Number.isNaN(n));
     
     if (allowedUserIds.length === 0) {
       // Không có quyền truy cập bất kỳ CV nào
@@ -245,7 +245,7 @@ listCvs: (async (req: Request, res: Response): Promise<any> => {
 
     console.log(`User has ${scopeResult.scope} scope access to ${allowedUserIds.length} users:`, allowedUserIds);
 
-    // Query CVs với scope filter
+    // Query CVs - auth-service đã xử lý scope, chỉ whereIn allowedUserIds
     const rows = await knex('cvs')
       .select('cv_id', 'user_id', 'file_path', 'original_text', 'uploaded_at')
       .whereIn('user_id', allowedUserIds)
@@ -266,7 +266,7 @@ listCvs: (async (req: Request, res: Response): Promise<any> => {
 
     if (userIds.length > 0) {
       try {
-        const usersInfo = await checkScopeService.getUsersByIds(userIds);
+        const usersInfo = await CheckScopeService.getUsersByIds(userIds);
         
         const usersById = new Map(usersInfo.map((u: any) => [
           u.id, 

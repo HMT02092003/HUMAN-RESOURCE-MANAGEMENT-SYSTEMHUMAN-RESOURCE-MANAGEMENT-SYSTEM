@@ -22,7 +22,7 @@ const ProjectDetailPage: React.FC<PageProps> = ({ params }) => {
   const pageDes = 'Xem và quản lý dự án';
 
   return (
-    <MainLayout requiredPermission="jobs" pageName={pageName} pageDes={pageDes} breadcrumbItems={breadcrumbItems}>
+    <MainLayout requiredPermission="projects" pageName={pageName} pageDes={pageDes} breadcrumbItems={breadcrumbItems}>
       <ProjectDetail projectId={params.id} />
     </MainLayout>
   );

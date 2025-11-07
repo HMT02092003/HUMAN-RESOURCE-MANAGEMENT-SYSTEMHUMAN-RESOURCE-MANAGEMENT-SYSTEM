@@ -905,6 +905,75 @@ export class MonthlyReportService {
         .orderBy(sortField || 'id', sortOrder || 'asc')
         .page(Math.max(0, page - 1), pageSize);
 
+      // Enrich data với thông tin user và department
+      if (result.results && result.results.length > 0) {
+        // Lấy danh sách unique userIds
+        const userIds = [...new Set(result.results.map((r: any) => r.userId))];
+        
+        // Gọi sang auth-service để lấy thông tin users
+        try {
+          const response = await axios.post(
+            'http://localhost:4001/api/users/bulk',
+            { userIds },
+            { headers: { 'Content-Type': 'application/json' }, timeout: 5000 }
+          );
+
+          if (response.data && response.data.success && response.data.data) {
+            const users = response.data.data;
+            
+            // Lấy danh sách unique departmentIds từ users
+            const departmentIds = [...new Set(users.map((u: any) => u.departmentId).filter(Boolean))];
+            
+            // Gọi sang employee-service để lấy thông tin departments
+            let departmentsById = new Map();
+            if (departmentIds.length > 0) {
+              try {
+                const deptPromises = departmentIds.map((deptId: any) =>
+                  axios.get(`http://localhost:4002/api/departments/${deptId}`)
+                    .then(r => r.data)
+                    .catch(() => null)
+                );
+                const deptResults = await Promise.all(deptPromises);
+                deptResults.forEach((dept: any) => {
+                  if (dept && dept.data) {
+                    departmentsById.set(dept.data.id, dept.data);
+                  }
+                });
+              } catch (error: any) {
+                console.error('⚠️ Could not fetch department details:', error.message);
+              }
+            }
+
+            // Map users với department info
+            const usersById = new Map(
+              users.map((u: any) => [
+                u.id,
+                {
+                  ...u,
+                  department: departmentsById.get(u.departmentId) || null
+                }
+              ])
+            );
+
+            // Enrich mỗi record với thông tin user
+            result.results = result.results.map((record: any) => {
+              const user: any = usersById.get(record.userId);
+              return {
+                ...record,
+                user: user || null,
+                username: user?.username || null,
+                fullName: user?.fullName || null,
+                departmentId: user?.departmentId || null,
+                chevronId: user?.chevronId || null
+              };
+            });
+          }
+        } catch (error: any) {
+          console.error('⚠️ Could not fetch user details:', error.message);
+          // Không throw error, chỉ log warning và trả về data không có user info
+        }
+      }
+
       return { success: true, data: result };
     } catch (error: any) {
       console.error('❌ [attendance] Error in getMonthlyAttendanceForAllUsers:', error);

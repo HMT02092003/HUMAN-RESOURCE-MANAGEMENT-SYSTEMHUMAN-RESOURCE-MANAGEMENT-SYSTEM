@@ -19,7 +19,7 @@ export default function ProjectsPage() {
 			pageName={pageName}
 			pageDes={pageDes}
 			breadcrumbItems={breadcrumbItems}
-			requiredPermission="jobs"
+			requiredPermission="projects"
 		>
 			<div style={{ padding: 24 }}>
 				<ProjectManager />

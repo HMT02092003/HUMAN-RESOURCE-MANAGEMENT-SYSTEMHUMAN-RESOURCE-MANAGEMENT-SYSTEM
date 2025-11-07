@@ -241,6 +241,62 @@ export const getAllUsersAll = async (req: any, res: Response) => {
   }
 }
 
+export const getAllUsersAllForSelect = async (req: any, res: Response) => {
+  try {
+    const { auth } = req as any;
+    const scope = req.query.scope || 'users';
+
+    // Determine which user IDs are visible under the provided scope
+    let userIds: number[] = await UserModel.checkScope(scope, req);
+
+    // Fetch users (no pagination)
+    let users: any[] = await UserModel.query()
+      .select(['users.*'])
+      .whereIn('users.id', userIds)
+      // .whereNot('users.id', auth?.id)
+      .where('users.status', 1)
+      .withGraphJoined('[role]');
+
+    // Enrich with department and chevron details (reuse same logic as paginated endpoint)
+    const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
+    const headers: any = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const usersWithDetails = await Promise.all(users.map(async (user: any) => {
+      let department = null;
+      let chevron = null;
+      try {
+        if (user.departmentId) {
+          const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${user.departmentId}`, { headers });
+          department = depRes.data || null;
+        }
+      } catch (e: any) {
+        console.error(`Error fetching department ${user.departmentId}:`, e.message || 'Unknown error');
+      }
+      try {
+        if (user.chevronId) {
+          const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: user.chevronId }, { headers });
+          chevron = chvRes.data || null;
+        }
+      } catch (e: any) {
+        console.error(`Error fetching chevron ${user.chevronId}:`, e.message || 'Unknown error');
+      }
+      return {
+        ...user,
+        department,
+        chevron,
+      };
+    }));
+
+    return res.status(200).json(usersWithDetails);
+  } catch (error) {
+    console.error("Error fetching users (all):", error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : "Internal Server Error",
+    });
+  }
+}
+
 /**
  * Create a new user
  */
@@ -316,7 +372,7 @@ export const createUser = async (req: Request, res: Response) => {
       removeNotAllow: true,
     });
 
-  console.log("Create user params:", params);
+    console.log("Create user params:", params);
 
     // Xử lý upload ảnh đại diện nếu có
     if (req.file || (req as any).files?.identificationPhoto) {
@@ -501,7 +557,7 @@ export const createUser = async (req: Request, res: Response) => {
         // Verify contract type exists
         try {
           const contractTypeRes = await axios.get(
-            `${API_GATEWAY_URL}/api/employee/contractTypes/${params.contract.contractTypeId}`, 
+            `${API_GATEWAY_URL}/api/employee/contractTypes/${params.contract.contractTypeId}`,
             { headers }
           );
           if (!contractTypeRes.data) {
@@ -518,14 +574,14 @@ export const createUser = async (req: Request, res: Response) => {
 
         const contractParams: any = {
           contractTypeId: params.contract.contractTypeId,
-          startDate: params.contract.startDate instanceof Date 
-            ? params.contract.startDate.toISOString() 
+          startDate: params.contract.startDate instanceof Date
+            ? params.contract.startDate.toISOString()
             : params.contract.startDate,
-          endDate: params.contract.endDate instanceof Date 
-            ? params.contract.endDate.toISOString() 
+          endDate: params.contract.endDate instanceof Date
+            ? params.contract.endDate.toISOString()
             : params.contract.endDate,
-          activeDay: params.contract.activeDay instanceof Date 
-            ? params.contract.activeDay.toISOString() 
+          activeDay: params.contract.activeDay instanceof Date
+            ? params.contract.activeDay.toISOString()
             : params.contract.activeDay,
           insurance: params.contract.insurance,
           salary: salary, // Use extracted value
@@ -538,11 +594,11 @@ export const createUser = async (req: Request, res: Response) => {
 
         // Call employee-service to create contract and salary
         const contractResponse = await axios.post(
-          `${API_GATEWAY_URL}/api/employee/users/${newUser.id}/contracts`, 
-          contractParams, 
+          `${API_GATEWAY_URL}/api/employee/users/${newUser.id}/contracts`,
+          contractParams,
           { headers }
         );
-        
+
         console.log('✅ Contract and salary created successfully');
         createdContractId = contractResponse.data?.id || null;
       }
@@ -554,7 +610,7 @@ export const createUser = async (req: Request, res: Response) => {
     } catch (innerError: any) {
       // Something failed after user creation - perform rollback
       console.error('❌ Error after user creation:', innerError.response?.data || innerError.message);
-      
+
       // ROLLBACK: Delete the created user if contract creation was attempted
       if (needsUserRollback) {
         try {
@@ -566,19 +622,19 @@ export const createUser = async (req: Request, res: Response) => {
       }
 
       // Determine error message
-      const errorMsg = innerError?.response?.data?.error 
-        || innerError?.response?.data?.message 
-        || innerError?.message 
+      const errorMsg = innerError?.response?.data?.error
+        || innerError?.response?.data?.message
+        || innerError?.message
         || 'Tạo hợp đồng hoặc lương thất bại';
-      
-      return res.status(400).json({ 
-        message: errorMsg, 
-        code: 7001, 
-        details: { 
+
+      return res.status(400).json({
+        message: errorMsg,
+        code: 7001,
+        details: {
           stage: createdContractId ? 'salary' : 'contract',
           rolledBackUserId: newUser.id,
           contractId: createdContractId
-        } 
+        }
       });
     }
   } catch (error) {
@@ -859,9 +915,9 @@ export const updateUser = async (req: Request, res: Response) => {
       phone: "string",
       birthday: "date",
       startDate: "date",
-  dayOff: "number",
+      dayOff: "number",
       identificationPhoto: "string",
-      
+
       profileFamily: [
         {
           name: "string",
@@ -1530,7 +1586,7 @@ export const getNumberOfDaysOff = async (req: Request, res: Response) => {
 export const checkUserScope = async (req: Request, res: Response) => {
   try {
     const { permissionKey } = req.body;
-    
+
     if (!permissionKey) {
       return res.status(400).json({
         success: false,
@@ -1540,20 +1596,20 @@ export const checkUserScope = async (req: Request, res: Response) => {
 
     // Sử dụng UserModel.checkScope với req (có token trong header/cookie)
     const userIds = await UserModel.checkScope(permissionKey, req);
-    
+
     // Determine actual scope type based on the actualScopeValue from UserModel.checkScope
     let scope = "personal";
     const { auth } = req as any;
-    
+
     // Get the actual scope value that was used in UserModel.checkScope 
     let actualScopeValue = null;
     if (auth && auth.user && auth.user.scope && auth.user.scope[permissionKey]) {
       actualScopeValue = auth.user.scope[permissionKey];
     } else {
       // Try to get from token in cookies or header
-      const tokenFromCookie = req.cookies?.token || 
-                             (req.headers.authorization?.startsWith('Bearer ') ? 
-                              req.headers.authorization.substring(7) : null);
+      const tokenFromCookie = req.cookies?.token ||
+        (req.headers.authorization?.startsWith('Bearer ') ?
+          req.headers.authorization.substring(7) : null);
       if (tokenFromCookie) {
         try {
           const decodedAuth = getDecodedToken(tokenFromCookie);
@@ -1563,13 +1619,13 @@ export const checkUserScope = async (req: Request, res: Response) => {
         }
       }
     }
-    
+
     // Map scope value to scope name using constantConfig
     const { permissionScope } = constantConfig;
     if (actualScopeValue === permissionScope.global) {
       scope = "global";
     } else if (actualScopeValue === permissionScope.department) {
-      scope = "department";  
+      scope = "department";
     } else if (actualScopeValue === permissionScope.personal) {
       scope = "personal";
     } else {
@@ -1582,7 +1638,7 @@ export const checkUserScope = async (req: Request, res: Response) => {
           const deptUsers = await UserModel.query()
             .select("id")
             .where("departmentId", auth.departmentId);
-          
+
           if (userIds.length === deptUsers.length) {
             scope = "department";
           } else {
@@ -1616,7 +1672,7 @@ export const checkUserScope = async (req: Request, res: Response) => {
 export const getUsersByIds = async (req: Request, res: Response) => {
   try {
     const { userIds } = req.body;
-    
+
     if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
       return res.status(400).json({
         success: false,
@@ -1637,9 +1693,8 @@ export const getUsersByIds = async (req: Request, res: Response) => {
     const users = await UserModel.query()
       .select([
         'id',
-        'username', 
-        'firstName',
-        'lastName',
+        'username',
+        'fullName',
         'email',
         'departmentId',
         'chevronId',
@@ -1678,20 +1733,20 @@ export const updateUserStatusForResignation = async (req: Request, res: Response
     console.log("approvedBy:", auth?.id);
 
     if (!userId) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: "Thiếu ID người dùng!", 
-        code: 9996 
+        message: "Thiếu ID người dùng!",
+        code: 9996
       });
     }
 
     // Check if user exists
     const existingUser = await UserModel.query().findById(userId);
     if (!existingUser) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "Người dùng không tồn tại!", 
-        code: 6006 
+        message: "Người dùng không tồn tại!",
+        code: 6006
       });
     }
 
@@ -1714,12 +1769,12 @@ export const updateUserStatusForResignation = async (req: Request, res: Response
     console.log("Updating user status to resigned:", updateData);
 
     await UserModel.query().findById(userId).patch(updateData);
-    
+
     // Get updated user data (without password)
     const updatedUser = await UserModel.query().findById(userId);
     if (updatedUser) {
       const { password, ...userWithoutPassword } = updatedUser;
-      
+
       console.log("✅ User status updated successfully:", {
         userId: updatedUser.id,
         username: updatedUser.username,
@@ -1755,6 +1810,38 @@ export const updateUserStatusForResignation = async (req: Request, res: Response
       success: false,
       message: error instanceof Error ? error.message : "Lỗi máy chủ nội bộ",
       code: 500
+    });
+  }
+};
+
+
+export const getUserBulk = async (req: Request, res: Response) => {
+  try {
+    const { userIds } = req.body;
+
+    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "userIds array is required"
+      });
+    }
+
+    // Fetch users in bulk
+    const users = await UserModel.query()
+      .whereIn('id', userIds)
+      .where('status', 1);
+
+    return res.status(200).json({
+      success: true,
+      data: users,
+      total: users.length
+    });
+
+  } catch (error) {
+    console.error("Error fetching users in bulk:", error);
+    return res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : "Internal Server Error",
     });
   }
 };

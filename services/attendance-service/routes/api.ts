@@ -3,6 +3,7 @@
  * Chỉ giữ các API đang được sử dụng bởi frontend
  */
 import { Router, Request, Response } from 'express';
+import { authenticateToken } from '../src/middleware/authenticateToken';
 import { getAllMonthlyAttendance, getUserMonthlyFull, recordAttendance, approveMonthlyAttendance, calculateAndSaveMonthly } from '@/controller/AttendanceController';
 import {
   getSettings,
@@ -19,35 +20,35 @@ const router = Router();
 
 // API: Lấy toàn bộ thông tin chấm công tháng (monthly-full)
 // GET /api/user/:userId/monthly-full?year=2025&month=10
-router.get('/user/:userId/monthly-full', async (req: Request, res: Response) => {
+router.get('/user/:userId/monthly-full', authenticateToken, async (req: Request, res: Response) => {
   await getUserMonthlyFull(req, res);
 });
 
 // API: Chấm công tự động (check-in/check-out)
 // POST /api/attendance/record (from gateway) -> /api/record (in service)
-router.post('/record', async (req: Request, res: Response) => {
+router.post('/record', authenticateToken, async (req: Request, res: Response) => {
   await recordAttendance(req, res);
 });
 
 // Admin helper: calculate and upsert monthly_attendances for a user/month
-router.post('/admin/calculate-monthly/:userId', async (req: Request, res: Response) => {
+router.post('/admin/calculate-monthly/:userId', authenticateToken, async (req: Request, res: Response) => {
   await calculateAndSaveMonthly(req, res as any);
 });
 
 
-router.get('/monthly-attendance', async (req: Request, res: Response) => {
+router.get('/monthly-attendance', authenticateToken, async (req: Request, res: Response) => {
   await getAllMonthlyAttendance(req, res);
 });
 
 // Fast endpoint: get monthly attendance rows filtered by month and approval flag
-router.get('/monthly-attendance/by-month', (req: Request, res: Response, next) => {
+router.get('/monthly-attendance/by-month', authenticateToken, (req: Request, res: Response, next) => {
   (async () => {
     const controller = await import('@/controller/AttendanceController');
     return controller.getMonthlyAttendanceByMonth(req, res);
   })().catch(next);
 });
 
-router.post('/approve-monthly', async (req: Request, res: Response) => {
+router.post('/approve-monthly', authenticateToken, async (req: Request, res: Response) => {
   await approveMonthlyAttendance(req, res);
 });
 
@@ -58,30 +59,30 @@ const handleMonthlySummariesByScope = async (req: any, res: any) => {
 };
 
 router.route('/monthly-summaries-by-scope')
-  .get((req: any, res: any, next: any) => { handleMonthlySummariesByScope(req, res).catch(next); })
-  .post((req: any, res: any, next: any) => { handleMonthlySummariesByScope(req, res).catch(next); });
+  .get(authenticateToken, (req: any, res: any, next: any) => { handleMonthlySummariesByScope(req, res).catch(next); })
+  .post(authenticateToken, (req: any, res: any, next: any) => { handleMonthlySummariesByScope(req, res).catch(next); });
 
 // ===================================
 // SETTINGS ROUTES
 // ===================================
 
 // GET /api/settings - Lấy tất cả settings
-router.get('/settings', async (req: Request, res: Response) => {
+router.get('/settings', authenticateToken, async (req: Request, res: Response) => {
   await getSettings(req, res);
 });
 
 // POST /api/settings - Cập nhật settings
-router.post('/settings', async (req: Request, res: Response) => {
+router.post('/settings', authenticateToken, async (req: Request, res: Response) => {
   await updateSettings(req, res);
 });
 
 // POST /api/settings/key - Cập nhật single setting
-router.post('/settings/key', async (req: Request, res: Response) => {
+router.post('/settings/key', authenticateToken, async (req: Request, res: Response) => {
   await updateSettingByKey(req, res as any);
 });
 
 // GET /api/settings/:key - Lấy setting theo key
-router.get('/settings/:key', async (req: Request, res: Response) => {
+router.get('/settings/:key', authenticateToken, async (req: Request, res: Response) => {
   await getSettingByKey(req, res);
 });
 
@@ -89,12 +90,12 @@ router.get('/settings/:key', async (req: Request, res: Response) => {
 // CONVENIENCE ROUTES - Setting shortcuts
 // ===================================
 
-router.post('/settings/working-hours', async (req: Request, res: Response) => {
+router.post('/settings/working-hours', authenticateToken, async (req: Request, res: Response) => {
   req.body = { key: 'WorkingHours', value: req.body.value };
   await updateSettingByKey(req, res as any);
 });
 
-router.post('/settings/lunch-break', async (req: Request, res: Response) => {
+router.post('/settings/lunch-break', authenticateToken, async (req: Request, res: Response) => {
   req.body = { key: 'LunchBreak', value: req.body.value };
   await updateSettingByKey(req, res as any);
 });

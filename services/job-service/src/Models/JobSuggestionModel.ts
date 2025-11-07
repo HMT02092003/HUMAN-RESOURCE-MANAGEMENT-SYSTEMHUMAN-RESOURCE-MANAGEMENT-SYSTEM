@@ -1,4 +1,5 @@
 import { Model } from 'objection';
+import { JobModel } from './JobModel.ts';
 
 export class JobSuggestionModel extends Model {
   suggestion_id!: string;
@@ -39,8 +40,7 @@ export class JobSuggestionModel extends Model {
   }
 
   static get relationMappings() {
-    const { JobModel } = require('./JobModel.ts');
-
+  // Use top-level imports to avoid runtime 'require is not defined'
     return {
       job: {
         relation: Model.BelongsToOneRelation,

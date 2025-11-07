@@ -1,6 +1,6 @@
 import express from 'express';
 import { ApplicationController } from '../src/controller/application-controller.js';
-import { authenticateToken } from '../src/middleware/auth.js';
+import { authenticateToken } from '../src/middleware/authenticateToken';
 import { uploadEvidence, processAndSaveFiles } from '../src/middleware/upload.js';
 
 const router = express.Router();

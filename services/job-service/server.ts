@@ -46,7 +46,6 @@ console.log('[job-service] Serving uploads from:', uploadsDir);
 app.use('/uploads', express.static(uploadsDir));
 
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  res.status(500).json({ success: false, error: err.message });
 });
 
 app.listen(PORT, () => {

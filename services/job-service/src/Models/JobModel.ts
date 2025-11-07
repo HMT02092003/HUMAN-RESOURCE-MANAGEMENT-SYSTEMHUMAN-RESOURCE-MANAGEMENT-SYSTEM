@@ -1,4 +1,6 @@
 import { Model } from 'objection';
+import { JobRequiredSkillModel } from './JobRequiredSkillModel.ts';
+import { JobSuggestionModel } from './JobSuggestionModel.ts';
 
 export class JobModel extends Model {
   job_id!: string;
@@ -44,9 +46,7 @@ export class JobModel extends Model {
   }
 
   static get relationMappings() {
-    const { JobRequiredSkillModel } = require('./JobRequiredSkillModel.ts');
-    const { JobSuggestionModel } = require('./JobSuggestionModel.ts');
-
+  // Use top-level imports to avoid runtime 'require is not defined' in ESM
     return {
       requiredSkills: {
         relation: Model.HasManyRelation,

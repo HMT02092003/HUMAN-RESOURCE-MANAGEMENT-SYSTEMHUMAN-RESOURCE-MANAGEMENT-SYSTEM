@@ -142,5 +142,15 @@ const UserService = {
       throw error;
     }
   },
+
+  // Lấy tất cả users không phân trang cho select options
+  getAllUsersAllForSelect: async (params?: { scope?: string }) => {
+    try {
+      const response = await api.get('/api/auth/users/allForSelect', { params: { ...(params || {}), _t: Date.now() } });
+      return response.data; // array of users
+    } catch (error) {
+      throw error;
+    }
+  },
 };
 export default UserService;

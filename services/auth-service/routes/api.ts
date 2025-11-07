@@ -42,7 +42,8 @@ import {
   getNumberOfDaysOff,
   checkUserScope,
   getUsersByIds,
-  updateUserStatusForResignation,
+  getUserBulk,
+  getAllUsersAllForSelect,
 } from '@/src/controller/UserController';
 
 const router = Router();
@@ -77,9 +78,9 @@ const createUploadMiddleware = () => {
     }
   };
 
-  return multer({ 
-    storage, 
-    fileFilter: imageOnlyFilter, 
+  return multer({
+    storage,
+    fileFilter: imageOnlyFilter,
     limits: { fileSize: 5 * 1024 * 1024 } // 5MB
   });
 };
@@ -99,12 +100,14 @@ const authRoutes = [
   { method: 'post', path: '/reset-password', handler: resetPasswordController, auth: false },
   { method: 'post', path: '/send-otp', handler: sendOTPController, auth: false },
   { method: 'post', path: '/change-password', handler: changePassword, auth: true },
-  { method: 'get', path: '/check-auth', handler: (req: Request, res: Response) => {
-    res.status(200).json({
-      status: 'success',
-      user: (req as any).auth || null
-    });
-  }, auth: true },
+  {
+    method: 'get', path: '/check-auth', handler: (req: Request, res: Response) => {
+      res.status(200).json({
+        status: 'success',
+        user: (req as any).auth || null
+      });
+    }, auth: true
+  },
 ];
 
 // ===================================
@@ -127,6 +130,7 @@ const roleRoutes = [
 const userRoutes = [
   { method: 'get', path: '/users', handler: getAllUsers, auth: true },
   { method: 'get', path: '/users/all', handler: getAllUsersAll, auth: true },
+  { method: 'get', path: '/users/allForSelect', handler: getAllUsersAllForSelect, auth: true },
   { method: 'get', path: '/users/by-department', handler: getUsersByDepartment, auth: true },
   { method: 'get', path: '/users/by-chevron', handler: getUsersByChevron, auth: true },
   { method: 'post', path: '/users/bulk', handler: getUsersByIds, auth: false }, // Internal bulk fetch
@@ -141,33 +145,34 @@ const userRoutes = [
   { method: 'get', path: '/users/:id/number-of-days-off', handler: getNumberOfDaysOff, auth: false }, // Internal
   { method: 'post', path: '/users/check-scope', handler: checkUserScope, auth: true }, // Internal scope check
   // { method: 'post', path: '/users/update-status-resignation', handler: updateUserStatusForResignation, auth: false }, // Internal resignation status update
+  { method: 'post', path: '/users/user-bulk', handler: getUserBulk, auth: true }, // Internal status update
 ];
 
 // Routes with file upload
 const uploadRoutes = [
-  { 
-    method: 'post', 
-    path: '/users', 
+  {
+    method: 'post',
+    path: '/users',
     handler: (req: Request, res: Response) => {
       if ((req as any).file) {
         req.body.identificationPhoto = `/uploads/identificationPhoto/${(req as any).file.filename}`;
       }
       createUser(req, res);
-    }, 
+    },
     auth: true,
-    upload: true 
+    upload: true
   },
-  { 
-    method: 'put', 
-    path: '/users/:id', 
+  {
+    method: 'put',
+    path: '/users/:id',
     handler: (req: Request, res: Response) => {
       if ((req as any).file) {
         req.body.identificationPhoto = `/uploads/identificationPhoto/${(req as any).file.filename}`;
       }
       updateUser(req, res);
-    }, 
+    },
     auth: true,
-    upload: true 
+    upload: true
   },
 ];
 
@@ -177,23 +182,23 @@ const uploadRoutes = [
 const registerRoutes = (routes: any[]) => {
   routes.forEach(route => {
     const middlewares: any[] = [];
-    
+
     // Add authentication middleware if required
     if (route.auth) {
       middlewares.push(authenticateToken);
     }
-    
+
     // Add upload middleware if required
     if (route.upload) {
       middlewares.push(upload.single('identificationPhoto'));
     }
-    
+
     // Add handler
     middlewares.push((req: Request, res: Response) => {
       console.log(`[${route.method.toUpperCase()}] ${route.path}`);
       route.handler(req, res);
     });
-    
+
     // Register route
     (router as any)[route.method](route.path, ...middlewares);
   });

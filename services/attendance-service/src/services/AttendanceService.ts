@@ -94,6 +94,7 @@ export class AttendanceService {
       await Promise.all(deptIds.map(async (did) => {
             try {
               const resp = await axios.get(`${EMPLOYEE_SERVICE_URL}/api/departments/${did}`, { timeout: 4000 });
+              // Department API returns data directly, not wrapped in { data: ... }
               if (resp?.data) deptById[did] = resp.data;
             } catch (depErr) {
               // Non-fatal: log and continue
@@ -108,8 +109,19 @@ export class AttendanceService {
           if (u && u.departmentId) u.department = deptById[u.departmentId] || null;
         }
 
-        // Merge into results
-        results = results.map((r: any) => ({ ...r, user: usersById[r.userId] || null }));
+        // Merge into results - include both nested user object and flat fields for backward compatibility
+        results = results.map((r: any) => {
+          const user = usersById[r.userId] || null;
+          return {
+            ...r,
+            user: user,
+            username: user?.username || null,
+            fullName: user?.fullName || null,
+            departmentId: user?.departmentId || null,
+            departmentName: user?.department?.name || null,
+            chevronId: user?.chevronId || null
+          };
+        });
       } catch (e: any) {
         logger.error('Failed to enrich users or departments', e?.message || e);
       }
