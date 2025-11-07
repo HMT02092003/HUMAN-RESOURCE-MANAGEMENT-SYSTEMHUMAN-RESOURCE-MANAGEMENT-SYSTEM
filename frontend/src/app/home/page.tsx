@@ -10,11 +10,12 @@ const HomePage = () => {
     { title: 'Dashboard', href: '/home' }
   ];
 
-  const pageName = "Dashboard"
+  const pageName = "Dashboard";
+  const pageDes = "Tổng quan hệ thống quản lý nhân sự";
 
   return (
     <>
-      <MainLayout breadcrumbItems={breadcrumbItems} pageName={pageName}>
+      <MainLayout breadcrumbItems={breadcrumbItems} pageName={pageName} pageDes={pageDes}>
         <Home />
       </MainLayout>
     </>

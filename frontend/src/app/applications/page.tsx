@@ -17,6 +17,9 @@ const ApplicationsPage = () => {
   const pageName = 'Danh sách đơn từ';
   const pageDes = 'Xem và quản lý tất cả các đơn từ đã gửi';
 
+  const requiredPermission = 'applications';
+  const permissionType = 'read';
+
   const handleCreateClick = () => {
     router.push('/applications/select-type');
   };
@@ -26,6 +29,8 @@ const ApplicationsPage = () => {
       breadcrumbItems={breadcrumbItems}
       pageName={pageName}
       pageDes={pageDes}
+      requiredPermission={requiredPermission}
+      permissionType={permissionType}
     >
       <ApplicationList onCreateClick={handleCreateClick} />
     </MainLayout>

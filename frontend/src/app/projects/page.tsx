@@ -14,12 +14,16 @@ export default function ProjectsPage() {
 	const pageName = 'Quản lý dự án';
 	const pageDes = 'Xem và quản lý tất cả dự án';
 
+	const requiredPermission = 'projects';
+	const permissionType = 'read';
+
 	return (
 		<MainLayout
 			pageName={pageName}
 			pageDes={pageDes}
 			breadcrumbItems={breadcrumbItems}
-			requiredPermission="projects"
+			requiredPermission={requiredPermission}
+			permissionType={permissionType}
 		>
 			<div style={{ padding: 24 }}>
 				<ProjectManager />

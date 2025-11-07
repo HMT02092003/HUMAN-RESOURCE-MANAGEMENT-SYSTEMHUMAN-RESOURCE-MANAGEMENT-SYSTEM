@@ -16,11 +16,20 @@ export default function JobsPage() {
 	const pageName = 'Hồ Sơ';
 	const pageDes = 'Xem và quản lý tất cả hồ sơ ứng viên';
 
+	const requiredPermission = 'CV';
+	const permissionType = 'read';
+
 	return (
-		<MainLayout pageName={pageName} pageDes={pageDes} breadcrumbItems={breadcrumbItems}>
-				<div style={{ padding: 24 }}>
-					<CvManager />
-				</div>
-			</MainLayout>
+		<MainLayout
+			pageName={pageName}
+			pageDes={pageDes}
+			breadcrumbItems={breadcrumbItems}
+			requiredPermission={requiredPermission}
+			permissionType={permissionType}
+		>
+			<div style={{ padding: 24 }}>
+				<CvManager />
+			</div>
+		</MainLayout>
 	);
 }

@@ -14,17 +14,16 @@ const AttendancePage = () => {
   const pageName = 'Thông tin chấm công';
   const pageDes = 'Theo dõi thời gian làm việc và hiệu suất';
   
-  // Thử bỏ quyền để kiểm tra
-  // const requiredPermission = 'attendance';
-  // const permissionType = 'read' as const;
+  const requiredPermission = 'timeAttendance';
+  const permissionType = 'read';
 
   return (
     <MainLayout
       breadcrumbItems={breadcrumbItems}
       pageName={pageName}
       pageDes={pageDes}
-      // requiredPermission={requiredPermission}
-      // permissionType={permissionType}
+      requiredPermission={requiredPermission}
+      permissionType={permissionType}
     >
       <AttendanceSimplePage />
     </MainLayout>
