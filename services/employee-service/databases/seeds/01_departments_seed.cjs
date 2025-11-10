@@ -7,7 +7,7 @@ exports.seed = async function(knex) {
   // Xóa dữ liệu cũ
   await knex('departments').del();
 
-  // Dữ liệu phòng ban thực tế
+  // Dữ liệu phòng ban thực tế (tối ưu cho công ty nhỏ)
   const departments = [
     {
       id: 1,
@@ -50,20 +50,6 @@ exports.seed = async function(knex) {
       description: 'Phòng Nhân sự - Quản lý nguồn nhân lực và đào tạo',
       created_at: new Date(),
       updated_at: new Date()
-    },
-    {
-      id: 7,
-      name: 'P. Hành chính',
-      description: 'Phòng Hành chính - Quản lý hành chính và tổng hợp',
-      created_at: new Date(),
-      updated_at: new Date()
-    },
-    {
-      id: 8,
-      name: 'Phòng Vận hành',
-      description: 'Phòng Vận hành - Quản lý quy trình và hoạt động',
-      created_at: new Date(),
-      updated_at: new Date()
     }
   ];
 
@@ -73,5 +59,5 @@ exports.seed = async function(knex) {
   // Reset sequence
   await knex.raw("SELECT setval('departments_id_seq', (SELECT MAX(id) FROM departments))");
   
-  console.log('✅ Đã tạo 8 phòng ban thực tế');
+  console.log('✅ Đã tạo 6 phòng ban thực tế (công ty nhỏ)');
 };

@@ -1,4 +1,4 @@
-import { Model } from 'objection';
+import { Model, ModelObject } from 'objection';
 import ProjectMemberModel from './ProjectMemberModel.ts';
 import ProjectRequiredSkillModel from './ProjectRequiredSkillModel.ts';
 import ProjectSuggestionModel from './ProjectSuggestionModel.ts';
@@ -6,14 +6,14 @@ import TaskModel from './TaskModel.ts';
 import ProjectTimelineModel from './ProjectTimelineModel.ts';
 
 export class ProjectModel extends Model {
-  project_id!: string;
+  project_id!: number;
   name!: string;
   description?: string | null;
   status!: string;
   start_date!: string;
   end_date!: string;
-  budget?: string | null;
-  spent?: string | null;
+  budget?: number | null;
+  spent?: number | null;
   customer?: string | null;
   progress?: number;
   manager_id!: number;
@@ -33,24 +33,28 @@ export class ProjectModel extends Model {
       type: 'object',
       required: ['name', 'start_date', 'end_date', 'manager_id'],
       properties: {
-  // project_id can be a service-generated code (e.g. PRJYYYYMMDDHHmmss) stored as string
-  project_id: { type: 'string' },
+        project_id: { type: 'integer' },
         name: { type: 'string', maxLength: 255 },
         description: { type: ['string', 'null'] },
-        status: { type: 'string', enum: ['planning', 'active', 'on_hold', 'completed', 'cancelled'] },
+        status: { 
+          type: 'string', 
+          enum: ['planning', 'active', 'on_hold', 'completed', 'cancelled'],
+          default: 'planning'
+        },
         start_date: { type: 'string', format: 'date' },
         end_date: { type: 'string', format: 'date' },
         budget: { type: ['number', 'null'] },
         spent: { type: ['number', 'null'] },
-  customer: { type: ['string', 'null'] },
-        progress: { type: ['integer', 'null'] },
-        manager_id: { type: ['integer', 'null'] }
+        customer: { type: ['string', 'null'], maxLength: 255 },
+        progress: { type: ['integer', 'null'], minimum: 0, maximum: 100 },
+        manager_id: { type: 'integer' },
+        created_at: { type: ['string', 'null'], format: 'date-time' },
+        updated_at: { type: ['string', 'null'], format: 'date-time' }
       }
     };
   }
 
   static get relationMappings() {
-  // Use top-level imports to avoid runtime 'require is not defined'
     return {
       members: {
         relation: Model.HasManyRelation,

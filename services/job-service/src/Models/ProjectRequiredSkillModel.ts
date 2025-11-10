@@ -1,9 +1,9 @@
-import { Model } from 'objection';
+import { Model, ModelObject } from 'objection';
 import ProjectModel from './ProjectModel.ts';
-import { SkillModel } from './SkillModel.ts';
+import SkillModel from './SkillModel.ts';
 
 export class ProjectRequiredSkillModel extends Model {
-  project_id!: string;
+  project_id!: number;
   skill_id!: number;
   proficiency_level?: string | null;
 
@@ -20,15 +20,14 @@ export class ProjectRequiredSkillModel extends Model {
       type: 'object',
       required: ['project_id', 'skill_id'],
       properties: {
-        project_id: { type: 'string' }, // Can be PRJ code or UUID
+        project_id: { type: 'integer' },
         skill_id: { type: 'integer' },
-        proficiency_level: { type: ['string', 'null'] }
+        proficiency_level: { type: ['string', 'null'], maxLength: 50 }
       }
     };
   }
 
   static get relationMappings() {
-  // Use top-level imports to avoid runtime 'require is not defined'
     return {
       project: {
         relation: Model.BelongsToOneRelation,

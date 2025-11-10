@@ -1,27 +1,24 @@
 import e, { Request, Response, RequestHandler } from 'express';
 import dayjs from 'dayjs';
 import knex from '../lib/database.ts';
-import { JobModel } from '../Models/JobModel.ts';
-import { JobRequiredSkillModel } from '../Models/JobRequiredSkillModel.ts';
-import { JobSuggestionModel } from '../Models/JobSuggestionModel.ts';
 import { SkillModel } from '../Models/SkillModel.ts';
-import { JobController } from './job-controller.ts';
 import { validate } from '../ulitis/validation-utility.ts';
 import { remove } from 'lodash';
 import ProjectModel from '../Models/ProjectModel.ts';
 import ProjectMemberModel from '../Models/ProjectMemberModel.ts';
 import ProjectTimelineModel from '../Models/ProjectTimelineModel.ts';
+import ProjectRequiredSkillModel from '../Models/ProjectRequiredSkillModel.ts';
+import ProjectSuggestionModel from '../Models/ProjectSuggestionModel.ts';
 import CheckScopeService from '../services/checkScope.ts';
 import axios from 'axios';
 
 
-JobModel.knex(knex);
-JobRequiredSkillModel.knex(knex);
-JobSuggestionModel.knex(knex);
 SkillModel.knex(knex);
 ProjectModel.knex(knex);
 ProjectMemberModel.knex(knex);
 ProjectTimelineModel.knex(knex);
+ProjectRequiredSkillModel.knex(knex);
+ProjectSuggestionModel.knex(knex);
 
 const AuthServiceUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:4001';
 
@@ -37,7 +34,7 @@ export class ProjectController {
                 status: 'string',
                 startDate: 'string',
                 endDate: 'string',
-                members: 'object'
+                members: 'array'
             };
 
             let params: any = validate(req.body, allowFields);
@@ -457,13 +454,17 @@ export class ProjectController {
 
                 // Add timeline event
                 await ProjectTimelineModel.query(trx).insert({
-                    project_id: id,
+                    project_id: Number(id),
                     event_type: 'updated',
                     title: 'Dự án được cập nhật',
                     description: `Dự án "${updatedProject.name}" đã được cập nhật.`,
-                    user_id: params.managerId || updatedProject.manager_id,
+                    user_id: params.managerId !== undefined
+                        ? Number(params.managerId)
+                        : (updatedProject && (updatedProject as any).manager_id !== undefined
+                            ? Number((updatedProject as any).manager_id)
+                            : null),
                     event_time: dayjs().toISOString()
-                });
+                } as any);
 
                 await trx.commit();
 

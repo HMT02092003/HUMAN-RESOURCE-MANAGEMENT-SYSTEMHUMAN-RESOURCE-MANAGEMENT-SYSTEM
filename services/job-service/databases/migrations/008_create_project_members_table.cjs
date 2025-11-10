@@ -1,6 +1,6 @@
 exports.up = function(knex) {
   return knex.schema.createTable('project_members', function(table) {
-    table.string('project_id', 64).notNullable()
+    table.integer('project_id').unsigned().notNullable()
       .references('project_id').inTable('projects').onDelete('CASCADE');
     table.integer('user_id').notNullable(); // Foreign key to employee-service
     table.string('role', 100); // e.g., 'Developer', 'Designer', 'Tester', etc.

@@ -1,8 +1,8 @@
 exports.up = function(knex) {
   return knex.schema.createTable('project_timeline', function(table) {
-  // Use gen_random_uuid() from pgcrypto
-  table.uuid('event_id').primary().defaultTo(knex.raw('gen_random_uuid()'));
-    table.string('project_id', 64).notNullable()
+    // Use gen_random_uuid() from pgcrypto
+    table.uuid('event_id').primary().defaultTo(knex.raw('gen_random_uuid()'));
+    table.integer('project_id').unsigned().notNullable()
       .references('project_id').inTable('projects').onDelete('CASCADE');
     table.enum('event_type', [
       'created', 

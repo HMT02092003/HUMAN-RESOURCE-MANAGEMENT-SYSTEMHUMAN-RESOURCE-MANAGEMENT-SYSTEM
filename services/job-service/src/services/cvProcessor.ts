@@ -6,6 +6,7 @@ import { SkillModel } from '../Models/SkillModel.ts';
 import { UserSkillModel } from '../Models/UserSkillModel.ts';
 import { getTextFromPdf } from './pdfParser.ts';
 import { analyzeCvText, GeminiResponse } from './geminiService.ts';
+import { findOrCreateNormalizedSkill } from './skillNormalizationService.ts';
 
 export function triggerCvAnalysis(cvId: string): void {
   processCv(cvId).catch((err) => {
@@ -26,20 +27,23 @@ export async function processCv(cvId: string): Promise<void> {
 
   const analysis: GeminiResponse = await analyzeCvText(text);
 
+      console.log(`[CV Processor] Found ${analysis.skills?.length || 0} skills, normalizing...`);
+      
+      let processedCount = 0;
+      let excludedCount = 0;
+
       for (const skill of analysis.skills || []) {
-        let skillRow = await SkillModel.query(trx)
-          .where('skill_name', skill.name)
-          .first();
+        // Normalize skill name and check if it should be excluded
+        const skillRow = await findOrCreateNormalizedSkill(skill.name, trx);
+        
         if (!skillRow) {
-          const inserted = await SkillModel.query(trx)
-            .insert({ skill_name: skill.name })
-            .returning('*');
-          skillRow = Array.isArray(inserted) ? inserted[0] : inserted;
-        }
-        if (!skillRow) {
+          excludedCount++;
+          console.log(`[CV Processor] Excluded skill: "${skill.name}" (not a real technical skill)`);
           continue;
         }
 
+        processedCount++;
+        
         const existing = await UserSkillModel.query(trx).findById([cv.user_id, skillRow.skill_id]);
         if (existing) {
           await UserSkillModel.query(trx)
@@ -54,13 +58,15 @@ export async function processCv(cvId: string): Promise<void> {
         }
       }
 
+      console.log(`[CV Processor] Processed ${processedCount} skills, excluded ${excludedCount}`);
+
       await CvModel.query(trx)
-        .patch({ ai_analysis_status: 'Completed', original_text: text })
+        .patch({ original_text: text } as any)
         .findById(cvId);
     } catch (error) {
       try {
         await CvModel.query(trx)
-          .patch({ ai_analysis_status: 'Failed' })
+          .patch({} as any)
           .where('cv_id', cvId);
       } catch (patchError) {
         console.error('failed to mark cv as Failed', patchError);

@@ -1,9 +1,9 @@
-import { Model } from 'objection';
+import { Model, ModelObject } from 'objection';
 import ProjectModel from './ProjectModel.ts';
 
 export class TaskModel extends Model {
   task_id!: string;
-  project_id!: string;
+  project_id!: number;
   title!: string;
   description?: string | null;
   status?: string;
@@ -29,24 +29,30 @@ export class TaskModel extends Model {
       type: 'object',
       required: ['title', 'project_id'],
       properties: {
-  task_id: { type: 'string', format: 'uuid' },
-  // project_id may be a service code (PRJ...) or a UUID; accept any string
-  project_id: { type: 'string' },
+        task_id: { type: 'string', maxLength: 64 },
+        project_id: { type: 'integer' },
         title: { type: 'string', maxLength: 255 },
         description: { type: ['string', 'null'] },
-        status: { type: ['string', 'null'] },
-        priority: { type: ['string', 'null'] },
+        status: { 
+          type: ['string', 'null'],
+          enum: ['todo', 'in_progress', 'review', 'done', null]
+        },
+        priority: { 
+          type: ['string', 'null'],
+          enum: ['low', 'medium', 'high', 'urgent', null]
+        },
         assignee_id: { type: ['integer', 'null'] },
         due_date: { type: ['string', 'null'], format: 'date' },
         estimated_hours: { type: ['integer', 'null'] },
         actual_hours: { type: ['integer', 'null'] },
-        tags: { type: ['array', 'null'] }
+        tags: { type: ['array', 'null'] },
+        created_at: { type: ['string', 'null'], format: 'date-time' },
+        updated_at: { type: ['string', 'null'], format: 'date-time' }
       }
     };
   }
 
   static get relationMappings() {
-  // Use top-level import to avoid require at runtime
     return {
       project: {
         relation: Model.BelongsToOneRelation,

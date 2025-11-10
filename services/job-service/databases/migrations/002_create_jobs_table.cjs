@@ -1,7 +1,7 @@
 exports.up = function(knex) {
   return knex.schema.createTable('projects', function(table) {
-  // Use string project codes (e.g. PRJYYYYMMDDHHmmss) or UUIDs; store as string
-  table.string('project_id', 64).primary();
+    // Use auto-increment integer ID
+    table.increments('project_id').primary();
     table.string('name', 255).notNullable();
     table.text('description');
     table.enum('status', ['planning', 'active', 'on_hold', 'completed', 'cancelled']).defaultTo('planning');

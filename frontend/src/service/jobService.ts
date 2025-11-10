@@ -9,6 +9,9 @@ export const analyzeJob = (payload: { title: string; description: string; projec
 
 export const findCandidates = (payload: {
   job_id?: string;
+  job_title?: string;
+  job_estimated_hours?: number;
+  project_id?: string;
   required_skills: Array<{
     skill_id: number;
     proficiency_level: string;
@@ -16,6 +19,7 @@ export const findCandidates = (payload: {
   }>;
   min_match_score?: number;
   max_results?: number;
+  check_workload?: boolean;
 }) => {
   return api.post(`${JOB_SERVICE_PREFIX}/jobs/find-candidates`, payload);
 };
@@ -62,6 +66,10 @@ export const deleteProject = (projectIdsOrPayload: string[] | { ids: string[] })
   return api.delete(`${JOB_SERVICE_PREFIX}/projects`, { data: payload });
 };
 
+export const getUserTasks = (userId: string) => {
+  return api.get(`${JOB_SERVICE_PREFIX}/jobs/users/${userId}/tasks`);
+};
+
 export default {
   analyzeJob,
   findCandidates,
@@ -75,4 +83,5 @@ export default {
   getProjectById,
   updateProject,
   deleteProject,
+  getUserTasks,
 };

@@ -1,8 +1,8 @@
 exports.up = function(knex) {
   return knex.schema.createTable('tasks', function(table) {
-  // Use gen_random_uuid() from pgcrypto
-  table.uuid('task_id').primary().defaultTo(knex.raw('gen_random_uuid()'));
-    table.string('project_id', 64).notNullable()
+    // Use string format: TASK{YYYYMMDDHHmmss}
+    table.string('task_id', 64).primary();
+    table.integer('project_id').unsigned().notNullable()
       .references('project_id').inTable('projects').onDelete('CASCADE');
     table.string('title', 255).notNullable();
     table.text('description');

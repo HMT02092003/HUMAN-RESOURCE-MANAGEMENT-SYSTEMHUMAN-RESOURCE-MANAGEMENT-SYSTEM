@@ -114,7 +114,7 @@ const CreateCv: React.FC = () => {
             <Select placeholder="Chọn người dùng">
               {users.map(u => {
                 const id = u.id || u.userId || u.user_id;
-                const label = ((u.firstName || '') + ' ' + (u.lastName || '')).trim() || u.username;
+                const label = u.fullName || u.username;
                 return <Option key={id} value={id}>{label}</Option>;
               })}
             </Select>

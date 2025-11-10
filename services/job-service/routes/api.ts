@@ -17,6 +17,7 @@ router.post('/cvs/bulk-delete', authenticateToken, CvController.bulkDeleteCvs);
 router.post('/jobs/analyze', authenticateToken, JobController.analyzeJob);
 router.post('/jobs/find-candidates', authenticateToken, JobController.findCandidates);
 router.post('/jobs/create-with-analysis', authenticateToken, JobController.createJobWithAnalysis);
+router.get('/jobs/users/:user_id/tasks', authenticateToken, JobController.getUserTasks);
 
 // Project endpoints (register before generic job endpoints to avoid route conflicts)
 router.post('/projects', authenticateToken, ProjectController.createProject);

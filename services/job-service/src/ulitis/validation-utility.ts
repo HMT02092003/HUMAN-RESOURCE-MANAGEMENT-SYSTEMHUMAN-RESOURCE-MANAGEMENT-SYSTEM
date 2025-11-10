@@ -90,13 +90,31 @@ export const validateFields = (
             debug(error.message);
             return error;
         } else if (isExists) {
-            let realType = typeof data;
+            let realType: string = typeof data as string;
+            
+            // Special handling for arrays
+            if (Array.isArray(data)) {
+                realType = 'array';
+            }
+            
             let typeAllowed = realType == typeOfField;
 
             //nếu không đúng kiểu dữ liệu mong muốn, thì cố gắng convert về đúng kiểu.
             if (!typeAllowed) {
                 if (typeOfField == "any") {
                     typeAllowed = true;
+                } else if (typeOfField == "array") {
+                    // Validate array type
+                    typeAllowed = Array.isArray(data);
+                    if (typeAllowed && newData) {
+                        _.set(newData, path, data);
+                    }
+                } else if (typeOfField == "object") {
+                    // Object type (but not array)
+                    typeAllowed = typeof data === 'object' && !Array.isArray(data) && data !== null;
+                    if (typeAllowed && newData) {
+                        _.set(newData, path, data);
+                    }
                 } else if (typeOfField == "number") {
                     typeAllowed = !isNaN(Number(data));
                     if (typeAllowed && newData) {

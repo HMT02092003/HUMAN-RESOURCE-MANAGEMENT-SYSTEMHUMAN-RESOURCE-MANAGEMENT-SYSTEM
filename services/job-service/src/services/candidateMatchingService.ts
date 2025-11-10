@@ -1,6 +1,8 @@
 import { UserSkillModel } from '../Models/UserSkillModel.ts';
 import { SkillModel } from '../Models/SkillModel.ts';
-import { JobRequiredSkillModel } from '../Models/JobRequiredSkillModel.ts';
+import ProjectRequiredSkillModel from '../Models/ProjectRequiredSkillModel.ts';
+import { ProjectMemberModel } from '../Models/ProjectMemberModel.ts';
+import { findSimilarSkills } from './skillNormalizationService.ts';
 
 export interface MatchedSkill {
   skill_id: number;
@@ -36,13 +38,13 @@ const SKILL_LEVEL_MAP: { [key: string]: number } = {
 };
 
 /**
- * Tìm ứng viên phù hợp dựa trên job requirements
- * @param jobId - ID của công việc
+ * Tìm ứng viên phù hợp dựa trên project requirements
+ * @param projectId - ID của dự án
  * @param requiredSkills - Array of {skill_id, proficiency_level, importance}
  * @param options - Options for filtering and sorting
  */
 export async function findMatchingCandidates(
-  jobId: string,
+  projectId: string,
   requiredSkills: Array<{
     skill_id: number;
     proficiency_level: string;
@@ -52,12 +54,14 @@ export async function findMatchingCandidates(
     minMatchScore?: number;
     maxResults?: number;
     includePartialMatches?: boolean;
+    project_id?: string | null;
   } = {}
 ): Promise<CandidateMatch[]> {
   const {
-    minMatchScore = 50,
-    maxResults = 20,
-    includePartialMatches = true
+    minMatchScore = 0, // Changed from 50 to 0 - show all candidates
+    maxResults = 10, // Limit to 10 candidates as requested
+    includePartialMatches = true,
+    project_id = null
   } = options;
 
   if (!requiredSkills || requiredSkills.length === 0) {
@@ -65,17 +69,42 @@ export async function findMatchingCandidates(
     return [];
   }
 
-  console.log(`[Candidate Matching] Finding candidates for job ${jobId} with ${requiredSkills.length} required skills`);
+  console.log(`[Candidate Matching] Finding candidates for project ${projectId} with ${requiredSkills.length} required skills`);
 
-  // Get all skills info
+  // Lấy danh sách user_id từ project_members nếu có project_id
+  let allowedUserIds: number[] | null = null;
+  if (project_id) {
+    const projectMembers = await ProjectMemberModel.query()
+      .where('project_id', project_id)
+      .select('user_id');
+    
+    allowedUserIds = projectMembers.map(pm => pm.user_id);
+    console.log(`[Candidate Matching] Project ${project_id} has ${allowedUserIds.length} members`);
+    
+    if (allowedUserIds.length === 0) {
+      console.log('[Candidate Matching] No members in project');
+      return [];
+    }
+  }
+
+  // Get all skills info - DISABLE fuzzy matching for performance
   const skillIds = requiredSkills.map(s => s.skill_id);
   const skillsInfo = await SkillModel.query().whereIn('skill_id', skillIds);
   const skillMap = new Map(skillsInfo.map(s => [s.skill_id, s.skill_name]));
 
-  // Get all users who have at least one of the required skills
-  const usersWithSkills = await UserSkillModel.query()
-    .whereIn('skill_id', skillIds)
-    .select('user_id', 'skill_id', 'proficiency_level');
+  // OPTIMIZATION: Disable fuzzy/similar skill matching to improve performance
+  // Fuzzy matching calls Gemini API multiple times causing 10-20s delay
+  // For now, only match exact skills
+  console.log('[Candidate Matching] Using exact skill matching (fuzzy disabled for performance)');
+
+  // Get users with required skills (filtered by project members)
+  let query = UserSkillModel.query().whereIn('skill_id', skillIds);
+  
+  if (allowedUserIds) {
+    query = query.whereIn('user_id', allowedUserIds);
+  }
+  
+  const usersWithSkills = await query.select('user_id', 'skill_id', 'proficiency_level');
 
   // Group by user_id
   const userSkillsMap = new Map<number, Map<number, string>>();
@@ -89,7 +118,18 @@ export async function findMatchingCandidates(
     }
   }
 
-  console.log(`[Candidate Matching] Found ${userSkillsMap.size} unique candidates with matching skills`);
+  // IMPORTANT: ALWAYS show ALL project members (even those with no matching skills)
+  // This ensures we see all team members, sorted by match score
+  if (allowedUserIds && allowedUserIds.length > 0) {
+    console.log(`[Candidate Matching] Ensuring all ${allowedUserIds.length} project members are included`);
+    for (const userId of allowedUserIds) {
+      if (!userSkillsMap.has(userId)) {
+        userSkillsMap.set(userId, new Map()); // Add with empty skills (0% match)
+      }
+    }
+  }
+
+  console.log(`[Candidate Matching] Found ${userSkillsMap.size} candidates (exact match only)`);
 
   // Calculate match score for each user
   const candidates: CandidateMatch[] = [];
@@ -103,6 +143,8 @@ export async function findMatchingCandidates(
 
     for (const required of requiredSkills) {
       const skillName = skillMap.get(required.skill_id) || `Skill ${required.skill_id}`;
+      
+      // EXACT MATCH ONLY (fuzzy matching disabled for performance)
       const userLevel = userSkills.get(required.skill_id);
       
       if (userLevel) {
@@ -154,39 +196,37 @@ export async function findMatchingCandidates(
       ? Math.round((totalScore / totalPossibleScore) * 100)
       : 0;
 
-    // Generate assessment
+    // Generate assessment (Vietnamese)
     let assessment = '';
     if (matchScore >= 90) {
-      assessment = 'Excellent match - Highly qualified candidate';
+      assessment = 'Rất phù hợp - Ứng viên xuất sắc';
     } else if (matchScore >= 75) {
-      assessment = 'Very good match - Strong candidate';
+      assessment = 'Phù hợp cao - Ứng viên mạnh';
     } else if (matchScore >= 60) {
-      assessment = 'Good match - Qualified with minor gaps';
+      assessment = 'Phù hợp tốt - Đủ năng lực với khoảng trống nhỏ';
     } else if (matchScore >= 40) {
-      assessment = 'Moderate match - May need training';
+      assessment = 'Phù hợp trung bình - Có thể cần đào tạo thêm';
     } else {
-      assessment = 'Weak match - Significant skill gaps';
+      assessment = 'Phù hợp yếu - Thiếu nhiều kỹ năng quan trọng';
     }
 
-    if (matchScore >= minMatchScore || (includePartialMatches && matchedCount > 0)) {
-      candidates.push({
-        user_id: userId,
-        match_score: matchScore,
-        matched_skills: matchedSkills,
-        missing_skills: missingSkills,
-        skill_match_count: matchedCount,
-        total_required_skills: requiredSkills.length,
-        overall_assessment: assessment
-      });
-    }
+    // Add all candidates to the list (no score filtering)
+    candidates.push({
+      user_id: userId,
+      match_score: matchScore,
+      matched_skills: matchedSkills,
+      missing_skills: missingSkills,
+      skill_match_count: matchedCount,
+      total_required_skills: requiredSkills.length,
+      overall_assessment: assessment
+    });
   }
 
   // Sort by match score (descending) and limit results
   candidates.sort((a, b) => b.match_score - a.match_score);
   const limitedCandidates = candidates.slice(0, maxResults);
 
-  console.log(`[Candidate Matching] Returning ${limitedCandidates.length} candidates ` +
-              `(min_score: ${minMatchScore}%)`);
+  console.log(`[Candidate Matching] Returning ${limitedCandidates.length} candidates (no min score filter)`);
 
   return limitedCandidates;
 }

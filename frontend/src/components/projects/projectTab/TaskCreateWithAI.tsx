@@ -54,6 +54,8 @@ interface AIAnalysisResult {
 
 interface CandidateMatch {
   user_id: number;
+  fullName?: string;
+  email?: string;
   match_score: number;
   overall_assessment: string;
   matched_skills: Array<{
@@ -70,6 +72,10 @@ interface CandidateMatch {
   }>;
   skill_match_count: number;
   total_required_skills: number;
+  current_workload_hours?: number | null;
+  can_take_more_work?: boolean;
+  workload_assessment?: string;
+  risk_level?: 'low' | 'medium' | 'high';
 }
 
 const difficultyColors = ['#52c41a', '#73d13d', '#faad14', '#ff7a45', '#ff4d4f'];
@@ -152,7 +158,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
       if (response.data.success) {
         const analysis = response.data.analysis;
         setAiAnalysis(analysis);
-        setEditableSkills(analysis.required_skills);
+        setEditableSkills(analysis.required_skills || []);
         setTaskInput({ title: values.title, description: values.description });
         message.success({ content: 'Phân tích thành công!', key: 'analyze' });
         setCurrentStep(1);
@@ -181,21 +187,35 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
       message.loading({ content: 'Đang tìm ứng viên phù hợp...', key: 'find', duration: 0 });
 
       const response = await jobService.findCandidates({
-        required_skills: editableSkills.map(skill => ({
+        project_id: projectId,
+        job_title: taskInput.title,
+        job_estimated_hours: aiAnalysis?.estimated_hours || 0,
+        required_skills: editableSkills.map((skill: any) => ({
           skill_id: skill.skill_id,
           proficiency_level: skill.required_level,
           importance: skill.importance
         })),
         min_match_score: 40,
-        max_results: 10
+        max_results: 10,
+        check_workload: true
       });
 
       if (response.data.success) {
         setCandidates(response.data.candidates);
-        message.success({
-          content: `Tìm thấy ${response.data.total_candidates} ứng viên phù hợp!`,
-          key: 'find'
-        });
+        
+        if (response.data.all_overloaded) {
+          message.warning({
+            content: 'Tất cả ứng viên đều đã quá tải. Vui lòng xem xét lại hoặc chọn người có workload thấp nhất.',
+            duration: 5,
+            key: 'find'
+          });
+        } else {
+          message.success({
+            content: `Tìm thấy ${response.data.available_candidates}/${response.data.total_candidates} ứng viên phù hợp!`,
+            key: 'find'
+          });
+        }
+        
         setCurrentStep(2);
       } else {
         throw new Error('Finding candidates failed');
@@ -230,7 +250,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
         difficulty_level: aiAnalysis?.difficulty_level,
         estimated_hours: aiAnalysis?.estimated_hours,
         ai_analysis_result: JSON.stringify(aiAnalysis),
-        required_skills: editableSkills.map(skill => ({
+        required_skills: editableSkills.map((skill: any) => ({
           skill_id: skill.skill_id,
           proficiency_level: skill.required_level
         }))
@@ -258,6 +278,13 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
     const newSkills = [...editableSkills];
     newSkills[index] = { ...newSkills[index], [field]: value };
     setEditableSkills(newSkills);
+    
+    // Clear candidates to force re-search when user edits skills
+    setCandidates([]);
+    // Reset to step 1 (skill editing) if user was viewing candidates
+    if (currentStep === 2) {
+      setCurrentStep(1);
+    }
   };
 
   // Render Step 1: Input
@@ -420,6 +447,11 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
                     onClick={() => {
                       const newSkills = editableSkills.filter((_, i) => i !== index);
                       setEditableSkills(newSkills);
+                      // Clear candidates when removing skill
+                      setCandidates([]);
+                      if (currentStep === 2) {
+                        setCurrentStep(1);
+                      }
                     }}
                   >
                     Xóa
@@ -451,10 +483,15 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
   const renderStepCandidates = () => {
     const candidateColumns = [
       {
-        title: 'User ID',
-        dataIndex: 'user_id',
-        key: 'user_id',
-        width: 100
+        title: 'Người dùng',
+        key: 'fullName',
+        width: 200,
+        render: (record: CandidateMatch) => (
+          <div>
+            <div><strong>{record.fullName || `User ${record.user_id}`}</strong></div>
+            {record.email && <div style={{ fontSize: 12, color: '#888' }}>{record.email}</div>}
+          </div>
+        )
       },
       {
         title: 'Match Score',
@@ -466,7 +503,25 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
             {score}%
           </Tag>
         ),
-        sorter: (a: any, b: any) => b.match_score - a.match_score
+        sorter: (a: any, b: any) => b.match_score - a.match_score,
+        defaultSortOrder: 'descend' as const
+      },
+      {
+        title: 'Workload',
+        key: 'workload',
+        width: 120,
+        render: (record: CandidateMatch) => {
+          if (record.current_workload_hours == null) {
+            return <Tag>N/A</Tag>;
+          }
+          const riskColor = record.risk_level === 'low' ? 'green' : record.risk_level === 'medium' ? 'orange' : 'red';
+          return (
+            <div>
+              <Tag color={riskColor}>{record.current_workload_hours}h</Tag>
+              {!record.can_take_more_work && <Tag color="red">Quá tải</Tag>}
+            </div>
+          );
+        }
       },
       {
         title: 'Đánh giá',
@@ -493,6 +548,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
             type={selectedCandidate === record.user_id ? 'primary' : 'default'}
             size="small"
             onClick={() => setSelectedCandidate(record.user_id)}
+            disabled={record.can_take_more_work === false}
           >
             {selectedCandidate === record.user_id ? <CheckCircleOutlined /> : 'Chọn'}
           </Button>
@@ -522,6 +578,16 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
 
         {selectedCandidateData && (
           <Card title="Chi tiết ứng viên đã chọn" style={{ marginTop: 16 }}>
+            {selectedCandidateData.workload_assessment && (
+              <Alert
+                message="Đánh giá Workload"
+                description={selectedCandidateData.workload_assessment}
+                type={selectedCandidateData.can_take_more_work ? 'success' : 'warning'}
+                showIcon
+                style={{ marginBottom: 12 }}
+              />
+            )}
+            
             <div style={{ marginBottom: 12 }}>
               <strong>Kỹ năng khớp:</strong>
               <div style={{ marginTop: 8 }}>

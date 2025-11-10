@@ -192,6 +192,7 @@ export const getAllUsersAll = async (req: any, res: Response) => {
 
     // Determine which user IDs are visible under the provided scope
     let userIds: number[] = await UserModel.checkScope(scope, req);
+    console.log('getAllUsersAll - userIds from checkScope:', userIds, 'length:', userIds.length);
 
     // Fetch users (no pagination)
     let users: any[] = await UserModel.query()
@@ -200,6 +201,8 @@ export const getAllUsersAll = async (req: any, res: Response) => {
       .whereNot('users.id', auth?.id)
       .where('users.status', 1)
       .withGraphJoined('[role]');
+
+    console.log('getAllUsersAll - users after query:', users.length);
 
     // Enrich with department and chevron details (reuse same logic as paginated endpoint)
     const token = req.cookies.token || req.headers.authorization?.split(' ')[1];

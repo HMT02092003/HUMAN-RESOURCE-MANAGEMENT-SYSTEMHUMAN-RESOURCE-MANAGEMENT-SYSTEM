@@ -19,13 +19,14 @@ interface UserInfo {
 	id: number;
 	firstName?: string;
 	lastName?: string;
+	fullName?: string;
 	username?: string;
 	email?: string;
 }
 
 interface CvWithUser extends CvRecord {
 	user?: UserInfo;
-	userName?: string;
+	fullName?: string;
 	userEmail?: string;
 }
 
@@ -66,11 +67,13 @@ const CvManager: React.FC = () => {
 			if (rawData.length > 0 && (rawData[0] as any).user !== undefined) {
 				cvWithUsers = rawData.map((cv: any) => {
 					const user = cv.user || null;
-					const userName = user ? [user.firstName, user.lastName].filter(Boolean).join(' ') || user.username || user.email : `User ${cv.user_id}`;
+					const fullName = user
+						? (user.fullName || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.username || user.email)
+						: `User ${cv.user_id}`;
 					return {
 						...cv,
 						user,
-						userName,
+						fullName,
 						userEmail: user?.email
 					};
 				});
@@ -80,11 +83,11 @@ const CvManager: React.FC = () => {
 					rawData.map(async (cv: CvRecord) => {
 						try {
 							const userRes = await UserService.getUserById(cv.user_id as any);
-							const userName = [userRes?.firstName, userRes?.lastName].filter(Boolean).join(' ') || userRes?.username || userRes?.email || `User ${cv.user_id}`;
-							return { ...cv, user: userRes, userName, userEmail: userRes?.email };
+							const fullName = userRes?.fullName || [userRes?.firstName, userRes?.lastName].filter(Boolean).join(' ') || userRes?.username || userRes?.email || `User ${cv.user_id}`;
+							return { ...cv, user: userRes, fullName, userEmail: userRes?.email };
 						} catch (err) {
 							console.error(`Failed to fetch user ${cv.user_id}:`, err);
-							return { ...cv, user: undefined, userName: `User ${cv.user_id}`, userEmail: undefined };
+							return { ...cv, user: undefined, fullName: `User ${cv.user_id}`, userEmail: undefined };
 						}
 					})
 				);
@@ -228,13 +231,13 @@ const CvManager: React.FC = () => {
 	const columns: TableColumnsType<CvWithUser> = [
 		{
 			title: 'Người dùng',
-			dataIndex: 'userName',
-			key: 'userName',
-			...getColumnSearchProps('userName', 'người dùng'),
-			sorter: (a, b) => (a.userName || '').localeCompare(b.userName || ''),
-			render: (userName: string, record) => (
+			dataIndex: 'fullName',
+			key: 'fullName',
+			...getColumnSearchProps('fullName', 'người dùng'),
+			sorter: (a, b) => (a.fullName || '').localeCompare(b.fullName || ''),
+			render: (fullName: string, record) => (
 				<Space direction="vertical" size={0}>
-					<strong>{userName}</strong>
+					<strong>{fullName}</strong>
 					{record.userEmail && <span style={{ fontSize: 12, color: '#666' }}>{record.userEmail}</span>}
 				</Space>
 			),

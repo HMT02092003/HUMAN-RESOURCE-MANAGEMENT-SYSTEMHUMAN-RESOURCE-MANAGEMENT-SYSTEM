@@ -1,4 +1,4 @@
-import { JSONSchema, Model } from 'objection';
+import { Model, ModelObject, JSONSchema } from 'objection';
 
 export interface Skill {
   skill_id: number;
@@ -9,20 +9,21 @@ export class SkillModel extends Model implements Skill {
   skill_id!: number;
   skill_name!: string;
 
-  static override get tableName(): string {
+  static get tableName(): string {
     return 'skills';
   }
 
-  static override get idColumn(): string {
+  static get idColumn(): string {
     return 'skill_id';
   }
 
-  static override get jsonSchema(): JSONSchema {
+  static get jsonSchema(): JSONSchema {
     return {
       type: 'object',
+      required: ['skill_name'],
       properties: {
         skill_id: { type: 'integer' },
-        skill_name: { type: 'string' }
+        skill_name: { type: 'string', maxLength: 100 }
       }
     };
   }
