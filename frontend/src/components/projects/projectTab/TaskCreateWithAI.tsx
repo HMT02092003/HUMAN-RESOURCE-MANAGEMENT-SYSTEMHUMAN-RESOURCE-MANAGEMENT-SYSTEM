@@ -16,7 +16,8 @@ import {
   Spin,
   Divider,
   InputNumber,
-  Select
+  Select,
+  Tooltip
 } from 'antd';
 import {
   RobotOutlined,
@@ -78,6 +79,13 @@ interface CandidateMatch {
   risk_level?: 'low' | 'medium' | 'high';
 }
 
+interface CandidatesResponse {
+  suggested_candidates: CandidateMatch[];
+  all_project_members: CandidateMatch[];
+  total_suggested: number;
+  total_members: number;
+}
+
 const difficultyColors = ['#52c41a', '#73d13d', '#faad14', '#ff7a45', '#ff4d4f'];
 const difficultyLabels = ['Rất dễ', 'Dễ', 'Trung bình', 'Khó', 'Rất khó'];
 
@@ -122,7 +130,8 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
   const [editableSkills, setEditableSkills] = useState<AIAnalysisResult['required_skills']>([]);
   
   // Step 3: Candidates
-  const [candidates, setCandidates] = useState<CandidateMatch[]>([]);
+  const [suggestedCandidates, setSuggestedCandidates] = useState<CandidateMatch[]>([]);
+  const [allProjectMembers, setAllProjectMembers] = useState<CandidateMatch[]>([]);
   const [selectedCandidate, setSelectedCandidate] = useState<number | null>(null);
 
   const handleReset = () => {
@@ -130,7 +139,8 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
     setTaskInput({ title: '', description: '' });
     setAiAnalysis(null);
     setEditableSkills([]);
-    setCandidates([]);
+    setSuggestedCandidates([]);
+    setAllProjectMembers([]);
     setSelectedCandidate(null);
     form.resetFields();
   };
@@ -195,26 +205,20 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
           proficiency_level: skill.required_level,
           importance: skill.importance
         })),
-        min_match_score: 40,
-        max_results: 10,
+        min_match_score: 0,
+        max_results: 1000,
         check_workload: true
       });
 
       if (response.data.success) {
-        setCandidates(response.data.candidates);
+        const data: CandidatesResponse = response.data;
+        setSuggestedCandidates(data.suggested_candidates || []);
+        setAllProjectMembers(data.all_project_members || []);
         
-        if (response.data.all_overloaded) {
-          message.warning({
-            content: 'Tất cả ứng viên đều đã quá tải. Vui lòng xem xét lại hoặc chọn người có workload thấp nhất.',
-            duration: 5,
-            key: 'find'
-          });
-        } else {
-          message.success({
-            content: `Tìm thấy ${response.data.available_candidates}/${response.data.total_candidates} ứng viên phù hợp!`,
-            key: 'find'
-          });
-        }
+        message.success({
+          content: `Tìm thấy ${data.total_suggested} người được đề xuất và ${data.total_members} thành viên trong dự án!`,
+          key: 'find'
+        });
         
         setCurrentStep(2);
       } else {
@@ -280,7 +284,8 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
     setEditableSkills(newSkills);
     
     // Clear candidates to force re-search when user edits skills
-    setCandidates([]);
+    setSuggestedCandidates([]);
+    setAllProjectMembers([]);
     // Reset to step 1 (skill editing) if user was viewing candidates
     if (currentStep === 2) {
       setCurrentStep(1);
@@ -448,7 +453,8 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
                       const newSkills = editableSkills.filter((_, i) => i !== index);
                       setEditableSkills(newSkills);
                       // Clear candidates when removing skill
-                      setCandidates([]);
+                      setSuggestedCandidates([]);
+                      setAllProjectMembers([]);
                       if (currentStep === 2) {
                         setCurrentStep(1);
                       }
@@ -479,13 +485,13 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
     );
   };
 
-  // Render Step 3: Candidates
+  // Render Step 3: Candidates (2 sections: Suggested + All Members)
   const renderStepCandidates = () => {
     const candidateColumns = [
       {
         title: 'Người dùng',
         key: 'fullName',
-        width: 200,
+        width: '20%',
         render: (record: CandidateMatch) => (
           <div>
             <div><strong>{record.fullName || `User ${record.user_id}`}</strong></div>
@@ -497,9 +503,8 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
         title: 'Match Score',
         dataIndex: 'match_score',
         key: 'match_score',
-        width: 120,
         render: (score: number) => (
-          <Tag color={score >= 75 ? 'green' : score >= 50 ? 'orange' : 'red'}>
+          <Tag color={score >= 75 ? 'green' : score >= 50 ? 'orange' : score > 0 ? 'red' : 'default'}>
             {score}%
           </Tag>
         ),
@@ -509,7 +514,6 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
       {
         title: 'Workload',
         key: 'workload',
-        width: 120,
         render: (record: CandidateMatch) => {
           if (record.current_workload_hours == null) {
             return <Tag>N/A</Tag>;
@@ -525,14 +529,19 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
       },
       {
         title: 'Đánh giá',
-        dataIndex: 'overall_assessment',
-        key: 'overall_assessment',
-        ellipsis: true
+        dataIndex: 'workload_assessment',
+        key: 'workload_assessment',
+        width: "40%",
+        ellipsis: true,
+        render: (text:any) => ( 
+          <Tooltip placement="topLeft" title={text}>
+            {text}
+          </Tooltip>
+        )
       },
       {
         title: 'Khớp/Tổng',
         key: 'match_count',
-        width: 120,
         render: (record: CandidateMatch) => (
           <span>
             {record.skill_match_count}/{record.total_required_skills}
@@ -542,13 +551,11 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
       {
         title: '',
         key: 'action',
-        width: 100,
         render: (record: CandidateMatch) => (
           <Button
             type={selectedCandidate === record.user_id ? 'primary' : 'default'}
             size="small"
             onClick={() => setSelectedCandidate(record.user_id)}
-            disabled={record.can_take_more_work === false}
           >
             {selectedCandidate === record.user_id ? <CheckCircleOutlined /> : 'Chọn'}
           </Button>
@@ -556,65 +563,125 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
       }
     ];
 
-    const selectedCandidateData = candidates.find(c => c.user_id === selectedCandidate);
+    // Find selected candidate from both lists
+    const selectedCandidateData = 
+      suggestedCandidates.find((c: CandidateMatch) => c.user_id === selectedCandidate) || 
+      allProjectMembers.find((c: CandidateMatch) => c.user_id === selectedCandidate);
 
     return (
       <div>
-        <Alert
-          message={`Tìm thấy ${candidates.length} ứng viên phù hợp`}
-          type="success"
-          icon={<StarOutlined />}
+        {/* SECTION 1: Suggested Candidates (with matching skills) */}
+        <Card 
+          title={
+            <Space>
+              <StarOutlined style={{ color: '#faad14' }} />
+              <span>Người được đề xuất (có kỹ năng phù hợp)</span>
+            </Space>
+          }
+          extra={<Tag color="gold">{suggestedCandidates.length} người</Tag>}
           style={{ marginBottom: 16 }}
-        />
-
-        <Table
-          dataSource={candidates}
-          columns={candidateColumns}
-          rowKey={(record) => record.user_id}
-          pagination={false}
-          scroll={{ y: 300 }}
-          size="small"
-        />
-
-        {selectedCandidateData && (
-          <Card title="Chi tiết ứng viên đã chọn" style={{ marginTop: 16 }}>
-            {selectedCandidateData.workload_assessment && (
+        >
+          {suggestedCandidates.length > 0 ? (
+            <>
               <Alert
-                message="Đánh giá Workload"
-                description={selectedCandidateData.workload_assessment}
-                type={selectedCandidateData.can_take_more_work ? 'success' : 'warning'}
-                showIcon
+                message="Những người này có ít nhất 1 kỹ năng đáp ứng yêu cầu của công việc"
+                type="success"
+                icon={<CheckCircleOutlined />}
                 style={{ marginBottom: 12 }}
               />
-            )}
-            
-            <div style={{ marginBottom: 12 }}>
-              <strong>Kỹ năng khớp:</strong>
-              <div style={{ marginTop: 8 }}>
-                {selectedCandidateData.matched_skills.map((skill, idx) => (
-                  <Tag
-                    key={idx}
-                    color={skill.is_match ? 'green' : 'orange'}
-                    style={{ marginBottom: 4 }}
-                  >
-                    {skill.skill_name}: Yêu cầu {skill.required_level} / Có {skill.user_level}
-                  </Tag>
-                ))}
-              </div>
-            </div>
+              <Table
+                dataSource={suggestedCandidates}
+                columns={candidateColumns}
+                rowKey={(record) => record.user_id}
+                pagination={false}
+                scroll={{ y: 300 }}
+                size="small"
+              />
+            </>
+          ) : (
+            <Alert
+              message="Không có người nào đáp ứng yêu cầu kỹ năng"
+              description="Vui lòng chọn từ danh sách thành viên dự án bên dưới hoặc điều chỉnh yêu cầu kỹ năng"
+              type="warning"
+              showIcon
+            />
+          )}
+        </Card>
 
-            {selectedCandidateData.missing_skills.length > 0 && (
+        {/* SECTION 2: All Project Members */}
+        <Card 
+          title={
+            <Space>
+              <UserOutlined style={{ color: '#1890ff' }} />
+              <span>Tất cả thành viên trong dự án</span>
+            </Space>
+          }
+          extra={<Tag color="blue">{allProjectMembers.length} người</Tag>}
+        >
+          <Alert
+            message="Danh sách đầy đủ tất cả thành viên trong dự án, bạn có thể chọn bất kỳ ai"
+            type="info"
+            icon={<UserOutlined />}
+            style={{ marginBottom: 12 }}
+          />
+          <Table
+            dataSource={allProjectMembers}
+            columns={candidateColumns}
+            rowKey={(record) => record.user_id}
+            pagination={false}
+            scroll={{ y: 300 }}
+            size="small"
+          />
+        </Card>
+
+        {/* Selected Candidate Details */}
+        {selectedCandidateData && (
+          <Card title="Chi tiết người được chọn" style={{ marginTop: 16 }}>
+            <Space direction="vertical" style={{ width: '100%' }}>
               <div>
-                <strong>Kỹ năng thiếu:</strong>
-                <div style={{ marginTop: 8 }}>
-                  {selectedCandidateData.missing_skills.map((skill, idx) => (
-                    <Tag key={idx} color="red" style={{ marginBottom: 4 }}>
-                      {skill.skill_name} (Level {skill.required_level})
-                    </Tag>
-                  ))}
-                </div>
+                <strong>Tên:</strong> {selectedCandidateData.fullName || `User ${selectedCandidateData.user_id}`}
               </div>
-            )}
+              
+              {selectedCandidateData.workload_assessment && (
+                <Alert
+                  message="Đánh giá Workload"
+                  description={selectedCandidateData.workload_assessment}
+                  type={selectedCandidateData.can_take_more_work ? 'success' : 'warning'}
+                  showIcon
+                  style={{ marginBottom: 12 }}
+                />
+              )}
+              
+              {selectedCandidateData.matched_skills && selectedCandidateData.matched_skills.length > 0 && (
+                <div>
+                  <strong>Kỹ năng khớp:</strong>
+                  <div style={{ marginTop: 8 }}>
+                    {selectedCandidateData.matched_skills.map((skill: any, idx: number) => (
+                      <Tag
+                        key={idx}
+                        color={skill.is_match ? 'green' : 'orange'}
+                        style={{ marginBottom: 4 }}
+                      >
+                        {skill.skill_name}: Yêu cầu {skill.required_level} / Có {skill.user_level}
+                      </Tag>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedCandidateData.missing_skills && selectedCandidateData.missing_skills.length > 0 && (
+                <div>
+                  <strong>Kỹ năng thiếu:</strong>
+                  <div style={{ marginTop: 8 }}>
+                    {selectedCandidateData.missing_skills.map((skill: any, idx: number) => (
+                      <Tag key={idx} color="red" style={{ marginBottom: 4 }}>
+                        {skill.skill_name} (Level {skill.required_level})
+                      </Tag>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Space>
           </Card>
         )}
 

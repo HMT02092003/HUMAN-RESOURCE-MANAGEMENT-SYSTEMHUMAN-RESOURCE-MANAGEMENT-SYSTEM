@@ -2,7 +2,7 @@ import { Model, ModelObject } from 'objection';
 import ProjectModel from './ProjectModel.ts';
 
 export class TaskModel extends Model {
-  task_id!: string;
+  task_id!: string; // Changed from number to string
   project_id!: number;
   title!: string;
   description?: string | null;
@@ -29,13 +29,13 @@ export class TaskModel extends Model {
       type: 'object',
       required: ['title', 'project_id'],
       properties: {
-        task_id: { type: 'string', maxLength: 64 },
+        task_id: { type: 'string' }, // Changed from integer to string
         project_id: { type: 'integer' },
         title: { type: 'string', maxLength: 255 },
         description: { type: ['string', 'null'] },
         status: { 
           type: ['string', 'null'],
-          enum: ['todo', 'in_progress', 'review', 'done', null]
+          enum: ['todo', 'in_progress', 'done', null] // Removed 'review'
         },
         priority: { 
           type: ['string', 'null'],

@@ -40,32 +40,34 @@ ChartJS.register(
 );
 
 interface ProjectStatisticsProps {
-  statistics: ProjectStatistics;
+  statistics: any; // Task statistics from API
+  charts: any; // Chart data from API
 }
 
-const ProjectStatisticsComponent: React.FC<ProjectStatisticsProps> = ({ statistics }) => {
-  // Task Status Distribution Chart
+const ProjectStatisticsComponent: React.FC<ProjectStatisticsProps> = ({ statistics, charts }) => {
+  if (!statistics || !charts) {
+    return <div>Đang tải thống kê...</div>;
+  }
+
+  // Task Status Distribution Chart (3 statuses only)
   const taskStatusData = {
-    labels: ['Chưa bắt đầu', 'Đang thực hiện', 'Đang review', 'Hoàn thành'],
+    labels: ['Chưa bắt đầu', 'Đang thực hiện', 'Hoàn thành'],
     datasets: [
       {
         label: 'Số lượng công việc',
         data: [
-          statistics.todoTasks,
-          statistics.inProgressTasks,
-          statistics.reviewTasks,
-          statistics.completedTasks
+          statistics.by_status?.todo || 0,
+          statistics.by_status?.in_progress || 0,
+          statistics.by_status?.done || 0
         ],
         backgroundColor: [
           'rgba(201, 203, 207, 0.8)',
           'rgba(54, 162, 235, 0.8)',
-          'rgba(255, 206, 86, 0.8)',
           'rgba(75, 192, 192, 0.8)'
         ],
         borderColor: [
           'rgba(201, 203, 207, 1)',
           'rgba(54, 162, 235, 1)',
-          'rgba(255, 206, 86, 1)',
           'rgba(75, 192, 192, 1)'
         ],
         borderWidth: 1
@@ -79,10 +81,10 @@ const ProjectStatisticsComponent: React.FC<ProjectStatisticsProps> = ({ statisti
     datasets: [
       {
         data: [
-          statistics.tasksByPriority.low,
-          statistics.tasksByPriority.medium,
-          statistics.tasksByPriority.high,
-          statistics.tasksByPriority.urgent
+          statistics.by_priority?.low || 0,
+          statistics.by_priority?.medium || 0,
+          statistics.by_priority?.high || 0,
+          statistics.by_priority?.urgent || 0
         ],
         backgroundColor: [
           'rgba(153, 102, 255, 0.8)',
@@ -101,44 +103,30 @@ const ProjectStatisticsComponent: React.FC<ProjectStatisticsProps> = ({ statisti
     ]
   };
 
-  // Weekly Progress Chart
-  const weeklyProgressData = {
-    labels: statistics.weeklyProgress.map(w => w.week),
+  // Timeline Chart
+  const timelineData = {
+    labels: charts.timeline?.map((t: any) => t.date) || [],
     datasets: [
       {
-        label: 'Hoàn thành',
-        data: statistics.weeklyProgress.map(w => w.completed),
-        borderColor: 'rgb(75, 192, 192)',
-        backgroundColor: 'rgba(75, 192, 192, 0.5)',
+        label: 'Chưa bắt đầu',
+        data: charts.timeline?.map((t: any) => t.todo) || [],
+        borderColor: 'rgb(201, 203, 207)',
+        backgroundColor: 'rgba(201, 203, 207, 0.5)',
         tension: 0.3
       },
       {
-        label: 'Tạo mới',
-        data: statistics.weeklyProgress.map(w => w.created),
+        label: 'Đang thực hiện',
+        data: charts.timeline?.map((t: any) => t.in_progress) || [],
         borderColor: 'rgb(54, 162, 235)',
         backgroundColor: 'rgba(54, 162, 235, 0.5)',
         tension: 0.3
-      }
-    ]
-  };
-
-  // Member Workload Chart
-  const memberWorkloadData = {
-    labels: statistics.memberWorkload.map(m => m.member.name),
-    datasets: [
-      {
-        label: 'Công việc được giao',
-        data: statistics.memberWorkload.map(m => m.assignedTasks),
-        backgroundColor: 'rgba(54, 162, 235, 0.8)',
-        borderColor: 'rgba(54, 162, 235, 1)',
-        borderWidth: 1
       },
       {
-        label: 'Công việc hoàn thành',
-        data: statistics.memberWorkload.map(m => m.completedTasks),
-        backgroundColor: 'rgba(75, 192, 192, 0.8)',
-        borderColor: 'rgba(75, 192, 192, 1)',
-        borderWidth: 1
+        label: 'Hoàn thành',
+        data: charts.timeline?.map((t: any) => t.done) || [],
+        borderColor: 'rgb(75, 192, 192)',
+        backgroundColor: 'rgba(75, 192, 192, 0.5)',
+        tension: 0.3
       }
     ]
   };
@@ -171,7 +159,7 @@ const ProjectStatisticsComponent: React.FC<ProjectStatisticsProps> = ({ statisti
           <Card>
             <Statistic
               title="Tổng công việc"
-              value={statistics.totalTasks}
+              value={statistics.total_tasks || 0}
               prefix={<CheckCircleOutlined />}
               valueStyle={{ color: '#1890ff' }}
             />
@@ -181,13 +169,13 @@ const ProjectStatisticsComponent: React.FC<ProjectStatisticsProps> = ({ statisti
           <Card>
             <Statistic
               title="Hoàn thành"
-              value={statistics.completedTasks}
-              suffix={`/ ${statistics.totalTasks}`}
+              value={statistics.by_status?.done || 0}
+              suffix={`/ ${statistics.total_tasks || 0}`}
               prefix={<TrophyOutlined />}
               valueStyle={{ color: '#52c41a' }}
             />
             <Progress 
-              percent={statistics.completionRate} 
+              percent={Math.round(statistics.completion_rate || 0)} 
               size="small" 
               status="active"
               style={{ marginTop: 8 }}
@@ -198,7 +186,7 @@ const ProjectStatisticsComponent: React.FC<ProjectStatisticsProps> = ({ statisti
           <Card>
             <Statistic
               title="Đang thực hiện"
-              value={statistics.inProgressTasks}
+              value={statistics.by_status?.in_progress || 0}
               prefix={<ClockCircleOutlined />}
               valueStyle={{ color: '#faad14' }}
             />
@@ -207,10 +195,10 @@ const ProjectStatisticsComponent: React.FC<ProjectStatisticsProps> = ({ statisti
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="Quá hạn"
-              value={statistics.overdueTasks}
+              title="Chưa bắt đầu"
+              value={statistics.by_status?.todo || 0}
               prefix={<ExclamationCircleOutlined />}
-              valueStyle={{ color: statistics.overdueTasks > 0 ? '#ff4d4f' : '#52c41a' }}
+              valueStyle={{ color: '#8c8c8c' }}
             />
           </Card>
         </Col>
@@ -221,8 +209,8 @@ const ProjectStatisticsComponent: React.FC<ProjectStatisticsProps> = ({ statisti
         <Col xs={24} sm={12} lg={8}>
           <Card>
             <Statistic
-              title="Thời gian ước tính"
-              value={statistics.totalHoursEstimated}
+              title="Thời gian ước tính (tổng)"
+              value={statistics.hours?.total_estimated || 0}
               suffix="giờ"
               valueStyle={{ color: '#1890ff' }}
             />
@@ -231,8 +219,8 @@ const ProjectStatisticsComponent: React.FC<ProjectStatisticsProps> = ({ statisti
         <Col xs={24} sm={12} lg={8}>
           <Card>
             <Statistic
-              title="Thời gian thực tế"
-              value={statistics.totalHoursActual}
+              title="Thời gian thực tế (tổng)"
+              value={statistics.hours?.total_actual || 0}
               suffix="giờ"
               valueStyle={{ color: '#722ed1' }}
             />
@@ -241,13 +229,11 @@ const ProjectStatisticsComponent: React.FC<ProjectStatisticsProps> = ({ statisti
         <Col xs={24} sm={12} lg={8}>
           <Card>
             <Statistic
-              title="Hiệu suất"
-              value={statistics.efficiency}
-              suffix="%"
-              prefix={statistics.efficiency <= 100 ? <TrophyOutlined /> : <FireOutlined />}
-              valueStyle={{ 
-                color: statistics.efficiency <= 100 ? '#52c41a' : '#ff4d4f' 
-              }}
+              title="Hoàn thành ước tính"
+              value={statistics.hours?.completed_estimated || 0}
+              suffix="giờ"
+              prefix={<TrophyOutlined />}
+              valueStyle={{ color: '#52c41a' }}
             />
           </Card>
         </Col>
@@ -273,79 +259,62 @@ const ProjectStatisticsComponent: React.FC<ProjectStatisticsProps> = ({ statisti
           </Card>
         </Col>
 
-        {/* Weekly Progress */}
-        <Col xs={24} lg={12}>
-          <Card title="Tiến độ theo tuần" style={{ height: 400 }}>
+        {/* Timeline Progress */}
+        <Col xs={24} lg={24}>
+          <Card title="Tiến độ theo thời gian" style={{ height: 400 }}>
             <div style={{ height: 300 }}>
-              <Line data={weeklyProgressData} options={chartOptions} />
-            </div>
-          </Card>
-        </Col>
-
-        {/* Member Workload */}
-        <Col xs={24} lg={12}>
-          <Card title="Khối lượng công việc theo thành viên" style={{ height: 400 }}>
-            <div style={{ height: 300 }}>
-              <Bar data={memberWorkloadData} options={chartOptions} />
+              <Line data={timelineData} options={chartOptions} />
             </div>
           </Card>
         </Col>
       </Row>
 
-      {/* Member Details */}
-      <Card 
-        title={
-          <>
-            <TeamOutlined style={{ marginRight: 8 }} />
-            Chi tiết thành viên
-          </>
-        } 
-        style={{ marginTop: 16 }}
-      >
-        <Row gutter={[16, 16]}>
-          {statistics.memberWorkload.map((workload) => (
-            <Col xs={24} sm={12} md={8} key={workload.member.id}>
-              <Card 
-                size="small" 
-                hoverable
-                style={{ borderLeft: '3px solid #1890ff' }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
-                  <img 
-                    src={workload.member.avatar} 
-                    alt={workload.member.name}
-                    style={{ 
-                      width: 40, 
-                      height: 40, 
-                      borderRadius: '50%', 
-                      marginRight: 12 
-                    }}
-                  />
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{workload.member.name}</div>
-                    <Tag color="blue" style={{ margin: 0 }}>
-                      {workload.member.role}
-                    </Tag>
+      {/* Member Details - Using by_assignee data */}
+      {statistics.by_assignee && statistics.by_assignee.length > 0 && (
+        <Card 
+          title={
+            <>
+              <TeamOutlined style={{ marginRight: 8 }} />
+              Chi tiết công việc theo thành viên
+            </>
+          } 
+          style={{ marginTop: 16 }}
+        >
+          <Row gutter={[16, 16]}>
+            {statistics.by_assignee.map((assignee: any) => (
+              <Col xs={24} sm={12} md={8} key={assignee.assignee_id}>
+                <Card 
+                  size="small" 
+                  hoverable
+                  style={{ borderLeft: '3px solid #1890ff' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{assignee.assignee_name || 'Chưa có tên'}</div>
+                      <Tag color="blue" style={{ margin: 0 }}>
+                        ID: {assignee.assignee_id}
+                      </Tag>
+                    </div>
                   </div>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Được giao: <strong>{workload.assignedTasks}</strong></span>
-                  <span>Hoàn thành: <strong style={{ color: '#52c41a' }}>
-                    {workload.completedTasks}
-                  </strong></span>
-                </div>
-                {workload.assignedTasks > 0 && (
-                  <Progress
-                    percent={Math.round((workload.completedTasks / workload.assignedTasks) * 100)}
-                    size="small"
-                    style={{ marginTop: 8 }}
-                  />
-                )}
-              </Card>
-            </Col>
-          ))}
-        </Row>
-      </Card>
+                  <div style={{ marginBottom: 8 }}>
+                    <div><strong>Tổng công việc:</strong> {assignee.total_tasks}</div>
+                    <div><strong>Chưa bắt đầu:</strong> {assignee.todo}</div>
+                    <div><strong>Đang thực hiện:</strong> {assignee.in_progress}</div>
+                    <div><strong>Hoàn thành:</strong> <span style={{ color: '#52c41a' }}>{assignee.done}</span></div>
+                  </div>
+                  {assignee.total_tasks > 0 && (
+                    <Progress
+                      percent={Math.round((assignee.done / assignee.total_tasks) * 100)}
+                      size="small"
+                      style={{ marginTop: 8 }}
+                    />
+                  )}
+                </Card>
+              </Col>
+            ))}
+          </Row>
+        </Card>
+      )}
     </div>
   );
 };

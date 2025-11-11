@@ -35,6 +35,7 @@ export class ProjectTimelineModel extends Model {
             'member_added', 
             'member_removed', 
             'task_created',
+            'task_assigned',
             'task_completed',
             'milestone_reached',
             'budget_updated',

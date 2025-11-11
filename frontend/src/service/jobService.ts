@@ -2,9 +2,9 @@ import api from './apiService';
 
 const JOB_SERVICE_PREFIX = '/jobs'; // proxied by API Gateway to job-service
 
-// AI Analysis
+// AI Analysis - Updated to use /projects endpoints
 export const analyzeJob = (payload: { title: string; description: string; project_id?: string }) => {
-  return api.post(`${JOB_SERVICE_PREFIX}/jobs/analyze`, payload);
+  return api.post(`${JOB_SERVICE_PREFIX}/projects/analyze-task`, payload);
 };
 
 export const findCandidates = (payload: {
@@ -21,11 +21,11 @@ export const findCandidates = (payload: {
   max_results?: number;
   check_workload?: boolean;
 }) => {
-  return api.post(`${JOB_SERVICE_PREFIX}/jobs/find-candidates`, payload);
+  return api.post(`${JOB_SERVICE_PREFIX}/projects/find-candidates`, payload);
 };
 
 export const createJobWithAnalysis = (payload: any) => {
-  return api.post(`${JOB_SERVICE_PREFIX}/jobs/create-with-analysis`, payload);
+  return api.post(`${JOB_SERVICE_PREFIX}/projects/create-task-with-analysis`, payload);
 };
 
 // CV Management
@@ -66,8 +66,44 @@ export const deleteProject = (projectIdsOrPayload: string[] | { ids: string[] })
   return api.delete(`${JOB_SERVICE_PREFIX}/projects`, { data: payload });
 };
 
-export const getUserTasks = (userId: string) => {
-  return api.get(`${JOB_SERVICE_PREFIX}/jobs/users/${userId}/tasks`);
+export const getUserTasks = (projectId: string, userId: string) => {
+  return api.get(`${JOB_SERVICE_PREFIX}/projects/${projectId}/users/${userId}/tasks`);
+};
+
+// Task Management APIs - Updated to use /projects endpoints
+export const getProjectTasks = (projectId: string, params?: any) => {
+  return api.get(`${JOB_SERVICE_PREFIX}/projects/${projectId}/tasks`, { params });
+};
+
+export const getProjectTaskStatistics = (projectId: string) => {
+  return api.get(`${JOB_SERVICE_PREFIX}/projects/${projectId}/tasks/statistics`);
+};
+
+// Update task status
+export const updateTaskStatus = (projectId: string, taskId: string, status: 'todo' | 'in_progress' | 'done') => {
+  return api.put(`${JOB_SERVICE_PREFIX}/projects/${projectId}/tasks/${taskId}/status`, { status });
+};
+
+// Get current user's tasks with filters
+export const getMyTasks = (params?: {
+  status?: string; // 'todo', 'in_progress', 'done' hoặc nhiều giá trị cách nhau bởi dấu phẩy: 'todo,in_progress'
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  project_id?: string;
+}) => {
+  return api.get(`${JOB_SERVICE_PREFIX}/tasks/my-tasks`, { params });
+};
+
+// Project Tab APIs - Updated to use /projects endpoints
+export const getProjectOverview = (projectId: string) => {
+  return api.get(`${JOB_SERVICE_PREFIX}/projects/${projectId}/overview`);
+};
+
+export const getProjectMembers = (projectId: string) => {
+  return api.get(`${JOB_SERVICE_PREFIX}/projects/${projectId}/members`);
+};
+
+export const getProjectTimeline = (projectId: string, params?: { limit?: number }) => {
+  return api.get(`${JOB_SERVICE_PREFIX}/projects/${projectId}/timeline`, { params });
 };
 
 export default {
@@ -84,4 +120,11 @@ export default {
   updateProject,
   deleteProject,
   getUserTasks,
+  getProjectTasks,
+  getProjectTaskStatistics,
+  updateTaskStatus,
+  getMyTasks,
+  getProjectOverview,
+  getProjectMembers,
+  getProjectTimeline,
 };

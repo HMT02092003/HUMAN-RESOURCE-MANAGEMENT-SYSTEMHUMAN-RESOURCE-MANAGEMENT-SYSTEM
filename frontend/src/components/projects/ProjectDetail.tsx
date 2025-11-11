@@ -54,35 +54,64 @@ const statusLabels = {
 const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [realProject, setRealProject] = useState<any>(null); // Real API data from jobService
-  const [statistics, setStatistics] = useState<ProjectStatistics | null>(null);
-  const [fakeTasks, setFakeTasks] = useState<Task[]>([]); // Fake tasks for TaskBoard
+  const [activeTab, setActiveTab] = useState('overview');
+  const [realProject, setRealProject] = useState<any>(null);
+  const [statistics, setStatistics] = useState<any>(null);
+  const [members, setMembers] = useState<any[]>([]);
+  const [timeline, setTimeline] = useState<any[]>([]);
 
   useEffect(() => {
-    loadProjectData();
+    loadProjectOverview();
   }, [projectId]);
 
-  const loadProjectData = async () => {
+  useEffect(() => {
+    // Gọi API khi chuyển tab
+    if (activeTab === 'statistics') {
+      loadStatistics();
+    } else if (activeTab === 'members') {
+      loadMembers();
+    } else if (activeTab === 'timeline') {
+      loadTimeline();
+    }
+  }, [activeTab]);
+
+  const loadProjectOverview = async () => {
     try {
       setLoading(true);
-      
-      // Load real project data from jobService API
-      const realResponse = await jobService.getProjectById(projectId);
-      const realData = realResponse?.data?.data || realResponse?.data || null;
-      setRealProject(realData);
-      
-      // Load fake statistics and tasks from projectService (mock)
-      const [statsData, fakeProject] = await Promise.all([
-        projectService.getProjectStatistics(projectId),
-        projectService.getProjectById(projectId)
-      ]);
-      
-      setStatistics(statsData);
-      setFakeTasks(fakeProject?.tasks || []);
+      const response = await jobService.getProjectOverview(projectId);
+      const data = response?.data?.project || null;
+      setRealProject(data);
     } catch (error) {
-      console.error('Failed to load project data:', error);
+      console.error('Failed to load project:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadStatistics = async () => {
+    try {
+      const response = await jobService.getProjectTaskStatistics(projectId);
+      setStatistics(response?.data);
+    } catch (error) {
+      console.error('Failed to load statistics:', error);
+    }
+  };
+
+  const loadMembers = async () => {
+    try {
+      const response = await jobService.getProjectMembers(projectId);
+      setMembers(response?.data?.members || []);
+    } catch (error) {
+      console.error('Failed to load members:', error);
+    }
+  };
+
+  const loadTimeline = async () => {
+    try {
+      const response = await jobService.getProjectTimeline(projectId, { limit: 50 });
+      setTimeline(response?.data?.events || []);
+    } catch (error) {
+      console.error('Failed to load timeline:', error);
     }
   };
 
@@ -216,23 +245,22 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
 
   const renderMembers = () => (
     <Row gutter={[16, 16]}>
-      {(realProject.members || []).map((member: any) => {
-        const user = member.user_id || member;
+      {members.map((member: any) => {
         return (
-          <Col xs={24} sm={12} md={8} lg={6} key={user.id}>
+          <Col xs={24} sm={12} md={8} lg={6} key={member.user_id}>
             <Card hoverable>
               <div style={{ textAlign: 'center' }}>
                 <Avatar 
                   size={64} 
-                  src={user.identificationPhoto}
+                  src={member.avatar}
                   style={{ marginBottom: 12 }}
-                >{!user.identificationPhoto && getInitials(user.fullName || user.username)}</Avatar>
+                >{!member.avatar && getInitials(member.fullName)}</Avatar>
                 <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>
-                  {user.fullName || user.username}
+                  {member.fullName}
                 </div>
                 <Tag color="blue">{member.role}</Tag>
                 <div style={{ fontSize: 12, color: '#999', marginTop: 8 }}>
-                  {user.email}
+                  {member.email}
                 </div>
               </div>
             </Card>
@@ -245,15 +273,11 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
   const renderTimeline = () => (
     <Card>
       <Timeline mode="left">
-        {(realProject.timeline || []).map((event: any) => {
+        {timeline.map((event: any) => {
           let icon;
           let color;
           
-          switch (event.event_type) {
-            case 'created':
-              icon = <ProjectOutlined />;
-              color = 'blue';
-              break;
+          switch (event.type) {
             case 'milestone':
               icon = <ProjectOutlined />;
               color = 'blue';
@@ -272,9 +296,9 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
               color = 'gray';
           }
 
-          const user = event.user_id || {};
+          const user = event.user || {};
           return (
-            <Timeline.Item key={event.event_id} dot={icon} color={color}>
+            <Timeline.Item key={event.id} dot={icon} color={color}>
               <div>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>
                   {event.title}
@@ -283,11 +307,11 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
                   {event.description}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {user && (
+                  {user && user.id && (
                     <>
-                      <Avatar size="small" src={user.identificationPhoto}>{!user.identificationPhoto && getInitials(user.fullName || user.username)}</Avatar>
+                      <Avatar size="small" src={user.avatar}>{!user.avatar && getInitials(user.fullName)}</Avatar>
                       <span style={{ fontSize: 12, color: '#999' }}>
-                        {user.fullName || user.username} • {dayjs(event.event_time).format('DD/MM/YYYY HH:mm')}
+                        {user.fullName} • {dayjs(event.timestamp).format('DD/MM/YYYY HH:mm')}
                       </span>
                     </>
                   )}
@@ -310,40 +334,35 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
       key: 'statistics',
       label: 'Thống kê',
       children: statistics ? (
-        <ProjectStatisticsComponent statistics={statistics} />
+        <ProjectStatisticsComponent statistics={statistics.statistics} charts={statistics.charts} />
       ) : (
-        <div>Đang tải thống kê...</div>
+        <div style={{ textAlign: 'center', padding: '50px' }}>
+          <Spin tip="Đang tải thống kê..." />
+        </div>
       )
     },
     {
       key: 'tasks',
       label: 'Công việc',
-      children: (
-        <TaskBoard 
-          tasks={fakeTasks}
-          members={realProject.members || []}
-          projectId={realProject.project_id}
-          onTaskUpdate={(taskId: string, updates: any) => {
-            console.log('Update task:', taskId, updates);
-            // TODO: Implement task update
-          }}
-          onTaskCreate={(task: any) => {
-            console.log('Create task:', task);
-            // TODO: Implement task creation
-            loadProjectData(); // Reload data
-          }}
-        />
-      )
+      children: <TaskBoard projectId={projectId} />
     },
     {
       key: 'members',
       label: 'Thành viên',
-      children: renderMembers()
+      children: members.length > 0 ? renderMembers() : (
+        <div style={{ textAlign: 'center', padding: '50px' }}>
+          <Spin tip="Đang tải thành viên..." />
+        </div>
+      )
     },
     {
       key: 'timeline',
       label: 'Timeline',
-      children: renderTimeline()
+      children: timeline.length > 0 ? renderTimeline() : (
+        <div style={{ textAlign: 'center', padding: '50px' }}>
+          <Spin tip="Đang tải timeline..." />
+        </div>
+      )
     }
   ];
 
@@ -359,7 +378,9 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
       </div>
 
       <Tabs 
-        defaultActiveKey="overview" 
+        defaultActiveKey="overview"
+        activeKey={activeTab}
+        onChange={setActiveTab}
         items={tabItems}
         size="large"
       />

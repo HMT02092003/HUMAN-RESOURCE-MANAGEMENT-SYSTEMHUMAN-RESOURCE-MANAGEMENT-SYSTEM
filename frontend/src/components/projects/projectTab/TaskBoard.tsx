@@ -1,32 +1,30 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Card, Tag, Avatar, Button, Modal, Form, Input, Select, DatePicker, Space, Dropdown, MenuProps } from 'antd';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, Tag, Avatar, Button, Modal, Form, Input, Select, DatePicker, Space, Popconfirm, message, Spin } from 'antd';
 import {
-  PlusOutlined,
   ClockCircleOutlined,
   UserOutlined,
   FlagOutlined,
   RobotOutlined,
-  DownOutlined
+  TeamOutlined,
+  PlayCircleOutlined,
+  CheckCircleOutlined
 } from '@ant-design/icons';
 import { Task, ProjectMember } from '@/types/project';
 import TaskCreateWithAI from './TaskCreateWithAI';
+import jobService from '@/service/jobService';
 import dayjs from 'dayjs';
 
 const { TextArea } = Input;
 const { Option } = Select;
 
 interface TaskBoardProps {
-  tasks: Task[];
-  members: ProjectMember[];
-  projectId: string; // Add project ID
-  onTaskUpdate?: (taskId: string, updates: Partial<Task>) => void;
-  onTaskCreate?: (task: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  projectId: string;
 }
 
 interface Column {
-  id: Task['status'];
+  id: 'todo' | 'in_progress' | 'done';
   title: string;
   color: string;
 }
@@ -34,7 +32,6 @@ interface Column {
 const columns: Column[] = [
   { id: 'todo', title: 'Chưa bắt đầu', color: '#d9d9d9' },
   { id: 'in_progress', title: 'Đang thực hiện', color: '#1890ff' },
-  { id: 'review', title: 'Đang review', color: '#faad14' },
   { id: 'done', title: 'Hoàn thành', color: '#52c41a' }
 ];
 
@@ -52,17 +49,73 @@ const priorityLabels = {
   urgent: 'Khẩn cấp'
 };
 
-const TaskBoard: React.FC<TaskBoardProps> = ({ 
-  tasks, 
-  members,
-  projectId,
-  onTaskUpdate,
-  onTaskCreate 
-}) => {
+const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
+  const [loading, setLoading] = useState(false);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [members, setMembers] = useState<ProjectMember[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isAIModalVisible, setIsAIModalVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [viewMode, setViewMode] = useState<'all' | 'me'>('all');
+  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
   const [form] = Form.useForm();
+
+  useEffect(() => {
+    if (projectId) {
+      loadTasksAndMembers();
+    }
+  }, [projectId, viewMode]);
+
+  const loadTasksAndMembers = async () => {
+    try {
+      setLoading(true);
+      const params = viewMode === 'me' ? { assignee_id: 'me' } : {};
+      const [tasksRes, membersRes] = await Promise.all([
+        jobService.getProjectTasks(projectId, params),
+        jobService.getProjectMembers(projectId)
+      ]);
+
+      // Map API data to Task format
+      const apiTasks = tasksRes.data.tasks || [];
+      const mappedTasks: Task[] = apiTasks.map((t: any) => ({
+        id: t.task_id,
+        title: t.title,
+        description: t.description,
+        status: t.status,
+        priority: t.priority,
+        assignee: t.assignee_id ? {
+          id: t.assignee_id,
+          name: t.assignee_name,
+          email: t.assignee_email,
+          role: '',
+          avatar: ''
+        } : undefined,
+        dueDate: t.due_date,
+        createdAt: t.created_at,
+        updatedAt: t.updated_at,
+        tags: t.tags || [],
+        estimatedHours: t.estimated_hours || 0,
+        actualHours: t.actual_hours || 0
+      }));
+
+      // Map API data to ProjectMember format
+      const apiMembers = membersRes.data.members || [];
+      const mappedMembers: ProjectMember[] = apiMembers.map((m: any) => ({
+        id: m.user_id,
+        name: m.fullName,
+        email: m.email,
+        role: m.role || '',
+        avatar: m.avatar || ''
+      }));
+
+      setTasks(mappedTasks);
+      setMembers(mappedMembers);
+    } catch (error: any) {
+      message.error(`Lỗi tải dữ liệu: ${error.response?.data?.details || error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getTasksByStatus = (status: Task['status']) => {
     return tasks.filter(task => task.status === status);
@@ -87,26 +140,9 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
   const handleModalOk = async () => {
     try {
       const values = await form.validateFields();
-      const assignee = members.find(m => m.id === values.assigneeId);
-      
-      const taskData = {
-        title: values.title,
-        description: values.description,
-        status: values.status,
-        priority: values.priority,
-        assignee,
-        dueDate: values.dueDate ? values.dueDate.format('YYYY-MM-DD') : '',
-        tags: values.tags || [],
-        estimatedHours: values.estimatedHours || 0,
-        actualHours: selectedTask?.actualHours || 0
-      };
-
-      if (selectedTask) {
-        onTaskUpdate?.(selectedTask.id, taskData);
-      } else {
-        onTaskCreate?.(taskData);
-      }
-
+      // For now, just close modal and show success message
+      // TODO: Implement update task API
+      message.success('Chức năng cập nhật task sẽ được implement sau');
       setIsModalVisible(false);
       form.resetFields();
     } catch (error) {
@@ -114,9 +150,25 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
     }
   };
 
-  const handleStatusChange = (taskId: string, newStatus: Task['status']) => {
-    onTaskUpdate?.(taskId, { status: newStatus });
-  };
+  const handleStatusChange = useCallback(async (taskId: string, newStatus: 'todo' | 'in_progress' | 'done') => {
+    try {
+      setUpdatingTaskId(taskId);
+      const response = await jobService.updateTaskStatus(projectId, taskId, newStatus);
+      
+      if (response.data.success) {
+        message.success('Cập nhật trạng thái thành công!');
+        await loadTasksAndMembers();
+      }
+    } catch (error: any) {
+      message.error(`Lỗi cập nhật: ${error.response?.data?.details || error.message}`);
+    } finally {
+      setUpdatingTaskId(null);
+    }
+  }, [projectId]);
+
+  const handleToggleViewMode = useCallback(() => {
+    setViewMode(prev => prev === 'all' ? 'me' : 'all');
+  }, []);
 
   const renderTaskCard = (task: Task) => (
     <Card
@@ -184,94 +236,141 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
       </div>
 
       {/* Status Change Buttons */}
-      <div style={{ marginTop: 8, display: 'flex', gap: 4 }}>
-        {columns.map(col => {
-          if (col.id !== task.status) {
-            return (
-              <Button
-                key={col.id}
-                size="small"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleStatusChange(task.id, col.id);
-                }}
-                style={{ fontSize: 11, padding: '0 8px' }}
-              >
-                → {col.title}
-              </Button>
-            );
-          }
-          return null;
-        })}
+      <div 
+        style={{ marginTop: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {task.status !== 'in_progress' && task.status !== 'done' && (
+          <Popconfirm
+            title="Bắt đầu thực hiện?"
+            onConfirm={() => handleStatusChange(task.id, 'in_progress')}
+            okText="Có"
+            cancelText="Không"
+          >
+            <Button
+              type="primary"
+              size="small"
+              icon={<PlayCircleOutlined />}
+              loading={updatingTaskId === task.id}
+              disabled={updatingTaskId !== null && updatingTaskId !== task.id}
+              style={{ fontSize: 11 }}
+            >
+              Đang làm
+            </Button>
+          </Popconfirm>
+        )}
+        
+        {task.status !== 'done' && (
+          <Popconfirm
+            title="Đánh dấu hoàn thành?"
+            onConfirm={() => handleStatusChange(task.id, 'done')}
+            okText="Có"
+            cancelText="Không"
+          >
+            <Button
+              type="primary"
+              size="small"
+              icon={<CheckCircleOutlined />}
+              loading={updatingTaskId === task.id}
+              disabled={updatingTaskId !== null && updatingTaskId !== task.id}
+              style={{ fontSize: 11, backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+            >
+              Hoàn thành
+            </Button>
+          </Popconfirm>
+        )}
+        
+        {task.status === 'done' && (
+          <Tag color="success" icon={<CheckCircleOutlined />}>
+            Đã hoàn thành
+          </Tag>
+        )}
       </div>
     </Card>
   );
 
   return (
     <div className="task-board">
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <Button 
-          type="default" 
-          icon={<PlusOutlined />}
-          onClick={handleCreateTask}
-        >
-          Tạo thủ công
-        </Button>
-        <Button 
-          type="primary" 
-          icon={<RobotOutlined />}
-          onClick={() => setIsAIModalVisible(true)}
-        >
-          Tạo với AI
-        </Button>
+      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Space>
+          {viewMode === 'me' && (
+            <Tag color="blue" icon={<UserOutlined />}>
+              Công việc của tôi
+            </Tag>
+          )}
+        </Space>
+        <Space>
+          <Button 
+            type={viewMode === 'me' ? 'primary' : 'default'}
+            icon={viewMode === 'me' ? <UserOutlined /> : <TeamOutlined />}
+            onClick={handleToggleViewMode}
+            loading={loading}
+          >
+            {viewMode === 'me' ? 'Xem tất cả' : 'Công việc của tôi'}
+          </Button>
+          {/* Manual creation removed - creation is available via AI only */}
+          <Button 
+            type="primary" 
+            icon={<RobotOutlined />}
+            onClick={() => setIsAIModalVisible(true)}
+          >
+            Tạo với AI
+          </Button>
+        </Space>
       </div>
 
-      <div style={{ display: 'flex', gap: 16, overflowX: 'auto' }}>
-        {columns.map(column => {
-          const columnTasks = getTasksByStatus(column.id);
-          return (
-            <div
-              key={column.id}
-              style={{
-                flex: '1 1 300px',
-                minWidth: 300,
-                backgroundColor: '#f5f5f5',
-                borderRadius: 8,
-                padding: 12
-              }}
-            >
-              <div 
-                style={{ 
-                  marginBottom: 12,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between'
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '50px' }}>
+          <Spin size="large" tip="Đang tải công việc..." />
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 16, overflowX: 'auto' }}>
+          {columns.map(column => {
+            const columnTasks = getTasksByStatus(column.id);
+            return (
+              <div
+                key={column.id}
+                style={{
+                  flex: '1 1 300px',
+                  minWidth: 300,
+                  backgroundColor: '#f5f5f5',
+                  borderRadius: 8,
+                  padding: 12
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <div
-                    style={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: '50%',
-                      backgroundColor: column.color,
-                      marginRight: 8
-                    }}
-                  />
-                  <span style={{ fontWeight: 600, fontSize: 14 }}>
-                    {column.title}
-                  </span>
+                <div 
+                  style={{ 
+                    marginBottom: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <div
+                      style={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: '50%',
+                        backgroundColor: column.color,
+                        marginRight: 8
+                      }}
+                    />
+                    <span style={{ fontWeight: 600, fontSize: 14 }}>
+                      {column.title}
+                    </span>
+                  </div>
+                  <Tag color={column.color}>{columnTasks.length}</Tag>
                 </div>
-                <Tag color={column.color}>{columnTasks.length}</Tag>
+                
+                <div style={{ minHeight: 100 }}>
+                  {columnTasks.map(task => renderTaskCard(task))}
+                </div>
               </div>
-              
-              <div style={{ minHeight: 100 }}>
-                {columnTasks.map(task => renderTaskCard(task))}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Task Modal */}
       <Modal
@@ -395,8 +494,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({
         onCancel={() => setIsAIModalVisible(false)}
         onSuccess={() => {
           setIsAIModalVisible(false);
-          // Reload tasks if needed
-          onTaskCreate?.({} as any); // Trigger parent reload
+          loadTasksAndMembers(); // Reload tasks after creation
         }}
       />
     </div>
