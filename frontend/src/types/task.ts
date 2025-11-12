@@ -14,7 +14,8 @@ export interface Task {
   assignee_name?: string;
   assignee_email?: string;
   due_date?: string;
-  estimated_hours?: number;
+  estimated_days?: number; // canonical: days (1 day = 8 hours)
+  estimated_hours?: number; // kept for backward compatibility
   actual_hours?: number;
   tags?: string[];
   created_at?: string;

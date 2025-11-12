@@ -27,6 +27,8 @@ router.get('/tasks/my-tasks', authenticateToken, ProjectController.getMyTasks);
 router.get('/projects/:project_id/tasks', authenticateToken, ProjectController.getProjectTasks);
 router.get('/projects/:project_id/tasks/statistics', authenticateToken, ProjectController.getProjectTaskStatistics);
 router.put('/projects/:project_id/tasks/:task_id/status', authenticateToken, ProjectController.updateTaskStatus);
+router.put('/projects/:project_id/tasks/:task_id', authenticateToken, ProjectController.updateTask);
+router.delete('/projects/:project_id/tasks/:task_id', authenticateToken, ProjectController.deleteTask);
 
 // Project Tab endpoints
 router.get('/projects/:project_id/overview', authenticateToken, ProjectController.getProjectOverview);

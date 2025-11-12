@@ -6,7 +6,7 @@ import { SkillModel } from '../Models/SkillModel.ts';
 import { UserSkillModel } from '../Models/UserSkillModel.ts';
 import { getTextFromPdf } from './pdfParser.ts';
 import { analyzeCvText, GeminiResponse } from './geminiService.ts';
-import { findOrCreateNormalizedSkill } from './skillNormalizationService.ts';
+import { findOrCreateNormalizedSkill } from './geminiService.ts';
 
 export function triggerCvAnalysis(cvId: string): void {
   processCv(cvId).catch((err) => {
@@ -20,6 +20,10 @@ export async function processCv(cvId: string): Promise<void> {
       const cv = await CvModel.query(trx).findById(cvId);
       if (!cv) {
         throw new Error(`CV not found: ${cvId}`);
+      }
+
+      if (!cv.file_path) {
+        throw new Error(`CV ${cvId} has no file_path`);
       }
 
       const absPath = path.resolve(process.cwd(), cv.file_path);

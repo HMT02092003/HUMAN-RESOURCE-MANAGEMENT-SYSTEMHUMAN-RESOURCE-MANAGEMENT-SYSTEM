@@ -8,7 +8,7 @@ import axios from 'axios';
 const BASE_URL = 'http://localhost:4008/api';
 
 // Valid test token (generated with JWT_SECRET)
-const TEST_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEsInVzZXJuYW1lIjoidGVzdC11c2VyIiwicGVybWlzc2lvbnMiOltdLCJyb2xlSWQiOjEsImlhdCI6MTc2Mjc1ODM5MywiZXhwIjoxNzYyODQ0NzkzfQ.6WhNzE624pd-fXBzRLZhH19AuMm-wU1jO5L4UAy8lqc';
+const TEST_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOjEsInVzZXJuYW1lIjoidGVzdC11c2VyIiwicGVybWlzc2lvbnMiOltdLCJyb2xlSWQiOjEsImlhdCI6MTc2Mjk3MzY5MywiZXhwIjoxNzYzMDYwMDkzfQ.3hOCwl00pZvXzHbcn4QG8x5b31wNJwKs2I2psofC6DI';
 
 // Test data
 const testData = {
@@ -37,7 +37,7 @@ async function testFindCandidates() {
   
   try {
     const response = await axios.post(
-      `${BASE_URL}/jobs/find-candidates`,
+      `${BASE_URL}/projects/find-candidates`,
       testData,
       {
         headers: {
@@ -89,7 +89,7 @@ async function testFindCandidatesWithDifferentSkills() {
   
   try {
     const response = await axios.post(
-      `${BASE_URL}/jobs/find-candidates`,
+      `${BASE_URL}/projects/find-candidates`,
       testDataD,
       {
         headers: {
@@ -145,7 +145,7 @@ async function testCreateJob() {
   
   try {
     const response = await axios.post(
-      `${BASE_URL}/jobs/create-with-analysis`,
+      `${BASE_URL}/projects/create-task-with-analysis`,
       createJobData,
       {
         headers: {

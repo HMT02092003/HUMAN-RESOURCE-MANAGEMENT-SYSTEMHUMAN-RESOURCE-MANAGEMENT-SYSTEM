@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Card, Tag, Avatar, Button, Modal, Form, Input, Select, DatePicker, Space, Popconfirm, message, Spin } from 'antd';
+import { Card, Tag, Avatar, Button, Modal, Form, Input, Select, DatePicker, Space, Popconfirm, message, Spin, Tooltip } from 'antd';
 import {
   ClockCircleOutlined,
   UserOutlined,
@@ -9,11 +9,14 @@ import {
   RobotOutlined,
   TeamOutlined,
   PlayCircleOutlined,
-  CheckCircleOutlined
+  CheckCircleOutlined,
+  CloseOutlined,
+  OpenAIOutlined
 } from '@ant-design/icons';
 import { Task, ProjectMember } from '@/types/project';
 import TaskCreateWithAI from './TaskCreateWithAI';
 import jobService from '@/service/jobService';
+import { attendanceService } from '@/service/attendanceService';
 import dayjs from 'dayjs';
 
 const { TextArea } = Input;
@@ -55,16 +58,63 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isAIModalVisible, setIsAIModalVisible] = useState(false);
+  const [isManualModalVisible, setIsManualModalVisible] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [viewMode, setViewMode] = useState<'all' | 'me'>('all');
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
   const [form] = Form.useForm();
+  const [manualForm] = Form.useForm();
+  const [workingDays, setWorkingDays] = useState<{
+    monday: boolean;
+    tuesday: boolean;
+    wednesday: boolean;
+    thursday: boolean;
+    friday: boolean;
+    saturday: boolean;
+    sunday: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (projectId) {
       loadTasksAndMembers();
     }
   }, [projectId, viewMode]);
+
+  // Fetch working days when modals open or project changes
+  useEffect(() => {
+    if (projectId && (isModalVisible || isManualModalVisible || isAIModalVisible)) {
+      fetchWorkingDays();
+    }
+  }, [projectId, isModalVisible, isManualModalVisible, isAIModalVisible]);
+
+  const fetchWorkingDays = async () => {
+    try {
+      const setting = await attendanceService.getSettingByKey('WorkingDays');
+      if (setting && setting.value) {
+        const parsed = typeof setting.value === 'string' ? JSON.parse(setting.value) : setting.value;
+        setWorkingDays(parsed);
+      }
+    } catch (err) {
+      // fallback to Mon-Fri
+      setWorkingDays({
+        monday: true,
+        tuesday: true,
+        wednesday: true,
+        thursday: true,
+        friday: true,
+        saturday: false,
+        sunday: false
+      });
+    }
+  };
+
+  const isWorkingDay = (date: any): boolean => {
+    if (!workingDays) return true;
+    const dayOfWeek = date.day(); // 0=Sunday
+    const dayMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayKey = dayMap[dayOfWeek] as keyof typeof workingDays;
+    return workingDays[dayKey] === true;
+  };
 
   const loadTasksAndMembers = async () => {
     try {
@@ -77,26 +127,35 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
 
       // Map API data to Task format
       const apiTasks = tasksRes.data.tasks || [];
-      const mappedTasks: Task[] = apiTasks.map((t: any) => ({
-        id: t.task_id,
-        title: t.title,
-        description: t.description,
-        status: t.status,
-        priority: t.priority,
-        assignee: t.assignee_id ? {
-          id: t.assignee_id,
-          name: t.assignee_name,
-          email: t.assignee_email,
-          role: '',
-          avatar: ''
-        } : undefined,
-        dueDate: t.due_date,
-        createdAt: t.created_at,
-        updatedAt: t.updated_at,
-        tags: t.tags || [],
-        estimatedHours: t.estimated_hours || 0,
-        actualHours: t.actual_hours || 0
-      }));
+      const mappedTasks: Task[] = apiTasks.map((t: any) => {
+        // normalize canonical days field while keeping hours for compatibility
+        const estDays = typeof t.estimated_days !== 'undefined' && t.estimated_days !== null
+          ? t.estimated_days
+          : Math.max(1, Math.ceil((t.estimated_hours || 0) / 8));
+
+        return {
+          id: t.task_id,
+          title: t.title,
+          description: t.description,
+          status: t.status,
+          priority: t.priority,
+          assignee: t.assignee_id ? {
+            id: t.assignee_id,
+            name: t.assignee_name,
+            email: t.assignee_email,
+            role: '',
+            avatar: ''
+          } : undefined,
+          dueDate: t.due_date,
+          createdAt: t.created_at,
+          updatedAt: t.updated_at,
+          tags: t.tags || [],
+          estimatedDays: estDays,
+          estimatedHours: t.estimated_hours || (estDays * 8),
+          actualHours: t.actual_hours || 0,
+          startDate: t.start_date
+        } as Task;
+      });
 
       // Map API data to ProjectMember format
       const apiMembers = membersRes.data.members || [];
@@ -124,9 +183,14 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
   const handleTaskClick = (task: Task) => {
     setSelectedTask(task);
     form.setFieldsValue({
-      ...task,
-      dueDate: task.dueDate ? dayjs(task.dueDate) : null,
-      assigneeId: task.assignee?.id
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      assigneeId: task.assignee?.id,
+      start_date: task.startDate ? dayjs(task.startDate) : null,
+      due_date: task.dueDate ? dayjs(task.dueDate) : null,
+      estimatedDays: task.estimatedDays
     });
     setIsModalVisible(true);
   };
@@ -140,13 +204,90 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
   const handleModalOk = async () => {
     try {
       const values = await form.validateFields();
-      // For now, just close modal and show success message
-      // TODO: Implement update task API
-      message.success('Chức năng cập nhật task sẽ được implement sau');
-      setIsModalVisible(false);
-      form.resetFields();
-    } catch (error) {
-      console.error('Validation failed:', error);
+
+      // Auto-calculate estimated_days from start_date and due_date
+      let estimatedDays = values.estimatedDays;
+      if (values.start_date && values.due_date) {
+        const start = dayjs(values.start_date);
+        const due = dayjs(values.due_date);
+        estimatedDays = Math.max(1, due.diff(start, 'day'));
+      }
+
+      const payload = {
+        title: values.title,
+        description: values.description,
+        status: values.status,
+        priority: values.priority,
+        assignee_id: values.assigneeId,
+        start_date: values.start_date ? dayjs(values.start_date).format('YYYY-MM-DD') : undefined,
+        due_date: values.due_date ? dayjs(values.due_date).format('YYYY-MM-DD') : undefined,
+        estimated_days: estimatedDays,
+        estimated_hours: estimatedDays ? estimatedDays * 8 : undefined
+      };
+
+      const response = await jobService.updateTask(projectId, selectedTask!.id, payload);
+
+      if (response.data.success) {
+        message.success('Cập nhật task thành công!');
+        setIsModalVisible(false);
+        form.resetFields();
+        await loadTasksAndMembers();
+      }
+    } catch (error: any) {
+      message.error(`Lỗi cập nhật: ${error.response?.data?.details || error.message}`);
+    }
+  };
+
+  const handleDeleteTask = useCallback(async (taskId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    try {
+      const response = await jobService.deleteTask(projectId, taskId);
+      if (response.data.success) {
+        message.success('Xóa task thành công!');
+        await loadTasksAndMembers();
+      }
+    } catch (error: any) {
+      message.error(`Lỗi xóa task: ${error.response?.data?.details || error.message}`);
+    }
+  }, [projectId]);
+
+  const handleManualTaskCreate = async () => {
+    try {
+      const values = await manualForm.validateFields();
+
+      // Auto-calculate estimated_days from start_date and due_date
+      let estimatedDays = values.estimatedDays;
+      if (values.start_date && values.due_date) {
+        const start = dayjs(values.start_date);
+        const due = dayjs(values.due_date);
+        estimatedDays = Math.max(1, due.diff(start, 'day'));
+      }
+
+      const payload = {
+        title: values.title,
+        description: values.description,
+        project_id: projectId,
+        status: 'todo',
+        priority: values.priority || 'medium',
+        assigned_to_user_id: values.assigneeId,
+        start_date: values.start_date ? dayjs(values.start_date).format('YYYY-MM-DD') : undefined,
+        due_date: values.due_date ? dayjs(values.due_date).format('YYYY-MM-DD') : undefined,
+        estimated_days: estimatedDays,
+        estimated_hours: estimatedDays ? estimatedDays * 8 : undefined,
+        required_skills: [] // Manual creation - no AI analysis
+      };
+
+      const response = await jobService.createJobWithAnalysis(payload);
+
+      if (response.data.success) {
+        message.success('Tạo task thủ công thành công!');
+        setIsManualModalVisible(false);
+        manualForm.resetFields();
+        await loadTasksAndMembers();
+      }
+    } catch (error: any) {
+      message.error(`Lỗi tạo task: ${error.response?.data?.details || error.message}`);
     }
   };
 
@@ -154,7 +295,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
     try {
       setUpdatingTaskId(taskId);
       const response = await jobService.updateTaskStatus(projectId, taskId, newStatus);
-      
+
       if (response.data.success) {
         message.success('Cập nhật trạng thái thành công!');
         await loadTasksAndMembers();
@@ -175,26 +316,53 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
       key={task.id}
       size="small"
       hoverable
-      style={{ marginBottom: 12, cursor: 'pointer' }}
+      style={{ marginBottom: 12, cursor: 'pointer', position: 'relative' }}
       onClick={() => handleTaskClick(task)}
       bodyStyle={{ padding: 12 }}
     >
+      {/* Delete Button - Only show for TODO tasks */}
+      {task.status === 'todo' && (
+        <Popconfirm
+          title="Xóa task này?"
+          description="Bạn có chắc chắn muốn xóa task này?"
+          onConfirm={(e) => handleDeleteTask(task.id, e)}
+          onCancel={(e) => e?.stopPropagation()}
+          okText="Xóa"
+          cancelText="Hủy"
+          okButtonProps={{ danger: true }}
+        >
+          <Button
+            type="text"
+            size="small"
+            danger
+            icon={<CloseOutlined />}
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              zIndex: 10
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </Popconfirm>
+      )}
+
       <div style={{ marginBottom: 8 }}>
         <Tag color={priorityColors[task.priority]} style={{ marginRight: 4 }}>
           <FlagOutlined /> {priorityLabels[task.priority]}
         </Tag>
         <span style={{ fontSize: 12, color: '#999' }}>{task.id}</span>
       </div>
-      
+
       <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
         {task.title}
       </div>
-      
+
       {task.description && (
-        <div 
-          style={{ 
-            fontSize: 12, 
-            color: '#666', 
+        <div
+          style={{
+            fontSize: 12,
+            color: '#666',
             marginBottom: 8,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -204,7 +372,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
           {task.description}
         </div>
       )}
-      
+
       {task.tags && task.tags.length > 0 && (
         <div style={{ marginBottom: 8 }}>
           {task.tags.map(tag => (
@@ -212,14 +380,14 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
           ))}
         </div>
       )}
-      
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center' }}>
           {task.assignee && (
             <>
-              <Avatar 
-                size="small" 
-                src={task.assignee.avatar} 
+              <Avatar
+                size="small"
+                src={task.assignee.avatar}
                 icon={<UserOutlined />}
                 style={{ marginRight: 4 }}
               />
@@ -236,87 +404,127 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
       </div>
 
       {/* Status Change Buttons */}
-      <div 
+      <div
         style={{ marginTop: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}
         onClick={(e) => e.stopPropagation()}
       >
-        {task.status !== 'in_progress' && task.status !== 'done' && (
-          <Popconfirm
-            title="Bắt đầu thực hiện?"
-            onConfirm={() => handleStatusChange(task.id, 'in_progress')}
-            okText="Có"
-            cancelText="Không"
-          >
+        {(() => {
+          const notStarted = task.startDate ? dayjs(task.startDate).isAfter(dayjs(), 'day') : false;
+
+          const startDisabled = notStarted || (updatingTaskId !== null && updatingTaskId !== task.id);
+          const completeDisabled = notStarted || (updatingTaskId !== null && updatingTaskId !== task.id);
+
+          const startButton = (
             <Button
               type="primary"
               size="small"
               icon={<PlayCircleOutlined />}
               loading={updatingTaskId === task.id}
-              disabled={updatingTaskId !== null && updatingTaskId !== task.id}
+              disabled={startDisabled}
               style={{ fontSize: 11 }}
+              onClick={(e) => { e.stopPropagation(); }}
             >
               Đang làm
             </Button>
-          </Popconfirm>
-        )}
-        
-        {task.status !== 'done' && (
-          <Popconfirm
-            title="Đánh dấu hoàn thành?"
-            onConfirm={() => handleStatusChange(task.id, 'done')}
-            okText="Có"
-            cancelText="Không"
-          >
+          );
+
+          const completeButton = (
             <Button
               type="primary"
               size="small"
               icon={<CheckCircleOutlined />}
               loading={updatingTaskId === task.id}
-              disabled={updatingTaskId !== null && updatingTaskId !== task.id}
+              disabled={completeDisabled}
               style={{ fontSize: 11, backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+              onClick={(e) => { e.stopPropagation(); }}
             >
               Hoàn thành
             </Button>
-          </Popconfirm>
-        )}
-        
-        {task.status === 'done' && (
-          <Tag color="success" icon={<CheckCircleOutlined />}>
-            Đã hoàn thành
-          </Tag>
-        )}
+          );
+
+          return (
+            <>
+              {task.status !== 'in_progress' && task.status !== 'done' && (
+                notStarted ? (
+                  <Tooltip title={`Task bắt đầu vào ${dayjs(task.startDate).format('DD/MM/YYYY')}`}>
+                    {startButton}
+                  </Tooltip>
+                ) : (
+                  <Popconfirm
+                    title="Bắt đầu thực hiện?"
+                    onConfirm={() => handleStatusChange(task.id, 'in_progress')}
+                    okText="Có"
+                    cancelText="Không"
+                  >
+                    {startButton}
+                  </Popconfirm>
+                )
+              )}
+
+              {task.status !== 'done' && (
+                notStarted ? (
+                  <Tooltip title={`Task bắt đầu vào ${dayjs(task.startDate).format('DD/MM/YYYY')}`}>
+                    {completeButton}
+                  </Tooltip>
+                ) : (
+                  <Popconfirm
+                    title="Đánh dấu hoàn thành?"
+                    onConfirm={() => handleStatusChange(task.id, 'done')}
+                    okText="Có"
+                    cancelText="Không"
+                  >
+                    {completeButton}
+                  </Popconfirm>
+                )
+              )}
+
+              {task.status === 'done' && (
+                <Tag color="success" icon={<CheckCircleOutlined />}>
+                  Đã hoàn thành
+                </Tag>
+              )}
+            </>
+          );
+        })()}
       </div>
     </Card>
   );
 
   return (
     <div className="task-board">
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Space>
+      <div style={{ marginBottom: 16 }}>
           {viewMode === 'me' && (
             <Tag color="blue" icon={<UserOutlined />}>
               Công việc của tôi
             </Tag>
           )}
-        </Space>
-        <Space>
-          <Button 
+          <Button
             type={viewMode === 'me' ? 'primary' : 'default'}
             icon={viewMode === 'me' ? <UserOutlined /> : <TeamOutlined />}
             onClick={handleToggleViewMode}
             loading={loading}
           >
             {viewMode === 'me' ? 'Xem tất cả' : 'Công việc của tôi'}
+            <Button
+              type="primary"
+              style={{ backgroundColor: "#52c41a" }}
+              onClick={() => setIsManualModalVisible(true)}
+            >
+              Tạo thủ công
+            </Button>
           </Button>
-          {/* Manual creation removed - creation is available via AI only */}
-          <Button 
-            type="primary" 
-            icon={<RobotOutlined />}
+          <Button
+            icon={<OpenAIOutlined />}
             onClick={() => setIsAIModalVisible(true)}
+            style={{
+              background: 'linear-gradient(90deg, #9871e8ff 0%, #0066ff 100%)',
+              border: 'none',
+              color: '#fff',
+              boxShadow: '0 2px 8px rgba(24,144,255,0.2)'
+            }}
           >
             Tạo với AI
           </Button>
-        </Space>
       </div>
 
       {loading ? (
@@ -338,8 +546,8 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
                   padding: 12
                 }}
               >
-                <div 
-                  style={{ 
+                <div
+                  style={{
                     marginBottom: 12,
                     display: 'flex',
                     alignItems: 'center',
@@ -362,7 +570,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
                   </div>
                   <Tag color={column.color}>{columnTasks.length}</Tag>
                 </div>
-                
+
                 <div style={{ minHeight: 100 }}>
                   {columnTasks.map(task => renderTaskCard(task))}
                 </div>
@@ -405,8 +613,8 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
             name="description"
             label="Mô tả"
           >
-            <TextArea 
-              rows={4} 
+            <TextArea
+              rows={4}
               placeholder="Nhập mô tả chi tiết"
             />
           </Form.Item>
@@ -440,7 +648,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
             name="assigneeId"
             label="Người thực hiện"
           >
-            <Select 
+            <Select
               placeholder="Chọn người thực hiện"
               allowClear
             >
@@ -456,31 +664,78 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
           </Form.Item>
 
           <Form.Item
-            name="dueDate"
-            label="Hạn hoàn thành"
+            name="start_date"
+            label="Ngày bắt đầu"
           >
-            <DatePicker 
+            <DatePicker
               style={{ width: '100%' }}
               format="DD/MM/YYYY"
               placeholder="Chọn ngày"
+              allowClear
+              disabledDate={(current) => {
+                // Disable past dates
+                if (current && current < dayjs().startOf('day')) return true;
+                // Disable non-working days based on settings
+                if (current && !isWorkingDay(current)) return true;
+                return false;
+              }}
+              onChange={() => {
+                // Trigger auto-calculation when dates change
+                const startDate = form.getFieldValue('start_date');
+                const dueDate = form.getFieldValue('due_date');
+                if (startDate && dueDate) {
+                  const days = Math.max(1, dueDate.diff(startDate, 'day'));
+                  form.setFieldsValue({ estimatedDays: days });
+                }
+              }}
             />
           </Form.Item>
 
           <Form.Item
-            name="estimatedHours"
-            label="Thời gian ước tính (giờ)"
+            name="due_date"
+            label="Hạn hoàn thành"
           >
-            <Input type="number" placeholder="Nhập số giờ" />
+            <DatePicker
+              style={{ width: '100%' }}
+              format="DD/MM/YYYY"
+              placeholder="Chọn ngày"
+              allowClear
+              disabledDate={(current) => {
+                const startDate = form.getFieldValue('start_date');
+                // Disable dates before or equal to start_date
+                if (current && startDate && current <= startDate) return true;
+                // Disable non-working days based on settings
+                if (current && !isWorkingDay(current)) return true;
+                return false;
+              }}
+              onChange={() => {
+                // Trigger auto-calculation when dates change
+                const startDate = form.getFieldValue('start_date');
+                const dueDate = form.getFieldValue('due_date');
+                if (startDate && dueDate) {
+                  const days = Math.max(1, dueDate.diff(startDate, 'day'));
+                  form.setFieldsValue({ estimatedDays: days });
+                }
+              }}
+            />
           </Form.Item>
 
           <Form.Item
-            name="tags"
-            label="Tags"
+            name="estimatedDays"
+            label={
+              <span>
+                Thời gian ước tính (ngày)
+                <span style={{ color: '#999', fontSize: 12, marginLeft: 8 }}>
+                  (Tự động tính từ ngày bắt đầu → deadline)
+                </span>
+              </span>
+            }
           >
-            <Select
-              mode="tags"
-              style={{ width: '100%' }}
-              placeholder="Nhập tags"
+            <Input
+              type="number"
+              placeholder="Tự động tính"
+              disabled
+              style={{ backgroundColor: '#f5f5f5' }}
             />
           </Form.Item>
         </Form>
@@ -497,6 +752,157 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
           loadTasksAndMembers(); // Reload tasks after creation
         }}
       />
+
+      {/* Manual Task Creation Modal */}
+      <Modal
+        title="Tạo task thủ công"
+        open={isManualModalVisible}
+        onCancel={() => {
+          setIsManualModalVisible(false);
+          manualForm.resetFields();
+        }}
+        onOk={handleManualTaskCreate}
+        okText="Tạo task"
+        cancelText="Hủy"
+        width={600}
+      >
+        <Form form={manualForm} layout="vertical">
+          <Form.Item
+            name="title"
+            label="Tiêu đề task"
+            rules={[{ required: true, message: 'Vui lòng nhập tiêu đề!' }]}
+          >
+            <Input placeholder="Nhập tiêu đề task" />
+          </Form.Item>
+
+          <Form.Item
+            name="description"
+            label="Mô tả"
+            rules={[{ required: true, message: 'Vui lòng nhập mô tả!' }]}
+          >
+            <TextArea rows={4} placeholder="Nhập mô tả chi tiết" />
+          </Form.Item>
+
+          <Form.Item
+            name="priority"
+            label="Mức độ ưu tiên"
+            rules={[{ required: true, message: 'Vui lòng chọn mức độ ưu tiên!' }]}
+            initialValue="medium"
+          >
+            <Select>
+              <Option value="low">
+                <Tag color="blue">Thấp</Tag>
+              </Option>
+              <Option value="medium">
+                <Tag color="orange">Trung bình</Tag>
+              </Option>
+              <Option value="high">
+                <Tag color="red">Cao</Tag>
+              </Option>
+              <Option value="urgent">
+                <Tag color="volcano">Khẩn cấp</Tag>
+              </Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            name="assigneeId"
+            label="Người thực hiện"
+            rules={[{ required: true, message: 'Vui lòng chọn người thực hiện!' }]}
+          >
+            <Select placeholder="Chọn người thực hiện">
+              {members.map((member) => (
+                <Option key={member.id} value={member.id}>
+                  {member.name || member.email}
+                </Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            name="start_date"
+            label="Ngày bắt đầu"
+            rules={[{ required: true, message: 'Vui lòng chọn ngày bắt đầu!' }]}
+          >
+            <DatePicker
+              style={{ width: '100%' }}
+              format="DD/MM/YYYY"
+              placeholder="Chọn ngày bắt đầu"
+              disabledDate={(current) => {
+                if (current && current < dayjs().startOf('day')) return true;
+                if (current && !isWorkingDay(current)) return true;
+                return false;
+              }}
+              onChange={() => {
+                // Auto-calculate estimated days
+                const startDate = manualForm.getFieldValue('start_date');
+                const dueDate = manualForm.getFieldValue('due_date');
+                if (startDate && dueDate) {
+                  const days = Math.max(1, dueDate.diff(startDate, 'day'));
+                  manualForm.setFieldsValue({ estimatedDays: days });
+                }
+              }}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="due_date"
+            label="Hạn hoàn thành"
+            rules={[
+              { required: true, message: 'Vui lòng chọn hạn hoàn thành!' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  const startDate = getFieldValue('start_date');
+                  if (!value || !startDate || value.isAfter(startDate)) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error('Hạn hoàn thành phải sau ngày bắt đầu!'));
+                },
+              }),
+            ]}
+          >
+            <DatePicker
+              style={{ width: '100%' }}
+              format="DD/MM/YYYY"
+              placeholder="Chọn hạn hoàn thành"
+              disabledDate={(current) => {
+                const startDate = manualForm.getFieldValue('start_date');
+                if (current && startDate && current <= startDate) return true;
+                if (current && !isWorkingDay(current)) return true;
+                return false;
+              }}
+              onChange={() => {
+                // Auto-calculate estimated days
+                const startDate = manualForm.getFieldValue('start_date');
+                const dueDate = manualForm.getFieldValue('due_date');
+                if (startDate && dueDate) {
+                  const days = Math.max(1, dueDate.diff(startDate, 'day'));
+                  manualForm.setFieldsValue({ estimatedDays: days });
+                }
+              }}
+            />
+          </Form.Item>
+
+          <Form.Item
+            name="estimatedDays"
+            label={
+              <span>
+                Thời gian ước tính (ngày)
+                <span style={{ color: '#999', fontSize: 12, marginLeft: 8 }}>
+                  (Tự động tính)
+                </span>
+              </span>
+            }
+          >
+            <Input
+              type="number"
+              placeholder="Tự động tính từ ngày bắt đầu → deadline"
+              disabled
+              style={{ backgroundColor: '#f5f5f5' }}
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 };

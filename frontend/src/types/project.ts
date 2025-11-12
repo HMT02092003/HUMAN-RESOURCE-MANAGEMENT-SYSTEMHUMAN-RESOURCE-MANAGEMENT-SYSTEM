@@ -15,10 +15,12 @@ export interface Task {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   assignee?: ProjectMember;
   dueDate: string;
+  startDate?: string;
   createdAt: string;
   updatedAt: string;
   tags: string[];
-  estimatedHours?: number;
+  estimatedDays?: number; // canonical: days (1 day = 8 hours)
+  estimatedHours?: number; // kept for backward compatibility
   actualHours?: number;
 }
 

@@ -12,11 +12,14 @@ import ProjectSuggestionModel from '../Models/ProjectSuggestionModel.ts';
 import CheckScopeService from '../services/checkScope.ts';
 import axios from 'axios';
 import { TaskModel } from '../Models/TaskModel.ts';
-import { analyzeJobWithAI, JobAnalysisResult } from '../services/jobAnalysisService.ts';
+import { analyzeJobWithAI, JobAnalysisResult } from '../services/geminiService.ts';
 import { findMatchingCandidates, CandidateMatch } from '../services/candidateMatchingService.ts';
-import { findOrCreateNormalizedSkill } from '../services/skillNormalizationService.ts';
+import { findOrCreateNormalizedSkill } from '../services/geminiService.ts';
 import { generateUniqueTaskId } from '../ulitis/id-generator.ts';
 import { transaction } from 'objection';
+import { Metadata } from 'pdf-parse';
+import { assessWorkload } from '../services/geminiService.ts';
+import { analyzeTaskTimeline, validateTaskDependencies } from '../services/geminiService.ts';
 
 
 SkillModel.knex(knex);
@@ -127,6 +130,26 @@ export class ProjectController {
                         }
 
                         await ProjectMemberModel.query(trx).insert(toInsert);
+
+                        // Add timeline events for each member added on project creation
+                        try {
+                            const memberEvents = toInsert.map(t => ({
+                                project_id: t.project_id,
+                                event_type: 'member_added',
+                                title: 'Thêm thành viên',
+                                description: `User ${t.user_id} được thêm vào dự án.`,
+                                user_id: projectData.manager_id || null,
+                                event_time: dayjs().toISOString(),
+                                metadata: { user_id: t.user_id }
+                            }));
+
+                            if (memberEvents.length) {
+                                await ProjectTimelineModel.query(trx).insert(memberEvents as any);
+                            }
+                        } catch (e) {
+                            // timeline insert should not block project creation; log and continue
+                            console.warn('Failed to write member_added timeline events for project creation:', e);
+                        }
                     }
                 }
 
@@ -299,6 +322,24 @@ export class ProjectController {
             }
 
             await knex.transaction(async (trx) => {
+                // Insert a 'deleted' timeline event for each project id (best-effort)
+                try {
+                    const actorId = (req as any).user?.id || null;
+                    const delEvents = ids.map((pid: number) => ({
+                        project_id: pid,
+                        event_type: 'deleted',
+                        title: 'Dự án bị xóa',
+                        description: `Dự án ${pid} đã bị xóa.`,
+                        user_id: actorId,
+                        event_time: dayjs().toISOString()
+                    }));
+
+                    if (delEvents.length) {
+                        await ProjectTimelineModel.query(trx).insert(delEvents as any);
+                    }
+                } catch (e) {
+                    console.warn('Failed to write deleted timeline events before project deletion:', e);
+                }
                 // Delete child rows first to avoid FK constraint issues, then delete projects
                 await ProjectMemberModel.query(trx).delete().whereIn('project_id', ids as any);
                 await ProjectTimelineModel.query(trx).delete().whereIn('project_id', ids as any);
@@ -452,6 +493,9 @@ export class ProjectController {
                 if (_start) updateData.start_date = dayjs(_start).format('YYYY-MM-DD');
                 if (_end) updateData.end_date = dayjs(_end).format('YYYY-MM-DD');
 
+                // Fetch current project state so we can record diffs in timeline
+                const projectBefore = await ProjectModel.query(trx).findById(idNum).select('manager_id', 'progress', 'status', 'name');
+
                 // Update project
                 const updatedProject = await ProjectModel.query(trx)
                     .patchAndFetchById(idNum, updateData);
@@ -464,6 +508,19 @@ export class ProjectController {
 
                 // Update members if provided
                 if (Array.isArray(params.members)) {
+                    // Read existing members first so we can record additions/removals
+                    const existingMembers = await ProjectMemberModel.query(trx)
+                        .where('project_id', idNum)
+                        .select('user_id');
+
+                    const existingIds = existingMembers.map((m: any) => Number(m.user_id));
+                    const newIds = params.members
+                        .map((member: any) => Number(member.id ?? member.user_id))
+                        .filter((n: number) => !Number.isNaN(n));
+
+                    const removedIds = existingIds.filter((id: number) => !newIds.includes(id));
+                    const addedIds = newIds.filter((id: number) => !existingIds.includes(id));
+
                     // Delete existing members
                     await ProjectMemberModel.query(trx).delete().where('project_id', idNum);
 
@@ -484,9 +541,96 @@ export class ProjectController {
                     if (toInsert.length) {
                         await ProjectMemberModel.query(trx).insert(toInsert);
                     }
+
+                    // Write timeline events for added/removed members
+                    try {
+                        const actorId = params.managerId !== undefined ? Number(params.managerId) : ((req as any).user?.id || null);
+                        const events: any[] = [];
+
+                        for (const uid of addedIds) {
+                            events.push({
+                                project_id: idNum,
+                                event_type: 'member_added',
+                                title: 'Thêm thành viên',
+                                description: `User ${uid} được thêm vào dự án.`,
+                                user_id: actorId,
+                                event_time: dayjs().toISOString(),
+                                metadata: { user_id: uid }
+                            });
+                        }
+
+                        for (const uid of removedIds) {
+                            events.push({
+                                project_id: idNum,
+                                event_type: 'member_removed',
+                                title: 'Xóa thành viên',
+                                description: `User ${uid} đã bị xóa khỏi dự án.`,
+                                user_id: actorId,
+                                event_time: dayjs().toISOString(),
+                                metadata: { user_id: uid }
+                            });
+                        }
+
+                        if (events.length) {
+                            await ProjectTimelineModel.query(trx).insert(events as any);
+                        }
+                    } catch (e) {
+                        console.warn('Failed to write member change timeline events:', e);
+                    }
                 }
 
-                // Add timeline event
+                // Add specific timeline events for manager/progress/status changes
+                try {
+                    const actorId = params.managerId !== undefined ? Number(params.managerId) : ((req as any).user?.id || null);
+                    const specificEvents: any[] = [];
+
+                    // manager changed
+                    if (projectBefore && updateData.manager_id !== undefined && Number(projectBefore.manager_id) !== Number(updateData.manager_id)) {
+                        specificEvents.push({
+                            project_id: idNum,
+                            event_type: 'manager_changed',
+                            title: 'Thay đổi quản lý dự án',
+                            description: `Quản lý dự án thay đổi từ ${projectBefore.manager_id} sang ${updateData.manager_id}.`,
+                            user_id: actorId,
+                            event_time: dayjs().toISOString(),
+                            metadata: { old_manager: projectBefore.manager_id, new_manager: updateData.manager_id }
+                        });
+                    }
+
+                    // progress changed
+                    if (projectBefore && updateData.progress !== undefined && Number(projectBefore.progress) !== Number(updateData.progress)) {
+                        specificEvents.push({
+                            project_id: idNum,
+                            event_type: 'progress_updated',
+                            title: 'Cập nhật tiến độ',
+                            description: `Tiến độ thay đổi từ ${projectBefore.progress} -> ${updateData.progress}.`,
+                            user_id: actorId,
+                            event_time: dayjs().toISOString(),
+                            metadata: { old_progress: projectBefore.progress, new_progress: updateData.progress }
+                        });
+                    }
+
+                    // status changed
+                    if (projectBefore && updateData.status !== undefined && String(projectBefore.status) !== String(updateData.status)) {
+                        specificEvents.push({
+                            project_id: idNum,
+                            event_type: 'status_changed',
+                            title: 'Thay đổi trạng thái dự án',
+                            description: `Trạng thái thay đổi từ ${projectBefore.status} sang ${updateData.status}.`,
+                            user_id: actorId,
+                            event_time: dayjs().toISOString(),
+                            metadata: { old_status: projectBefore.status, new_status: updateData.status }
+                        });
+                    }
+
+                    if (specificEvents.length) {
+                        await ProjectTimelineModel.query(trx).insert(specificEvents as any);
+                    }
+                } catch (e) {
+                    console.warn('Failed to write specific timeline events for project update:', e);
+                }
+
+                // Add generic timeline event
                 await ProjectTimelineModel.query(trx).insert({
                     project_id: idNum,
                     event_type: 'updated',
@@ -572,7 +716,9 @@ export class ProjectController {
             const allowFields = {
                 title: 'string!',
                 description: 'string!',
-                project_id: 'number'
+                project_id: 'number',
+                start_date: 'string', // NEW: Ngày bắt đầu
+                due_date: 'string'    // NEW: Ngày kết thúc
             };
 
             let payload: any;
@@ -609,11 +755,22 @@ export class ProjectController {
                 }
             }
 
-            // Phân tích với AI (với context dự án)
+            // Chuẩn bị taskTimeline nếu có start_date và due_date
+            let taskTimeline = null;
+            if (payload.start_date && payload.due_date) {
+                taskTimeline = {
+                    start_date: payload.start_date,
+                    due_date: payload.due_date
+                };
+                console.log(`[Project Controller] Task timeline: ${payload.start_date} → ${payload.due_date}`);
+            }
+
+            // Phân tích với AI (với context dự án và timeline)
             const analysis: JobAnalysisResult = await analyzeJobWithAI(
                 payload.title,
                 payload.description,
-                projectContext
+                projectContext,
+                taskTimeline // TRUYỀN TIMELINE VÀO ĐÂY
             );
 
             // Tìm hoặc tạo skills trong database với normalization
@@ -624,15 +781,11 @@ export class ProjectController {
                 importance: string;
             }> = [];
 
-            console.log(`[Project Controller] Normalizing ${analysis.required_skills.length} skills from Gemini...`);
-
             for (const reqSkill of analysis.required_skills) {
-                // Use normalization service to find or create skill
                 const skill = await findOrCreateNormalizedSkill(reqSkill.name);
                 
                 if (!skill) {
-                    console.log(`[Project Controller] Excluded skill: "${reqSkill.name}" (not a real technical skill)`);
-                    continue;
+                    continue; // Skill bị loại trừ
                 }
 
                 skillsWithIds.push({
@@ -643,14 +796,15 @@ export class ProjectController {
                 });
             }
 
-            console.log(`[Project Controller] Analyze returning ${skillsWithIds.length} skills (after normalization)`);
+            // Compute estimated hours (backend/clients expect hours). Gemini now returns days.
+            const analysisEstimatedHours = (analysis as any).estimated_hours ?? (typeof (analysis as any).estimated_days === 'number' ? (analysis as any).estimated_days * 8 : null);
 
             // Return analysis result with skill IDs
             res.status(200).json({
                 success: true,
                 analysis: {
                     difficulty_level: analysis.difficulty_level,
-                    estimated_hours: analysis.estimated_hours,
+                    estimated_hours: analysisEstimatedHours,
                     summary: analysis.summary,
                     recommendations: analysis.recommendations,
                     required_skills: skillsWithIds
@@ -679,7 +833,11 @@ export class ProjectController {
                 job_id: 'string',
                 job_title: 'string',
                 job_estimated_hours: 'number',
+                job_estimated_days: 'number', // prefer days as canonical unit (1 day = 8 hours)
                 required_skills: 'array!',
+                // Optional timeframe for the new task - used to count overlapping tasks per candidate
+                start_date: 'string',
+                due_date: 'string',
                 min_match_score: 'number',
                 max_results: 'number',
                 check_workload: 'boolean',
@@ -701,13 +859,21 @@ export class ProjectController {
             const {
                 job_id,
                 job_title = 'Công việc mới',
-                job_estimated_hours = 0,
+                job_estimated_hours = undefined,
+                job_estimated_days = undefined,
+                start_date: newTaskStart = null,
+                due_date: newTaskDue = null,
                 required_skills,
                 min_match_score = 0,
                 max_results = 1000,
                 check_workload = true,
                 project_id = null
             } = payload;
+
+            // Prefer estimated days (canonical) and convert to hours for internal checks
+            const jobEstimatedHours = (job_estimated_hours !== undefined && job_estimated_hours !== null)
+                ? Number(job_estimated_hours)
+                : (job_estimated_days !== undefined && job_estimated_days !== null) ? Number(job_estimated_days) * 8 : 0;
 
             console.log(`[Project Controller] Finding candidates for ${required_skills.length} required skills${project_id ? ` in project ${project_id}` : ''}`);
 
@@ -753,7 +919,7 @@ export class ProjectController {
                 });
             }
 
-            // Kiểm tra workload cho từng candidate nếu check_workload = true
+            // Kiểm tra workload VÀ timeline conflict cho từng candidate
             const candidatesWithWorkload = await Promise.all(
                 candidates.map(async (candidate) => {
                     const userInfo = userInfoMap.get(candidate.user_id) || { 
@@ -784,42 +950,92 @@ export class ProjectController {
                             });
 
                         const totalEstimatedHours = tasks.reduce((sum, t) => sum + (t.estimated_hours || 0), 0);
-                        
-                        console.log(`[Project Controller] User ${candidate.user_id} (${userInfo.fullName}): ${tasks.length} active tasks, ${totalEstimatedHours}h`);
 
-                        // Simple rule-based assessment
-                        const newTotal = totalEstimatedHours + job_estimated_hours;
-                        let can_take_more_work = true;
-                        let risk_level: 'low' | 'medium' | 'high' = 'low';
-                        let workload_assessment = '';
+                        // Count how many of this user's current tasks overlap with the new task timeframe (if provided)
+                        let overlapTaskCount = 0;
+                        if (newTaskStart && newTaskDue) {
+                            try {
+                                const newStart = dayjs(newTaskStart);
+                                const newEnd = dayjs(newTaskDue);
+                                if (newStart.isValid() && newEnd.isValid()) {
+                                    for (const t of tasks) {
+                                        // If task has both start_date and due_date, use them
+                                        if (t.start_date && t.due_date) {
+                                            const tStart = dayjs(t.start_date);
+                                            const tEnd = dayjs(t.due_date);
+                                            if (tStart.isValid() && tEnd.isValid()) {
+                                                // Overlap when intervals intersect
+                                                if (!(tEnd.isBefore(newStart) || tStart.isAfter(newEnd))) {
+                                                    overlapTaskCount++;
+                                                }
+                                                continue;
+                                            }
+                                        }
 
-                        if (newTotal >= 56) {
-                            can_take_more_work = false;
-                            risk_level = 'high';
-                            workload_assessment = `Quá tải: ${newTotal}h (hiện tại ${totalEstimatedHours}h + thêm ${job_estimated_hours}h). Vượt ngưỡng an toàn (56h). Không nên giao thêm việc.`;
-                        } else if (newTotal >= 45) {
-                            can_take_more_work = false;
-                            risk_level = 'high';
-                            workload_assessment = `Gần quá tải: ${newTotal}h (hiện tại ${totalEstimatedHours}h + thêm ${job_estimated_hours}h). Rủi ro cao về chất lượng và tiến độ.`;
-                        } else if (newTotal >= 35) {
-                            can_take_more_work = true;
-                            risk_level = 'medium';
-                            workload_assessment = `Tải vừa phải: ${newTotal}h (hiện tại ${totalEstimatedHours}h + thêm ${job_estimated_hours}h). Có thể nhận nhưng cần theo dõi sát.`;
-                        } else {
-                            can_take_more_work = true;
-                            risk_level = 'low';
-                            workload_assessment = `Còn dư dả: ${newTotal}h (hiện tại ${totalEstimatedHours}h + thêm ${job_estimated_hours}h). An toàn để nhận thêm công việc.`;
+                                        // If dates missing but task is in-progress, count conservatively as overlapping
+                                        const status = (t.status || '').toLowerCase();
+                                        if (status === 'in-progress' || status === 'in_progress') {
+                                            overlapTaskCount++;
+                                        }
+                                    }
+                                }
+                            } catch (e) {
+                                // If any date parsing fails, default to 0 overlapping (safe)
+                                overlapTaskCount = 0;
+                            }
                         }
 
-                        return {
-                            ...candidate,
-                            fullName: userInfo.fullName,
-                            email: userInfo.email,
-                            current_workload_hours: totalEstimatedHours,
-                            can_take_more_work,
-                            workload_assessment,
-                            risk_level
-                        };
+                        // Gemini workload assessment (với fallback nếu overload)
+                        try {
+                            const aiAssessment = await assessWorkload({
+                                candidateName: userInfo.fullName,
+                                totalTasks: tasks.length,
+                                totalEstimatedHours: totalEstimatedHours,
+                                currentTasks: tasks.map(t => ({
+                                    title: t.title,
+                                    status: t.status || 'unknown',
+                                    estimated_hours: t.estimated_hours || 0
+                                })),
+                                newTaskTitle: job_title,
+                                newTaskEstimatedHours: jobEstimatedHours
+                            });
+
+                            return {
+                                ...candidate,
+                                fullName: userInfo.fullName,
+                                email: userInfo.email,
+                                current_workload_hours: totalEstimatedHours,
+                                can_take_more_work: aiAssessment.can_take_more_work,
+                                workload_assessment: aiAssessment.workload_assessment,
+                                risk_level: aiAssessment.risk_level,
+                                overlap_task_count: overlapTaskCount
+                            };
+                        } catch (aiError) {
+                            // Fallback - không log chi tiết, chỉ dùng rule-based
+                            const newTotal = totalEstimatedHours + jobEstimatedHours;
+                            const totalDays = Math.ceil(newTotal / 8);
+                            
+                            let can_take_more_work = true;
+                            let risk_level: 'low' | 'medium' | 'high' = 'low';
+
+                            if (totalDays > 15) {
+                                can_take_more_work = false;
+                                risk_level = 'high';
+                            } else if (totalDays > 10) {
+                                risk_level = 'medium';
+                            }
+
+                            return {
+                                ...candidate,
+                                fullName: userInfo.fullName,
+                                email: userInfo.email,
+                                current_workload_hours: totalEstimatedHours,
+                                can_take_more_work,
+                                workload_assessment: `Tổng: ${totalDays} ngày (AI unavailable)`,
+                                risk_level,
+                                overlap_task_count: overlapTaskCount
+                            };
+                        }
                     } catch (error) {
                         console.error(`[Project Controller] Error checking workload for user ${candidate.user_id}:`, error);
                         return {
@@ -829,7 +1045,8 @@ export class ProjectController {
                             current_workload_hours: null,
                             can_take_more_work: true,
                             workload_assessment: 'Lỗi khi kiểm tra workload',
-                            risk_level: 'medium' as const
+                            risk_level: 'medium' as const,
+                            overlap_task_count: 0
                         };
                     }
                 })
@@ -853,7 +1070,8 @@ export class ProjectController {
                 current_workload_hours: c.current_workload_hours,
                 can_take_more_work: c.can_take_more_work,
                 workload_assessment: c.workload_assessment,
-                risk_level: c.risk_level
+                risk_level: c.risk_level,
+                overlap_task_count: c.overlap_task_count ?? 0
             });
 
             res.status(200).json({
@@ -899,11 +1117,14 @@ export class ProjectController {
                 assigned_to_user_id: 'number',
                 difficulty_level: 'number',
                 estimated_hours: 'number',
+                estimated_days: 'number', // NEW: canonical unit is days (1 day = 8 hours)
                 ai_analysis_result: 'string',
                 required_skills: 'array!',
                 tags: 'array',
                 priority: 'string',
-                due_date: 'string'
+                start_date: 'string', // NEW
+                due_date: 'string',
+                depends_on: 'array' // NEW: array of task_ids
             };
 
             let payload: any;
@@ -920,6 +1141,122 @@ export class ProjectController {
             const trx = await transaction.start(knex);
 
             try {
+                // ============ STEP 1: VALIDATE DEPENDENCIES ============
+                if (payload.depends_on && Array.isArray(payload.depends_on) && payload.depends_on.length > 0 && payload.project_id) {
+                    const allProjectTasks = await TaskModel.query().where('project_id', payload.project_id);
+                    
+                    const depValidation = await validateTaskDependencies({
+                        depends_on: payload.depends_on,
+                        allProjectTasks: allProjectTasks.map(t => ({
+                            task_id: t.task_id,
+                            title: t.title,
+                            status: t.status || 'unknown',
+                            due_date: t.due_date
+                        }))
+                    });
+
+                    if (!depValidation.valid) {
+                        await trx.rollback();
+                        res.status(400).json({
+                            error: 'DEPENDENCY_NOT_MET',
+                            message: 'Không thể tạo task - các task phụ thuộc chưa hoàn thành',
+                            blocking_tasks: depValidation.blocking_tasks,
+                            recommendations: depValidation.recommendations
+                        });
+                        return;
+                    }
+                }
+
+                // ============ STEP 2: VALIDATE TIMELINE (nếu có start_date + due_date + assignee) ============
+                // Normalize estimated hours from estimated_days if needed (days are canonical)
+                const normalizedEstimatedHours = payload.estimated_hours ?? (payload.estimated_days !== undefined && payload.estimated_days !== null ? Number(payload.estimated_days) * 8 : undefined);
+
+                let timelineAnalysis = null;
+                if (payload.start_date && payload.due_date && payload.assigned_to_user_id && (normalizedEstimatedHours !== undefined)) {
+                    try {
+                        // Get assigned user's current tasks
+                        const userTasks = await TaskModel.query()
+                            .where('assignee_id', payload.assigned_to_user_id)
+                            .whereNot('status', 'done')
+                            .whereNot('status', 'cancelled');
+
+                        // Get project info for context
+                        let projectContext = null;
+                        if (payload.project_id) {
+                            const project = await ProjectModel.query().findById(payload.project_id);
+                            if (project) {
+                                projectContext = {
+                                    name: project.name,
+                                    deadline: project.end_date,
+                                    status: project.status
+                                };
+                            }
+                        }
+
+                        // Call Gemini to analyze timeline (real-time, no cache)
+                        console.log(`[Project Controller] Analyzing timeline for task "${payload.title}" (${payload.start_date} → ${payload.due_date})`);
+                        
+                        timelineAnalysis = await analyzeTaskTimeline({
+                            newTask: {
+                                title: payload.title,
+                                start_date: payload.start_date,
+                                due_date: payload.due_date,
+                                estimated_hours: normalizedEstimatedHours
+                            },
+                            userTasks: userTasks.map(t => ({
+                                task_id: t.task_id,
+                                title: t.title,
+                                start_date: t.start_date,
+                                due_date: t.due_date,
+                                estimated_hours: t.estimated_hours || 0,
+                                status: t.status || 'unknown',
+                                priority: t.priority || 'medium'
+                            })),
+                            userName: `User ${payload.assigned_to_user_id}`, // TODO: fetch real name
+                            projectContext: projectContext || undefined
+                        });
+
+                        // If risk is CRITICAL, block task creation
+                        if (timelineAnalysis.risk_level === 'critical' || !timelineAnalysis.can_schedule) {
+                            await trx.rollback();
+                            res.status(400).json({
+                                error: 'TIMELINE_CONFLICT',
+                                message: 'Không thể giao task - quá tải nghiêm trọng hoặc xung đột thời gian',
+                                timeline_analysis: timelineAnalysis
+                            });
+                            return;
+                        }
+
+                        // If HIGH risk, include warning in response (but still allow creation)
+                        if (timelineAnalysis.risk_level === 'high') {
+                            console.warn(`[Project Controller] Creating task with HIGH risk: ${timelineAnalysis.ai_reasoning}`);
+                        }
+
+                    } catch (timelineError: any) {
+                        console.error('[Project Controller] Timeline analysis failed:', timelineError);
+                        
+                        // If Gemini failed and there's a fallback, use it
+                        if (timelineError.code === 'AI_ANALYSIS_FAILED' && timelineError.fallback) {
+                            timelineAnalysis = timelineError.fallback;
+                            
+                            if (timelineAnalysis.risk_level === 'critical') {
+                                await trx.rollback();
+                                res.status(503).json({
+                                    error: 'AI_SERVICE_UNAVAILABLE',
+                                    message: 'Dịch vụ AI không khả dụng và task có rủi ro cao',
+                                    details: timelineError.message,
+                                    fallback_analysis: timelineAnalysis
+                                });
+                                return;
+                            }
+                        } else {
+                            // Unknown error - log but continue (optimistic approach)
+                            console.warn('[Project Controller] Timeline analysis failed completely, continuing without validation');
+                        }
+                    }
+                }
+
+                // ============ STEP 3: CREATE TASK ============
                 // Parse ai_analysis_result if it's a string
                 let aiAnalysis = null;
                 if (payload.ai_analysis_result) {
@@ -940,11 +1277,45 @@ export class ProjectController {
                     tagsArray = [payload.tags];
                 }
 
+                // Prepare depends_on field
+                let dependsOnArray = null;
+                if (payload.depends_on && Array.isArray(payload.depends_on) && payload.depends_on.length > 0) {
+                    dependsOnArray = payload.depends_on;
+                }
+
                 // Generate unique task_id
                 const taskId = generateUniqueTaskId();
 
+                // Calculate due_date if not provided: prefer estimated_days (canonical) then estimated_hours
+                let computedDueDate: string | null = null;
+                if (payload.due_date) {
+                    computedDueDate = payload.due_date;
+                } else if (payload.estimated_days && !isNaN(Number(payload.estimated_days))) {
+                    try {
+                        computedDueDate = dayjs().add(Number(payload.estimated_days), 'day').format('YYYY-MM-DD');
+                    } catch (e) {
+                        console.warn('[Project Controller] Failed to compute due_date from estimated_days:', e);
+                        computedDueDate = null;
+                    }
+                } else if (payload.estimated_hours && !isNaN(Number(payload.estimated_hours))) {
+                    try {
+                        computedDueDate = dayjs().add(Number(payload.estimated_hours), 'hour').format('YYYY-MM-DD');
+                    } catch (e) {
+                        console.warn('[Project Controller] Failed to compute due_date from estimated_hours:', e);
+                        computedDueDate = null;
+                    }
+                }
+
+                // Use start_date from payload if provided, otherwise default to today
+                // IMPORTANT: Frontend should always provide start_date - no auto-default
+                const computedStartDate = payload.start_date || null;
+
                 // Create task
-                const task = await TaskModel.query(trx).insert({
+                // Build insert object and only include optional keys when present to avoid DB errors
+                // Check whether optional DB columns exist (some deployments may not have 'tags')
+                const hasTagsColumn = await trx.schema.hasColumn('tasks', 'tags');
+
+                const insertData: any = {
                     task_id: taskId,
                     title: payload.title,
                     description: payload.description,
@@ -952,10 +1323,17 @@ export class ProjectController {
                     status: payload.status || 'todo',
                     priority: payload.priority || 'medium',
                     assignee_id: payload.assigned_to_user_id || null,
-                    estimated_hours: payload.estimated_hours || null,
-                    due_date: payload.due_date || null,
-                    tags: tagsArray
-                });
+                    // Store both estimated_days (canonical) and estimated_hours (compat)
+                    estimated_days: payload.estimated_days !== undefined ? payload.estimated_days : (payload.estimated_hours ? Math.ceil(Number(payload.estimated_hours) / 8) : null),
+                    estimated_hours: normalizedEstimatedHours ?? null,
+                    start_date: computedStartDate,
+                    due_date: computedDueDate
+                };
+                if (tagsArray !== null && tagsArray !== undefined && hasTagsColumn) insertData.tags = tagsArray;
+                if (dependsOnArray !== null && dependsOnArray !== undefined) insertData.depends_on = dependsOnArray;
+                if (aiAnalysis !== null && aiAnalysis !== undefined) insertData.ai_metadata = aiAnalysis;
+
+                const task = await TaskModel.query(trx).insert(insertData);
 
                 // Add timeline event: task created
                 await ProjectTimelineModel.query(trx).insert({
@@ -1146,6 +1524,7 @@ export class ProjectController {
                         assignee_name: assignee?.fullName || null,
                         assignee_email: assignee?.email || null,
                         estimated_hours: t.estimated_hours,
+                        start_date: t.start_date,
                         actual_hours: t.actual_hours,
                         due_date: t.due_date,
                         tags: t.tags,
@@ -1211,6 +1590,18 @@ export class ProjectController {
                     status: status,
                     updated_at: new Date().toISOString()
                 });
+
+                // Add timeline event: task created
+                await ProjectTimelineModel.query().insert({
+                    project_id: task.project_id,
+                    event_type: 'task_updated',
+                    title: 'Cập nhật trạng thái task',
+                    description: `Task "${task.title}" đã được cập nhật trạng thái thành ${status} bởi user ${task.assignee_id || 'unknown'}`,
+                    user_id: task.assignee_id || null,
+                    event_time: dayjs().toISOString(),
+                    metadata: { task_id: updatedTask.task_id, new_status: status }
+                } as any);
+
 
             // Fetch assignee info if exists
             let assigneeInfo = null;
@@ -1360,6 +1751,7 @@ export class ProjectController {
                         status: t.status,
                         priority: t.priority,
                         estimated_hours: t.estimated_hours,
+                            start_date: t.start_date,
                         actual_hours: t.actual_hours,
                         due_date: t.due_date,
                         tags: t.tags,
@@ -1648,6 +2040,163 @@ export class ProjectController {
             console.error('[Project Controller] Error getting project timeline:', error);
             res.status(500).json({
                 error: 'Failed to get project timeline',
+                details: error.message
+            });
+        }
+    };
+
+    /**
+     * PUT /projects/:project_id/tasks/:task_id - Cập nhật thông tin task đầy đủ
+     */
+    static updateTask: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { project_id, task_id } = req.params;
+            const payload = req.body;
+            const userId = (req as any).user?.id;
+
+            console.log(`[Project Controller] Updating task ${task_id} in project ${project_id}`);
+
+            // Validate project exists
+            const project = await ProjectModel.query().findById(Number(project_id));
+            if (!project) {
+                res.status(404).json({ error: 'Project not found' });
+                return;
+            }
+
+            // Validate task exists
+            const existingTask = await TaskModel.query().findOne({ task_id });
+            if (!existingTask) {
+                res.status(404).json({ error: 'Task not found' });
+                return;
+            }
+
+            // Auto-calculate estimated_days from dates if provided
+            let estimatedDays = payload.estimated_days;
+            if (payload.start_date && payload.due_date && !estimatedDays) {
+                const start = dayjs(payload.start_date);
+                const due = dayjs(payload.due_date);
+                estimatedDays = Math.max(1, due.diff(start, 'day'));
+                console.log(`[Project Controller] Auto-calculated estimated_days: ${estimatedDays} (${payload.start_date} → ${payload.due_date})`);
+            }
+
+            // Build update object - only include fields that are provided
+            const updateData: any = {};
+            if (payload.title !== undefined) updateData.title = payload.title;
+            if (payload.description !== undefined) updateData.description = payload.description;
+            if (payload.status !== undefined) updateData.status = payload.status;
+            if (payload.priority !== undefined) updateData.priority = payload.priority;
+            if (payload.assignee_id !== undefined) updateData.assignee_id = payload.assignee_id;
+            if (payload.start_date !== undefined) updateData.start_date = payload.start_date;
+            if (payload.due_date !== undefined) updateData.due_date = payload.due_date;
+            if (estimatedDays !== undefined) updateData.estimated_days = estimatedDays;
+            if (payload.estimated_hours !== undefined) updateData.estimated_hours = payload.estimated_hours;
+            if (payload.actual_hours !== undefined) updateData.actual_hours = payload.actual_hours;
+
+            // Check if tags column exists before updating
+            if (payload.tags !== undefined) {
+                const hasTagsColumn = await knex.schema.hasColumn('tasks', 'tags');
+                if (hasTagsColumn) updateData.tags = payload.tags;
+            }
+
+            // Update task
+            const updatedTask = await TaskModel.query()
+                .where('task_id', task_id)
+                .patch(updateData)
+                .returning('*')
+                .first();
+
+            if (!updatedTask) {
+                res.status(500).json({ error: 'Failed to update task' });
+                return;
+            }
+
+            // Add timeline event
+            await ProjectTimelineModel.query().insert({
+                project_id: Number(project_id),
+                event_type: 'task_updated',
+                title: 'Cập nhật task',
+                description: `Task "${updatedTask.title}" đã được cập nhật`,
+                user_id: userId || null,
+                event_time: dayjs().toISOString(),
+                metadata: { task_id: updatedTask.task_id }
+            } as any);
+
+            res.status(200).json({
+                success: true,
+                message: 'Task updated successfully',
+                task: {
+                    task_id: updatedTask.task_id,
+                    title: updatedTask.title,
+                    description: updatedTask.description,
+                    status: updatedTask.status,
+                    priority: updatedTask.priority,
+                    assignee_id: updatedTask.assignee_id,
+                    estimated_days: updatedTask.estimated_days,
+                    estimated_hours: updatedTask.estimated_hours,
+                    actual_hours: updatedTask.actual_hours,
+                    start_date: updatedTask.start_date,
+                    due_date: updatedTask.due_date,
+                    updated_at: updatedTask.updated_at
+                }
+            });
+        } catch (error: any) {
+            console.error('[Project Controller] Error updating task:', error);
+            res.status(500).json({
+                error: 'Failed to update task',
+                details: error.message
+            });
+        }
+    };
+
+    /**
+     * DELETE /projects/:project_id/tasks/:task_id - Xóa task
+     */
+    static deleteTask: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { project_id, task_id } = req.params;
+            const userId = (req as any).user?.id;
+
+            console.log(`[Project Controller] Deleting task ${task_id} from project ${project_id}`);
+
+            // Validate project exists
+            const project = await ProjectModel.query().findById(Number(project_id));
+            if (!project) {
+                res.status(404).json({ error: 'Project not found' });
+                return;
+            }
+
+            // Validate task exists
+            const existingTask = await TaskModel.query().findOne({ task_id });
+            if (!existingTask) {
+                res.status(404).json({ error: 'Task not found' });
+                return;
+            }
+
+            const taskTitle = existingTask.title;
+
+            // Delete task
+            await TaskModel.query().where('task_id', task_id).delete();
+
+            // Add timeline event
+            await ProjectTimelineModel.query().insert({
+                project_id: Number(project_id),
+                event_type: 'task_deleted',
+                title: 'Xóa task',
+                description: `Task "${taskTitle}" đã được xóa`,
+                user_id: userId || null,
+                event_time: dayjs().toISOString(),
+                metadata: { task_id }
+            } as any);
+
+            res.status(200).json({
+                success: true,
+                message: 'Task deleted successfully',
+                task_id
+            });
+        } catch (error: any) {
+            console.error('[Project Controller] Error deleting task:', error);
+            res.status(500).json({
+                error: 'Failed to delete task',
                 details: error.message
             });
         }

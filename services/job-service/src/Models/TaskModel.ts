@@ -9,10 +9,14 @@ export class TaskModel extends Model {
   status?: string;
   priority?: string;
   assignee_id?: number | null;
+  start_date?: string | null; // NEW: task start date
   due_date?: string | null;
   estimated_hours?: number;
+  estimated_days?: number;
   actual_hours?: number;
   tags?: any;
+  depends_on?: string[] | null; // NEW: array of task_ids that must complete first
+  ai_metadata?: any; // NEW: AI analysis result
   created_at?: string;
   updated_at?: string;
 
@@ -42,11 +46,15 @@ export class TaskModel extends Model {
           enum: ['low', 'medium', 'high', 'urgent', null]
         },
         assignee_id: { type: ['integer', 'null'] },
+        start_date: { type: ['string', 'null'], format: 'date' }, // NEW
         due_date: { type: ['string', 'null'], format: 'date' },
-        estimated_hours: { type: ['integer', 'null'] },
+  estimated_hours: { type: ['integer', 'null'] },
+  estimated_days: { type: ['integer', 'null'] },
         actual_hours: { type: ['integer', 'null'] },
-        tags: { type: ['array', 'null'] },
-        created_at: { type: ['string', 'null'], format: 'date-time' },
+    tags: { type: ['array', 'null'] },
+  depends_on: { type: ['array', 'null'] }, // NEW: array of task_ids
+  ai_metadata: { type: ['object', 'null'] }, // NEW: JSON object
+  created_at: { type: ['string', 'null'], format: 'date-time' },
         updated_at: { type: ['string', 'null'], format: 'date-time' }
       }
     };

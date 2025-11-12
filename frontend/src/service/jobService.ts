@@ -3,7 +3,13 @@ import api from './apiService';
 const JOB_SERVICE_PREFIX = '/jobs'; // proxied by API Gateway to job-service
 
 // AI Analysis - Updated to use /projects endpoints
-export const analyzeJob = (payload: { title: string; description: string; project_id?: string }) => {
+export const analyzeJob = (payload: { 
+  title: string; 
+  description: string; 
+  project_id?: string;
+  start_date?: string;
+  due_date?: string;
+}) => {
   return api.post(`${JOB_SERVICE_PREFIX}/projects/analyze-task`, payload);
 };
 
@@ -11,6 +17,7 @@ export const findCandidates = (payload: {
   job_id?: string;
   job_title?: string;
   job_estimated_hours?: number;
+  job_estimated_days?: number;
   project_id?: string;
   required_skills: Array<{
     skill_id: number;
@@ -84,6 +91,16 @@ export const updateTaskStatus = (projectId: string, taskId: string, status: 'tod
   return api.put(`${JOB_SERVICE_PREFIX}/projects/${projectId}/tasks/${taskId}/status`, { status });
 };
 
+// Update task (full update)
+export const updateTask = (projectId: string, taskId: string, payload: any) => {
+  return api.put(`${JOB_SERVICE_PREFIX}/projects/${projectId}/tasks/${taskId}`, payload);
+};
+
+// Delete task
+export const deleteTask = (projectId: string, taskId: string) => {
+  return api.delete(`${JOB_SERVICE_PREFIX}/projects/${projectId}/tasks/${taskId}`);
+};
+
 // Get current user's tasks with filters
 export const getMyTasks = (params?: {
   status?: string; // 'todo', 'in_progress', 'done' hoặc nhiều giá trị cách nhau bởi dấu phẩy: 'todo,in_progress'
@@ -123,6 +140,8 @@ export default {
   getProjectTasks,
   getProjectTaskStatistics,
   updateTaskStatus,
+  updateTask,
+  deleteTask,
   getMyTasks,
   getProjectOverview,
   getProjectMembers,

@@ -2,7 +2,7 @@ import { UserSkillModel } from '../Models/UserSkillModel.ts';
 import { SkillModel } from '../Models/SkillModel.ts';
 import ProjectRequiredSkillModel from '../Models/ProjectRequiredSkillModel.ts';
 import { ProjectMemberModel } from '../Models/ProjectMemberModel.ts';
-import { findSimilarSkills } from './skillNormalizationService.ts';
+import { findSimilarSkills } from './geminiService.ts';
 
 export interface MatchedSkill {
   skill_id: number;

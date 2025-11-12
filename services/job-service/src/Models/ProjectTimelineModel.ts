@@ -36,10 +36,15 @@ export class ProjectTimelineModel extends Model {
             'member_removed', 
             'task_created',
             'task_assigned',
+            'task_updated',
+            'task_deleted',
             'task_completed',
             'milestone_reached',
             'budget_updated',
-            'comment_added'
+            'comment_added',
+            'deleted',
+            'manager_changed',
+            'progress_updated'
           ]
         },
         title: { type: 'string', maxLength: 255 },

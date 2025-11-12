@@ -214,6 +214,28 @@ class AttendanceService {
       throw new Error(error.response?.data?.message || error.message || 'Lỗi khi tạo bảng lương');
     }
   }
+
+  // Get all settings from attendance-service
+  async getSettings(): Promise<any> {
+    try {
+      const response = await apiService.get('/api/attendance/settings');
+      return response.data; // Array of { key, name, value }
+    } catch (error: any) {
+      console.error('Error fetching settings:', error);
+      throw new Error(error.response?.data?.message || error.message || 'Lỗi khi lấy settings');
+    }
+  }
+
+  // Get specific setting by key
+  async getSettingByKey(key: string): Promise<any> {
+    try {
+      const response = await apiService.get(`/api/attendance/settings/${key}`);
+      return response.data; // { key, name, value }
+    } catch (error: any) {
+      console.error('Error fetching setting by key:', error);
+      throw new Error(error.response?.data?.message || error.message || 'Lỗi khi lấy setting');
+    }
+  }
 }
 
 export const attendanceService = new AttendanceService();

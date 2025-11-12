@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Modal, 
   Form, 
@@ -17,17 +17,21 @@ import {
   Divider,
   InputNumber,
   Select,
-  Tooltip
+  Tooltip,
+  DatePicker
 } from 'antd';
 import {
   RobotOutlined,
   CheckCircleOutlined,
   UserOutlined,
   BulbOutlined,
-  StarOutlined
+  StarOutlined,
+  WarningOutlined
 } from '@ant-design/icons';
 import { ProjectMember } from '@/types/project';
 import jobService from '@/service/jobService';
+import { attendanceService } from '@/service/attendanceService';
+import dayjs, { Dayjs } from 'dayjs';
 
 const { TextArea } = Input;
 const { Step } = Steps;
@@ -77,6 +81,7 @@ interface CandidateMatch {
   can_take_more_work?: boolean;
   workload_assessment?: string;
   risk_level?: 'low' | 'medium' | 'high';
+  overlap_task_count?: number;
 }
 
 interface CandidatesResponse {
@@ -134,6 +139,71 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
   const [allProjectMembers, setAllProjectMembers] = useState<CandidateMatch[]>([]);
   const [selectedCandidate, setSelectedCandidate] = useState<number | null>(null);
 
+  // NEW: Project tasks for dependencies dropdown
+  const [projectTasks, setProjectTasks] = useState<Array<{ task_id: string; title: string; status: string }>>([]);
+
+  // NEW: Working days settings from attendance-service
+  const [workingDays, setWorkingDays] = useState<{
+    monday: boolean;
+    tuesday: boolean;
+    wednesday: boolean;
+    thursday: boolean;
+    friday: boolean;
+    saturday: boolean;
+    sunday: boolean;
+  } | null>(null);
+
+  // NEW: Fetch project tasks and working days when modal opens
+  useEffect(() => {
+    if (visible && projectId) {
+      fetchProjectTasks();
+      fetchWorkingDays();
+    }
+  }, [visible, projectId]);
+
+  const fetchProjectTasks = async () => {
+    try {
+      const response = await jobService.getProjectTasks(projectId);
+      if (response.data.success) {
+        setProjectTasks(response.data.tasks || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch project tasks:', error);
+    }
+  };
+
+  const fetchWorkingDays = async () => {
+    try {
+      const setting = await attendanceService.getSettingByKey('WorkingDays');
+      if (setting && setting.value) {
+        const parsed = typeof setting.value === 'string' ? JSON.parse(setting.value) : setting.value;
+        setWorkingDays(parsed);
+        console.log('✅ Loaded working days:', parsed);
+      }
+    } catch (error) {
+      console.error('Failed to fetch working days:', error);
+      // Fallback: Assume Mon-Fri
+      setWorkingDays({
+        monday: true,
+        tuesday: true,
+        wednesday: true,
+        thursday: true,
+        friday: true,
+        saturday: false,
+        sunday: false
+      });
+    }
+  };
+
+  // Helper: Check if a date is a working day based on settings
+  const isWorkingDay = (date: any): boolean => {
+    if (!workingDays) return true; // If not loaded yet, allow all days
+    const dayOfWeek = date.day(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+    const dayMap = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayKey = dayMap[dayOfWeek] as keyof typeof workingDays;
+    return workingDays[dayKey] === true;
+  };
+
   const handleReset = () => {
     setCurrentStep(0);
     setTaskInput({ title: '', description: '' });
@@ -142,6 +212,8 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
     setSuggestedCandidates([]);
     setAllProjectMembers([]);
     setSelectedCandidate(null);
+    setProjectTasks([]); // Clear project tasks
+    setWorkingDays(null); // Clear working days
     form.resetFields();
   };
 
@@ -153,7 +225,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
   // Step 1: Analyze with AI
   const handleAnalyze = async () => {
     try {
-      await form.validateFields(['title', 'description']);
+      await form.validateFields(['title', 'description', 'start_date', 'due_date']);
       const values = form.getFieldsValue();
       
       setLoading(true);
@@ -162,7 +234,9 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
       const response = await jobService.analyzeJob({
         title: values.title,
         description: values.description,
-        project_id: projectId
+        project_id: projectId,
+        start_date: values.start_date ? values.start_date.format('YYYY-MM-DD') : undefined,
+        due_date: values.due_date ? values.due_date.format('YYYY-MM-DD') : undefined
       });
 
       if (response.data.success) {
@@ -196,10 +270,19 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
       setLoading(true);
       message.loading({ content: 'Đang tìm ứng viên phù hợp...', key: 'find', duration: 0 });
 
-      const response = await jobService.findCandidates({
+      const estHours = aiAnalysis?.estimated_hours || 0;
+      const formStart = form.getFieldValue('start_date');
+      const formDue = form.getFieldValue('due_date');
+      const computedDays = formStart && formDue ? formDue.diff(formStart, 'day') : Math.max(1, Math.ceil(estHours / 8));
+
+      const payload: any = {
         project_id: projectId,
         job_title: taskInput.title,
-        job_estimated_hours: aiAnalysis?.estimated_hours || 0,
+        job_estimated_days: computedDays,
+        // keep hours for backward compatibility
+        job_estimated_hours: estHours,
+        start_date: formStart ? formStart.format('YYYY-MM-DD') : undefined,
+        due_date: formDue ? formDue.format('YYYY-MM-DD') : undefined,
         required_skills: editableSkills.map((skill: any) => ({
           skill_id: skill.skill_id,
           proficiency_level: skill.required_level,
@@ -208,7 +291,9 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
         min_match_score: 0,
         max_results: 1000,
         check_workload: true
-      });
+      };
+
+      const response = await jobService.findCandidates(payload);
 
       if (response.data.success) {
         const data: CandidatesResponse = response.data;
@@ -243,21 +328,30 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
       }
 
       setLoading(true);
-      message.loading({ content: 'Đang tạo công việc...', key: 'create', duration: 0 });
+      message.loading({ content: 'Đang tạo công việc và phân tích workload...', key: 'create', duration: 0 });
+
+      const formValues = form.getFieldsValue();
 
       const response = await jobService.createJobWithAnalysis({
         title: taskInput.title,
         description: taskInput.description,
         project_id: projectId,
         status: 'todo',
+        priority: formValues.priority || 'medium', // NEW: include priority
         assigned_to_user_id: selectedCandidate,
         difficulty_level: aiAnalysis?.difficulty_level,
+        // send canonical estimated_days (frontend prefers days). Include hours for compatibility.
+        estimated_days: Math.max(1, Math.ceil((aiAnalysis?.estimated_hours || 0) / 8)),
         estimated_hours: aiAnalysis?.estimated_hours,
         ai_analysis_result: JSON.stringify(aiAnalysis),
         required_skills: editableSkills.map((skill: any) => ({
           skill_id: skill.skill_id,
           proficiency_level: skill.required_level
-        }))
+        })),
+        // NEW: include start_date, due_date, depends_on
+        start_date: formValues.start_date ? formValues.start_date.format('YYYY-MM-DD') : undefined,
+        due_date: formValues.due_date ? formValues.due_date.format('YYYY-MM-DD') : undefined,
+        depends_on: formValues.depends_on || []
       });
 
       if (response.data.success) {
@@ -268,10 +362,107 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
         throw new Error('Create job failed');
       }
     } catch (error: any) {
-      message.error({
-        content: `Lỗi tạo công việc: ${error.response?.data?.details || error.message}`,
-        key: 'create'
-      });
+      console.error('Create task error:', error);
+      
+      // Handle specific error codes from BE
+      const errorData = error.response?.data;
+      
+      if (errorData?.error === 'TIMELINE_CONFLICT') {
+        // Timeline overlap - show detailed analysis
+        Modal.error({
+          title: 'Xung đột thời gian!',
+          width: 600,
+          content: (
+            <div>
+              <p>{errorData.message}</p>
+              {errorData.timeline_analysis && (
+                <div style={{ marginTop: 16 }}>
+                  <Alert
+                    type={errorData.timeline_analysis.risk_level === 'critical' ? 'error' : 'warning'}
+                    message={`Risk Level: ${errorData.timeline_analysis.risk_level.toUpperCase()}`}
+                    description={
+                      <div>
+                        <p><strong>AI Analysis:</strong> {errorData.timeline_analysis.ai_reasoning}</p>
+                        <p><strong>Overlapping tasks:</strong> {errorData.timeline_analysis.overlapping_tasks?.length || 0}</p>
+                        <p><strong>Total overlap hours:</strong> {errorData.timeline_analysis.total_overlap_hours}h</p>
+                        {errorData.timeline_analysis.recommendations?.length > 0 && (
+                          <div>
+                            <strong>Recommendations:</strong>
+                            <ul>
+                              {errorData.timeline_analysis.recommendations.map((rec: string, idx: number) => (
+                                <li key={idx}>{rec}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    }
+                  />
+                </div>
+              )}
+            </div>
+          )
+        });
+      } else if (errorData?.error === 'DEPENDENCY_NOT_MET') {
+        // Dependency error
+        Modal.error({
+          title: 'Task phụ thuộc chưa hoàn thành!',
+          width: 600,
+          content: (
+            <div>
+              <p>{errorData.message}</p>
+              {errorData.blocking_tasks && errorData.blocking_tasks.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <strong>Blocking tasks:</strong>
+                  <ul>
+                    {errorData.blocking_tasks.map((task: any, idx: number) => (
+                      <li key={idx}>
+                        <Tag color="red">{task.status}</Tag>
+                        {task.title} - {task.issue}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {errorData.recommendations && errorData.recommendations.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <strong>Gợi ý:</strong>
+                  <ul>
+                    {errorData.recommendations.map((rec: string, idx: number) => (
+                      <li key={idx}>{rec}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )
+        });
+      } else if (errorData?.error === 'AI_SERVICE_UNAVAILABLE') {
+        // AI service down
+        Modal.warning({
+          title: 'Dịch vụ AI không khả dụng',
+          content: (
+            <div>
+              <p>{errorData.message}</p>
+              <p><strong>Details:</strong> {errorData.details}</p>
+              {errorData.fallback_analysis && (
+                <Alert
+                  type="warning"
+                  message="Fallback analysis"
+                  description={`Risk level: ${errorData.fallback_analysis.risk_level}`}
+                  style={{ marginTop: 12 }}
+                />
+              )}
+            </div>
+          )
+        });
+      } else {
+        // Generic error
+        message.error({
+          content: `Lỗi tạo công việc: ${errorData?.details || error.message}`,
+          key: 'create'
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -309,10 +500,124 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
         rules={[{ required: true, message: 'Vui lòng nhập mô tả!' }]}
       >
         <TextArea
-          rows={8}
+          rows={6}
           placeholder="Mô tả chi tiết về công việc, yêu cầu, deliverables..."
           showCount
           maxLength={2000}
+        />
+      </Form.Item>
+
+      {/* NEW: Priority Selector */}
+      <Form.Item
+        name="priority"
+        label="Mức độ ưu tiên"
+        rules={[{ required: true, message: 'Vui lòng chọn mức độ ưu tiên!' }]}
+        initialValue="medium"
+      >
+        <Select size="large" placeholder="Chọn mức độ ưu tiên">
+          <Select.Option value="low">
+            <Tag color="blue">Thấp</Tag> - Không gấp, có thể làm sau
+          </Select.Option>
+          <Select.Option value="medium">
+            <Tag color="orange">Trung bình</Tag> - Ưu tiên bình thường
+          </Select.Option>
+          <Select.Option value="high">
+            <Tag color="red">Cao</Tag> - Cần hoàn thành sớm
+          </Select.Option>
+          <Select.Option value="urgent">
+            <Tag color="volcano">Khẩn cấp</Tag> - Ưu tiên tối đa
+          </Select.Option>
+        </Select>
+      </Form.Item>
+
+      {/* NEW: Date Range Picker */}
+      <Form.Item
+        label="Thời gian thực hiện"
+        required
+        style={{ marginBottom: 0 }}
+      >
+        <Space.Compact style={{ width: '100%' }}>
+          <Form.Item
+            name="start_date"
+            rules={[{ required: true, message: 'Chọn ngày bắt đầu!' }]}
+            style={{ display: 'inline-block', width: 'calc(50% - 8px)', marginRight: 8 }}
+          >
+            <DatePicker
+              placeholder="Ngày bắt đầu"
+              style={{ width: '100%' }}
+              format="DD/MM/YYYY"
+              disabledDate={(current) => {
+                // Disable past dates
+                if (current && current < dayjs().startOf('day')) return true;
+                // Disable non-working days based on settings
+                if (current && !isWorkingDay(current)) return true;
+                return false;
+              }}
+            />
+          </Form.Item>
+          <Form.Item
+            name="due_date"
+            rules={[
+              { required: true, message: 'Chọn deadline!' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  const startDate = getFieldValue('start_date');
+                  if (!value || !startDate || value.isAfter(startDate)) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error('Deadline phải sau ngày bắt đầu!'));
+                },
+              }),
+            ]}
+            style={{ display: 'inline-block', width: 'calc(50% - 8px)' }}
+          >
+            <DatePicker
+              placeholder="Deadline"
+              style={{ width: '100%' }}
+              format="DD/MM/YYYY"
+              disabledDate={(current) => {
+                const startDate = form.getFieldValue('start_date');
+                // Disable dates before or equal to start_date
+                if (current && startDate && current <= startDate) return true;
+                // Disable non-working days based on settings
+                if (current && !isWorkingDay(current)) return true;
+                return false;
+              }}
+            />
+          </Form.Item>
+        </Space.Compact>
+      </Form.Item>
+
+      {/* NEW: Dependencies Selector */}
+      <Form.Item
+        name="depends_on"
+        label={
+          <span>
+            Phụ thuộc task khác (optional){' '}
+            <Tooltip title="Task này chỉ có thể bắt đầu khi các task được chọn hoàn thành">
+              <WarningOutlined style={{ color: '#faad14' }} />
+            </Tooltip>
+          </span>
+        }
+      >
+        <Select
+          mode="multiple"
+          placeholder="Chọn tasks phải hoàn thành trước"
+          allowClear
+          options={projectTasks
+            .filter(t => t.status !== 'cancelled') // Don't show cancelled tasks
+            .map(t => ({
+              value: t.task_id,
+              label: (
+                <span>
+                  <Tag color={t.status === 'done' ? 'green' : t.status === 'in_progress' ? 'blue' : 'orange'}>
+                    {t.status}
+                  </Tag>
+                  {t.title}
+                </span>
+              ),
+              disabled: t.status !== 'done' // Only allow selecting completed tasks
+            }))}
         />
       </Form.Item>
 
@@ -324,6 +629,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
             <li>Thời gian ước tính (giờ)</li>
             <li>Kỹ năng cần thiết (A-E level)</li>
             <li>Khuyến nghị thực hiện</li>
+            <li>Phân tích workload và xung đột thời gian</li>
           </ul>
         }
         type="info"
@@ -348,11 +654,27 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
   const renderStepAnalysis = () => {
     if (!aiAnalysis) return null;
 
+    const formValues = form.getFieldsValue();
+    const startDate = formValues.start_date;
+    const dueDate = formValues.due_date;
+    const workDays = startDate && dueDate ? dueDate.diff(startDate, 'day') : 0;
+
     return (
       <div>
         {/* Summary */}
         <Card title="Phân tích tổng quan" style={{ marginBottom: 16 }}>
           <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            {/* Hiển thị thời gian đã chọn */}
+            {startDate && dueDate && (
+              <div>
+                <strong>Thời gian thực hiện:</strong>{' '}
+                <Tag color="purple" icon={<CheckCircleOutlined />}>
+                  {startDate.format('DD/MM/YYYY')} → {dueDate.format('DD/MM/YYYY')}
+                </Tag>
+                <Tag color="cyan">{workDays} ngày ({workDays * 8}h)</Tag>
+              </div>
+            )}
+
             <div>
               <strong>Mức độ khó:</strong>{' '}
               <Tag color={difficultyColors[aiAnalysis.difficulty_level - 1]}>
@@ -362,7 +684,18 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
             
             <div>
               <strong>Thời gian ước tính:</strong>{' '}
-              <Tag color="blue">{aiAnalysis.estimated_hours} giờ</Tag>
+              {(() => {
+                const estHours = aiAnalysis.estimated_hours || 0;
+                const estDays = Math.max(1, Math.ceil(estHours / 8));
+                return (
+                  <>
+                    <Tag color="blue">{estDays} ngày ({estHours}h)</Tag>
+                    {workDays > 0 && estHours === workDays * 8 && (
+                      <Tag color="green" icon={<CheckCircleOutlined />}>Tự động tính từ timeline</Tag>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             <div>
@@ -500,7 +833,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
         )
       },
       {
-        title: 'Match Score',
+        title: 'Độ phù hợp',
         dataIndex: 'match_score',
         key: 'match_score',
         render: (score: number) => (
@@ -512,20 +845,17 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
         defaultSortOrder: 'descend' as const
       },
       {
-        title: 'Workload',
-        key: 'workload',
+        title: 'Số task trùng thời gian',
+        key: 'overlap',
         render: (record: CandidateMatch) => {
-          if (record.current_workload_hours == null) {
-            return <Tag>N/A</Tag>;
-          }
-          const riskColor = record.risk_level === 'low' ? 'green' : record.risk_level === 'medium' ? 'orange' : 'red';
+          const count = record.overlap_task_count ?? 0;
           return (
-            <div>
-              <Tag color={riskColor}>{record.current_workload_hours}h</Tag>
-              {!record.can_take_more_work && <Tag color="red">Quá tải</Tag>}
-            </div>
+            <Tooltip title="Số task hiện tại của user trùng với thời gian task mới">
+              <Tag color={count === 0 ? 'green' : count < 3 ? 'orange' : 'red'}>{count} task</Tag>
+            </Tooltip>
           );
-        }
+        },
+        width: 120
       },
       {
         title: 'Đánh giá',
@@ -540,7 +870,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
         )
       },
       {
-        title: 'Khớp/Tổng',
+        title: 'Tổng số kĩ năng khớp',
         key: 'match_count',
         render: (record: CandidateMatch) => (
           <span>
@@ -650,6 +980,14 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
                   showIcon
                   style={{ marginBottom: 12 }}
                 />
+              )}
+              {typeof selectedCandidateData.overlap_task_count !== 'undefined' && (
+                <div>
+                  <strong>Số task trùng thời gian:</strong>{' '}
+                  <Tag color={selectedCandidateData.overlap_task_count === 0 ? 'green' : selectedCandidateData.overlap_task_count < 3 ? 'orange' : 'red'}>
+                    {selectedCandidateData.overlap_task_count} task
+                  </Tag>
+                </div>
               )}
               
               {selectedCandidateData.matched_skills && selectedCandidateData.matched_skills.length > 0 && (
