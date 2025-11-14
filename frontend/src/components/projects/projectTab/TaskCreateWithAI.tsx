@@ -21,13 +21,15 @@ import {
   DatePicker
 } from 'antd';
 import {
-  RobotOutlined,
   CheckCircleOutlined,
   UserOutlined,
   BulbOutlined,
   StarOutlined,
   WarningOutlined
 } from '@ant-design/icons';
+// Use Material UI icons already installed to avoid react-icons resolution issues
+import { FaBrain } from "react-icons/fa";
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { ProjectMember } from '@/types/project';
 import jobService from '@/service/jobService';
 import { attendanceService } from '@/service/attendanceService';
@@ -331,13 +333,15 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
       message.loading({ content: 'Đang tạo công việc và phân tích workload...', key: 'create', duration: 0 });
 
       const formValues = form.getFieldsValue();
+      // read priority explicitly (getFieldValue ensures we read even if the field was unmounted)
+      const priorityVal = form.getFieldValue('priority') ?? formValues.priority ?? 'medium';
 
       const response = await jobService.createJobWithAnalysis({
         title: taskInput.title,
         description: taskInput.description,
         project_id: projectId,
         status: 'todo',
-        priority: formValues.priority || 'medium', // NEW: include priority
+        priority: priorityVal,
         assigned_to_user_id: selectedCandidate,
         difficulty_level: aiAnalysis?.difficulty_level,
         // send canonical estimated_days (frontend prefers days). Include hours for compatibility.
@@ -633,13 +637,13 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
           </ul>
         }
         type="info"
-        icon={<RobotOutlined />}
+        icon={<AutoAwesomeIcon style={{ color: '#1890ff' }} />}
         style={{ marginBottom: 16 }}
       />
 
       <Button
         type="primary"
-        icon={<RobotOutlined />}
+        icon={<FaBrain style={{ fontSize: 18 }} />}
         onClick={handleAnalyze}
         loading={loading}
         size="large"
@@ -1051,9 +1055,9 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
       destroyOnClose
     >
       <Steps current={currentStep} style={{ marginBottom: 24 }}>
-        <Step title="Nhập thông tin" icon={<BulbOutlined />} />
-        <Step title="Phân tích AI" icon={<RobotOutlined />} />
-        <Step title="Chọn ứng viên" icon={<UserOutlined />} />
+    <Step title="Nhập thông tin" icon={<BulbOutlined />} />
+    <Step title="Phân tích AI" icon={<FaBrain />} />
+    <Step title="Chọn ứng viên" icon={<UserOutlined />} />
       </Steps>
 
       <Spin spinning={loading}>

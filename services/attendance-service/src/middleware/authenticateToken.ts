@@ -13,8 +13,27 @@ export const authenticateToken = (
   res: Response, 
   next: NextFunction
 ): void => {
-  const token = req.headers['authorization'];
-  
+  // Accept Authorization header or token stored in cookies (cookie name: token)
+  let token = (req.headers['authorization'] as string) || '';
+  // If not provided in header, try to read cookie header and extract common cookie keys
+  if (!token || String(token).trim() === '') {
+    const cookieHeader = req.headers['cookie'] as string | undefined;
+    if (cookieHeader) {
+      // Parse cookies like 'key1=val1; key2=val2'
+      const pairs = cookieHeader.split(';').map(s => s.trim());
+      for (const p of pairs) {
+        const [k, v] = p.split('=');
+        if (!k) continue;
+        const key = k.trim();
+        const val = (v || '').trim();
+        if (key === 'token' || key === 'accessToken' || key === 'auth_token') {
+          token = val;
+          break;
+        }
+      }
+    }
+  }
+
   if (!token) {
     res.status(401).json({ success: false, message: 'No token provided' });
     return;

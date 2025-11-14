@@ -263,3 +263,91 @@ export const calculateAndSaveMonthly = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: error.message || 'Internal error' });
   }
 };
+
+/**
+ * Bulk calculate monthly attendance for multiple users
+ * POST /api/admin/bulk-calculate-monthly
+ * Body: { userIds: number[], year: number, month: number }
+ */
+export const bulkCalculateMonthly = async (req: Request, res: Response) => {
+  try {
+    const { userIds, year, month } = req.body;
+    
+    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'userIds (array) is required' 
+      });
+    }
+    
+    if (!year || !month) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'year and month are required' 
+      });
+    }
+
+    const dateStr = `${String(year)}-${String(month).padStart(2, '0')}-01`;
+    
+    console.log(`\n📊 === BULK CALCULATE MONTHLY ATTENDANCE ===`);
+    console.log(`   📅 Month: ${year}-${String(month).padStart(2, '0')}`);
+    console.log(`   👥 Total users: ${userIds.length}`);
+    console.log(`   🔢 User IDs: ${userIds.slice(0, 10).join(', ')}${userIds.length > 10 ? '...' : ''}`);
+
+    const results = {
+      total: userIds.length,
+      success: 0,
+      failed: 0,
+      errors: [] as any[]
+    };
+
+    // Process each user sequentially to avoid overwhelming the database
+    for (let i = 0; i < userIds.length; i++) {
+      const userId = Number(userIds[i]);
+      
+      try {
+        console.log(`\n   [${i + 1}/${userIds.length}] Processing user ${userId}...`);
+        
+        const result = await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, dateStr);
+        
+        if (result && result.success !== false) {
+          results.success++;
+          console.log(`   ✅ User ${userId} - Success`);
+        } else {
+          results.failed++;
+          results.errors.push({ userId, error: result?.error || 'Unknown error' });
+          console.log(`   ❌ User ${userId} - Failed: ${result?.error || 'Unknown'}`);
+        }
+      } catch (error: any) {
+        results.failed++;
+        results.errors.push({ userId, error: error.message || 'Unknown error' });
+        console.error(`   ❌ User ${userId} - Exception: ${error.message}`);
+      }
+
+      // Add small delay to avoid overwhelming the system
+      if (i < userIds.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
+
+    console.log(`\n📊 === BULK CALCULATE SUMMARY ===`);
+    console.log(`   ✅ Success: ${results.success}/${results.total}`);
+    console.log(`   ❌ Failed: ${results.failed}/${results.total}`);
+    
+    if (results.errors.length > 0) {
+      console.log(`   ⚠️  Errors:`, results.errors.slice(0, 5));
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Bulk calculate completed: ${results.success} success, ${results.failed} failed`,
+      data: results
+    });
+  } catch (error: any) {
+    console.error('❌ Error in bulkCalculateMonthly:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal error' 
+    });
+  }
+};

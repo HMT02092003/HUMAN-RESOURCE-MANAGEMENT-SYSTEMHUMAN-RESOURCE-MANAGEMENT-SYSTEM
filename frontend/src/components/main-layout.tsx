@@ -131,20 +131,41 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     }, [role, requiredPermission, permissionType]);
 
     const checkUserPermissions = (userData: any, permissionKey: string, permType: PermissionType) => {
-            if (userData?.user?.permissions) {
+        console.log('🔍 [MAIN-LAYOUT] ===== CHECKING PERMISSIONS =====');
+        console.log('👤 User data:', userData);
+        console.log('🔑 Permission key required:', permissionKey);
+        console.log('📝 Permission type required:', permType);
+        console.log('🔒 User permissions object:', userData?.user?.permissions);
+        
+        if (userData?.user?.permissions) {
             const permissionValue = userData.user.permissions[permissionKey];
+            console.log(`📊 Permission value for "${permissionKey}":`, permissionValue);
+            
+            if (permissionValue === undefined || permissionValue === null) {
+                console.warn(`⚠️ [MAIN-LAYOUT] Permission "${permissionKey}" not found in user permissions!`);
+                setHasAccess(false);
+                router.push('/unauthorized');
+                return;
+            }
 
             const decodedPermissions = decodePermissions(permissionValue);
+            console.log('🔓 Decoded permissions:', decodedPermissions);
             setPermissions(decodedPermissions);
 
             // Check if user has the specific permission type requested (read, create, update, delete, approve)
             const canAccess = decodedPermissions[permType] === true;
+            console.log(`✅ Can access (${permType}):`, canAccess);
             setHasAccess(canAccess);
 
             if (!canAccess) {
+                console.error(`❌ [MAIN-LAYOUT] User does NOT have "${permType}" permission for "${permissionKey}"`);
                 router.push('/unauthorized');
+            } else {
+                console.log(`✅ [MAIN-LAYOUT] User HAS "${permType}" permission for "${permissionKey}"`);
             }
+            console.log('==============================================');
         } else {
+            console.error('❌ [MAIN-LAYOUT] No permissions found in user data!');
             setHasAccess(false);
             router.push('/unauthorized');
         }

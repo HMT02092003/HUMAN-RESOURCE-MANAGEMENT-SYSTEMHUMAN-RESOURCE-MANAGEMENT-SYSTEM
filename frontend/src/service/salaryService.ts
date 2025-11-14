@@ -1,4 +1,5 @@
 import api from './apiService';
+import Cookies from 'js-cookie';
 
 export default {
 
@@ -88,7 +89,14 @@ export default {
 
   // Trigger bulk calculation on the server for a month
   calculateFromAttendance(month: string) {
-    return api.post('/api/salary/payslips/calculate-from-attendance', { month })
+    // Attach Authorization header explicitly as a safeguard in case proxy or env
+    // strips original headers. The axios instance usually adds the token, but
+    // for this admin bulk endpoint we force it here too.
+    const token = Cookies.get('token') || (typeof window !== 'undefined' ? window.localStorage?.getItem('token') || undefined : undefined);
+    const headers: any = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    return api.post('/api/salary/payslips/calculate-from-attendance', { month }, { headers })
       .then(r => ({ 
         success: r.data?.success ?? true, 
         data: r.data?.data ?? r.data ?? null, 

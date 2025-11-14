@@ -23,6 +23,17 @@ const createOptimizedProxy = (target, pathRewrite = false, handleMultipart = fal
       console.log('📍 Body:', JSON.stringify(req.body, null, 2));
       console.log('🌐🌐🌐 ================================ 🌐🌐🌐\n');
       
+      // Ensure Authorization header is explicitly forwarded to target services
+      // Some environments or manual body writes can cause headers to be lost, so set explicitly.
+      try {
+        const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+        if (authHeader) {
+          proxyReq.setHeader('Authorization', String(authHeader));
+        }
+      } catch (e) {
+        // ignore header set errors
+      }
+
       const contentType = req.headers['content-type'] || '';
       
       // Xử lý multipart form data (cho upload file)

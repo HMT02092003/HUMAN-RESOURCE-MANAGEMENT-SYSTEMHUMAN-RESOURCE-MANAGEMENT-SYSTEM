@@ -252,20 +252,41 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
     const router = useRouter();
 
     const filterMenuItems = useCallback((items: ExtendedMenuItem[]): ExtendedMenuItem[] => {
+        console.log('🔍 [FILTER-MENU] Starting menu filter...');
+        
         return items.flatMap(item => {
+            console.log(`\n📌 [FILTER-MENU] Checking item: "${item.label}" (key: ${item.key})`);
+            
             // Hàm helper để kiểm tra permissions
             const hasPermissionAccess = (permissionKeys: string[], requireAll: boolean = false) => {
                 if (!permissionKeys || permissionKeys.length === 0) return false;
 
                 const permissionChecks = permissionKeys.map(key => {
                     const permissionValue = userPermissions[key];
-                    if (!permissionValue) return false;
-                    return decodePermissions(parseInt(permissionValue)).read;
+                    console.log(`  🔑 Permission key "${key}":`, permissionValue);
+                    
+                    // ✅ Kiểm tra kỹ hơn: value phải tồn tại và không phải null/undefined
+                    if (permissionValue === undefined || permissionValue === null || permissionValue === '') {
+                        console.log(`  ❌ Permission "${key}" is undefined/null/empty`);
+                        return false;
+                    }
+                    
+                    try {
+                        const hasRead = decodePermissions(parseInt(permissionValue)).read;
+                        console.log(`  📖 Has read permission for "${key}":`, hasRead);
+                        return hasRead;
+                    } catch (e) {
+                        console.warn(`  ⚠️ Failed to decode permission for key: ${key}`, e);
+                        return false;
+                    }
                 });
 
-                return requireAll ?
+                const result = requireAll ?
                     permissionChecks.every(check => check) :
                     permissionChecks.some(check => check);
+                
+                console.log(`  📊 Permission check result (requireAll=${requireAll}):`, result);
+                return result;
             };
 
             // Xử lý các mục con trước (nếu có)
@@ -286,7 +307,10 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
 
                 const parentPermissionKey = item.permission;
                 const hasParentPermission = !parentPermissionKey ||
-                    (userPermissions[parentPermissionKey] && decodePermissions(parseInt(userPermissions[parentPermissionKey])).read);
+                    (userPermissions[parentPermissionKey] && 
+                     userPermissions[parentPermissionKey] !== null && 
+                     userPermissions[parentPermissionKey] !== '' &&
+                     decodePermissions(parseInt(userPermissions[parentPermissionKey])).read);
 
                 if (hasParentPermission) {
                     return [{ ...item, children: filteredChildren }];
@@ -303,14 +327,18 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                 if (!permKey) return [];
 
                 const permVal = userPermissions[permKey];
-                if (!permVal) return [];
+                // ✅ Kiểm tra kỹ hơn
+                if (permVal === undefined || permVal === null || permVal === '') return [];
 
-                const decoded = decodePermissions(parseInt(permVal));
-
-                // Phải có cả quyền READ và quyền được yêu cầu (approve/create/update/delete)
-                if (!decoded.read || !decoded[item.requirePermission]) return [];
-
-                return [item];
+                try {
+                    const decoded = decodePermissions(parseInt(permVal));
+                    // Phải có cả quyền READ và quyền được yêu cầu (approve/create/update/delete)
+                    if (!decoded.read || !decoded[item.requirePermission]) return [];
+                    return [item];
+                } catch (e) {
+                    console.warn(`Failed to decode permission for requirePermission check, key: ${permKey}`, e);
+                    return [];
+                }
             }
 
             // Kiểm tra permissions array trước
@@ -321,25 +349,51 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
 
             // Fallback - Kiểm tra single permission
             const permissionKey = item.permission;
-            if (!permissionKey) return [item];
+            if (!permissionKey) {
+                console.log(`  ✅ No permission required for "${item.label}" - allowing access`);
+                return [item];
+            }
 
             const permissionValue = userPermissions[permissionKey];
-            if (!permissionValue) return [];
+            console.log(`  🔑 Single permission check for "${permissionKey}":`, permissionValue);
+            
+            // ✅ Kiểm tra kỹ hơn
+            if (permissionValue === undefined || permissionValue === null || permissionValue === '') {
+                console.log(`  ❌ Permission value is undefined/null/empty - denying access`);
+                return [];
+            }
 
-            const decodedPermission = decodePermissions(parseInt(permissionValue));
-            return decodedPermission.read === true ? [item] : [];
+            try {
+                const decodedPermission = decodePermissions(parseInt(permissionValue));
+                const hasReadPermission = decodedPermission.read === true;
+                console.log(`  📖 Has read permission:`, hasReadPermission);
+                console.log(`  ${hasReadPermission ? '✅ ALLOWED' : '❌ DENIED'}`);
+                return hasReadPermission ? [item] : [];
+            } catch (e) {
+                console.warn(`Failed to decode permission for key: ${permissionKey}`, e);
+                return [];
+            }
         });
     }, [userPermissions]);
 
     // Cập nhật Menu Items khi Permissions thay đổi
     useEffect(() => {
+        console.log('🎨 [ADMIN-LAYOUT] ===== FILTERING MENU ITEMS =====');
+        console.log('🔒 User permissions received:', userPermissions);
+        console.log('📊 Permissions count:', userPermissions ? Object.keys(userPermissions).length : 0);
+        
         if (userPermissions && Object.keys(userPermissions).length > 0) {
+            console.log('✅ [ADMIN-LAYOUT] User has permissions - filtering menu...');
             const filteredItems = filterMenuItems(baseMenuItemsList);
+            console.log('📋 Filtered menu items count:', filteredItems.length);
+            console.log('📝 Filtered menu keys:', filteredItems.map(item => item.key));
             updateMenuItemsState(filteredItems);
         } else {
+            console.warn('⚠️ [ADMIN-LAYOUT] No permissions found - showing only dashboard');
             const dashboardItem = baseMenuItemsList.find(item => item.key === 'home');
             updateMenuItemsState(dashboardItem ? [dashboardItem] : []);
         }
+        console.log('==============================================');
     }, [userPermissions, updateMenuItemsState, filterMenuItems]);
 
     // Function to get current selected menu keys based on pathname

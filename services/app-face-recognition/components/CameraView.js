@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AttendanceAPI from '../services/AttendanceAPI';
 
 const { width, height } = Dimensions.get('window');
+const FRAME_SIZE = Math.min(width * 0.8, height * 0.5);
 
 export default function AttendanceCameraView({ onCapture }) {
   const [hasPermission, setHasPermission] = useState(null);
@@ -172,7 +173,8 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   camera: {
-    flex: 1,
+    width: '100%',
+    height: '100%',
   },
   overlay: {
     flex: 1,
@@ -180,8 +182,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   frame: {
-    width: 250,
-    height: 250,
+    width: FRAME_SIZE,
+    height: FRAME_SIZE,
     borderWidth: 2,
     borderColor: 'white',
     borderRadius: 125,

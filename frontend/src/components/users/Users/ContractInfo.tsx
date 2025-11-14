@@ -150,12 +150,6 @@ const ContractInfo: React.FC<ContractInfoProps> = ({ data }) => {
       },
     },
     {
-      title: "Bảo hiểm",
-      dataIndex: ["insurance"],
-      key: "insurance",
-      render: (insurance: number) => insurance ? `${insurance.toLocaleString()} VND` : "Không có",
-    },
-    {
       title: "Thời hạn",
       dataIndex: ["contractType", "contractTerm"],
       key: "contractType.contractTerm",

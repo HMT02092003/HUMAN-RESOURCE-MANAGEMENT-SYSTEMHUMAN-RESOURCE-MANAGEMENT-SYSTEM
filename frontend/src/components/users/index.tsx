@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Table, Button, Tooltip, ConfigProvider, Modal, message, Tag, Row, Col, Grid, Input, Typography } from 'antd';
+import { Table, Button, Tooltip, ConfigProvider, Modal, message, Tag, Row, Col, Grid, Input, Typography, Select, DatePicker } from 'antd';
 import {
   PlusCircleOutlined,
   DeleteOutlined,
@@ -35,8 +35,8 @@ const UserTable = () => {
   const [userData, setUserData] = useState<any[]>([]);
   // Store full dataset locally for client-side search/sort
   const [allUsers, setAllUsers] = useState<any[]>([]);
-  // per-column search text map
-  const [columnSearch, setColumnSearch] = useState<Record<string, string>>({});
+  // per-column search map. Values can be string, number, array (for ranges), etc.
+  const [columnSearch, setColumnSearch] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
@@ -114,14 +114,40 @@ const UserTable = () => {
 
   // Apply search and sort and then slice for pagination
   // data: full array, columnFilters: { field: text }
-  const applySearchSortSlice = (data: any[], columnFilters: Record<string,string>, sorterState: SorterState, pag: any) => {
+  const applySearchSortSlice = (data: any[], columnFilters: Record<string,any>, sorterState: SorterState, pag: any) => {
     let filtered = data;
-    const filterKeys = Object.keys(columnFilters || {}).filter(k => columnFilters[k] && columnFilters[k].trim() !== '');
+    const filterKeys = Object.keys(columnFilters || {}).filter(k => {
+      const v = columnFilters[k];
+      if (v === undefined || v === null) return false;
+      if (Array.isArray(v)) {
+        // for ranges or array values: include if any non-empty item exists
+        return v.length > 0 && v.some((it: any) => it !== undefined && it !== null && String(it).trim() !== '');
+      }
+      if (typeof v === 'string') return v.trim() !== '';
+      // numbers/booleans/etc. - include if not empty
+      return String(v) !== '';
+    });
     if (filterKeys.length > 0) {
       filtered = data.filter((r) => {
         return filterKeys.every((k) => {
+          // special handling for date range filters
+          const filterVal = columnFilters[k];
+          if (Array.isArray(filterVal) && filterVal.length === 2 && filterVal[0] && filterVal[1]) {
+            // treat field as date-like
+            const getVal = (obj: any, f: string) => {
+              if (f.includes('.')) return f.split('.').reduce((acc, kk) => (acc ? acc[kk] : undefined), obj);
+              return obj[f];
+            };
+            const raw = getVal(r, k);
+            const time = raw ? new Date(raw).getTime() : null;
+            const start = new Date(filterVal[0]).setHours(0,0,0,0);
+            const end = new Date(filterVal[1]).setHours(23,59,59,999);
+            if (!time) return false;
+            return time >= start && time <= end;
+          }
+          // fallback: substring match
           const val = recordToSearchString(r, k);
-          return val.includes((columnFilters[k] || '').toLowerCase());
+          return val.includes(String(columnFilters[k] || '').toLowerCase());
         });
       });
     }
@@ -278,7 +304,7 @@ const UserTable = () => {
       dataIndex: "birthday",
       key: "birthday",
       sorter: true,
-      ...getColumnSearchProps('birthday'),
+      ...getColumnSearchProps('birthday', { type: 'dateRange', placeholder: 'Ngày sinh' }),
       defaultSortOrder: sorter.field === 'birthday' ? sorter.order : undefined,
       render: (text: Date) => formatDate(text),
       width: 150,
@@ -308,7 +334,8 @@ const UserTable = () => {
       dataIndex: "gender",
       key: "gender",
       sorter: true,
-      ...getColumnSearchProps('gender'),
+      // Use select filter for gender to make selection easier for users
+      ...getColumnSearchProps('gender', { type: 'select', options: Gender.map(g => ({ value: g.key, label: g.value })) }),
       defaultSortOrder: sorter.field === 'gender' ? sorter.order : undefined,
       render: (gender: number) => {
         return Gender.find((g) => g.key === gender)?.value || "-";
@@ -320,7 +347,7 @@ const UserTable = () => {
       dataIndex: "status",
       key: "status",
       sorter: true,
-      ...getColumnSearchProps('status'),
+      ...getColumnSearchProps('status', { type: 'select', options: statusOptions.map(s => ({ value: s.value, label: s.label })) }),
       defaultSortOrder: sorter.field === 'status' ? sorter.order : undefined,
       render: (status: string | number) => {
         const statusNum = typeof status === 'string' ? parseInt(status, 10) : status;
@@ -367,7 +394,7 @@ const UserTable = () => {
       dataIndex: "startDate",
       key: "startDate",
       sorter: true,
-      ...getColumnSearchProps('startDate'),
+      ...getColumnSearchProps('startDate', { type: 'dateRange', placeholder: 'Ngày vào làm' }),
       defaultSortOrder: sorter.field === 'startDate' ? sorter.order : undefined,
       render: (text: Date) => formatDate(text),
       width: 180,
@@ -377,7 +404,7 @@ const UserTable = () => {
       dataIndex: "createdAt",
       key: "createdAt",
       sorter: true,
-      ...getColumnSearchProps('createdAt'),
+      ...getColumnSearchProps('createdAt', { type: 'dateRange', placeholder: 'Ngày tạo' }),
       defaultSortOrder: sorter.field === 'createdAt' ? sorter.order : undefined,
       render: (text: Date) => formatDate(text),
       width: 180,
@@ -451,7 +478,7 @@ const UserTable = () => {
   ];
 
   // Per-column search helpers (function declarations so they are available to column definitions above)
-  function handleColumnSearch(value: string, dataIndex: string) {
+  function handleColumnSearch(value: any, dataIndex: string) {
     const newFilters = { ...(columnSearch || {}), [dataIndex]: value };
     setColumnSearch(newFilters);
     const newPag = { ...pagination, current: 1 };
@@ -460,25 +487,80 @@ const UserTable = () => {
     setPagination(prev => ({ ...prev, total: (allUsers || []).filter((r:any) => {
       const keys = Object.keys(newFilters).filter(k => newFilters[k]);
       if (keys.length === 0) return true;
-      return keys.every(k => recordToSearchString(r, k).includes(newFilters[k].toLowerCase()));
+      return keys.every(k => {
+        const filterVal = newFilters[k];
+        if (Array.isArray(filterVal) && filterVal.length === 2 && filterVal[0] && filterVal[1]) {
+          const getVal = (obj: any, f: string) => {
+            if (f.includes('.')) return f.split('.').reduce((acc, kk) => (acc ? acc[kk] : undefined), obj);
+            return obj[f];
+          };
+          const raw = getVal(r, k);
+          const time = raw ? new Date(raw).getTime() : null;
+          const start = new Date(filterVal[0]).setHours(0,0,0,0);
+          const end = new Date(filterVal[1]).setHours(23,59,59,999);
+          if (!time) return false;
+          return time >= start && time <= end;
+        }
+        return recordToSearchString(r, k).includes(String(filterVal).toLowerCase());
+      });
     }).length }));
   }
 
-  function getColumnSearchProps(dataIndex: string, placeholder?: string) {
+  function getColumnSearchProps(dataIndex: string, opts?: { type?: 'input' | 'select' | 'dateRange'; options?: { value: any; label: string }[]; placeholder?: string }) {
+    const type = opts?.type || 'input';
+    const placeholder = opts?.placeholder || dataIndex;
     return {
+      // Keep filteredValue in sync with our columnSearch state so the UI shows current filter
+      filteredValue: columnSearch[dataIndex] ? (Array.isArray(columnSearch[dataIndex]) ? [columnSearch[dataIndex]] : [columnSearch[dataIndex]]) : null,
       filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: any) => (
         <div style={{ padding: 8 }}>
-          <Input
-            placeholder={`Tìm ${placeholder || dataIndex}`}
-            value={selectedKeys && selectedKeys[0]}
-            onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-            onPressEnter={() => { handleColumnSearch((selectedKeys && selectedKeys[0]) || '', dataIndex); confirm(); }}
-            style={{ width: 188, marginBottom: 8, display: 'block' }}
-          />
+          {type === 'select' ? (
+            <Select
+              placeholder={`Chọn ${placeholder}`}
+              value={(selectedKeys && selectedKeys[0]) ?? columnSearch[dataIndex] ?? undefined}
+              onChange={(v) => setSelectedKeys(v !== undefined && v !== null ? [v] : [])}
+              options={opts?.options?.map(o => ({ value: o.value, label: o.label }))}
+              style={{ width: 188, marginBottom: 8, display: 'block' }}
+              allowClear
+              onSelect={() => {
+                // apply filter immediately when selecting
+                const val = (selectedKeys && selectedKeys[0]) ?? columnSearch[dataIndex] ?? undefined;
+                handleColumnSearch(val, dataIndex);
+                confirm();
+              }}
+            />
+          ) : type === 'dateRange' ? (
+            <DatePicker.RangePicker
+              value={(selectedKeys && selectedKeys[0]) ? [dayjs(selectedKeys[0][0]), dayjs(selectedKeys[0][1])] : (columnSearch[dataIndex] ? [dayjs(columnSearch[dataIndex][0]), dayjs(columnSearch[dataIndex][1])] : undefined)}
+              onChange={(vals: any) => {
+                if (!vals || vals.length === 0) {
+                  setSelectedKeys([]);
+                  return;
+                }
+                const start = vals[0] ? vals[0].toISOString() : null;
+                const end = vals[1] ? vals[1].toISOString() : null;
+                setSelectedKeys(start && end ? [[start, end]] : []);
+                if (start && end) {
+                  // apply immediately
+                  handleColumnSearch([start, end], dataIndex);
+                  confirm();
+                }
+              }}
+              style={{ width: 250, marginBottom: 8, display: 'block' }}
+            />
+          ) : (
+            <Input
+              placeholder={`Tìm ${placeholder}`}
+              value={(selectedKeys && selectedKeys[0]) ?? columnSearch[dataIndex] ?? ''}
+              onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
+              onPressEnter={() => { handleColumnSearch((selectedKeys && selectedKeys[0]) || columnSearch[dataIndex] || '', dataIndex); confirm(); }}
+              style={{ width: 188, marginBottom: 8, display: 'block' }}
+            />
+          )}
           <Button
             type="primary"
             size="small"
-            onClick={() => { handleColumnSearch((selectedKeys && selectedKeys[0]) || '', dataIndex); confirm(); }}
+            onClick={() => { handleColumnSearch((selectedKeys && selectedKeys[0]) || columnSearch[dataIndex] || '', dataIndex); confirm(); }}
           >
             Tìm
           </Button>

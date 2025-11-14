@@ -1,25 +1,23 @@
 /**
- * Seed file: Time Attendances for November 2025 (100 Employees)
- * Tạo dữ liệu chấm công cho tháng 11/2025 cho 100 nhân viên
- * CHỈ TẠO ĐẾN NGÀY 14/11/2025 (hôm nay)
+ * Seed file: Time Attendances for October 2025 (100 Employees)
+ * Tạo dữ liệu chấm công cho tháng 10/2025 cho 100 nhân viên
+ * Bao gồm: check-in/out time, late minutes, early departure, work hours
  */
 
 exports.seed = async function(knex) {
-  console.log('\n📅 Seeding November 2025 attendance data (up to Nov 14)...\n');
+  console.log('\n📅 Seeding October 2025 attendance data...\n');
   
-  // Xóa dữ liệu chấm công tháng 11/2025
+  // Xóa dữ liệu chấm công tháng 10/2025 (giữ lại các tháng khác)
   await knex('time_attendances')
-    .whereBetween('date', ['2025-11-01', '2025-11-30'])
+    .whereBetween('date', ['2025-10-01', '2025-10-31'])
     .del();
 
   const attendances = [];
   
-  // Danh sách ngày làm việc trong tháng 11/2025 (CHỈ ĐẾN 14/11)
+  // Danh sách ngày làm việc trong tháng 10/2025 (loại bỏ cuối tuần)
   const workingDays = [];
-  const today = 14; // Ngày hiện tại
-  
-  for (let day = 1; day <= today; day++) {
-    const date = new Date(2025, 10, day); // Month 10 = November
+  for (let day = 1; day <= 31; day++) {
+    const date = new Date(2025, 9, day); // Month 9 = October
     const dayOfWeek = date.getDay();
     // 0 = Chủ nhật, 6 = Thứ 7
     if (dayOfWeek !== 0 && dayOfWeek !== 6) {
@@ -27,7 +25,7 @@ exports.seed = async function(knex) {
     }
   }
 
-  console.log(`   Working days in November (until today): ${workingDays.length} days`);
+  console.log(`   Working days in October: ${workingDays.length} days`);
 
   // Hàm random thời gian check-in với phân phối realistic
   const randomCheckIn = (day, employeeType) => {
@@ -38,8 +36,8 @@ exports.seed = async function(knex) {
       // Nhân viên đúng giờ: 7:30-8:25
       randomMinutes = 30 + Math.floor(Math.random() * 55);
     } else if (employeeType === 'often_late') {
-      // Nhân viên hay trễ: 8:35-9:20
-      randomMinutes = 95 + Math.floor(Math.random() * 45);
+      // Nhân viên hay trễ: 8:35-9:15
+      randomMinutes = 95 + Math.floor(Math.random() * 40);
     } else {
       // Nhân viên trung bình: 8:10-8:50
       randomMinutes = 70 + Math.floor(Math.random() * 40);
@@ -47,7 +45,7 @@ exports.seed = async function(knex) {
     
     const hour = baseHour + Math.floor(randomMinutes / 60);
     const minute = randomMinutes % 60;
-    return new Date(2025, 10, day, hour, minute, Math.floor(Math.random() * 60));
+    return new Date(2025, 9, day, hour, minute, Math.floor(Math.random() * 60));
   };
 
   // Hàm random thời gian check-out
@@ -59,8 +57,8 @@ exports.seed = async function(knex) {
       // Nhân viên chăm chỉ: 17:30-18:30
       randomMinutes = 30 + Math.floor(Math.random() * 60);
     } else if (employeeType === 'often_late') {
-      // Nhân viên hay về sớm: 17:00-17:20
-      randomMinutes = Math.floor(Math.random() * 20);
+      // Nhân viên hay về sớm: 17:00-17:25
+      randomMinutes = Math.floor(Math.random() * 25);
     } else {
       // Trung bình: 17:15-18:00
       randomMinutes = 15 + Math.floor(Math.random() * 45);
@@ -68,7 +66,7 @@ exports.seed = async function(knex) {
     
     const hour = baseHour + Math.floor(randomMinutes / 60);
     const minute = randomMinutes % 60;
-    const checkOut = new Date(2025, 10, day, hour, minute, Math.floor(Math.random() * 60));
+    const checkOut = new Date(2025, 9, day, hour, minute, Math.floor(Math.random() * 60));
     
     // Đảm bảo check-out sau check-in ít nhất 7 giờ
     const minCheckOut = new Date(checkIn.getTime() + 7 * 60 * 60 * 1000);
@@ -101,9 +99,9 @@ exports.seed = async function(knex) {
     return 0;
   };
 
-  // Phân loại nhân viên (giống logic tháng 10)
+  // Phân loại nhân viên
   const getEmployeeType = (userId) => {
-    const random = (userId * 7) % 100;
+    const random = (userId * 7) % 100; // Pseudo-random but deterministic
     if (random < 20) return 'often_late';
     if (random < 70) return 'average';
     return 'punctual';
@@ -118,12 +116,12 @@ exports.seed = async function(knex) {
     const employeeType = getEmployeeType(userId);
     
     // Tỷ lệ vắng mặt dựa trên loại nhân viên
-    let absentRate = 0.03;
-    if (employeeType === 'often_late') absentRate = 0.08;
-    else if (employeeType === 'punctual') absentRate = 0.01;
+    let absentRate = 0.03; // 3% default
+    if (employeeType === 'often_late') absentRate = 0.08; // 8% cho người hay trễ
+    else if (employeeType === 'punctual') absentRate = 0.01; // 1% cho người đúng giờ
     
     for (const day of workingDays) {
-      const date = new Date(2025, 10, day);
+      const date = new Date(2025, 9, day);
       
       // Random xem có vắng mặt không
       if (Math.random() < absentRate) {
@@ -167,5 +165,5 @@ exports.seed = async function(knex) {
   console.log(`      - Late arrivals: ${lateCount} times`);
   console.log(`      - Early departures: ${earlyLeaveCount} times`);
   console.log(`      - Average attendance: ${(totalRecords / 100).toFixed(1)} days/employee`);
-  console.log(`\n✅ November 2025 seed completed (up to Nov 14)!\n`);
+  console.log(`\n✅ October 2025 seed completed!\n`);
 };

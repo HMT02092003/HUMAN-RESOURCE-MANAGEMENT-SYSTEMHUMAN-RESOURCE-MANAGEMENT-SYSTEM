@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, TouchableOpacity, Image, Dimensions, Alert, Act
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AttendanceAPI from '../services/AttendanceAPI'; // Sửa import này
+import AuthTokenManager from '../services/AuthTokenManager';
 
 const { width, height } = Dimensions.get('window');
 
@@ -29,6 +30,12 @@ export default function AttendanceConfirmation({
         throw new Error('Không tìm thấy ID nhận diện. Vui lòng thử lại.');
       }
       
+      // Get stored token (if any) and call attendance API
+      let deviceToken = null;
+      try {
+        deviceToken = await AuthTokenManager.getAccessToken();
+      } catch (e) { /* ignore */ }
+
       // Gọi API xác nhận chấm công với recognition_log_id
       const result = await AttendanceAPI.submitAttendance({
         recognition_log_id: recognitionLogId,
@@ -38,7 +45,8 @@ export default function AttendanceConfirmation({
         imageUri: imageUri,
         confidence: confidence,
         method: recognitionData?.data?.method,
-        location: null // Có thể thêm thông tin vị trí sau
+        location: null, // Có thể thêm thông tin vị trí sau
+        token: deviceToken
       });
       
       if (result.success) {
@@ -251,16 +259,16 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   capturedImage: {
-    width: width * 0.35,
-    height: width * 0.35,
-    borderRadius: (width * 0.35) / 2,
+    width: width * 0.6,
+    height: width * 0.6,
+    borderRadius: (width * 0.6) / 2,
     borderWidth: 3,
     borderColor: '#007AFF',
   },
   confidenceBadge: {
     position: 'absolute',
     top: -5,
-    right: width * 0.15,
+    right: width * 0.2,
     backgroundColor: '#007AFF',
     paddingHorizontal: 8,
     paddingVertical: 4,

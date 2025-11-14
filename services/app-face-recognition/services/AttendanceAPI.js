@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import AuthTokenManager from './AuthTokenManager';
 
 // Heuristic to get LAN base URL from Expo metadata (no extra libs)
 function extractHost(input) {
@@ -87,36 +88,79 @@ export async function sendImageForRecognition(imageUri, meta = {}) {
 export async function submitAttendance(payload) {
   try {
     const base = await getBaseUrl();
-    
+    // Build headers with token (from payload.token or AuthTokenManager)
+    let authToken = payload?.token || null;
+    if (!authToken) {
+      try {
+        authToken = await AuthTokenManager.getAccessToken();
+        console.log('AttendanceAPI: Retrieved token from AuthTokenManager:', authToken ? 'Token exists' : 'No token');
+      } catch (e) {
+        console.error('AttendanceAPI: Failed to get token from AuthTokenManager', e);
+      }
+    } else {
+      console.log('AttendanceAPI: Using token from payload');
+    }
+
+    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+      console.log('AttendanceAPI: Authorization header set');
+    } else {
+      console.warn('AttendanceAPI: No token available - request will be unauthorized');
+    }
+
+    const requestBody = {
+      userId: payload.userId,
+      time: payload.timestamp || new Date().toISOString(),
+      recognition_log_id: payload.recognition_log_id,
+      confidence: payload.confidence,
+      method: payload.method,
+      imageUri: payload.imageUri
+    };
+    console.log('AttendanceAPI: Submitting attendance to:', `${base}/api/attendance/record`);
+    console.log('AttendanceAPI: Request body:', JSON.stringify(requestBody, null, 2));
+
     // Gọi API record - tự động phát hiện check-in hoặc check-out
     const res = await fetch(`${base}/api/attendance/record`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify({
-        userId: payload.userId,
-        time: payload.timestamp || new Date().toISOString()
-      }),
+      headers,
+      body: JSON.stringify(requestBody),
     });
-    
-    const data = await res.json();
-    
-    if (!res.ok) {
-      console.error('Attendance API error:', data);
-      return { 
-        success: false, 
-        message: data?.message || `HTTP ${res.status}: ${res.statusText}`,
-        error: data 
-      };
+
+    let data = await res.json().catch(() => null);
+    console.log('AttendanceAPI: Response status:', res.status, 'Data:', data);
+
+    if (res.status === 401) {
+      console.log('AttendanceAPI: Got 401, attempting token refresh...');
+      // attempt refresh once
+      const newToken = await AuthTokenManager.refreshAccessToken();
+      if (newToken) {
+        console.log('AttendanceAPI: Token refreshed, retrying request...');
+        headers['Authorization'] = `Bearer ${newToken}`;
+        const retry = await fetch(`${base}/api/attendance/record`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(requestBody),
+        });
+        const retryData = await retry.json().catch(() => null);
+        console.log('AttendanceAPI: Retry response status:', retry.status, 'Data:', retryData);
+        if (retry.ok) return retryData;
+        return { success: false, message: retryData?.message || `HTTP ${retry.status}`, error: retryData };
+      }
+      console.error('AttendanceAPI: Token refresh failed or no refresh token');
+      return { success: false, message: data?.message || 'Unauthorized - please login again', error: data };
     }
-    
-    console.log('Attendance API response:', data);
+
+    if (!res.ok) {
+      console.error('AttendanceAPI: Error response:', data);
+      return { success: false, message: data?.message || `HTTP ${res.status}: ${res.statusText}`, error: data };
+    }
+
+    console.log('AttendanceAPI: Success:', data);
     return data;
     
   } catch (error) {
-    console.error('Submit attendance error:', error);
+    console.error('AttendanceAPI: Submit attendance error:', error);
     return { 
       success: false, 
       message: `Network error: ${error.message}`,

@@ -104,7 +104,7 @@ const AdminAllowanceList: React.FC = () => {
     },
     {
       title: 'Hành động', key: 'actions', render: (_: any, record: any) => (
-        <div>
+        <div style={{display:"flex", justifyItems:"row"}}>
           <Button type="text" onClick={() => handleEdit(record.id)}><EditOutlined /></Button>
           <Button type="text" danger onClick={() => handleDeleteOne(record.id)}><DeleteOutlined /></Button>
         </div>

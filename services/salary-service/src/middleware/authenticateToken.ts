@@ -16,6 +16,8 @@ export const authenticateToken = (
   const token = req.headers['authorization'];
   
   if (!token) {
+    // Debug: missing Authorization header
+    console.warn('[salary-service] authenticateToken: No Authorization header present on request to', req.method, req.originalUrl);
     res.status(401).json({ success: false, message: 'No token provided' });
     return;
   }
@@ -41,9 +43,11 @@ export const authenticateToken = (
     next();
   } catch (error: any) {
     if (error.name === 'TokenExpiredError') {
+      console.warn('[salary-service] authenticateToken: Token expired for request to', req.method, req.originalUrl);
       res.status(401).json({ success: false, message: 'Access token expired, please refresh' });
       return;
     }
+    console.warn('[salary-service] authenticateToken: Invalid token for request to', req.method, req.originalUrl, 'error:', error?.message || error);
     res.status(401).json({ success: false, message: 'Unauthorized: Invalid token' });
   }
 };

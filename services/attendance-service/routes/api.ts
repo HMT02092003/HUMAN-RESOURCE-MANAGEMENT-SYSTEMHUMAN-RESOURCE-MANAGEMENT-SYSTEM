@@ -4,13 +4,20 @@
  */
 import { Router, Request, Response } from 'express';
 import { authenticateToken } from '../src/middleware/authenticateToken';
-import { getAllMonthlyAttendance, getUserMonthlyFull, recordAttendance, approveMonthlyAttendance, calculateAndSaveMonthly } from '@/controller/AttendanceController';
+import { 
+  getAllMonthlyAttendance, 
+  getUserMonthlyFull, 
+  recordAttendance, 
+  approveMonthlyAttendance, 
+  calculateAndSaveMonthly,
+  bulkCalculateMonthly
+} from '../src/controller/AttendanceController';
 import {
   getSettings,
   updateSettings,
   updateSettingByKey,
   getSettingByKey,
-}  from '@/controller/SettingsController';
+}  from '../src/controller/SettingsController';
 
 const router = Router();
 
@@ -33,6 +40,11 @@ router.post('/record', authenticateToken, async (req: Request, res: Response) =>
 // Admin helper: calculate and upsert monthly_attendances for a user/month
 router.post('/admin/calculate-monthly/:userId', authenticateToken, async (req: Request, res: Response) => {
   await calculateAndSaveMonthly(req, res as any);
+});
+
+// Admin helper: bulk calculate monthly attendance for multiple users
+router.post('/admin/bulk-calculate-monthly', authenticateToken, async (req: Request, res: Response) => {
+  await bulkCalculateMonthly(req, res as any);
 });
 
 

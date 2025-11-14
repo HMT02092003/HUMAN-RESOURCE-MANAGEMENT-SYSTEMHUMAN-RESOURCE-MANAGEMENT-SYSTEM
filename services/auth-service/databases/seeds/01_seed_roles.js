@@ -17,18 +17,21 @@ export async function seed(knex) {
       name: "Quản lý",
       description: "Cấp quản lý (Team Leader, Manager, Director)",
       key: "leader",
+      parentId: 2 // kế thừa quyền từ Nhân viên
     },
     {
       id: 4,
       name: "Kế toán",
       description: "Nhân viên kế toán/tài chính",
       key: "accountant",
+      parentId: 2 // kế thừa quyền cơ bản của Nhân viên
     },
     {
       id: 5,
       name: "Nhân sự",
       description: "Nhân viên nhân sự",
       key: "hr",
+      parentId: 2 // kế thừa quyền cơ bản của Nhân viên
     },
   ];
 

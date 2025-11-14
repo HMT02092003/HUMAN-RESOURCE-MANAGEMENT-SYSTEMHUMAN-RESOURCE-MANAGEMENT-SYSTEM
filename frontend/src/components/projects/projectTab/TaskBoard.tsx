@@ -6,13 +6,13 @@ import {
   ClockCircleOutlined,
   UserOutlined,
   FlagOutlined,
-  RobotOutlined,
   TeamOutlined,
   PlayCircleOutlined,
   CheckCircleOutlined,
   CloseOutlined,
-  OpenAIOutlined
+  PlusOutlined
 } from '@ant-design/icons';
+import { FaMagic } from "react-icons/fa";
 import { Task, ProjectMember } from '@/types/project';
 import TaskCreateWithAI from './TaskCreateWithAI';
 import jobService from '@/service/jobService';
@@ -64,6 +64,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
   const [form] = Form.useForm();
   const [manualForm] = Form.useForm();
+  const [startDateComputed, setStartDateComputed] = useState(false);
   const [workingDays, setWorkingDays] = useState<{
     monday: boolean;
     tuesday: boolean;
@@ -182,16 +183,26 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
 
   const handleTaskClick = (task: Task) => {
     setSelectedTask(task);
+    // If backend didn't provide a startDate, compute a reasonable estimate
+    // from dueDate - estimatedDays so the edit modal is pre-filled for convenience.
+    const explicitStart = task.startDate ? dayjs(task.startDate) : null;
+    const explicitDue = task.dueDate ? dayjs(task.dueDate) : null;
+    const estDays = typeof task.estimatedDays === 'number' ? task.estimatedDays : undefined;
+    const computedStart = (!explicitStart && explicitDue && estDays)
+      ? explicitDue.subtract(estDays, 'day')
+      : null;
+
     form.setFieldsValue({
       title: task.title,
       description: task.description,
       status: task.status,
       priority: task.priority,
       assigneeId: task.assignee?.id,
-      start_date: task.startDate ? dayjs(task.startDate) : null,
-      due_date: task.dueDate ? dayjs(task.dueDate) : null,
+      start_date: explicitStart || computedStart || null,
+      due_date: explicitDue || null,
       estimatedDays: task.estimatedDays
     });
+    setStartDateComputed(!!(computedStart && !explicitStart));
     setIsModalVisible(true);
   };
 
@@ -219,7 +230,26 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
         status: values.status,
         priority: values.priority,
         assignee_id: values.assigneeId,
-        start_date: values.start_date ? dayjs(values.start_date).format('YYYY-MM-DD') : undefined,
+        // Only include start_date if user explicitly set it, or if it's an existing explicit value.
+        // If we populated the field with a computed estimate and the user didn't edit it,
+        // omit start_date to avoid overwriting server data unintentionally.
+        ...(function() {
+          const s: any = {};
+          if (values.start_date) {
+            let include = true;
+            if (startDateComputed && selectedTask) {
+              const explicitDue = selectedTask.dueDate ? dayjs(selectedTask.dueDate) : null;
+              const estDays = typeof selectedTask.estimatedDays === 'number' ? selectedTask.estimatedDays : undefined;
+              const computedStart = (!selectedTask.startDate && explicitDue && estDays) ? explicitDue.subtract(estDays, 'day') : null;
+              if (computedStart && dayjs(values.start_date).isSame(computedStart, 'day')) {
+                // user didn't change the computed start date; don't include it
+                include = false;
+              }
+            }
+            if (include) s.start_date = dayjs(values.start_date).format('YYYY-MM-DD');
+          }
+          return s;
+        })(),
         due_date: values.due_date ? dayjs(values.due_date).format('YYYY-MM-DD') : undefined,
         estimated_days: estimatedDays,
         estimated_hours: estimatedDays ? estimatedDays * 8 : undefined
@@ -395,10 +425,40 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
             </>
           )}
         </div>
-        {task.dueDate && (
-          <div style={{ fontSize: 11, color: '#999' }}>
+        {(task.startDate || task.dueDate) && (
+          <div style={{ fontSize: 11, color: '#999', display: 'flex', alignItems: 'center', gap: 6 }}>
             <ClockCircleOutlined style={{ marginRight: 4 }} />
-            {dayjs(task.dueDate).format('DD/MM')}
+            {(() => {
+              // Compute a display start date: use explicit startDate if present, otherwise
+              // try to estimate from dueDate - estimatedDays (frontend-only display fallback).
+              const explicitStart = task.startDate ? dayjs(task.startDate) : null;
+              const explicitDue = task.dueDate ? dayjs(task.dueDate) : null;
+              const estDays = typeof task.estimatedDays === 'number' ? task.estimatedDays : undefined;
+              const computedStart = (!explicitStart && explicitDue && estDays)
+                ? explicitDue.subtract(estDays, 'day')
+                : null;
+
+              const displayStart = explicitStart || computedStart;
+              const isComputed = !!computedStart && !explicitStart;
+
+              return (
+                <>
+                  {displayStart && (
+                    <span title={displayStart.format('DD/MM/YYYY')}>
+                      {displayStart.format('DD/MM')}{isComputed ? ' (ước tính)' : ''}
+                    </span>
+                  )}
+
+                  {displayStart && task.dueDate && <span style={{ opacity: 0.6 }}>→</span>}
+
+                  {task.dueDate && (
+                    <span title={task.dueDate ? dayjs(task.dueDate).format('DD/MM/YYYY') : ''}>
+                      {dayjs(task.dueDate).format('DD/MM')}
+                    </span>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
       </div>
@@ -492,39 +552,48 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
 
   return (
     <div className="task-board">
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 auto' }}>
           {viewMode === 'me' && (
             <Tag color="blue" icon={<UserOutlined />}>
               Công việc của tôi
             </Tag>
           )}
+
           <Button
             type={viewMode === 'me' ? 'primary' : 'default'}
             icon={viewMode === 'me' ? <UserOutlined /> : <TeamOutlined />}
             onClick={handleToggleViewMode}
             loading={loading}
+            style={{ minWidth: 160 }}
           >
             {viewMode === 'me' ? 'Xem tất cả' : 'Công việc của tôi'}
-            <Button
-              type="primary"
-              style={{ backgroundColor: "#52c41a" }}
-              onClick={() => setIsManualModalVisible(true)}
-            >
-              Tạo thủ công
-            </Button>
           </Button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Button
-            icon={<OpenAIOutlined />}
+            type="primary"
+            style={{backgroundColor:"#52c41a"}}
+            onClick={() => setIsManualModalVisible(true)}
+          >
+            <PlusOutlined /> Tạo thủ công
+          </Button>
+
+          <Button
+            icon={<FaMagic />}
             onClick={() => setIsAIModalVisible(true)}
             style={{
               background: 'linear-gradient(90deg, #9871e8ff 0%, #0066ff 100%)',
               border: 'none',
               color: '#fff',
-              boxShadow: '0 2px 8px rgba(24,144,255,0.2)'
+              boxShadow: '0 2px 8px rgba(24,144,255,0.2)',
+              minWidth: 140
             }}
           >
             Tạo với AI
           </Button>
+        </div>
       </div>
 
       {loading ? (
