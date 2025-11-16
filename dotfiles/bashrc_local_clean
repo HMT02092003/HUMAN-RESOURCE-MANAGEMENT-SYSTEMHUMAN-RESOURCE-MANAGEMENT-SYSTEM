@@ -1,0 +1,23 @@
+# ~/.bashrc_local - personal aliases and helpers (editable)
+# Put your personal shortcuts, project aliases, and small env vars here.
+# This file is optional and is safe to edit.
+
+# Example: frontend dev shortcut (edit the path to match your repo location)
+alias ydev='cd "e:/ĐỒ_ÁN_TỐT_NGHIỆP/HUMAN-RESOURCE-MANAGEMENT-SYSTEMHUMAN-RESOURCE-MANAGEMENT-SYSTEM/frontend" && yarn dev'
+
+# Example: api-gateway shortcut
+alias agw='cd "e:/ĐỒ_ÁN_TỐT_NGHIỆP/HUMAN-RESOURCE-MANAGEMENT-SYSTEMHUMAN-RESOURCE-MANAGEMENT-SYSTEM/services/api-gateway" && yarn dev'
+
+# Handy shortcuts
+alias ll='ls -la'
+alias gs='git status'
+alias gp='git pull'
+alias gd='git diff'
+
+# If you use Python/Conda virtualenvs often, you can add helper:
+# alias ac='conda activate'
+
+# Add any other personal exports below:
+# export MY_VAR=value
+
+# End of ~/.bashrc_local

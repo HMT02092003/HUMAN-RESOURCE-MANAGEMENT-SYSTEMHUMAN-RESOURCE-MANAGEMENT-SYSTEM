@@ -100,77 +100,81 @@ export class ApplicationController {
       }
 
       // Check scope quyền quản lý đơn từ từ Auth Service
-      const scopeResult = await AuthService.checkUserScope('applications', token);
-      console.log('DEBUG - User scope result:', scopeResult);
-
-      // Nếu không có quyền hoặc scope không trả về userIds, chỉ trả về đơn từ của bản thân
-      let allowedUserIds = [];
-      if (!scopeResult.hasAccess || !scopeResult.userIds || scopeResult.userIds.length === 0) {
-        allowedUserIds = [currentUserId];
-        console.log('User has no scope access, showing only personal applications for user:', currentUserId);
-      } else {
-        allowedUserIds = scopeResult.userIds;
-        console.log(`User has ${scopeResult.scope} scope access to ${allowedUserIds.length} users:`, allowedUserIds);
-      }
+      const { allowedUserIds } = await AuthService.checkUserScope(token);
 
       const pageNum = parseInt(page);
       const pageSizeNum = parseInt(pageSize);
       const offset = (pageNum - 1) * pageSizeNum;
 
-      let applications;
-      let totalCount;
-
+      // Lấy danh sách applications với filters đúng format
       const filters = {
         allowedUserIds,
-        userId: currentUserId
+        userId: currentUserId // Để loại bỏ đơn của chính mình
       };
 
-      applications = await ApplicationModel.getAllApplicationsPaginated(filters, offset, pageSizeNum);
-      totalCount = await ApplicationModel.getAllApplicationsCount(filters);
+      const applications = await ApplicationModel.getAllApplicationsPaginated(
+        filters,
+        offset,
+        pageSizeNum
+      );
 
-      // Lấy danh sách unique user IDs từ applications
+      const totalCount = await ApplicationModel.getAllApplicationsCount(filters);
+
+      // Lấy danh sách unique user IDs từ applications (cả người tạo và người duyệt)
       const uniqueUserIds = [...new Set(applications.map(app => app.userId))];
-      // const uniqueApprovedIds = [...new Set(applications.forEach(app => {
-      //   let arr = [];
-      //   if (app.approvedBy != null) arr.push(app.approvedBy);
-      //   return arr;
-      // }))];
+      const uniqueApprovedIds = [...new Set(applications.filter(app => app.approvedBy != null).map(app => app.approvedBy))];
+      const allUserIds = [...new Set([...uniqueUserIds, ...uniqueApprovedIds])];
 
-      let uniqueApprovedIds = [];
-      applications.forEach(app => {
-        if (app.approvedBy != null) uniqueApprovedIds.push(app.approvedBy);
-      });
+      // ✨ Gọi API getUserDetail cho từng user để lấy đầy đủ thông tin (user, department, chevron)
+      const usersDetailMap = {};
+      await Promise.all(allUserIds.map(async (userId) => {
+        try {
+          const response = await axios.get(
+            `${API_GATEWAY_URL}/api/auth/users/detail/${userId}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+          if (response.data) {
+            usersDetailMap[userId] = {
+              id: response.data.id,
+              username: response.data.username,
+              fullName: response.data.fullName,
+              email: response.data.email,
+              identificationPhoto: response.data.identificationPhoto,
+              department: response.data.department ? {
+                id: response.data.department.id,
+                name: response.data.department.name
+              } : null,
+              chevron: response.data.chevron ? {
+                id: response.data.chevron.id,
+                name: response.data.chevron.name
+              } : null
+            };
+          }
+        } catch (error) {
+          console.error(`Error fetching user detail for user ${userId}:`, error.message);
+          // Fallback to basic info if detail fetch fails
+          usersDetailMap[userId] = {
+            id: userId,
+            username: 'Unknown',
+            fullName: 'Unknown',
+            email: null,
+            identificationPhoto: null,
+            department: null,
+            chevron: null
+          };
+        }
+      }));
 
-      // Gọi Auth Service để lấy thông tin users
-      const usersInfo = await AuthService.getUsersByIds(uniqueUserIds);
-      const approvedUsersInfo = await AuthService.getUsersByIds(uniqueApprovedIds);
-
-
-      // Tạo map để dễ dàng lookup user info
-      const usersMap = {};
-      usersInfo.forEach(user => {
-        usersMap[user.id] = {
-          id: user.id,
-          username: user.username,
-          fullName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-          email: user.email,
-          identificationPhoto: user.identificationPhoto
-        };
-      });
-
-      const approvedUsersMap = {};
-      approvedUsersInfo.forEach(approve => {
-        approvedUsersMap[approve.id] = {
-          ...approve,
-          fullName: `${approve.firstName || ''} ${approve.lastName || ''}`.trim()
-        };
-      });
-
-      // Map applications với user info
+      // Map thông tin user đầy đủ vào applications
       const applicationsWithUserInfo = applications.map(application => ({
         ...application,
-        approvedByInfo: approvedUsersMap[application.approvedBy] || null,
-        userInfo: usersMap[application.userId] || null
+        userInfo: usersDetailMap[application.userId] || null,
+        approvedByInfo: application.approvedBy ? usersDetailMap[application.approvedBy] : null
       }));
 
       res.json({
@@ -472,56 +476,69 @@ export class ApplicationController {
         allowedUserIds
       );
 
-      // Lấy danh sách unique user IDs từ applications
+      // Lấy danh sách unique user IDs từ applications (cả người tạo và người duyệt)
       const uniqueUserIds = [...new Set(applications.map(app => app.userId))];
+      const uniqueApprovedIds = [...new Set(applications.filter(app => app.approvedBy != null).map(app => app.approvedBy))];
+      const allUserIds = [...new Set([...uniqueUserIds, ...uniqueApprovedIds])];
 
-      // Lấy danh sách unique approvedBy IDs
-      let uniqueApprovedIds = [];
-      applications.forEach(app => {
-        if (app.approvedBy != null) uniqueApprovedIds.push(app.approvedBy);
-      });
-
-      // Gọi Auth Service để lấy thông tin users
-      const usersInfo = await AuthService.getUsersByIds(uniqueUserIds);
-      const approvedUsersInfo = uniqueApprovedIds.length > 0
-        ? await AuthService.getUsersByIds(uniqueApprovedIds)
-        : [];
-
-      // Tạo map để dễ dàng lookup user info
-      const usersMap = {};
-      usersInfo.forEach(user => {
-        usersMap[user.id] = {
-          id: user.id,
-          username: user.username,
-          fullName: `${user.lastName || ''} ${user.firstName || ''}`.trim(),
-          email: user.email,
-          identificationPhoto: user.identificationPhoto
-        };
-      });
-
-      // Tạo map để dễ dàng lookup approved user info
-      const approvedUsersMap = {};
-      approvedUsersInfo.forEach(approve => {
-        approvedUsersMap[approve.id] = {
-          id: approve.id,
-          username: approve.username,
-          fullName: `${approve.firstName || ''} ${approve.lastName || ''}`.trim(),
-          email: approve.email,
-          identificationPhoto: approve.identificationPhoto
-        };
-      });
+      // ✨ Gọi API getUserDetail cho từng user để lấy đầy đủ thông tin (user, department, chevron)
+      const usersDetailMap = {};
+      await Promise.all(allUserIds.map(async (userId) => {
+        try {
+          const response = await axios.get(
+            `${API_GATEWAY_URL}/api/auth/users/detail/${userId}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+          if (response.data) {
+            usersDetailMap[userId] = {
+              id: response.data.id,
+              username: response.data.username,
+              fullName: response.data.fullName,
+              email: response.data.email,
+              identificationPhoto: response.data.identificationPhoto,
+              department: response.data.department ? {
+                id: response.data.department.id,
+                name: response.data.department.name
+              } : null,
+              chevron: response.data.chevron ? {
+                id: response.data.chevron.id,
+                name: response.data.chevron.name
+              } : null
+            };
+          }
+        } catch (error) {
+          console.error(`Error fetching user detail for user ${userId}:`, error.message);
+          // Fallback to basic info if detail fetch fails
+          usersDetailMap[userId] = {
+            id: userId,
+            username: 'Unknown',
+            fullName: 'Unknown',
+            email: null,
+            identificationPhoto: null,
+            department: null,
+            chevron: null
+          };
+        }
+      }));
 
       // Map applications với user info và approvedBy info
       const applicationsWithUserInfo = applications.map(application => ({
         ...application,
-        userInfo: usersMap[application.userId] || {
+        userInfo: usersDetailMap[application.userId] || {
           id: application.userId,
           username: 'Unknown',
           fullName: 'Unknown User',
           email: '',
-          identificationPhoto: null
+          identificationPhoto: null,
+          department: null,
+          chevron: null
         },
-        approvedByInfo: approvedUsersMap[application.approvedBy] || null
+        approvedByInfo: application.approvedBy ? usersDetailMap[application.approvedBy] : null
       }));
 
       res.json({

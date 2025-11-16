@@ -1,0 +1,12 @@
+# ~/.bashrc_local - personal aliases and helpers (editable)
+# Put personal aliases / helpers here. This file is optional and is sourced by ~/.bashrc
+
+# Example aliases (edit paths to match your environment):
+alias ydev='cd "e:/ĐỒ_ÁN_TỐT_NGHIỆP/HUMAN-RESOURCE-MANAGEMENT-SYSTEMHUMAN-RESOURCE-MANAGEMENT-SYSTEM/frontend" && yarn dev'
+alias agw='cd "e:/ĐỒ_ÁN_TỐT_NGHIỆP/HUMAN-RESOURCE-MANAGEMENT-SYSTEMHUMAN-RESOURCE-MANAGEMENT-SYSTEM/services/api-gateway" && yarn dev'
+
+# Editor preference
+export EDITOR=nano
+
+# Add more personal exports below
+# export MY_VAR=value

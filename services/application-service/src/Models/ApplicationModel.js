@@ -212,7 +212,9 @@ export class ApplicationModel extends Model {
 
     return query
       .orderBy('created_at', 'desc')
-      .whereNot("userId", userId) 
+      .modify((builder) => {
+        if (userId) builder.whereNot("userId", userId);
+      })
       .offset(offset)
       .limit(limit);
   }
@@ -232,13 +234,14 @@ export class ApplicationModel extends Model {
       query = query.where('type', type);
     }
 
-    if (userId) {
-      query = query.where('userId', userId);
-    }
-
     // Filter theo allowedUserIds (scope permission)
     if (allowedUserIds && allowedUserIds.length > 0) {
       query = query.whereIn('userId', allowedUserIds);
+    }
+
+    // Loại bỏ đơn của chính mình (giống logic trong getAllApplicationsPaginated)
+    if (userId) {
+      query = query.whereNot('userId', userId);
     }
 
     if (startDate && endDate) {

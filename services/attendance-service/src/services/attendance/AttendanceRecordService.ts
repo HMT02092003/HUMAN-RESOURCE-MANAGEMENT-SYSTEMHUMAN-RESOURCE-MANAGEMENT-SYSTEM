@@ -8,7 +8,7 @@ import AttendanceCalculationService from './AttendanceCalculationService';
 // Thay thế bằng gọi trực tiếp từ class
 import { MonthlyReportService } from '../MonthlyReportService';
 
-export async function recordAttendance(userId: number, time: string): Promise<any> {
+export async function recordAttendance(userId: number, time: string, token?: string): Promise<any> {
   try {
     const date = dayjs(time).format('YYYY-MM-DD');
 
@@ -36,7 +36,15 @@ export async function recordAttendance(userId: number, time: string): Promise<an
     }
 
 
-    const calculation = await AttendanceCalculationService.calculateAttendance(record.checkInTime, record.checkOutTime, date, userId, undefined, otEndTime ? otEndTime.toISOString() : undefined);
+    // ✨ QUAN TRỌNG: Truyền token xuống calculateAttendance để lấy salary info
+    const calculation = await AttendanceCalculationService.calculateAttendance(
+      record.checkInTime, 
+      record.checkOutTime, 
+      date, 
+      userId, 
+      token, // Truyền token vào đây
+      otEndTime ? otEndTime.toISOString() : undefined
+    );
 
     // Calculate dailyWorkingUnit: min(1, workHours / standardHours)
     let dailyWorkingUnit = 0;

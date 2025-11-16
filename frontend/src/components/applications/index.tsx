@@ -5,6 +5,7 @@ import type { FilterConfirmProps, FilterDropdownProps } from 'antd/es/table/inte
 import dayjs from 'dayjs';
 import { useRouter } from 'next/navigation';
 import applicationService from '@/service/applicationService';
+import api from '@/service/apiService';
 import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS, FORGOT_CHECK_TYPE_LABELS } from '@/config/constant';
 import ApplicationDetailModal from './ApplicationDetailModal';
 import commonGetColumnSearchProps from '@/components/common/getColumnSearchProps';
@@ -35,6 +36,8 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({ onCreateClick, onEd
     const [selectedApplication, setSelectedApplication] = useState<any>(null);
     const [approveForm] = Form.useForm();
     const searchInput = useRef<any>(null);
+    const fetchedApproversRef = useRef<Record<string, any>>({});
+    const fetchedUsersRef = useRef<Record<string, any>>({});
 
     const fetchMyApplications = useCallback(async (page = 1, size = 10) => {
         try {
@@ -57,6 +60,53 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({ onCreateClick, onEd
     useEffect(() => {
         fetchMyApplications(1, 10);
     }, [fetchMyApplications]);
+
+    // Fetch missing user (creator) and approver details when backend omits nested fields
+    useEffect(() => {
+        if (!applications || applications.length === 0) return;
+
+        const missingUserIds = new Set<string>();
+        const missingApproverIds = new Set<string>();
+
+        applications.forEach((row: any) => {
+            // If userInfo is present but missing department or chevron, fetch full user
+            if ((!row.userInfo || !row.userInfo.department || !row.userInfo.chevron) && row.userId) {
+                missingUserIds.add(String(row.userId));
+            }
+            if ((!row.approvedByInfo || !row.approvedByInfo.department || !row.approvedByInfo.chevron) && row.approvedBy) {
+                missingApproverIds.add(String(row.approvedBy));
+            }
+        });
+
+        const idsToFetch = Array.from(new Set([...Array.from(missingUserIds), ...Array.from(missingApproverIds)])).filter(id => !fetchedUsersRef.current[id]);
+        if (idsToFetch.length === 0) return;
+
+        (async () => {
+            try {
+                const promises = idsToFetch.map(id => api.get(`/api/auth/users/detail/${id}`).then(r => r.data).catch(() => null));
+                const results = await Promise.all(promises);
+                results.forEach((user: any, idx: number) => {
+                    const id = idsToFetch[idx];
+                    if (user) fetchedUsersRef.current[id] = user;
+                });
+
+                setApplications(prev => prev.map((app: any) => {
+                    const updated = { ...app };
+                    if ((!updated.userInfo || !updated.userInfo.department || !updated.userInfo.chevron) && updated.userId) {
+                        const u = fetchedUsersRef.current[String(updated.userId)];
+                        if (u) updated.userInfo = { ...(updated.userInfo || {}), ...u };
+                    }
+                    if ((!updated.approvedByInfo || !updated.approvedByInfo.department || !updated.approvedByInfo.chevron) && updated.approvedBy) {
+                        const a = fetchedUsersRef.current[String(updated.approvedBy)];
+                        if (a) updated.approvedByInfo = { ...(updated.approvedByInfo || {}), ...a };
+                    }
+                    return updated;
+                }));
+            } catch (err) {
+                console.error('Error fetching user/approver details', err);
+            }
+        })();
+    }, [applications]);
 
     const handleTableChange = (pagination: any) => {
         const { current, pageSize: newPageSize } = pagination;
@@ -383,7 +433,19 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({ onCreateClick, onEd
                 const vb = String(b.userInfo?.fullName || '').toLowerCase();
                 return va < vb ? -1 : va > vb ? 1 : 0;
             },
-            ...commonGetColumnSearchProps('userInfo.fullName', 'Tìm người tạo...')
+            ...commonGetColumnSearchProps('userInfo.fullName', 'Tìm người tạo...'),
+            render: (_: any, record: any) => {
+                const user = record.userInfo || {};
+                const name = user.fullName || '-';
+                const dept = user.department?.name || '-';
+                const chevron = user.chevron?.name || '-';
+                return (
+                    <div>
+                        <div>{name}</div>
+                        <div style={{ fontSize: 12, color: '#888' }}>{dept} • {chevron}</div>
+                    </div>
+                );
+            }
         },
         {
             title: 'Người duyệt',
@@ -394,7 +456,19 @@ const ApplicationList: React.FC<MyApplicationListProps> = ({ onCreateClick, onEd
                 const vb = String(b.approvedByInfo?.fullName || '').toLowerCase();
                 return va < vb ? -1 : va > vb ? 1 : 0;
             },
-            ...commonGetColumnSearchProps('approvedByInfo.fullName', 'Tìm người duyệt...')
+            ...commonGetColumnSearchProps('approvedByInfo.fullName', 'Tìm người duyệt...'),
+            render: (_: any, record: any) => {
+                const approver = record.approvedByInfo || {};
+                const name = approver.fullName || '-';
+                const dept = approver.department?.name || '-';
+                const chevron = approver.chevron?.name || '-';
+                return (
+                    <div>
+                        <div>{name}</div>
+                        <div style={{ fontSize: 12, color: '#888' }}>{dept} • {chevron}</div>
+                    </div>
+                );
+            }
         },
         {
             title: 'Ngày duyệt',

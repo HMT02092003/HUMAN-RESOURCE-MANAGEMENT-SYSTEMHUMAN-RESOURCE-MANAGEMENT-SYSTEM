@@ -1,4 +1,5 @@
 import axios from 'axios';
+import knex from 'knex';
 
 const API_GATEWAY_PORT = process.env['API_GATEWAY_PORT'] || 4000;
 const SALARY_SERVICE_PORT = process.env['SALARY_SERVICE_PORT'] || 4006;
@@ -62,9 +63,48 @@ export class SalaryService {
       console.log(`⚠️ [SalaryService] Failed to fetch from direct salary-service:`, e.message);
     }
 
-    console.log(`❌ [SalaryService] Could not fetch salary for user ${userId} from salary-service`);
+    // Fallback: Direct database connection (same as seed data)
+    let salaryDbConnection: any = null;
+    try {
+      console.log(`🔍 [SalaryService] Trying direct DB connection for user ${userId}`);
+      salaryDbConnection = knex({
+        client: 'pg',
+        connection: {
+          host: process.env['DB_HOST'] || 'localhost',
+          port: Number(process.env['DB_PORT']) || 5432,
+          database: 'salary_service',
+          user: process.env['DB_USER'] || 'postgres',
+          password: process.env['DB_PASSWORD'] || '123456'
+        }
+      });
+
+      const profile = await salaryDbConnection('employee_salary_profiles')
+        .where('user_id', userId)
+        .orderBy('created_at', 'desc')
+        .first();
+
+      if (profile && profile.base_salary) {
+        const salary = parseFloat(profile.base_salary.toString());
+        const allowance = profile.allowance ? parseFloat(profile.allowance.toString()) : 0;
+        
+        console.log(`✅ [SalaryService] Salary retrieved from direct DB connection:`, { salary, allowance });
+        return { 
+          baseSalary: salary, 
+          allowance: allowance 
+        };
+      }
+    } catch (e: any) {
+      console.log(`⚠️ [SalaryService] Failed to fetch from direct DB connection:`, e.message);
+    } finally {
+      if (salaryDbConnection) {
+        await salaryDbConnection.destroy();
+      }
+    }
+
+    console.log(`❌ [SalaryService] Could not fetch salary for user ${userId} from any source`);
     return null;
   }
+
 
   /**
    * Fetch penalty rate settings from salary-service
@@ -125,6 +165,45 @@ export class SalaryService {
       }
     } catch (e: any) {
       console.log(`⚠️ [SalaryService] Failed to fetch penalty rates from direct salary-service:`, e.message);
+    }
+
+    // Fallback: Direct database connection
+    let salaryDbConnection: any = null;
+    try {
+      console.log(`🔍 [SalaryService] Trying direct DB connection for penalty rates`);
+      salaryDbConnection = knex({
+        client: 'pg',
+        connection: {
+          host: process.env['DB_HOST'] || 'localhost',
+          port: Number(process.env['DB_PORT']) || 5432,
+          database: 'salary_service',
+          user: process.env['DB_USER'] || 'postgres',
+          password: process.env['DB_PASSWORD'] || '123456'
+        }
+      });
+
+      const setting = await salaryDbConnection('settings')
+        .where('key', 'PenaltyRate')
+        .first();
+
+      if (setting && setting.value) {
+        const parsedValue = typeof setting.value === 'string' 
+          ? JSON.parse(setting.value) 
+          : setting.value;
+        const penaltyRate = parseFloat(parsedValue.rate || '0');
+        
+        console.log(`✅ [SalaryService] Penalty rate retrieved from direct DB:`, penaltyRate);
+        return {
+          late: penaltyRate,
+          earlyLeave: penaltyRate
+        };
+      }
+    } catch (e: any) {
+      console.log(`⚠️ [SalaryService] Failed to fetch penalty rates from direct DB:`, e.message);
+    } finally {
+      if (salaryDbConnection) {
+        await salaryDbConnection.destroy();
+      }
     }
 
     console.log(`❌ [SalaryService] Could not fetch penalty rates, using default 0`);

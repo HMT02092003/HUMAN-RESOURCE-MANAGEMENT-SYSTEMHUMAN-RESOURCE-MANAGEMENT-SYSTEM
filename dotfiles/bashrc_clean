@@ -1,0 +1,24 @@
+# ~/.bashrc - cleaned and minimal
+# Loaded by bash (Git Bash / WSL) on Windows
+
+# --- Preserve existing user PATH additions safely ---
+# Add Redis bin if present
+if [ -d "/e/Redis" ]; then
+  export PATH="$PATH:/e/Redis"
+fi
+
+# Add Yarn local bin if present
+if [ -d "/c/Users/Toan/AppData/Local/Yarn/bin" ]; then
+  export PATH="$PATH:/c/Users/Toan/AppData/Local/Yarn/bin"
+fi
+
+# Helpful prompt (optional)
+export PS1='[\u@\h \W]\$ '
+
+# Load user customizations (if a separate file exists)
+if [ -f "$HOME/.bashrc_local" ]; then
+  # Keep local overrides separate to avoid accidental edits to main file
+  source "$HOME/.bashrc_local"
+fi
+
+# End of ~/.bashrc

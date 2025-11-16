@@ -1706,10 +1706,43 @@ export const getUsersByIds = async (req: Request, res: Response) => {
       .whereIn('id', numericUserIds)
       .where('status', 1); // Only active users
 
+    // Enrich each user with department and chevron details by calling employee-service through gateway
+    const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
+    const headers: any = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const usersWithDetails = await Promise.all(users.map(async (user: any) => {
+      let department = null;
+      let chevron = null;
+      try {
+        if (user.departmentId) {
+          const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${user.departmentId}`, { headers });
+          department = depRes.data || null;
+        }
+      } catch (e: any) {
+        console.error(`Error fetching department ${user.departmentId}:`, e?.message || e);
+      }
+
+      try {
+        if (user.chevronId) {
+          const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: user.chevronId }, { headers });
+          chevron = chvRes.data || null;
+        }
+      } catch (e: any) {
+        console.error(`Error fetching chevron ${user.chevronId}:`, e?.message || e);
+      }
+
+      return {
+        ...user,
+        department,
+        chevron
+      };
+    }));
+
     return res.status(200).json({
       success: true,
-      data: users,
-      total: users.length
+      data: usersWithDetails,
+      total: usersWithDetails.length
     });
 
   } catch (error) {

@@ -496,11 +496,12 @@ export class AttendanceCalculationService {
 
   private static getDefaultSettings() {
     return {
-      workingHours: { start: '08:00', end: '17:00' },
+      workingHours: { start: '09:00', end: '18:00' },
       lunchBreak: { start: '12:00', end: '13:00' },
       overtimeRate: { rate: 1.5 },
       holidayRate: { rate: 3.0 },
-      penaltyRate: { rate: 0.01 } // 0.01% lương cơ bản mỗi phút (tương đương ~600 VND/phút với lương 6M)
+      // penaltyRate is fraction per minute (e.g. 0.0001 == 0.01% per minute)
+      penaltyRate: { rate: 0.0001 }
     };
   }
 

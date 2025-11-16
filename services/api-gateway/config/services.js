@@ -48,6 +48,16 @@ const ROUTE_CONFIG = [
     pathRewrite: { '^/api/attendance': '/api' }
   },
   {
+    path: '/api/shifts',
+    target: 'attendance',
+    pathRewrite: { '^/api/shifts': '/api/shifts' }
+  },
+  {
+    path: '/api/schedules',
+    target: 'attendance',
+    pathRewrite: { '^/api/schedules': '/api/schedules' }
+  },
+  {
     path: '/api/salary',
     target: 'salary',
     pathRewrite: { '^/api/salary': '/api' },

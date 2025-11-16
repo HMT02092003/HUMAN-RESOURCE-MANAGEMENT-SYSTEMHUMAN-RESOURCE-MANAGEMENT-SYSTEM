@@ -44,6 +44,8 @@ export async function seed(knex) {
     { roleId: 1, permissionId: 14, value: 31, key: 'personal_salary_info', scope: 1 },  // personal_salary_info - Full global
     { roleId: 1, permissionId: 15, value: 31, key: 'CV', scope: 1 },  // CV - Full global
     { roleId: 1, permissionId: 16, value: 31, key: 'projects', scope: 1 },  // projects - Full global
+    { roleId: 1, permissionId: 17, value: 31, key: 'manage_applications', scope: 1 },  // manage_applications - Full global
+    { roleId: 1, permissionId: 18, value: 31, key: 'shiftApproval', scope: 1 },  // shiftApproval - Full global
 
     // ==================== NHÂN VIÊN (roleId: 2) - PERSONAL ACCESS ====================
     { roleId: 2, permissionId: 2, value: 4, key: 'users', scope: 3 },    // users - read personal (xem thông tin mình)
@@ -53,6 +55,7 @@ export async function seed(knex) {
     { roleId: 2, permissionId: 14, value: 4, key: 'personal_salary_info', scope: 3 },   // personal_salary_info - read personal (xem lương mình)
     { roleId: 2, permissionId: 15, value: 4, key: 'CV', scope: 3 },   // CV - read personal (xem CV mình)
     { roleId: 2, permissionId: 16, value: 4, key: 'projects', scope: 3 },   // projects - read personal (xem project của mình)
+    { roleId: 2, permissionId: 17, value: 31, key: 'manage_applications', scope: 3 },   // manage_applications - Full personal (CRUD đơn từ của mình)
 
     // ==================== TRƯỞNG PHÒNG (roleId: 3) - DEPARTMENT MANAGEMENT ====================
     { roleId: 3, permissionId: 2, value: 4, key: 'users', scope: 2 },    // users - read department (xem nhân viên trong phòng)
@@ -62,6 +65,8 @@ export async function seed(knex) {
     { roleId: 3, permissionId: 14, value: 4, key: 'personal_salary_info', scope: 3 },   // personal_salary_info - read personal (chỉ xem lương mình)
     { roleId: 3, permissionId: 15, value: 4, key: 'CV', scope: 2 },   // CV - read department (xem CV trong phòng)
     { roleId: 3, permissionId: 16, value: 31, key: 'projects', scope: 2 },  // projects - full department (quản lý dự án phòng)
+    { roleId: 3, permissionId: 17, value: 31, key: 'manage_applications', scope: 2 },  // manage_applications - Full department (CRUD đơn từ phòng)
+    { roleId: 3, permissionId: 18, value: 20, key: 'shiftApproval', scope: 2 },  // shiftApproval - read(4) + approve(16) = 20 department (duyệt ca phòng)
 
     // ==================== KẾ TOÁN (roleId: 4) - FINANCIAL MANAGEMENT ====================
     { roleId: 4, permissionId: 2, value: 4, key: 'users', scope: 1 },    // users - read global (xem tất cả nhân viên để tính lương)
@@ -73,6 +78,8 @@ export async function seed(knex) {
     { roleId: 4, permissionId: 14, value: 4, key: 'personal_salary_info', scope: 3 },   // personal_salary_info - read personal (xem lương mình)
     { roleId: 4, permissionId: 15, value: 4, key: 'CV', scope: 1 },   // CV - read global (xem CV để verify)
     { roleId: 4, permissionId: 16, value: 4, key: 'projects', scope: 1 },   // projects - read global (xem project)
+    { roleId: 4, permissionId: 17, value: 31, key: 'manage_applications', scope: 1 },   // manage_applications - Full global (CRUD tất cả đơn từ)
+    { roleId: 4, permissionId: 18, value: 20, key: 'shiftApproval', scope: 1 },  // shiftApproval - read(4) + approve(16) = 20 global (duyệt ca toàn công ty)
 
     // ==================== NHÂN SỰ (roleId: 5) - HR MANAGEMENT ====================
     { roleId: 5, permissionId: 2, value: 31, key: 'users', scope: 1 },   // users - full global (quản lý nhân viên)
@@ -90,6 +97,8 @@ export async function seed(knex) {
     { roleId: 5, permissionId: 14, value: 4, key: 'personal_salary_info', scope: 3 },   // personal_salary_info - read personal (xem lương mình)
     { roleId: 5, permissionId: 15, value: 31, key: 'CV', scope: 1 },  // CV - full global (quản lý hồ sơ)
     { roleId: 5, permissionId: 16, value: 31, key: 'projects', scope: 1 },  // projects - full global (quản lý dự án)
+    { roleId: 5, permissionId: 17, value: 31, key: 'manage_applications', scope: 1 },  // manage_applications - Full global (CRUD tất cả đơn từ)
+    { roleId: 5, permissionId: 18, value: 31, key: 'shiftApproval', scope: 1 },  // shiftApproval - Full global (duyệt ca toàn công ty)
   ];
 
   // Insert seed entries

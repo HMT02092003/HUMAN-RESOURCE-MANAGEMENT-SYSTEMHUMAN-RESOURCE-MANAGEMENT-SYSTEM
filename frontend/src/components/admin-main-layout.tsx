@@ -16,7 +16,8 @@ import {
     ProfileOutlined,
     ReadOutlined,
     DashboardOutlined,
-    CheckCircleOutlined
+    CheckCircleOutlined,
+    ClockCircleOutlined
 } from '@ant-design/icons';
 
 import type { MenuProps } from 'antd';
@@ -128,7 +129,7 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
     // Quản lí hợp đồng
     getItem('Quản lí hợp đồng', 'contractTypes', <ContainerOutlined />, 'contractTypes'),
 
-    // Danh sách đơn từ - Sử dụng requirePermission
+    // Danh sách đơn từ - Thêm Quản lý ca làm việc vào đây
     getItem(
         'Danh sách đơn từ',
         'applications_parent',
@@ -136,6 +137,9 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         [
             getItem('Đơn từ cá nhân', 'myApplications', <ProfileOutlined />, 'applications'),
             getItem('Quản lí đơn từ', 'manageApplications', <ReadOutlined />, 'applications', 'approve'),
+            getItem('Đăng ký ca', 'shiftRegistration', <CalendarOutlined />),
+            getItem('Duyệt đơn đăng ký ca', 'shiftApproval', <CheckCircleOutlined />),
+            getItem('Cấu hình ca', 'shiftConfiguration', <SettingOutlined />),
         ],
         ['applications']
     ),
@@ -456,6 +460,15 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
             case 'myApplications':
                 router.push('/applications/me');
                 break;
+            case 'shiftConfiguration':
+                router.push('/shifts/configuration');
+                break;
+            case 'shiftRegistration':
+                router.push('/shifts/registration');
+                break;
+            case 'shiftApproval':
+                router.push('/shifts/approval');
+                break;
             case 'salary_allowances':
                 router.push('/salary/allowances');
                 break;
@@ -569,7 +582,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                         onClick={handleMenuClick}
                         selectedKeys={getSelectedKeys()}
                         // Ensure salary section is open on initial load in addition to other defaults
-                        defaultOpenKeys={[ 'applications_parent', 'account_management_parent', 'attendance_parent', 'salary_parent', 'job_management_parent', pathname && pathname.startsWith('/salary') ? 'salary_parent' : '' ].filter(Boolean)}
+                        defaultOpenKeys={[ 'applications_parent', 'account_management_parent', 'attendance_parent', 'shifts_parent', 'salary_parent', 'job_management_parent', pathname && pathname.startsWith('/salary') ? 'salary_parent' : '' ].filter(Boolean)}
                     />
                 </Sider>
 

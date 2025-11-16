@@ -107,10 +107,24 @@ export async function seed(knex) {
     },
     {
       "id": 16,
-      "name": "Quản lý công việc",
-      "description": "Quản lý công việc",
+      "name": "Quản lý công việc",
+      "description": "Quản lý công việc",
       "value": 31,
       "key": "projects",
+    },
+    {
+      "id": 17,
+      "name": "Quản lý đơn từ",
+      "description": "Quản lý đơn từ (CRUD đầy đủ)",
+      "value": 31,
+      "key": "manage_applications",
+    },
+    {
+      "id": 18,
+      "name": "Duyệt đơn đăng ký ca",
+      "description": "Duyệt đơn đăng ký ca làm việc",
+      "value": 31,
+      "key": "shiftApproval",
     }
   ];
 

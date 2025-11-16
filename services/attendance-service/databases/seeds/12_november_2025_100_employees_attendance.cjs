@@ -1,11 +1,11 @@
 /**
  * Seed file: Time Attendances for November 2025 (100 Employees)
  * Tạo dữ liệu chấm công cho tháng 11/2025 cho 100 nhân viên
- * CHỈ TẠO ĐẾN NGÀY 14/11/2025 (hôm nay)
+ * CHỈ TẠO ĐẾN NGÀY 15/11/2025 (hôm nay)
  */
 
 exports.seed = async function(knex) {
-  console.log('\n📅 Seeding November 2025 attendance data (up to Nov 14)...\n');
+  console.log('\n📅 Seeding November 2025 attendance data (up to Nov 15)...\n');
   
   // Xóa dữ liệu chấm công tháng 11/2025
   await knex('time_attendances')
@@ -14,9 +14,9 @@ exports.seed = async function(knex) {
 
   const attendances = [];
   
-  // Danh sách ngày làm việc trong tháng 11/2025 (CHỈ ĐẾN 14/11)
+  // Danh sách ngày làm việc trong tháng 11/2025 (CHỈ ĐẾN 15/11)
   const workingDays = [];
-  const today = 14; // Ngày hiện tại
+  const today = 15; // Ngày hiện tại
   
   for (let day = 1; day <= today; day++) {
     const date = new Date(2025, 10, day); // Month 10 = November
@@ -75,30 +75,46 @@ exports.seed = async function(knex) {
     return checkOut > minCheckOut ? checkOut : minCheckOut;
   };
 
-  // Tính số giờ làm việc (trừ 1 giờ nghỉ trưa)
+  // Tính số giờ làm việc (trừ 1 giờ nghỉ trưa) - Chuẩn 09:00-18:00
   const calculateWorkHours = (checkIn, checkOut) => {
-    const diff = (checkOut - checkIn) / (1000 * 60 * 60);
-    return Math.max(0, Math.round((diff - 1) * 100) / 100);
+    const ci = new Date(checkIn);
+    const co = new Date(checkOut);
+    
+    // Lunch period: 12:00-13:00
+    const lunchStart = new Date(ci);
+    lunchStart.setHours(12, 0, 0, 0);
+    const lunchEnd = new Date(ci);
+    lunchEnd.setHours(13, 0, 0, 0);
+
+    // Total minutes worked
+    const totalMinutes = (co - ci) / (1000 * 60);
+
+    // Calculate lunch overlap
+    const overlapStart = Math.max(ci.getTime(), lunchStart.getTime());
+    const overlapEnd = Math.min(co.getTime(), lunchEnd.getTime());
+    const lunchOverlapMinutes = overlapEnd > overlapStart ? (overlapEnd - overlapStart) / (1000 * 60) : 0;
+
+    // Work hours = total - lunch overlap
+    const workMinutes = Math.max(0, totalMinutes - lunchOverlapMinutes);
+    return Math.round((workMinutes / 60) * 100) / 100;
   };
 
-  // Tính số phút đi trễ (chuẩn là 8:30)
+  // Tính số phút đi trễ (chuẩn là 09:00)
   const calculateLateMinutes = (checkIn) => {
-    const standardTime = new Date(checkIn);
-    standardTime.setHours(8, 30, 0, 0);
-    if (checkIn > standardTime) {
-      return Math.floor((checkIn - standardTime) / (1000 * 60));
-    }
-    return 0;
+    const ci = new Date(checkIn);
+    const standard = new Date(ci);
+    standard.setHours(9, 0, 0, 0);
+    
+    return ci > standard ? Math.floor((ci - standard) / (1000 * 60)) : 0;
   };
 
-  // Tính số phút về sớm (chuẩn là 17:30)
+  // Tính số phút về sớm (chuẩn là 18:00)
   const calculateEarlyMinutes = (checkOut) => {
-    const standardTime = new Date(checkOut);
-    standardTime.setHours(17, 30, 0, 0);
-    if (checkOut < standardTime) {
-      return Math.floor((standardTime - checkOut) / (1000 * 60));
-    }
-    return 0;
+    const co = new Date(checkOut);
+    const standard = new Date(co);
+    standard.setHours(18, 0, 0, 0);
+    
+    return co < standard ? Math.floor((standard - co) / (1000 * 60)) : 0;
   };
 
   // Phân loại nhân viên (giống logic tháng 10)

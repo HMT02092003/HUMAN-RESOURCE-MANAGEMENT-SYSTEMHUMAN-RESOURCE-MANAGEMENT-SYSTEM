@@ -17,9 +17,17 @@ import {
   updateSettings,
   updateSettingByKey,
   getSettingByKey,
-}  from '../src/controller/SettingsController';
+}  from '../src/controller/SettingsController.js';
+import { ShiftController } from '../src/controller/ShiftController.js';
 
 const router = Router();
+
+// small helper: wrap async controller methods so their Promise<Response> doesn't confuse Express typings
+const wrap = (fn: any) => {
+  return (req: Request, res: Response, next: any) => {
+    Promise.resolve(fn(req, res)).then(() => {}).catch(next);
+  };
+};
 
 // ===================================
 // ATTENDANCE ROUTES - USED BY FRONTEND
@@ -136,5 +144,37 @@ router.post('/settings/working-days', async (req: Request, res: Response) => {
   req.body = { key: 'WorkingDays', value: req.body.value };
   await updateSettingByKey(req, res as any);
 });
+
+// ===================================
+// SHIFT MANAGEMENT ROUTES
+// ===================================
+
+// Shift Templates (Mẫu ca)
+router.get('/shifts', authenticateToken, wrap(ShiftController.getAllShifts));
+router.get('/shifts/:id', authenticateToken, wrap(ShiftController.getShiftById));
+router.post('/shifts', authenticateToken, wrap(ShiftController.createShift));
+router.put('/shifts/:id', authenticateToken, wrap(ShiftController.updateShift));
+router.delete('/shifts/:id', authenticateToken, wrap(ShiftController.deleteShift));
+router.post('/shifts/bulk-delete', authenticateToken, wrap(ShiftController.bulkDeleteShifts));
+
+// Employee Schedules (Lịch đăng ký ca)
+router.get('/schedules/my', authenticateToken, wrap(ShiftController.getMySchedules));
+router.get('/schedules/pending', authenticateToken, wrap(ShiftController.getPendingSchedules));
+router.get('/schedules/stats/:year/:month', authenticateToken, wrap(ShiftController.getMonthlyStats));
+// Schedule Approval Management (static routes) should be defined before '/schedules/:id' to avoid
+// Express treating 'approval' as a dynamic :id parameter.
+router.get('/schedules/approval', authenticateToken, wrap(ShiftController.getSchedulesForApproval));
+router.post('/schedules/approve', authenticateToken, wrap(ShiftController.bulkApproveSchedules));
+router.post('/schedules/approve-month', authenticateToken, wrap(ShiftController.approveMonthSchedules));
+router.post('/schedules/delete', authenticateToken, wrap(ShiftController.bulkDeleteSchedules));
+
+// Dynamic schedule route (by id)
+router.get('/schedules/:id', authenticateToken, wrap(ShiftController.getScheduleById));
+router.post('/schedules', authenticateToken, wrap(ShiftController.createSchedule));
+router.post('/schedules/bulk', authenticateToken, wrap(ShiftController.bulkCreateSchedules));
+router.put('/schedules/:id', authenticateToken, wrap(ShiftController.updateSchedule));
+router.delete('/schedules/:id', authenticateToken, wrap(ShiftController.cancelSchedule));
+router.post('/schedules/:id/approve', authenticateToken, wrap(ShiftController.approveSchedule));
+router.post('/schedules/:id/reject', authenticateToken, wrap(ShiftController.rejectSchedule));
 
 export default router;

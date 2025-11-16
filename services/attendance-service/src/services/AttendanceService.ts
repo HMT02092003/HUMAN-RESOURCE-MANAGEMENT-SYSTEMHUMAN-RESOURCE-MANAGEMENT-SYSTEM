@@ -211,7 +211,7 @@ export class AttendanceService {
     }
   }
 
-  static async recordAttendance(userId: number, time: string) {
-    return AttendanceRecordService.recordAttendance(userId, time);
+  static async recordAttendance(userId: number, time: string, token?: string) {
+    return AttendanceRecordService.recordAttendance(userId, time, token);
   }
 }

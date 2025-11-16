@@ -131,7 +131,14 @@ export const recordAttendance = async (req: Request, res: Response) => {
       return;
     }
 
-    const result = await AttendanceService.recordAttendance(userId, time);
+    // ✨ Lấy token từ request để truyền xuống service (quan trọng để lấy salary info)
+    const token = req.cookies?.['token'] ||
+      req.headers.authorization?.replace('Bearer ', '') ||
+      req.headers.authorization?.split(' ')[1];
+
+    console.log('🎫 Token for attendance record:', token ? 'Found' : 'Not found');
+
+    const result = await AttendanceService.recordAttendance(userId, time, token);
 
     res.json({
       success: true,
