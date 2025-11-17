@@ -29,7 +29,8 @@ import {
 } from '@ant-design/icons';
 // Use Material UI icons already installed to avoid react-icons resolution issues
 import { FaBrain } from "react-icons/fa";
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+// Use react-icons (Material design pack) for a lightweight, well-supported icon
+import { MdAutoAwesome } from 'react-icons/md';
 import { ProjectMember } from '@/types/project';
 import jobService from '@/service/jobService';
 import { attendanceService } from '@/service/attendanceService';
@@ -637,7 +638,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
           </ul>
         }
         type="info"
-        icon={<AutoAwesomeIcon style={{ color: '#1890ff' }} />}
+  icon={<MdAutoAwesome style={{ color: '#1890ff', fontSize: 20 }} />}
         style={{ marginBottom: 16 }}
       />
 
