@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { DatePicker, Button, Table, message, Space, Input, Tag } from 'antd';
+import { DatePicker, Button, Table, message, Space, Input, Tag, notification, Badge } from 'antd';
 import type { InputRef } from 'antd';
 import type { ColumnType } from 'antd/es/table';
 import type { FilterConfirmProps } from 'antd/es/table/interface';
@@ -84,31 +84,47 @@ const SalaryManagement: React.FC = () => {
     try {
       const str = month.format('YYYY-MM');
       const res = await salaryService.calculateFromAttendance(str);
+
+      // Always handle invalid-user lists if present, even when success === true.
+      const hasInvalidUsers = 
+        (res.usersWithoutContracts && res.usersWithoutContracts.length > 0) ||
+        (res.usersWithoutApprovedAttendance && res.usersWithoutApprovedAttendance.length > 0) ||
+        (res.usersWithoutSalaryProfile && res.usersWithoutSalaryProfile.length > 0);
+
+      if (hasInvalidUsers) {
+        // Lưu dữ liệu người dùng không hợp lệ
+        setInvalidUsersData({
+          usersWithoutContracts: res.usersWithoutContracts || [],
+          usersWithoutApprovedAttendance: res.usersWithoutApprovedAttendance || [],
+          usersWithoutSalaryProfile: res.usersWithoutSalaryProfile || []
+        });
+        // Mở modal và hiển thị thông báo có nút để xem chi tiết
+        setInvalidUsersModalOpen(true);
+        const total = (res.usersWithoutContracts?.length || 0) + (res.usersWithoutApprovedAttendance?.length || 0) + (res.usersWithoutSalaryProfile?.length || 0);
+        notification.warning({
+          message: 'Có người dùng không thể tính lương',
+          description: `Có ${total} người chưa thể tính lương. Nhấn 'Xem chi tiết' để biết danh sách.`,
+          btn: (
+            <Button type="primary" size="small" onClick={() => { setInvalidUsersModalOpen(true); notification.destroy(); }}>
+              Xem chi tiết
+            </Button>
+          ),
+          duration: 8
+        });
+      }
+
       if (res.success) {
         message.success('Đã tính bảng lương cho tháng');
         fetchPayslipsForMonth(month);
-        // Reset invalid users data nếu thành công
-        setInvalidUsersData({
-          usersWithoutContracts: [],
-          usersWithoutApprovedAttendance: [],
-          usersWithoutSalaryProfile: []
-        });
-      } else {
-        // Kiểm tra xem có người dùng không hợp lệ không
-        const hasInvalidUsers = 
-          (res.usersWithoutContracts && res.usersWithoutContracts.length > 0) ||
-          (res.usersWithoutApprovedAttendance && res.usersWithoutApprovedAttendance.length > 0) ||
-          (res.usersWithoutSalaryProfile && res.usersWithoutSalaryProfile.length > 0);
-        
-        if (hasInvalidUsers) {
-          // Lưu dữ liệu người dùng không hợp lệ
+        // Don't clear invalid-users here: we handled them above. Only clear when response has no invalid lists.
+        if (!hasInvalidUsers) {
           setInvalidUsersData({
-            usersWithoutContracts: res.usersWithoutContracts || [],
-            usersWithoutApprovedAttendance: res.usersWithoutApprovedAttendance || [],
-            usersWithoutSalaryProfile: res.usersWithoutSalaryProfile || []
+            usersWithoutContracts: [],
+            usersWithoutApprovedAttendance: [],
+            usersWithoutSalaryProfile: []
           });
         }
-        
+      } else {
         message.error(res.message || 'Không thể tính bảng lương');
       }
     } catch (err: any) {
@@ -367,14 +383,16 @@ const SalaryManagement: React.FC = () => {
           <CalculatorOutlined />Tính dữ liệu chấm công
         </Button>
         {hasInvalidUsers && (
-          <Button 
-            onClick={() => setInvalidUsersModalOpen(true)} 
-            type="default"
-            danger
-            icon={<WarningOutlined />}
-          >
-            Xem người dùng không hợp lệ
-          </Button>
+          <Badge count={(invalidUsersData.usersWithoutContracts?.length || 0) + (invalidUsersData.usersWithoutApprovedAttendance?.length || 0) + (invalidUsersData.usersWithoutSalaryProfile?.length || 0)} offset={[6, 0]}>
+            <Button 
+              onClick={() => setInvalidUsersModalOpen(true)} 
+              type="default"
+              danger
+              icon={<WarningOutlined />}
+            >
+              Xem người dùng không hợp lệ
+            </Button>
+          </Badge>
         )}
       </Space>
       <Table
