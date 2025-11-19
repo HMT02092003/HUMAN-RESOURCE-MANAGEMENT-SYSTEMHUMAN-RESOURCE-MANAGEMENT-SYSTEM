@@ -64,11 +64,11 @@ Thumbs.db
 alembic/versions/*.py
 !alembic/versions/__init__.py
 
-# Model weights
-weights/
-weights/*.pth
-weights/*.pt
-weights/*.onnx
+# Model weight
+weight/
+weight/*.pth
+weight/*.pt
+weight/*.onnx
 
 # Test files and debugging
 test_*.py
