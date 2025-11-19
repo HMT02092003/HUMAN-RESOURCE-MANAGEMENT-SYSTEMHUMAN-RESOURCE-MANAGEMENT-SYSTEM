@@ -61,8 +61,7 @@ export const registerHandler = async (req: Request, res: Response) => {
         user: {
           id: user.id,
           username: user.username,
-          firstName: user.firstName,
-          lastName: user.lastName,
+          fullName: user.fullName,
           roleId: user.roleId
         }
       },

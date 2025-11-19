@@ -15,10 +15,10 @@ class TimeAttendanceModel extends Model {
     lateMinutes!: number;
     earlyDepartureMinutes!: number;
     dailyWorkingUnit!: number;
+    totalWorkingUnit!: number; // Tổng công (bao gồm cả OT)
+    otWorkingUnit!: number; // Công OT riêng
     earlyLeavePenalty!: number;
     lateArrivalPenalty!: number;
-    otMinutes!: number;
-    otSalary!: number;
     created_at!: string;
     updated_at!: string;
 
@@ -36,10 +36,10 @@ class TimeAttendanceModel extends Model {
                 lateMinutes: { type: ['number', 'string'], default: 0 },
                 earlyDepartureMinutes: { type: ['number', 'string'], default: 0 },
                 dailyWorkingUnit: { type: ['number', 'string'], default: 0 },
+                totalWorkingUnit: { type: ['number', 'string'], default: 0 },
+                otWorkingUnit: { type: ['number', 'string'], default: 0 },
                 earlyLeavePenalty: { type: ['number', 'string'], default: 0 },
                 lateArrivalPenalty: { type: ['number', 'string'], default: 0 },
-                otMinutes: { type: ['number', 'string'], default: 0 },
-                otSalary: { type: ['number', 'string'], default: 0 },
                 created_at: { type: 'string' },
                 updated_at: { type: 'string' }
             }

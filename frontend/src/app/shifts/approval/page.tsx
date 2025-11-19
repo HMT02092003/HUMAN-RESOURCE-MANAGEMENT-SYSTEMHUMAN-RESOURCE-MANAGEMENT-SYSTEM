@@ -15,6 +15,8 @@ const ShiftApprovalPage = () => {
       breadcrumbItems={breadcrumbItems}
       pageName="Duyệt đơn đăng ký ca"
       pageDes="Quản lý và duyệt các đơn đăng ký ca của nhân viên"
+      requiredPermission="shiftApproval"
+      permissionType="approve"
     >
       <ShiftApprovalManagement />
     </MainLayout>

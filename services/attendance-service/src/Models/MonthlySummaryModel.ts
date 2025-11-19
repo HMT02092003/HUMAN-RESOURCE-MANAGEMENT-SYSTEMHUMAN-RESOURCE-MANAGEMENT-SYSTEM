@@ -31,7 +31,8 @@ class MonthlySummaryModel extends Model {
     totalEarlyLeaveMinutes!: number;
     
     totalOvertimeHours!: number;
-    totalOvertimeSalary!: number;
+    totalWorkingUnits!: number; // Tổng công trong tháng (bao gồm cả OT, nghỉ phép, công tác)
+    totalOtWorkingUnits!: number; // Tổng công OT riêng biệt
     
     // totalUnpaidLeaveDays removed - use unauthorizedAbsenceDays
     
@@ -71,7 +72,8 @@ class MonthlySummaryModel extends Model {
                 totalEarlyLeaveMinutes: { type: 'integer', default: 0 },
                 
                 totalOvertimeHours: { type: 'number', default: 0 },
-                totalOvertimeSalary: { type: 'number', default: 0 },
+                totalWorkingUnits: { type: 'number', default: 0 },
+                totalOtWorkingUnits: { type: 'number', default: 0 },
                 
                 // totalUnpaidLeaveDays: removed
                 

@@ -137,9 +137,11 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         [
             getItem('Đơn từ cá nhân', 'myApplications', <ProfileOutlined />, 'applications'),
             getItem('Quản lí đơn từ', 'manageApplications', <ReadOutlined />, 'applications', 'approve'),
-            getItem('Đăng ký ca', 'shiftRegistration', <CalendarOutlined />),
-            getItem('Duyệt đơn đăng ký ca', 'shiftApproval', <CheckCircleOutlined />),
-            getItem('Cấu hình ca', 'shiftConfiguration', <SettingOutlined />),
+            // Shift-related menu items now require specific permissions
+            // Employees need create+read for registration; leaders/HR/Admin have broader scopes
+            getItem('Đăng ký ca', 'shiftRegistration', <CalendarOutlined />, 'shiftRegistration', 'create'),
+            getItem('Duyệt đơn đăng ký ca', 'shiftApproval', <CheckCircleOutlined />, 'shiftApproval', 'approve'),
+            getItem('Cấu hình ca', 'shiftConfiguration', <SettingOutlined />, 'shiftConfiguration', 'read'),
         ],
         ['applications']
     ),

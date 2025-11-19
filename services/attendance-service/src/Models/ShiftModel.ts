@@ -1,6 +1,16 @@
 import { Model } from 'objection';
 
 export class ShiftModel extends Model {
+  id!: number;
+  name!: string;
+  start_time!: string;
+  end_time!: string;
+  working_unit!: number;
+  is_default!: boolean;
+  description?: string;
+  created_at!: string;
+  updated_at!: string;
+
   static override get tableName() {
     return 'shifts';
   }
@@ -15,11 +25,17 @@ export class ShiftModel extends Model {
         start_time: { type: 'string' },
         end_time: { type: 'string' },
         working_unit: { type: 'number' },
+        is_default: { type: 'boolean', default: false },
         description: { type: ['string', 'null'] },
         created_at: { type: 'string', format: 'date-time' },
         updated_at: { type: 'string', format: 'date-time' }
       }
     };
+  }
+
+  // Lấy ca mặc định (ca hành chính)
+  static async getDefaultShift() {
+    return await this.query().where('is_default', true).first();
   }
 
   // Note: Relations commented out to avoid circular dependency issues in ES modules

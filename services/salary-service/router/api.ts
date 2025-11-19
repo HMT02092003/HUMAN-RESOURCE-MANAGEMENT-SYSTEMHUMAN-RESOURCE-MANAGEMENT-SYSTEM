@@ -47,7 +47,13 @@ router.post('/payslips/generate-from-profile/:userId', authenticateToken, paysli
 // Generate payslip from attendance summary (monthly-full)
 router.post('/payslips/generate-from-attendance/:userId', authenticateToken, payslipCtrl.generateFromAttendance as express.RequestHandler);
 // Bulk calculate payslips for a month from approved attendances
-router.post('/payslips/calculate-from-attendance', authenticateToken, payslipCtrl.calculateFromAttendanceBulk as express.RequestHandler);
+// For local development/testing it can be useful to allow unauthenticated calls to this endpoint.
+// Set environment variable SKIP_AUTH=1 to bypass authentication when starting the service.
+if (process.env.SKIP_AUTH === '1') {
+	router.post('/payslips/calculate-from-attendance', payslipCtrl.calculateFromAttendanceBulk as express.RequestHandler);
+} else {
+	router.post('/payslips/calculate-from-attendance', authenticateToken, payslipCtrl.calculateFromAttendanceBulk as express.RequestHandler);
+}
 
 // Get payslips for a single user (optional month filter)
 router.get('/auth/users/:userId/payslips', authenticateToken, payslipCtrl.getPayslipsByUser as express.RequestHandler);

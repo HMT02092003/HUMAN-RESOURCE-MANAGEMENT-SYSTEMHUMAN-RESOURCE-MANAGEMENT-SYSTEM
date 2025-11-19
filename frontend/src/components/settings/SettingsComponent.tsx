@@ -88,7 +88,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [fetchLoading, setFetchLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('workingHours');
+  const [activeTab, setActiveTab] = useState('lunchBreak');
 
   // Cấu hình mặc định
   const defaultSettings: SettingsData = {
@@ -386,13 +386,13 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       throw new Error('Giờ kết thúc nghỉ trưa phải sau giờ bắt đầu nghỉ trưa');
     }
 
-    // Kiểm tra thời gian nghỉ trưa phải nằm trong giờ hành chính
+    // Kiểm tra thời gian nghỉ trưa phải nằm trong giờ làm việc
     if (lunchStartTime < workStartTime || lunchStartTime > workEndTime) {
-      throw new Error('Giờ bắt đầu nghỉ trưa phải nằm trong giờ hành chính');
+      throw new Error('Giờ bắt đầu nghỉ trưa phải nằm trong giờ làm việc');
     }
 
     if (lunchEndTime < workStartTime || lunchEndTime > workEndTime) {
-      throw new Error('Giờ kết thúc nghỉ trưa phải nằm trong giờ hành chính');
+      throw new Error('Giờ kết thúc nghỉ trưa phải nằm trong giờ làm việc');
     }
 
     // Kiểm tra tỷ lệ OT
@@ -786,107 +786,8 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
     }
   };
 
-  const renderWorkingHoursTab = () => (
-    <Card
-      title={
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <ClockCircleOutlined style={{ color: '#1890ff' }} />
-          <span>Cấu hình thời gian hành chính</span>
-        </div>
-      }
-      style={{ marginBottom: 0 }}
-    >
-      <Row gutter={24}>
-        <Col xs={24} md={12}>
-          <Form.Item
-            label="Giờ bắt đầu làm việc"
-            name="workingHoursStart"
-            rules={[
-              { required: true, message: 'Vui lòng chọn giờ bắt đầu!' },
-              ({ getFieldValue }) => ({
-                validator(_, value) {
-                  const endTime = getFieldValue('workingHoursEnd');
-                  if (!value || !endTime) {
-                    return Promise.resolve();
-                  }
-                  if (dayjs(value).isAfter(endTime) || dayjs(value).isSame(endTime)) {
-                    return Promise.reject(new Error('Giờ bắt đầu phải trước giờ kết thúc!'));
-                  }
-                  return Promise.resolve();
-                },
-              }),
-            ]}
-          >
-            <TimePicker
-              format="HH:mm"
-              placeholder="Chọn giờ bắt đầu"
-              style={timePickerStyle}
-              size="large"
-              showNow={false}
-              use12Hours={false}
-            />
-          </Form.Item>
-        </Col>
-        <Col xs={24} md={12}>
-          <Form.Item
-            label="Giờ kết thúc làm việc"
-            name="workingHoursEnd"
-            rules={[
-              { required: true, message: 'Vui lòng chọn giờ kết thúc!' },
-              ({ getFieldValue }) => ({
-                validator(_, value) {
-                  const startTime = getFieldValue('workingHoursStart');
-                  if (!value || !startTime) {
-                    return Promise.resolve();
-                  }
-                  if (dayjs(value).isBefore(startTime) || dayjs(value).isSame(startTime)) {
-                    return Promise.reject(new Error('Giờ kết thúc phải sau giờ bắt đầu!'));
-                  }
-                  return Promise.resolve();
-                },
-              }),
-            ]}
-          >
-            <TimePicker
-              format="HH:mm"
-              placeholder="Chọn giờ kết thúc"
-              style={timePickerStyle}
-              size="large"
-              showNow={false}
-              use12Hours={false}
-            />
-          </Form.Item>
-        </Col>
-      </Row>
-
-      <div style={{
-        background: '#f6ffed',
-        border: '1px solid #b7eb8f',
-        borderRadius: '6px',
-        padding: '16px',
-        marginTop: '24px'
-      }}>
-        <p style={{ margin: '0 0 8px 0', color: '#52c41a', fontWeight: 600 }}>
-          <strong>Lưu ý:</strong>
-        </p>
-        <ul style={{ margin: 0, paddingLeft: '20px' }}>
-          <li style={{ color: '#666', marginBottom: '4px' }}>
-            Thời gian hành chính áp dụng cho tất cả nhân viên
-          </li>
-          <li style={{ color: '#666', marginBottom: '4px' }}>
-            Nhân viên cần chấm công trong khung giờ này
-          </li>
-          <li style={{ color: '#666', marginBottom: '4px' }}>
-            Thời gian ngoài khung giờ sẽ được tính là làm thêm giờ
-          </li>
-        </ul>
-      </div>
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 24 }}>
-        <Button onClick={() => revertKey('WorkingHours')} size="large" ><RollbackOutlined />Trở về</Button>
-        <Button type="primary" onClick={() => saveKey('WorkingHours')} size="large" ><SaveOutlined />Lưu</Button>
-      </div>
-    </Card>
-  );
+  // Render for working hours removed per request (tab hidden). The associated save/revert logic remains
+  // in case other parts of the app call saveKey/revertKey programmatically.
 
   const renderLunchBreakTab = () => (
     <Card
@@ -921,11 +822,11 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
                     const workEndTime = dayjs(workEnd).format('HH:mm');
 
                     if (valueTime < workStartTime) {
-                      return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
+                      return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ làm việc!'));
                     }
 
                     if (valueTime > workEndTime) {
-                      return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
+                      return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ làm việc!'));
                     }
                   }
 
@@ -975,11 +876,11 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
                     const workEndTime = dayjs(workEnd).format('HH:mm');
 
                     if (valueTime < workStartTime) {
-                      return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
+                      return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ làm việc!'));
                     }
 
                     if (valueTime > workEndTime) {
-                      return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ hành chính!'));
+                      return Promise.reject(new Error('Giờ nghỉ trưa phải trong giờ làm việc!'));
                     }
                   }
 
@@ -1538,7 +1439,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
               Chọn các ngày trong tuần mà nhân viên cần phải làm việc
             </li>
             <li style={{ color: '#666', marginBottom: '4px' }}>
-              Mặc định: Thứ 2 đến Thứ 6 (ngày làm việc hành chính)
+              Mặc định: Thứ 2 đến Thứ 6 (ngày làm việc làm việc)
             </li>
             <li style={{ color: '#666', marginBottom: '4px' }}>
               Có thể chọn thêm Thứ 7, Chủ nhật nếu công ty làm việc cuối tuần
@@ -1574,18 +1475,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
             size="large"
             style={{ margin: 0 }}
           >
-            <TabPane
-              tab={
-                <span>
-                  <ClockCircleOutlined />
-                  Thời gian hành chính
-                </span>
-              }
-              key="workingHours"
-            >
-              {renderWorkingHoursTab()}
-            </TabPane>
-
+            {/* Working hours tab removed per request */}
             <TabPane
               tab={
                 <span>

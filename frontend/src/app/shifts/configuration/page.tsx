@@ -17,6 +17,8 @@ const ShiftConfigurationPage = () => {
       breadcrumbItems={breadcrumbItems}
       pageName="Cấu hình ca làm việc"
       pageDes="Quản lý các ca làm việc: sáng, chiều, tối, đêm..."
+      requiredPermission="shiftConfiguration"
+      permissionType="read"
     >
       <ShiftConfigurationManagement />
     </MainLayout>

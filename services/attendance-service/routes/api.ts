@@ -72,6 +72,43 @@ router.post('/approve-monthly', authenticateToken, async (req: Request, res: Res
   await approveMonthlyAttendance(req, res);
 });
 
+// ===================================
+// WORKING DAYS CALCULATION (for salary-service)
+// ===================================
+
+// POST /api/attendance/calculate-standard-working-days
+// Body: { month: "2025-01" }
+// Response: { standardWorkingDays: 22 }
+// Note: No auth required - called by salary-service
+router.post('/calculate-standard-working-days', (req: Request, res: Response, next) => {
+  (async () => {
+    try {
+      const { month } = req.body;
+      if (!month) {
+        res.status(400).json({ error: 'Missing month parameter (format: YYYY-MM)' });
+        return;
+      }
+      
+      const [year, monthNum] = month.split('-').map(Number);
+      if (!year || !monthNum || monthNum < 1 || monthNum > 12) {
+        res.status(400).json({ error: 'Invalid month format. Use YYYY-MM' });
+        return;
+      }
+      
+      // Import helper
+      const { calculateStandardWorkingDaysInMonth } = await import('../src/services/attendance/WorkingDaysHelper');
+      const standardWorkingDays = await calculateStandardWorkingDaysInMonth(month);
+      
+      console.log(`✅ [attendance-service] Calculated standard working days for ${month}: ${standardWorkingDays}`);
+      
+      res.json({ standardWorkingDays });
+    } catch (error: any) {
+      console.error('❌ [attendance-service] Error calculating standard working days:', error);
+      res.status(500).json({ error: error?.message || 'Internal server error' });
+    }
+  })().catch(next);
+});
+
 // GET/POST /api/attendance/monthly-summaries-by-scope - return monthly_attendances for users in scope
 const handleMonthlySummariesByScope = async (req: any, res: any) => {
   const controller = await import('@/controller/AttendanceController');

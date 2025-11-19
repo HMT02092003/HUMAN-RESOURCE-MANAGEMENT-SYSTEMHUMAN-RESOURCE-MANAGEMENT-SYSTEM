@@ -75,330 +75,75 @@ yarn knex seed:run --specific=17_final_100_users_realistic.js
       Role: Admin (Full Access)
 
 📝 Step 3: Creating department users...
-   📂 Phòng Công nghệ (30 users):
-      ✅ Created 30 users
-   � Phòng Kinh doanh (28 users):
-      ✅ Created 28 users
-   ... (các phòng ban khác)
-
-🎉 ========================================
-   SEED COMPLETED SUCCESSFULLY!
-========================================
-   📊 Summary:
-   - Total Users: 99
-   - Contracts: 99
-   - Salary Profiles: 99
-
-   🔐 Role Distribution:
-   - Admin: 1 user
-   - Leader: 12 users (Trưởng phòng, Phó, Team Lead)
-   - Employee: 66 users (scope: personal)
-   - Accountant: 10 users (Tài chính)
-   - HR: 10 users (Nhân sự)
-========================================
-```
-
-**Verify**:
-```bash
-# Check user count
-PGPASSWORD=123456 psql -h localhost -U postgres -d auth_service -c \
-  "SELECT COUNT(*) FROM users;"
-# Expected: 99
-
-# Check contract count
-PGPASSWORD=123456 psql -h localhost -U postgres -d employee_service -c \
-  "SELECT COUNT(*) FROM contracts;"
-# Expected: 99
-
-# Check salary count
-PGPASSWORD=123456 psql -h localhost -U postgres -d salary_service -c \
-  "SELECT COUNT(*) FROM employee_salary_profiles;"
-# Expected: 99
-
-# Check role distribution
-PGPASSWORD=123456 psql -h localhost -U postgres -d auth_service -c \
-  "SELECT \"roleId\", COUNT(*) FROM users GROUP BY \"roleId\" ORDER BY \"roleId\";"
-# Expected: roleId 1=1, 2=66, 3=12, 4=10, 5=10
-```
-
----
-
-### GIAI ĐOẠN 3: ATTENDANCE & APPLICATIONS
-
-#### Bước 3.1: Tạo Attendance Records (Chấm công)
-
-```bash
-# Tháng 10/2025
-cd services/attendance-service
-yarn knex seed:run --specific=15_october_2025_100_employees_attendance.cjs
-
-# Tháng 11/2025
-yarn knex seed:run --specific=12_november_2025_100_employees_attendance.cjs
-```
-
-**Output mong đợi**:
-```
-✅ Đã tạo ~2,100 bản ghi chấm công cho tháng 10/2025 (99 nhân viên)
-   Ngày làm việc: 23 ngày
-   Trung bình: 21.0 ngày/người
-
-✅ Đã tạo ~1,900 bản ghi chấm công cho tháng 11/2025 (99 nhân viên)
-   Ngày làm việc: 20 ngày
-   Trung bình: 19.0 ngày/người
-```
-
-#### Bước 3.2: Tạo Applications (Đơn từ)
-
-```bash
-# October 2025
-cd services/application-service
-yarn knex seed:run --specific=16_october_2025_applications.cjs
-
-# November 2025
-yarn knex seed:run --specific=14_november_2025_applications.js
-```
-
-**Output mong đợi**:
-```
-✅ Đã tạo ~500 đơn từ cho tháng 10/2025 (99 nhân viên)
-   📋 Phân loại:
-      - Nghỉ phép: ~160 đơn
-      - Công tác: ~100 đơn
-      - Tăng ca: ~240 đơn
-   📊 Trạng thái:
-      - Đã duyệt: ~90%
-      - Chờ duyệt / Từ chối: ~10%
-
-✅ Đã tạo ~490 đơn từ cho tháng 11/2025 (99 nhân viên)
-```
-
-Troubleshooting quick checks:
-- If a seed file doesn't run, list seeds and check package type:
-
-```bash
-ls -1 services/application-service/databases/seeds
-cat services/application-service/package.json | jq .type
-```
-
-- Verify the `applications` table schema (the seeds write application payload into `data` jsonb):
-
-```bash
-PGPASSWORD=123456 psql -h localhost -U postgres -d application_service -c "\d applications"
-```
-
-#### Bước 3.3: Tính Monthly Attendance
-
-Important: the real `monthly_attendances` table in this project stores the month as a string in the format `YYYY-MM` (column name `month` VARCHAR). Also note that `applications` stores details inside the `data` JSONB column, so the calculation seed must parse `applications.data` to extract start/end/totalDays/totalHours for each approved application.
-
-Before running the calculation seed, ensure `17_calculate_monthly_oct_nov_2025.cjs` has been updated to:
-- treat `monthly_attendances.month` as `'2025-10'` / `'2025-11'` (not numeric month/year)
-- read approved applications where `status = 1` and extract details from `applications.data` JSONB
-
-Run it like this:
-
-```bash
-cd services/attendance-service
-yarn knex seed:run --specific=17_calculate_monthly_oct_nov_2025.cjs
-
-# Or from repo root
-yarn --cwd services/attendance-service knex seed:run --specific=17_calculate_monthly_oct_nov_2025.cjs
-```
-
-**Output mong đợi**:
-```
-🚀 ========================================
-   CALCULATING MONTHLY ATTENDANCE
-   October & November 2025 (100 Users)
-========================================
-
-📝 Step 1: Cleaned old monthly attendance data (deleted rows WHERE month IN ('2025-10','2025-11'))
-
-📅 Processing 2025-10...
-   ✅ Created 100 monthly records for 2025-10
-📅 Processing 2025-11...
-   ✅ Created 100 monthly records for 2025-11
-
-🎉 ========================================
-   CALCULATION COMPLETED!
-========================================
-   📊 Total Records: 200
-   👥 Users: 100 (ID: 2-101)
-   📅 Months: 2025-10 & 2025-11
-========================================
-```
-
-Quick verification: inspect the schema and data columns used by the seed:
-
-```bash
-PGPASSWORD=123456 psql -h localhost -U postgres -d attendance_service -c "\d monthly_attendances"
-PGPASSWORD=123456 psql -h localhost -U postgres -d application_service -c "SELECT id, type, status, data->>'startDate' AS startDate FROM applications LIMIT 5;"
-```
-
-### Ghi chú quan trọng về tiền phạt (penalties)
-
-- Tập lệnh `17_calculate_monthly_oct_nov_2025.cjs` đã được cập nhật để tính toán các khoản tiền phạt khi chèn vào bảng `monthly_attendances`:
-   - Tiền phạt đi muộn / về sớm được tính dựa trên `PenaltyRate` trong `salary_service.settings` (trường `value` chứa JSON với `rate`). Công thức dùng trong code attendance là:
-
-      penalty_amount = baseMonthlySalary * rate * minutes
-
-      (ví dụ: baseSalary = 6_000_000 VND, rate = 0.0001, minutes = 10 => penalty = 6_000_000 * 0.0001 * 10 = 6,000 VND)
-
-   - Tiền phạt vắng không phép (unauthorized absence) ưu tiên đọc `UnauthorizedAbsencePenaltyRate` từ `salary_service.settings` (nếu tồn tại). Nếu không có, seed sẽ fallback về Math.round(baseSalary / totalScheduledDays).
-
-   - Để tính các khoản trên, seed đọc trực tiếp `employee_salary_profiles.base_salary` từ cơ sở dữ liệu `salary_service` cho từng user.
-
-- Kết quả: sau khi chạy lại seed tính toán tháng, các cột `totalLatePenalty`, `totalEarlyLeavePenalty`, `totalUnauthorizedAbsencePenalty` và `totalPenalty` sẽ được cập nhật tương ứng trong `monthly_attendances`.
-
----
-
-## 🔁 Updated — Exact commands & verification (added 2025-11-14)
-
-Use the commands below to reproduce exactly what was run on 2025-11-14. These are the commands that create attendance data for October and November (note: November seed creates data only up to 2025-11-14), then calculate monthly summaries including penalties.
-
-1) Create October attendance records
-
-```bash
-cd services/attendance-service
-# run with npx/yarn depending on your environment; both work
-npx knex seed:run --specific=15_october_2025_100_employees_attendance.cjs
-# or
-yarn knex seed:run --specific=15_october_2025_100_employees_attendance.cjs
-```
-
-2) Create November attendance records (up to 2025-11-14)
-
-```bash
-cd services/attendance-service
-npx knex seed:run --specific=12_november_2025_100_employees_attendance.cjs
-# or
-yarn knex seed:run --specific=12_november_2025_100_employees_attendance.cjs
-```
-
-3) Calculate monthly summaries and penalties
-
-```bash
-cd services/attendance-service
-npx knex seed:run --specific=17_calculate_monthly_oct_nov_2025.cjs
-# or
-yarn knex seed:run --specific=17_calculate_monthly_oct_nov_2025.cjs
-```
-
-4) Quick verification queries (psql)
-
-```bash
-# attendance counts
-PGPASSWORD=123456 psql -h localhost -U postgres -d attendance_service -c "SELECT COUNT(*) FROM time_attendances WHERE date BETWEEN '2025-10-01' AND '2025-10-31';"
-PGPASSWORD=123456 psql -h localhost -U postgres -d attendance_service -c "SELECT COUNT(*) FROM time_attendances WHERE date BETWEEN '2025-11-01' AND '2025-11-14';"
-
-# monthly summaries
-PGPASSWORD=123456 psql -h localhost -U postgres -d attendance_service -c "SELECT COUNT(*) FROM monthly_attendances WHERE month IN ('2025-10','2025-11');"
-
-# sample summary for userId=2
-PGPASSWORD=123456 psql -h localhost -U postgres -d attendance_service -c "SELECT month, presentDays, totalScheduledDays, absentDays, lateDays, totalLateMinutes, totalLatePenalty, totalPenalty FROM monthly_attendances WHERE userId = 2 AND month IN ('2025-10','2025-11');"
-```
-
-5) Notes & troubleshooting when running seeds
-
-- If you see `column "startDate" does not exist` when running the calculation seed, the `applications` table schema in your `application_service` stores dates inside the `data` JSONB field (not `startDate` column). The calculation seed has been updated to filter by `created_at` and parse `applications.data`.
-- If you get 401/Unauthorized when calling HTTP APIs to verify results, ensure the `attendance-service` is running and that you pass a valid token in Authorization header or `token` cookie (you can also query DB directly with psql for verification).
-- If seeds take long or fail due to memory, run them individually or increase batch insert size.
-
----
-
-If you want, I can also:
-- add a small script to run the three attendance-related seeds in order and print a short summary, or
-- revert/delete seed files after verification (you requested deletion of non-essential files) — tell me which files you want removed.
-
-### Cleanup (tệp seed / migration trùng lặp)
-
-Tôi phát hiện một tệp migration trùng lặp trong `services/salary-service/databases/migrations` có cùng tên cơ sở nhưng khác phần mở rộng (`.cjs` và `.js`). Thông thường giữ lại 1 bản (.cjs) là đủ. Nếu bạn muốn xóa tệp `.js` trùng lặp, chạy lệnh sau từ thư mục gốc của repo (bash.exe):
-
-```bash
-# XÓA TỆP MIGRATION TRÙNG LẶP (chỉ chạy nếu bạn hiểu hậu quả)
-rm -f "services/salary-service/databases/migrations/20251027082646_update_unique_on_profiles.js"
-```
-
-Nếu muốn tôi chạy lệnh xóa giúp bạn thì nói "xoá file trùng lặp" và tôi sẽ chạy lệnh đó.
-
----
-
-## 🔍 Chi tiết từng bước
-
----
-
-## 📌 Kết quả chạy seed thực thi (chạy bởi tôi — 2025-11-14)
-
-Tôi đã chạy toàn bộ phần Attendance seeds và phần tính toán tháng (Oct & Nov 2025) sau khi đảm bảo `17_calculate_monthly_oct_nov_2025.cjs` tương thích với schema `monthly_attendances`.
-
-- Lệnh thực thi (attendance-service):
-
-```bash
-cd services/attendance-service
-yarn seed
-```
-
-- Kết quả chính (tóm tắt):
-   - Đã tạo chấm công tháng 10/2025: 2,216 bản ghi (100 người)
-   - Đã tạo chấm công tháng 11/2025: 1,900 bản ghi (100 người)
-   - Đã tạo bản ghi `monthly_attendances`: 200 (100 records cho 2025-10 + 100 records cho 2025-11)
-
-- Kiểm tra API (attendance-service phải đang chạy trên port 4003):
-   - Endpoint `GET /api/monthly-attendance/by-month?month=2025-10` trả về `success: true` và danh sách 100 bản ghi
-   - Endpoint `GET /api/user/4/monthly-full?year=2025&month=10` trả về `monthlyStats` và `dailyDetails` (ví dụ userId=4 đã có chi tiết hàng ngày)
-
-Ví dụ (tôi đã gọi bằng token admin):
-
-```text
-GET /api/monthly-attendance/by-month?month=2025-10 -> success: true, count: 100
-GET /api/monthly-attendance/by-month?month=2025-11 -> success: true, count: 100
-GET /api/user/4/monthly-full?year=2025&month=10 -> success: true, monthlyStats: { totalDays:23, presentDays:23, ... }
-```
-
-Nếu bạn muốn repro từng bước trên máy của bạn, đảm bảo:
-- Database các service (auth_service, employee_service, salary_service, attendance_service, application_service) đang chạy và cấu hình đúng trong `.env` của từng service.
-- Chạy lần lượt theo thứ tự ở phần "Thứ tự chạy seeds" phía trên.
-
----
-
-
-### Step 1: Foundation Seeds
-
-**Mục đích**: Tạo dữ liệu cơ bản cho hệ thống (roles, departments, permissions...)
-
-**Thời gian**: ~5 giây
-
-**Dependencies**: Không có
-
-**Seeds bao gồm**:
-- `01_seed_roles.js` - 5 roles
-- `03_seed_permissions.js` - 49 permissions
-- `04_seed_role_permissions.js` - 61 role-permission mappings (bao gồm trường `key`)
-- `01_departments_seed.cjs` - 6 departments
-- `02_chevrons_seed.cjs` - 7 chevrons
-- `03_contract_types_seed.cjs` - 3 contract types
-- `002_allowance_types.cjs` - Allowance types
-
----
-
-### Step 2: Users & Contracts
-
-**Mục đích**: Tạo 99 users với cấu trúc tổ chức thực tế (user + contract + salary)
-
-**Thời gian**: ~1 giây
-
-**Dependencies**: Foundation seeds phải chạy trước
-
-**Seed**: `17_final_100_users_realistic.js`
-
-**Chi tiết 99 users**:
-```
-├── Admin: 1 user (admin)
-│   └── Role: Admin, Full Access
-├── Phòng Công nghệ: 30 users
-│   ├── 1 Trưởng phòng (toanhm)
-│   ├── 1 Phó phòng
-│   ├── 2 Team Leaders
-│   └── 26 Nhân viên
+   ## Hướng dẫn chạy migrate & seed (ngắn gọn)
+
+   Chỉ liệt kê các lệnh cần thiết để chạy migration và seed trên từng service. Dùng `yarn` (nếu có) hoặc `npx knex` nếu không.
+
+   Lưu ý: chạy trong bash (hoặc dùng `yarn --cwd <path> ...`).
+
+   ### Auth Service
+
+   ```bash
+   cd services/auth-service
+   yarn knex migrate:latest
+   # Foundation
+   yarn knex seed:run --specific=01_seed_roles.js
+   yarn knex seed:run --specific=03_seed_permissions.js
+   yarn knex seed:run --specific=04_seed_role_permissions.js
+   # Users & contracts
+   yarn knex seed:run --specific=17_final_100_users_realistic.js
+   ```
+
+   ### Employee Service
+
+   ```bash
+   cd services/employee-service
+   yarn knex migrate:latest
+   yarn knex seed:run --specific=01_departments_seed.cjs
+   yarn knex seed:run --specific=02_chevrons_seed.cjs
+   yarn knex seed:run --specific=03_contract_types_seed.cjs
+   ```
+
+   ### Salary Service
+
+   ```bash
+   cd services/salary-service
+   yarn knex migrate:latest
+   yarn knex seed:run --specific=002_allowance_types.cjs
+   ```
+
+   ### Attendance Service
+
+   ```bash
+   cd services/attendance-service
+   yarn knex migrate:latest
+   # Tạo chấm công tháng 10 & 11
+   yarn knex seed:run --specific=15_october_2025_100_employees_attendance.cjs
+   yarn knex seed:run --specific=12_november_2025_100_employees_attendance.cjs
+   # Tính tổng hợp monthly_attendances (penalties...)
+   yarn knex seed:run --specific=17_calculate_monthly_oct_nov_2025.cjs
+   ```
+
+   ### Application Service
+
+   ```bash
+   cd services/application-service
+   yarn knex migrate:latest
+   yarn knex seed:run --specific=16_october_2025_applications.cjs
+   yarn knex seed:run --specific=14_november_2025_applications.js
+   ```
+
+   ### Nếu không dùng yarn (thay bằng npx)
+
+   ```bash
+   # Ví dụ từ repo root
+   npx --yes knex --cwd services/auth-service migrate:latest
+   npx --yes knex --cwd services/auth-service seed:run --specific=01_seed_roles.js
+   ```
+
+   ---
+
+   Ngắn gọn: chạy `migrate:latest` trên từng service trước, sau đó chạy các `seed:run --specific=...` theo thứ tự: foundation → users/contracts → attendance/applications. Nếu muốn, mình có thể rút gọn thêm theo 1 script duy nhất.
 ├── Phòng Kinh doanh: 28 users
 │   ├── 1 Trưởng phòng
 │   ├── 1 Phó phòng

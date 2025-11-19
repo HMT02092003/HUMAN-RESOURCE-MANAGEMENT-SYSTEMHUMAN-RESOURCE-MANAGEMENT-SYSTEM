@@ -99,6 +99,21 @@ export async function seed(knex) {
     { roleId: 5, permissionId: 16, value: 31, key: 'projects', scope: 1 },  // projects - full global (quản lý dự án)
     { roleId: 5, permissionId: 17, value: 31, key: 'manage_applications', scope: 1 },  // manage_applications - Full global (CRUD tất cả đơn từ)
     { roleId: 5, permissionId: 18, value: 31, key: 'shiftApproval', scope: 1 },  // shiftApproval - Full global (duyệt ca toàn công ty)
+  // ---- Shift registration & configuration permissions (new)
+  // Admin - full global for new shift modules
+  { roleId: 1, permissionId: 19, value: 31, key: 'shiftRegistration', scope: 1 }, // Đăng ký ca - Full global
+  { roleId: 1, permissionId: 20, value: 31, key: 'shiftConfiguration', scope: 1 }, // Cấu hình ca - Full global
+
+  // Employee - can create and read their own shift registrations
+  { roleId: 2, permissionId: 19, value: 12, key: 'shiftRegistration', scope: 3 }, // create(8)+read(4) personal
+
+  // Leader - department-level management / read of configuration
+  { roleId: 3, permissionId: 19, value: 31, key: 'shiftRegistration', scope: 2 }, // full department
+  { roleId: 3, permissionId: 20, value: 4, key: 'shiftConfiguration', scope: 2 }, // read department
+
+  // HR - full global for shift modules
+  { roleId: 5, permissionId: 19, value: 31, key: 'shiftRegistration', scope: 1 }, // Đăng ký ca - Full global
+  { roleId: 5, permissionId: 20, value: 31, key: 'shiftConfiguration', scope: 1 }, // Cấu hình ca - Full global
   ];
 
   // Insert seed entries

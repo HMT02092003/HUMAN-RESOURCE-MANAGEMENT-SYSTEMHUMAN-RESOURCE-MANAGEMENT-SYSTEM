@@ -3,10 +3,8 @@
 import dayjs from 'dayjs';
 import TimeAttendanceModel from '@/Models/TimeAttendanceModel';
 import AttendanceCalculationService from './AttendanceCalculationService';
-// Sử dụng phương thức static từ class
-// import { getApprovedOvertimeApplication } from './AttendanceCalculationService';
-// Thay thế bằng gọi trực tiếp từ class
 import { MonthlyReportService } from '../MonthlyReportService';
+import { getShiftForUserAndDate } from './ShiftHelper';
 
 export async function recordAttendance(userId: number, time: string, token?: string): Promise<any> {
   try {
@@ -27,7 +25,11 @@ export async function recordAttendance(userId: number, time: string, token?: str
       record = await TimeAttendanceModel.query().patchAndFetchById(existingRecord.id, { checkOutTime: time });
     }
 
-    // Sửa lại gọi hàm từ class
+    // ✨ Lấy shift cho user vào ngày này (đã đăng ký hoặc mặc định)
+    const shift = await getShiftForUserAndDate(userId, date);
+    console.log(`📋 Shift cho user ${userId} ngày ${date}:`, shift);
+
+    // Lấy thông tin OT đã duyệt
     const overtimeApp = await AttendanceCalculationService.getApprovedOvertimeApplication(userId, date);
     let otEndTime: dayjs.Dayjs | null = null;
     if (overtimeApp) {
@@ -35,45 +37,47 @@ export async function recordAttendance(userId: number, time: string, token?: str
       if (appData.endTime) { otEndTime = dayjs(`${date} ${appData.endTime}`); }
     }
 
-
-    // ✨ QUAN TRỌNG: Truyền token xuống calculateAttendance để lấy salary info
+    // ✨ Truyền shift vào calculateAttendance
     const calculation = await AttendanceCalculationService.calculateAttendance(
       record.checkInTime, 
       record.checkOutTime, 
       date, 
       userId, 
-      token, // Truyền token vào đây
-      otEndTime ? otEndTime.toISOString() : undefined
+      token,
+      otEndTime ? otEndTime.toISOString() : undefined,
+      undefined, // isHoliday - sẽ được tính trong calculateAttendance
+      shift // ✨ Truyền shift info
     );
 
-    // Calculate dailyWorkingUnit: min(1, workHours / standardHours)
-    let dailyWorkingUnit = 0;
-    if (calculation.standardHours > 0) {
-      dailyWorkingUnit = Math.min(1, calculation.workHours / calculation.standardHours);
-    }
-
+    // ✨ Cập nhật record với thông tin công mới
     const updatedRecord = await TimeAttendanceModel.query().patchAndFetchById(record.id, {
       dailyTotalWorkHours: calculation.workHours,
-      dailyWorkingUnit,
+      dailyWorkingUnit: calculation.dailyWorkingUnit || 0, // Công cơ bản (không bao gồm OT)
+      totalWorkingUnit: calculation.totalWorkingUnit || 0, // Tổng công (bao gồm cả OT)
+      otWorkingUnit: calculation.otWorkingUnit || 0, // Công OT riêng
       lateMinutes: calculation.lateMinutes,
       earlyDepartureMinutes: calculation.earlyDepartureMinutes,
       lateArrivalPenalty: calculation.latePenaltyAmount,
-      earlyLeavePenalty: calculation.earlyLeavePenaltyAmount,
-      otMinutes: calculation.otMinutes,
-      otSalary: calculation.otSalary || 0
+      earlyLeavePenalty: calculation.earlyLeavePenaltyAmount
+      // ✅ REMOVED: otMinutes and otSalary (deprecated columns)
     });
 
-    // ✨ --- Recalculate and upsert monthly summary for this user/month ---
+    // Recalculate and upsert monthly summary for this user/month
     try {
       console.log(`🔄 [attendance] Triggering monthly calculation after attendance record...`);
       const result = await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, date);
       console.log(`✅ [attendance] Monthly calculation result:`, result);
     } catch (monthlyErr: any) {
       console.error(`❌ [attendance] Failed to update monthly summary:`, monthlyErr);
-      // Don't fail the whole operation if monthly update fails
     }
 
-    return { type: isCheckIn ? 'check_in' : 'check_out', record: updatedRecord, calculation, hasOvertimeApproval: !!overtimeApp };
+    return { 
+      type: isCheckIn ? 'check_in' : 'check_out', 
+      record: updatedRecord, 
+      calculation, 
+      hasOvertimeApproval: !!overtimeApp,
+      shift // ✨ Trả về thông tin shift cho FE
+    };
   } catch (error) {
     console.error('Error in recordAttendance:', error);
     throw error;

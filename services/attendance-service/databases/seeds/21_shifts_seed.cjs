@@ -16,6 +16,7 @@ exports.seed = async function(knex) {
       start_time: '08:00:00',
       end_time: '17:00:00',
       working_unit: 1.0,
+      is_default: true, // ✨ Đánh dấu ca mặc định
       description: 'Ca hành chính chuẩn (8:00-17:00)',
       created_at: new Date(),
       updated_at: new Date()
@@ -26,6 +27,7 @@ exports.seed = async function(knex) {
       start_time: '08:30:00',
       end_time: '17:30:00',
       working_unit: 1.0,
+      is_default: false,
       description: 'Ca hành chính linh hoạt (8:30-17:30)',
       created_at: new Date(),
       updated_at: new Date()
@@ -36,6 +38,7 @@ exports.seed = async function(knex) {
       start_time: '09:00:00',
       end_time: '18:00:00',
       working_unit: 1.0,
+      is_default: false,
       description: 'Ca hành chính linh hoạt (9:00-18:00)',
       created_at: new Date(),
       updated_at: new Date()
@@ -48,6 +51,7 @@ exports.seed = async function(knex) {
       start_time: '08:00:00',
       end_time: '12:00:00',
       working_unit: 0.5,
+      is_default: false,
       description: 'Ca bán thời gian buổi sáng (8:00-12:00) - 0.5 công',
       created_at: new Date(),
       updated_at: new Date()
@@ -58,6 +62,7 @@ exports.seed = async function(knex) {
       start_time: '13:00:00',
       end_time: '17:00:00',
       working_unit: 0.5,
+      is_default: false,
       description: 'Ca bán thời gian buổi chiều (13:00-17:00) - 0.5 công',
       created_at: new Date(),
       updated_at: new Date()
@@ -68,6 +73,7 @@ exports.seed = async function(knex) {
       start_time: '18:00:00',
       end_time: '22:00:00',
       working_unit: 0.5,
+      is_default: false,
       description: 'Ca tối bán thời gian (18:00-22:00) - 0.5 công',
       created_at: new Date(),
       updated_at: new Date()
@@ -80,6 +86,7 @@ exports.seed = async function(knex) {
       start_time: '10:00:00',
       end_time: '14:00:00',
       working_unit: 0.5,
+      is_default: false,
       description: 'Ca gãy buổi sáng cho F&B (10:00-14:00) - 0.5 công',
       created_at: new Date(),
       updated_at: new Date()
@@ -90,6 +97,7 @@ exports.seed = async function(knex) {
       start_time: '18:00:00',
       end_time: '22:00:00',
       working_unit: 0.5,
+      is_default: false,
       description: 'Ca gãy buổi tối cho F&B (18:00-22:00) - 0.5 công',
       created_at: new Date(),
       updated_at: new Date()

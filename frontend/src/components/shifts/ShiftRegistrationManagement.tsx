@@ -264,7 +264,7 @@ const ShiftRegistrationManagement = () => {
       title: 'Ca làm việc',
       key: 'shift',
       render: (_: any, record: any) => (
-        <div>
+        <div style={{display:'flex', flexDirection:"column" }}>
           <span>{record.shift_name}</span>
           <Tag color="blue">{record.start_time?.substring(0, 5)} - {record.end_time?.substring(0, 5)}</Tag>
         </div>

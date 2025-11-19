@@ -6,7 +6,7 @@ import SettingsService from './SettingsService';
 
 const apiGateway = process.env.API_GATEWAY_URL || `http://localhost:${process.env.API_GATEWAY_PORT || 4000}`;
 
-export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
+export async function calculateAndInsertPayslipsForMonth(monthStr: string, options?: { authToken?: string }) {
   if (!monthStr || !/^\d{4}-\d{2}$/.test(monthStr)) {
     throw new Error('month must be in YYYY-MM format');
   }
@@ -14,9 +14,9 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
   const [year, month] = monthStr.split('-').map(Number);
 
   // Lấy dữ liệu attendance đã được duyệt (isApproved: true)
-  const resp = await axios.get(`${apiGateway}/api/attendance/monthly-attendance/by-month`, {
-    params: { month: monthStr, isApproved: true, page: 0, pageSize: 10000 }
-  });
+  const axiosConfigAny: any = { params: { month: monthStr, isApproved: true, page: 0, pageSize: 10000 } };
+  if (options?.authToken) axiosConfigAny.headers = { Authorization: `Bearer ${options.authToken}` };
+  const resp = await axios.get(`${apiGateway}/api/attendance/monthly-attendance/by-month`, axiosConfigAny);
 
   if (!resp.data || !resp.data.data) {
     return { 
@@ -95,9 +95,11 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
   // Gọi sang employee-service để lấy hợp đồng đang hiệu lực
   await Promise.all(newUserIds.map(async (userId) => {
     try {
+      const contractAxiosCfg: any = { params: { date: checkDate } };
+      if (options?.authToken) contractAxiosCfg.headers = { Authorization: `Bearer ${options.authToken}` };
       const contractResp = await axios.get(
         `${EMPLOYEE_SERVICE_URL}/contracts/user/${userId}/active`,
-        { params: { date: checkDate } }
+        contractAxiosCfg
       );
       if (contractResp.data && contractResp.data.id) {
         activeContractsMap.set(userId, contractResp.data);
@@ -117,36 +119,25 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
   
   console.log('[salary-service] Active contracts found:', contractIds.length, 'out of', newUserIds.length, 'users');
   
-  // Nếu không tìm thấy hợp đồng cho một số user
+  // If some users do not have active contracts, collect them and fetch basic user info for the response
+  let missingContractUsers: Array<{ userId: number | string; username: string; fullName: string }> = [];
   if (usersWithoutContracts.length > 0) {
     console.warn('[salary-service] Users without active contracts:', usersWithoutContracts);
-    
     try {
-      const usersResp = await axios.post(`${apiGateway}/api/auth/users/bulk`, { userIds: usersWithoutContracts.map(id => Number(id)) });
+      const usersAxiosCfg: any = {};
+      if (options?.authToken) usersAxiosCfg.headers = { Authorization: `Bearer ${options.authToken}` };
+      const usersResp = await axios.post(`${apiGateway}/api/auth/users/bulk`, { userIds: usersWithoutContracts.map(id => Number(id)) }, usersAxiosCfg);
       const usersList = (usersResp?.data?.data && Array.isArray(usersResp.data.data)) ? usersResp.data.data : [];
-      
-      const missingContractUsers = usersWithoutContracts.map(id => {
+
+      missingContractUsers = usersWithoutContracts.map(id => {
         const found = usersList.find((u: any) => String(u.id) === String(id));
         if (found) return { userId: found.id, username: found.username, fullName: found.fullName || '' };
         return { userId: id, username: `User ${id}`, fullName: '' };
       });
-      
-      return {
-        success: false,
-        inserted: 0,
-        message: 'Không tìm thấy hợp đồng đang hiệu lực cho một số người dùng',
-        usersWithoutContracts: missingContractUsers,
-        usersWithoutApprovedAttendance: []
-      };
     } catch (err) {
-      return {
-        success: false,
-        inserted: 0,
-        message: 'Không tìm thấy hợp đồng đang hiệu lực cho một số người dùng',
-        usersWithoutContracts: usersWithoutContracts.map(id => ({ userId: id, username: `User ${id}`, fullName: '' })),
-        usersWithoutApprovedAttendance: []
-      };
+      missingContractUsers = usersWithoutContracts.map(id => ({ userId: id, username: `User ${id}`, fullName: '' }));
     }
+    // continue processing users who DO have active contracts (don't abort)
   }
 
   console.log('[salary-service] Found', contractIds.length, 'active contracts, fetching salary profiles...');
@@ -162,39 +153,27 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
   });
 
   // Detect users that don't have a salary profile for their active contract
-  const missingProfileUserIds = newUserIds.filter(uid => !profileMap.has(uid));
+  const missingProfileUserIds = newUserIds.filter(uid => !profileMap.has(uid) && activeContractsMap.has(uid));
+  let missingProfileUsers: Array<{ userId: number | string; username: string; fullName: string }> = [];
   if (missingProfileUserIds.length > 0) {
     console.warn('[salary-service] Missing salary profiles for userIds:', missingProfileUserIds);
     try {
-      // Fetch user info from auth-service via API Gateway
-      const usersResp = await axios.post(`${apiGateway}/api/auth/users/bulk`, { userIds: missingProfileUserIds.map(id => Number(id)) });
+      const usersAxiosCfg2: any = {};
+      if (options?.authToken) usersAxiosCfg2.headers = { Authorization: `Bearer ${options.authToken}` };
+      const usersResp = await axios.post(`${apiGateway}/api/auth/users/bulk`, { userIds: missingProfileUserIds.map(id => Number(id)) }, usersAxiosCfg2);
       const missingUsers = (usersResp?.data?.data && Array.isArray(usersResp.data.data)) ? usersResp.data.data : [];
 
       // Build readable missing info: if auth-service returned details use them, otherwise fallback to id only
-      const missingInfo = missingProfileUserIds.map(id => {
+      missingProfileUsers = missingProfileUserIds.map(id => {
         const found = missingUsers.find((u: any) => String(u.id) === String(id));
         if (found) return { userId: found.id, username: found.username, fullName: found.fullName || '' };
         return { userId: id, username: `User ${id}`, fullName: '' };
       });
-
-      return {
-        success: false,
-        inserted: 0,
-        message: 'Không tìm thấy thông tin lương (salary profile) cho một số người dùng',
-        usersWithoutContracts: [],
-        usersWithoutSalaryProfile: missingInfo
-      };
     } catch (err) {
       console.error('[salary-service] Error fetching missing users from auth-service:', (err as any)?.message || err);
-      // If we cannot fetch user info, still return ids
-      return {
-        success: false,
-        inserted: 0,
-        message: 'Không tìm thấy thông tin lương cho một số người dùng (và không thể lấy thông tin người dùng)',
-        usersWithoutContracts: [],
-        usersWithoutSalaryProfile: missingProfileUserIds.map(id => ({ userId: id, username: `User ${id}`, fullName: '' }))
-      };
+      missingProfileUsers = missingProfileUserIds.map(id => ({ userId: String(id), username: `User ${id}`, fullName: '' }));
     }
+    // continue processing other users that do have profiles
   }
 
   // Lấy allowances từ bảng trung gian
@@ -246,7 +225,13 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
   // Tạo dữ liệu insert
   const insertRows: any[] = [];
   
-  for (const rec of newRecords) {
+  // Only process records for users that have active contracts and a salary profile
+  const processingRecords = newRecords.filter((r: any) => {
+    const uid = String(r.userId || r.user_id);
+    return activeContractsMap.has(uid) && profileMap.has(uid);
+  });
+
+  for (const rec of processingRecords) {
     const uid = String(rec.userId || rec.user_id);
     const profile = profileMap.get(uid);
     
@@ -260,8 +245,42 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
 
     console.log(`[salary-service] user ${uid}, profile ${profile?.id}, baseSalary: ${baseSalary}, allowancesSum: ${allowancesSum}`);
 
+    // ✨ Tính số công chuẩn trong tháng dựa vào WorkingDays setting
+    // Gọi sang attendance-service để lấy số công chuẩn
+    let standardWorkingDays = 22; // Fallback default
+    try {
+      const workingDaysCfg: any = { timeout: 5000 };
+      if (options?.authToken) workingDaysCfg.headers = { Authorization: `Bearer ${options.authToken}` };
+      const workingDaysResp = await axios.post(
+          `${apiGateway}/api/attendance/calculate-standard-working-days`,
+          { month: monthStr },
+          workingDaysCfg
+        );
+      if (workingDaysResp.data && workingDaysResp.data.standardWorkingDays) {
+        standardWorkingDays = Number(workingDaysResp.data.standardWorkingDays);
+        console.log(`✅ [salary-service] Số công chuẩn tháng ${monthStr}: ${standardWorkingDays}`);
+      }
+    } catch (err) {
+      console.warn(`⚠️ [salary-service] Không thể lấy số công chuẩn, dùng mặc định 22:`, (err as any)?.message);
+    }
+
+    // ✨ Lấy tổng công từ attendance record
+    const totalWorkingUnits = Number(rec.totalWorkingUnits || 0);
+    const totalOtWorkingUnits = Number(rec.totalOtWorkingUnits || 0);
+    
+    console.log(`📊 [salary-service] User ${uid}: ${totalWorkingUnits.toFixed(4)} công (trong đó ${totalOtWorkingUnits.toFixed(4)} công OT)`);
+    console.log(`📊 [salary-service] Số công chuẩn: ${standardWorkingDays}, Lương cơ bản: ${baseSalary.toLocaleString('vi-VN')}`);
+
+    // ✨ Tính lương theo công
+    // Lương/công = Lương cơ bản / Số công chuẩn
+    const salaryPerUnit = standardWorkingDays > 0 ? round2(baseSalary / standardWorkingDays) : 0;
+    const salaryFromWorkingUnits = round2(salaryPerUnit * totalWorkingUnits);
+    
+    console.log(`💰 [salary-service] Lương/công: ${salaryPerUnit.toLocaleString('vi-VN')} VNĐ`);
+    console.log(`💰 [salary-service] Lương từ công: ${salaryFromWorkingUnits.toLocaleString('vi-VN')} VNĐ`);
+
     // Tính penalties - ưu tiên totalPenalty từ attendance record
-    const totalScheduledDays = Number(rec.totalScheduledDays || rec.totalDays || 0);
+    const totalScheduledDays = Number(rec.totalScheduledDays || rec.totalDays || standardWorkingDays);
     const unauthorizedAbsencePenaltyPerDay = totalScheduledDays > 0 ? round2(baseSalary / totalScheduledDays) : 0;
     const totalUnauthorizedAbsencePenalty = Number(rec.unauthorizedAbsenceDays || 0) * unauthorizedAbsencePenaltyPerDay;
     
@@ -274,12 +293,8 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
     const computedPenalty = round2(totalLatePenalty + totalEarlyLeavePenalty + totalUnauthorizedAbsencePenalty);
     const totalPenalty = penaltyFromRec > 0 ? round2(penaltyFromRec) : computedPenalty;
 
-    // Tính overtime - ưu tiên giá trị từ attendance
-    const totalOvertimePay = Number(rec.totalOvertimePay || rec.totalOvertimeSalary || 0);
-    const overtimePay = totalOvertimePay;
-
-    // Tính gross = lương cơ bản + phụ cấp + làm thêm giờ
-    const gross = round2(baseSalary + allowancesSum + overtimePay);
+    // ✨ Tính gross = lương từ công + phụ cấp (không cần + OT vì đã tính trong công)
+    const gross = round2(salaryFromWorkingUnits + allowancesSum);
 
     // Tính bảo hiểm - dựa trên insurance_salary hoặc base_salary
     let socialInsurance = 0, healthInsurance = 0, unemploymentInsurance = 0;
@@ -310,7 +325,13 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
       month,
       base_salary: round2(baseSalary).toFixed(2),
       allowances: round2(allowancesSum).toFixed(2),
-      overtime_pay: round2(overtimePay).toFixed(2),
+      // ✨ Thêm thông tin công
+      total_working_units: totalWorkingUnits.toFixed(4), // Tổng công (bao gồm cả công OT)
+      total_ot_working_units: totalOtWorkingUnits.toFixed(4), // Công OT
+      standard_working_days: standardWorkingDays.toFixed(2), // Số công chuẩn
+      salary_per_unit: salaryPerUnit.toFixed(2), // Lương/công
+      salary_from_units: salaryFromWorkingUnits.toFixed(2), // Lương từ công
+      overtime_pay: '0.00', // Deprecated, giữ để tương thích
       gross_salary: round2(gross).toFixed(2),
       social_insurance: round2(socialInsurance).toFixed(2),
       health_insurance: round2(healthInsurance).toFixed(2),
@@ -318,9 +339,22 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
       penalty_total: round2(totalPenalty).toFixed(2),
       total_deductions: round2(totalDeductions).toFixed(2),
       net_salary: round2(net).toFixed(2),
-      notes:  `Bảng lương cho tháng ${monthStr}`,
+      notes:  `Bảng lương cho tháng ${monthStr}`,
       status: "1"
     });
+  }
+
+  // If no rows to insert, return summary with missing lists
+  if (insertRows.length === 0) {
+    return {
+      success: true,
+      inserted: 0,
+      skipped: existingUserIds.size,
+      data: [],
+      usersWithoutContracts: missingContractUsers,
+      usersWithoutSalaryProfile: missingProfileUsers,
+      usersWithoutApprovedAttendance: []
+    };
   }
 
   // Bulk insert
@@ -340,7 +374,9 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
   try {
     const createdUserIds = [...new Set(createdRows.map(r => String(r.user_id)))].map(id => Number(id));
     if (createdUserIds.length > 0) {
-      const usersResp = await axios.post(`${apiGateway}/api/auth/users/bulk`, { userIds: createdUserIds });
+      const usersAxiosCfg3: any = {};
+      if (options?.authToken) usersAxiosCfg3.headers = { Authorization: `Bearer ${options.authToken}` };
+      const usersResp = await axios.post(`${apiGateway}/api/auth/users/bulk`, { userIds: createdUserIds }, usersAxiosCfg3);
       const users = (usersResp?.data?.data && Array.isArray(usersResp.data.data)) ? usersResp.data.data : [];
       // attach user info to each created row
       createdRows.forEach(row => {
@@ -357,7 +393,8 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string) {
     inserted: createdRows.length,
     skipped: existingUserIds.size,
     data: createdRows,
-    usersWithoutContracts: [],
+    usersWithoutContracts: missingContractUsers,
+    usersWithoutSalaryProfile: missingProfileUsers,
     usersWithoutApprovedAttendance: []
   };
 }

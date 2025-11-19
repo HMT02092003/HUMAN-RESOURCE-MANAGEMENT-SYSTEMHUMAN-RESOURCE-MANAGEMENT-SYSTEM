@@ -170,7 +170,15 @@ export const generateFromAttendance = async (req: Request, res: Response, next: 
 export const calculateFromAttendanceBulk = async (req: Request, res: Response, next: NextFunction) => {
   try {
   const monthStr = String(req.body.month || req.query.month || '');
-  const result = await PayslipCalculationService.calculateAndInsertPayslipsForMonth(monthStr);
+  // Propagate incoming Authorization header or token cookie so service-to-service calls via API Gateway
+  let incomingToken: string | undefined = undefined;
+  if (req.headers['authorization']) incomingToken = String(req.headers['authorization']).startsWith('Bearer ') ? String(req.headers['authorization']).substring(7) : String(req.headers['authorization']);
+  else if (req.headers['cookie']) {
+    const match = (req.headers['cookie'] as string).split(';').map(c => c.trim()).find(c => c.startsWith('token='));
+    if (match) incomingToken = match.replace(/^token=/, '');
+  }
+
+  const result = await PayslipCalculationService.calculateAndInsertPayslipsForMonth(monthStr, { authToken: incomingToken });
   if (!result || !result.success) {
     console.error('[salary-service] calculateFromAttendanceBulk failed:', result?.message);
     return res.status(400).json({ success: false, message: result?.message || 'Calculation failed' });

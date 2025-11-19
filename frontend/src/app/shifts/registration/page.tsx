@@ -17,6 +17,8 @@ const ShiftRegistrationPage = () => {
       breadcrumbItems={breadcrumbItems}
       pageName="Đăng ký ca làm việc"
       pageDes="Đăng ký ca làm việc theo nhu cầu cá nhân"
+      requiredPermission="shiftRegistration"
+      permissionType="create"
     >
       <ShiftRegistrationManagement />
     </MainLayout>

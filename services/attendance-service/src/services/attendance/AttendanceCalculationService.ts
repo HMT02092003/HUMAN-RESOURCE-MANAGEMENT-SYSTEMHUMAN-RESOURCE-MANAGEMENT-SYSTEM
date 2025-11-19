@@ -105,6 +105,9 @@ interface AttendanceCalculation {
   penaltyRate: number;
   latePenaltyAmount: number;
   earlyLeavePenaltyAmount: number;
+  dailyWorkingUnit: number; // Công cơ bản (không bao gồm OT)
+  totalWorkingUnit: number; // Tổng công (bao gồm cả OT)
+  otWorkingUnit: number; // Công OT riêng
 }
 
 interface ApprovedLeaveApplication {
@@ -354,17 +357,14 @@ export class AttendanceCalculationService {
 
       let totalWorkDays = 0;
       let totalWorkHours = 0;
-      let totalOvertimeMinutes = 0;
       let totalPenalty = 0;
-      let totalOvertimeSalary = 0;
 
       enrichedAttendanceData.forEach(record => {
         if (record.checkInTime && record.checkOutTime) {
           totalWorkDays++;
-          totalWorkHours += parseFloat(record.dailyTotalWorkHours.toString());
-          totalOvertimeMinutes += parseFloat(record.otMinutes.toString());
-          totalPenalty += parseFloat(record.lateArrivalPenalty.toString()) + parseFloat(record.earlyLeavePenalty.toString());
-          totalOvertimeSalary += parseFloat(record.otSalary.toString());
+          totalWorkHours += parseFloat((record.dailyTotalWorkHours || 0).toString());
+          // Skip otMinutes and otSalary - they're deprecated, use otWorkingUnit instead
+          totalPenalty += parseFloat((record.lateArrivalPenalty || 0).toString()) + parseFloat((record.earlyLeavePenalty || 0).toString());
         }
       });
 
@@ -372,11 +372,12 @@ export class AttendanceCalculationService {
       const totalsFromDb = monthlyRecord ? {
         presentDays: parseFloat((monthlyRecord.presentDays ?? totalWorkDays).toString()) || totalWorkDays,
         totalWorkHours: parseFloat((monthlyRecord.totalWorkHours ?? totalWorkHours).toString()) || Math.round(totalWorkHours * 100) / 100,
-        totalOvertimeHours: parseFloat((monthlyRecord.totalOvertimeHours ?? Math.round(totalOvertimeMinutes / 60 * 100) / 100).toString()) || Math.round(totalOvertimeMinutes / 60 * 100) / 100,
+        totalOvertimeHours: parseFloat((monthlyRecord.totalOvertimeHours ?? 0).toString()) || 0,
         totalLateDays: parseFloat((monthlyRecord.lateDays ?? totalLateDays).toString()) || totalLateDays,
         totalEarlyLeaveDays: parseFloat((monthlyRecord.earlyLeaveDays ?? totalEarlyLeaveDays).toString()) || totalEarlyLeaveDays,
         totalPenalty: parseFloat((monthlyRecord.totalPenalty ?? Math.round(totalPenalty * 100) / 100).toString()) || Math.round(totalPenalty * 100) / 100,
-        totalOvertimeSalary: parseFloat((monthlyRecord.totalOvertimeSalary ?? Math.round(totalOvertimeSalary * 100) / 100).toString()) || Math.round(totalOvertimeSalary * 100) / 100,
+        totalWorkingUnits: parseFloat((monthlyRecord.totalWorkingUnits ?? 0).toString()) || 0,
+        totalOtWorkingUnits: parseFloat((monthlyRecord.totalOtWorkingUnits ?? 0).toString()) || 0,
         isApproved: monthlyRecord ? !!isApproved : isApproved
       } : null;
 
@@ -386,11 +387,12 @@ export class AttendanceCalculationService {
         month,
         presentDays: totalsFromDb ? totalsFromDb.presentDays : totalWorkDays,
         totalWorkHours: totalsFromDb ? totalsFromDb.totalWorkHours : Math.round(totalWorkHours * 100) / 100,
-        totalOvertimeHours: totalsFromDb ? totalsFromDb.totalOvertimeHours : Math.round(totalOvertimeMinutes / 60 * 100) / 100,
+        totalOvertimeHours: totalsFromDb ? totalsFromDb.totalOvertimeHours : 0,
         totalLateDays: totalsFromDb ? totalsFromDb.totalLateDays : totalLateDays,
         totalEarlyLeaveDays: totalsFromDb ? totalsFromDb.totalEarlyLeaveDays : totalEarlyLeaveDays,
         totalPenalty: totalsFromDb ? totalsFromDb.totalPenalty : Math.round(totalPenalty * 100) / 100,
-        totalOvertimeSalary: totalsFromDb ? totalsFromDb.totalOvertimeSalary : Math.round(totalOvertimeSalary * 100) / 100,
+        totalWorkingUnits: totalsFromDb ? totalsFromDb.totalWorkingUnits : 0,
+        totalOtWorkingUnits: totalsFromDb ? totalsFromDb.totalOtWorkingUnits : 0,
         isApproved: totalsFromDb ? totalsFromDb.isApproved : isApproved,
         attendanceData: enrichedAttendanceData
       };
@@ -512,14 +514,39 @@ export class AttendanceCalculationService {
     userId?: number,
     token?: string,
     approvedOtEndTime?: string | null,
-    isHoliday?: boolean // ✨ Thêm tham số để xác định ngày lễ
+    isHoliday?: boolean, // Thêm tham số để xác định ngày lễ
+    shiftInfo?: { id: number; name: string; start_time: string; end_time: string; working_unit: number; is_default: boolean } // ✨ Shift info
   ): Promise<AttendanceCalculation & { standardHours: number }> {
-    console.log('🧮 Starting attendance calculation for:', { date, checkInTime, checkOutTime, userId, approvedOtEndTime, isHoliday });
+    console.log('🧮 Starting attendance calculation for:', { date, checkInTime, checkOutTime, userId, approvedOtEndTime, isHoliday, shiftInfo });
 
     const settings = await this.getSettings();
-    const workingHours = settings.workingHours as WorkingHours;
     const lunchBreak = settings.lunchBreak as LunchBreak;
     const penaltyRate = (settings.penaltyRate as PenaltyConfig).rate;
+
+    // ✨ Sử dụng shift info nếu có, không dùng WorkingHours từ settings nữa
+    let workingHours: WorkingHours;
+    let standardHours = 8;
+    
+    if (shiftInfo) {
+      workingHours = {
+        start: shiftInfo.start_time.substring(0, 5), // '08:00:00' -> '08:00'
+        end: shiftInfo.end_time.substring(0, 5)
+      };
+      // Tính số giờ chuẩn của ca (trừ nghỉ trưa)
+      const start = dayjs(`${date} ${shiftInfo.start_time}`).tz('Asia/Ho_Chi_Minh');
+      const end = dayjs(`${date} ${shiftInfo.end_time}`).tz('Asia/Ho_Chi_Minh');
+      const diffMinutes = end.diff(start, 'minute');
+      const lunchBreakMinutes = diffMinutes > 360 ? 60 : 0; // Nếu ca > 6h thì trừ 1h nghỉ trưa
+      standardHours = (diffMinutes - lunchBreakMinutes) / 60;
+      console.log(`📋 Sử dụng shift: ${shiftInfo.name}, working_unit=${shiftInfo.working_unit}, standardHours=${standardHours}h`);
+    } else {
+      // Fallback: dùng settings cũ
+      workingHours = settings.workingHours as WorkingHours;
+      const start = dayjs(`${date} ${workingHours.start}`).tz('Asia/Ho_Chi_Minh');
+      const end = dayjs(`${date} ${workingHours.end}`).tz('Asia/Ho_Chi_Minh');
+      const diff = end.diff(start, 'minute');
+      if (diff > 0) standardHours = diff / 60;
+    }
 
     // Lấy thông tin lương của user nếu có userId
     let salaryInfo: UserSalaryInfo | null = null;
@@ -527,20 +554,9 @@ export class AttendanceCalculationService {
       salaryInfo = await this.getUserSalaryInfo(userId, token);
     }
 
-    console.log('⚙️ Using settings:', { workingHours, lunchBreak, penaltyRate });
+    console.log('⚙️ Using settings:', { workingHours, lunchBreak, penaltyRate, standardHours });
     console.log('💰 User salary info:', salaryInfo);
     console.log('🎉 Is holiday:', isHoliday);
-
-    // Calculate standard working hours for the day
-    let standardHours = 8; // fallback default
-    if (workingHours && workingHours.start && workingHours.end) {
-      const start = dayjs(`${date} ${workingHours.start}`).tz('Asia/Ho_Chi_Minh');
-      const end = dayjs(`${date} ${workingHours.end}`).tz('Asia/Ho_Chi_Minh');
-      const diff = end.diff(start, 'minute');
-      if (diff > 0) {
-        standardHours = diff / 60;
-      }
-    }
 
     // Nếu không có check-in thì return default
     if (!checkInTime) {
@@ -556,6 +572,9 @@ export class AttendanceCalculationService {
         penaltyRate,
         latePenaltyAmount: 0,
         earlyLeavePenaltyAmount: 0,
+        dailyWorkingUnit: 0,
+        totalWorkingUnit: 0,
+        otWorkingUnit: 0,
         standardHours
       };
     }
@@ -592,7 +611,10 @@ export class AttendanceCalculationService {
       isEarlyLeave: false,
       penaltyRate,
       latePenaltyAmount: 0,
-      earlyLeavePenaltyAmount: 0
+      earlyLeavePenaltyAmount: 0,
+      dailyWorkingUnit: 0,
+      totalWorkingUnit: 0,
+      otWorkingUnit: 0
     };
 
     // Tính toán tiền phạt đi muộn ngay cả khi chưa có check-out
@@ -646,45 +668,33 @@ export class AttendanceCalculationService {
         if (checkOut.isAfter(expectedCheckOut) && checkOut.isSameOrBefore(approvedOtEnd)) {
           result.otMinutes = checkOut.diff(expectedCheckOut, 'minute');
 
-          // Tính lương OT nếu có thông tin lương
-          if (salaryInfo) {
-            // ✨ Tính lương OT theo ngày lễ hoặc ngày thường
-            // Công thức: Lương OT = (Lương / Số ngày làm việc) * Tỷ lệ OT * Số phút OT
+          // ✨ Tính công OT thay vì tính lương OT
+          // Lấy tỷ lệ OT theo công từ settings
+          const otRateKey = isHoliday ? 'HolidayOvertimeRateInUnits' : 'OvertimeRateInUnits';
+          const otRateSetting = await SettingsService.getSettingValue(otRateKey);
+          const otRate = otRateSetting?.rate || (isHoliday ? 3.0 : 1.5);
 
-            // Lấy tỷ lệ OT từ settings
-            const otRate = isHoliday
-              ? ((settings.holidayRate as any)?.rate || 3.0)  // Ngày lễ: 300%
-              : ((settings.overtimeRate as any)?.rate || 1.5); // Ngày thường: 150%
+          // Tính công OT: (số giờ OT / 8) * tỉ lệ OT
+          const otHours = result.otMinutes / 60;
+          result.otWorkingUnit = (otHours / 8) * otRate;
+          result.otSalary = 0; // Không tính lương OT riêng nữa
 
-            // Số ngày làm việc trong tháng (mặc định 22 ngày)
-            const workingDaysInMonth = 22;
-
-            // Tính lương OT theo công thức mới:
-            // Lương ngày = Lương tháng / Số ngày làm việc
-            // Lương OT = (Lương ngày / (8 giờ * 60 phút)) * Tỷ lệ OT * Số phút OT
-            const baseSalary = parseFloat(salaryInfo.baseSalary.toString());
-            const dailySalary = baseSalary / workingDaysInMonth;
-            const perMinuteSalary = dailySalary / (8 * 60); // 8 giờ làm việc
-
-            result.otSalary = Math.round(perMinuteSalary * otRate * result.otMinutes);
-
-            console.log('⏰ Overtime calculation:');
-            console.log('- Is holiday:', isHoliday);
-            console.log('- OT rate:', otRate);
-            console.log('- Base salary:', baseSalary.toLocaleString('vi-VN'), 'VND');
-            console.log('- Daily salary:', dailySalary.toLocaleString('vi-VN'), 'VND');
-            console.log('- Per-minute salary:', perMinuteSalary.toLocaleString('vi-VN'), 'VND');
-            console.log('- OT minutes:', result.otMinutes);
-            console.log('- OT salary:', result.otSalary.toLocaleString('vi-VN'), 'VND');
-          }
+          console.log('⏰ Overtime calculation (units-based):');
+          console.log('- Is holiday:', isHoliday);
+          console.log('- OT rate (units):', otRate);
+          console.log('- OT minutes:', result.otMinutes);
+          console.log('- OT hours:', otHours.toFixed(2));
+          console.log('- OT working units:', result.otWorkingUnit.toFixed(4));
         } else {
           result.otMinutes = 0;
           result.otSalary = 0;
+          result.otWorkingUnit = 0;
           console.log('⚠️ Checkout time exceeds approved OT time - no OT calculated');
         }
       } else {
         result.otMinutes = 0;
         result.otSalary = 0;
+        result.otWorkingUnit = 0;
         console.log('ℹ️ No approved OT or checkout before expected time - no OT calculated');
       }
     }
@@ -727,6 +737,26 @@ export class AttendanceCalculationService {
 
       console.log('💰 Penalty amounts set to 0 due to missing salary info');
     }
+
+    // ✨ Tính công cơ bản (không bao gồm OT)
+    // Công cơ bản = min(1, số giờ làm / số giờ chuẩn) * working_unit của shift
+    const shiftWorkingUnit = shiftInfo?.working_unit || 1.0;
+    if (result.workHours > 0 && standardHours > 0) {
+      result.dailyWorkingUnit = Math.min(1, result.workHours / standardHours) * shiftWorkingUnit;
+    } else {
+      result.dailyWorkingUnit = 0;
+    }
+
+    // ✨ Tổng công = Công cơ bản + Công OT
+    result.totalWorkingUnit = result.dailyWorkingUnit + result.otWorkingUnit;
+
+    console.log('📊 Working units calculation:');
+    console.log('- Standard hours:', standardHours);
+    console.log('- Work hours:', result.workHours);
+    console.log('- Shift working unit:', shiftWorkingUnit);
+    console.log('- Daily working unit (base):', result.dailyWorkingUnit.toFixed(4));
+    console.log('- OT working unit:', result.otWorkingUnit.toFixed(4));
+    console.log('- Total working unit:', result.totalWorkingUnit.toFixed(4));
 
     console.log('✅ Final calculation result:', result);
     // Attach standardHours to result

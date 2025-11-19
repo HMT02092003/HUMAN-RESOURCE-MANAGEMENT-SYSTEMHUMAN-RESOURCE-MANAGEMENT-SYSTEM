@@ -28,6 +28,7 @@ import {
   MinusCircleOutlined,
   FieldTimeOutlined,
   TrophyOutlined,
+  FireOutlined,
   WarningOutlined,
   EnvironmentOutlined,
   FileTextOutlined,
@@ -958,6 +959,49 @@ const AttendanceSimplePage = () => {
                 </div>
               </Col>
             </Row>
+            {/* ✨ NEW: Working Units (Số công) */}
+            <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
+              <Col xs={12} sm={12} lg={12}>
+                <div style={{
+                  textAlign: 'center',
+                  padding: isMobile ? 12 : 16,
+                  borderRadius: 8,
+                  background: '#fff7e6',
+                  border: '1px solid #ffd591',
+                  height: '100%'
+                }}>
+                  <TrophyOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#fa8c16', marginBottom: 4 }} />
+                  <div>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#fa8c16' }}>
+                      {(monthlyStats.totalWorkingUnits || 0).toFixed(2)}
+                    </Title>
+                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#fa8c16', fontWeight: 500 }}>
+                      Tổng số công
+                    </Text>
+                  </div>
+                </div>
+              </Col>
+              <Col xs={12} sm={12} lg={12}>
+                <div style={{
+                  textAlign: 'center',
+                  padding: isMobile ? 12 : 16,
+                  borderRadius: 8,
+                  background: '#fff1f0',
+                  border: '1px solid #ffccc7',
+                  height: '100%'
+                }}>
+                  <FireOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#ff4d4f', marginBottom: 4 }} />
+                  <div>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#ff4d4f' }}>
+                      {(monthlyStats.totalOtWorkingUnits || 0).toFixed(2)}
+                    </Title>
+                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#ff4d4f', fontWeight: 500 }}>
+                      Công OT
+                    </Text>
+                  </div>
+                </div>
+              </Col>
+            </Row>
             <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
               <Col xs={12} sm={12} lg={12}>
                 <div style={{
@@ -1025,7 +1069,9 @@ const AttendanceSimplePage = () => {
                 }}>
                   <UserOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#13c2c2', marginBottom: 4 }} />
                   <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#13c2c2' }}>{monthlyStats.totalWorkingUnits}</Title>
+                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#13c2c2' }}>
+                      {(monthlyStats.totalWorkingUnits || 0).toFixed(2)}
+                    </Title>
                     <Text style={{ fontSize: isMobile ? 11 : 12, color: '#13c2c2', fontWeight: 500 }}>
                       Tổng công (công)
                     </Text>
@@ -1527,6 +1573,23 @@ const AttendanceSimplePage = () => {
                             <Text style={{ fontSize: isMobile ? 10 : 11, color: '#fa8c16', display: 'block' }}>Sớm</Text>
                             <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#fa8c16' }}>
                               {selectedDateData.earlyDepartureMinutes}p
+                            </Text>
+                          </div>
+                        </Col>
+                        {/* ✨ NEW: Working Units */}
+                        <Col xs={12} sm={12}>
+                          <div style={{ textAlign: 'center', padding: 8, background: '#fff7e6', borderRadius: 6, border: '1px solid #ffd591' }}>
+                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#d48806', display: 'block' }}>Số công</Text>
+                            <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#d48806' }}>
+                              {((selectedDateData as any).dailyWorkingUnit || (selectedDateData as any).totalWorkingUnit || 0).toFixed(2)}
+                            </Text>
+                          </div>
+                        </Col>
+                        <Col xs={12} sm={12}>
+                          <div style={{ textAlign: 'center', padding: 8, background: '#fff1f0', borderRadius: 6, border: '1px solid #ffccc7' }}>
+                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#cf1322', display: 'block' }}>Công OT</Text>
+                            <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#cf1322' }}>
+                              {((selectedDateData as any).otWorkingUnit || 0).toFixed(2)}
                             </Text>
                           </div>
                         </Col>

@@ -126,6 +126,21 @@ export async function seed(knex) {
       "value": 31,
       "key": "shiftApproval",
     }
+    ,
+    {
+      "id": 19,
+      "name": "Đăng ký ca",
+      "description": "Đăng ký ca làm việc (tạo và xem đơn đăng ký ca)",
+      "value": 31,
+      "key": "shiftRegistration",
+    },
+    {
+      "id": 20,
+      "name": "Cấu hình ca",
+      "description": "Cấu hình ca làm việc (quản lý lịch, ca, cấu hình chung)",
+      "value": 31,
+      "key": "shiftConfiguration",
+    }
   ];
 
   // Deletes ALL existing entries
