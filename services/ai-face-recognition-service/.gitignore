@@ -35,6 +35,7 @@ ENV/
 .env.production.local
 
 # Uploads and temporary files
+uploads/
 uploads/temp/*
 uploads/*.tmp
 uploads/*.log
@@ -63,10 +64,11 @@ Thumbs.db
 alembic/versions/*.py
 !alembic/versions/__init__.py
 
-# Model weights (optional - uncomment if weights should not be committed)
-# weights/*.pth
-# weights/*.pt
-# weights/*.onnx
+# Model weights
+weights/
+weights/*.pth
+weights/*.pt
+weights/*.onnx
 
 # Test files and debugging
 test_*.py
