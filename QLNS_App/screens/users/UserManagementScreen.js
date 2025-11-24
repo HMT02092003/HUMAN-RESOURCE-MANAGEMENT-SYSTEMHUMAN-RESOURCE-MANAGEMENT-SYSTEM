@@ -273,8 +273,6 @@ const UserManagementScreen = ({ navigation }) => {
               </View>
             )}
           </View>
-          
-
           {/* Actions - Menu with 3 dots */}
           <View style={styles.actionsColumn}>
             <Menu
