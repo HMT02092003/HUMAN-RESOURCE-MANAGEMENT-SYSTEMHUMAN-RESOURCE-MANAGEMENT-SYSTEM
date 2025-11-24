@@ -90,7 +90,9 @@ function LoginScreenContent({ navigation }) {
       <StatusBar style="dark" />
       {/* Use ImageBackground for the full screen */}
       <ImageBackground
-        source={require('../../assets/background.png')} // Updated to background.png
+        // Use a small inline data-URI placeholder so webpack won't fail when the asset file is missing.
+        // This is a transparent 1x1 PNG; it will scale to the background area.
+        source={{ uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAJ/6y2gAAAAASUVORK5CYII=' }}
         style={styles.backgroundImage}
       >
         <KeyboardAvoidingView
@@ -105,7 +107,9 @@ function LoginScreenContent({ navigation }) {
             {/* Logo */}
             <View style={styles.logoContainer}>
               <Image
-                source={require('../../assets/logo.png')}
+                // Inline placeholder logo (transparent 1x1 PNG). Replace with a real logo file under
+                // `QLNS_App/assets/logo.png` later if you have the original image.
+                source={{ uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAJ/6y2gAAAAASUVORK5CYII=' }}
                 style={styles.logo}
                 resizeMode="contain"
               />

@@ -34,7 +34,7 @@ const { width } = Dimensions.get('window');
 const isTablet = width >= 768;
 const PAGE_SIZE = 10;
 
-const UserManagementScreen = ({ navigation }) => {
+const UserManagementScreen = () => {
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -274,50 +274,36 @@ const UserManagementScreen = ({ navigation }) => {
             )}
           </View>
           
-
-          {/* Actions - Menu with 3 dots */}
+          {/* Actions */}
           <View style={styles.actionsColumn}>
-            <Menu
-              visible={visibleMenuId === item.id}
-              onDismiss={() => setVisibleMenuId(null)}
-              anchor={
-                <IconButton
-                  icon="dots-vertical"
-                  size={24}
-                  iconColor="#595959"
-                  onPress={() => setVisibleMenuId(item.id)}
-                />
-              }
-            >
-              <Menu.Item
-                leadingIcon="eye-outline"
-                onPress={() => {
-                  setVisibleMenuId(null);
-                  navigation.navigate('UserDetail', { userId: item.id });
-                }}
-                title="Xem chi tiết"
-              />
-              <Menu.Item
-                leadingIcon="pencil-outline"
-                onPress={() => {
-                  setVisibleMenuId(null);
-                  navigation.navigate('UserForm', { userId: item.id, mode: 'edit' });
-                }}
-                title="Chỉnh sửa"
-              />
-              <Divider />
-              <Menu.Item
-                leadingIcon="delete-outline"
-                onPress={() => {
-                  setVisibleMenuId(null);
-                  handleDeleteUser(item.id, item.fullName);
-                }}
-                title="Xóa"
-                titleStyle={{ color: '#ff4d4f' }}
-              />
-            </Menu>
+            <IconButton
+              icon="eye-outline"
+              size={20}
+              iconColor="#1890ff"
+              onPress={() => {
+                Alert.alert(
+                  item.fullName,
+                  `📧 Email: ${item.email}\n� SĐT: ${item.phone || 'N/A'}\n🎂 Ngày sinh: ${formatDate(item.birthday)}\n${item.gender === 1 ? '👨' : '👩'} Giới tính: ${getGenderText(item.gender)}\n\n🛡️ Vai trò: ${item.role?.name || 'N/A'}\n🏢 Phòng ban: ${item.department?.name || 'N/A'}\n👔 Chức vụ: ${item.chevron?.name || 'N/A'}\n\n${item.status === '1' ? '✅' : '🚫'} Trạng thái: ${getStatusText(item.status)}`,
+                  [{ text: 'Đóng' }]
+                );
+              }}
+            />
+            <IconButton
+              icon={item.status === '1' ? 'pause-circle-outline' : 'play-circle-outline'}
+              size={20}
+              iconColor={item.status === '1' ? '#ff9800' : '#52c41a'}
+              onPress={() => handleChangeStatus(item.id, item.status, item.fullName)}
+            />
+            <IconButton
+              icon="delete-outline"
+              size={20}
+              iconColor="#ff4d4f"
+              onPress={() => handleDeleteUser(item.id, item.fullName)}
+            />
           </View>
         </View>
+
+        <Divider style={styles.divider} />
 
         {/* ROW 2: DETAILED INFO GRID */}
         <View style={styles.detailsGrid}>
@@ -471,7 +457,7 @@ const UserManagementScreen = ({ navigation }) => {
           style={styles.fab}
           onPress={() => {
             console.log('➕ Add user button pressed');
-            navigation.navigate('UserForm', { mode: 'create' });
+            Alert.alert('Thông báo', 'Chức năng tạo người dùng đang phát triển');
           }}
           label="Thêm mới"
           color="#ffffff"
@@ -575,7 +561,7 @@ const styles = StyleSheet.create({
   },
   
   divider: {
-    marginVertical: 2,
+    marginVertical: 12,
     backgroundColor: '#f0f0f0'
   },
   

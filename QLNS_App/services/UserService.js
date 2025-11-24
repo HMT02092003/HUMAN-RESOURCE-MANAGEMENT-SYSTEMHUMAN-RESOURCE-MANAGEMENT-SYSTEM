@@ -46,6 +46,19 @@ class UserService {
     }
   }
 
+  // Lấy chi tiết user với đầy đủ thông tin (role, department, chevron, contract)
+  static async getUserDetail(id) {
+    try {
+      console.log('👤 [UserService] Getting user detail:', id);
+      const response = await apiService.get(`/auth/users/detail/${id}`);
+      console.log('✅ [UserService] Got user detail:', response.data.username);
+      return response.data;
+    } catch (error) {
+      console.error('❌ [UserService] Error fetching user detail:', error);
+      throw error;
+    }
+  }
+
   // Tạo user mới
   static async createUser(data) {
     try {

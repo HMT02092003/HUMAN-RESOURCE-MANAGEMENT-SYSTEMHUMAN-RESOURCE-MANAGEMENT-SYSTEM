@@ -115,7 +115,7 @@ const HomeScreen = () => {
         <View style={styles.headerContent}>
           <View>
             <Text style={styles.welcomeText}>Xin chào,</Text>
-            <Text style={styles.userName}>{userData?.username || userData?.fullName || 'User'}</Text>
+            <Text style={styles.userName}>{userData?.fullName || userData?.username || 'User'}</Text>
           </View>
           <IconButton
             icon="account-circle"
