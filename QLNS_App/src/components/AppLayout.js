@@ -35,11 +35,8 @@ const Drawer = createDrawerNavigator();
 const HeaderBackButton = ({ navigation }) => (
   <TouchableOpacity
     onPress={() => {
-      if (navigation.canGoBack()) {
-        navigation.goBack();
-      } else {
-        navigation.navigate('Dashboard');
-      }
+      console.log('⬅️ [Navigation] Back button pressed');
+      navigation.goBack();
     }}
     style={{ paddingHorizontal: 16, paddingVertical: 8 }}
     activeOpacity={0.7}
@@ -433,32 +430,40 @@ const AppLayout = () => {
           drawerContent={(props) => (
             <CustomDrawerContent {...props} isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} userPermissions={userPermissions} />
           )}
-          screenOptions={({ navigation, route }) => ({
-            drawerType: isTablet ? 'permanent' : 'front',
-            drawerStyle: {
-              width: isTablet && isCollapsed ? DRAWER_WIDTH_COLLAPSED : DRAWER_WIDTH_EXPANDED,
-              backgroundColor: AppTheme.colors.surface
-            },
-            headerShown: true,
-            headerStyle: {
-              backgroundColor: AppTheme.colors.primary,
-            },
-            headerTintColor: '#ffffff',
-            headerTitleStyle: {
-              fontWeight: '600',
-              fontSize: 18,
-            },
-            headerLeft: () => <HeaderMenuButton navigation={navigation} />,
-            headerRight: null, // Remove right menu button if not needed or move it
-            swipeEnabled: !isTablet,
-            overlayColor: 'rgba(0, 0, 0, 0.5)',
-            animationEnabled: true, // Enable animations for smoother feel
-          })}
+          screenOptions={({ navigation, route }) => {
+            // Check if this is a hidden screen (detail/form screens)
+            const isHiddenScreen = ['UserDetail', 'UserForm', 'Profile'].includes(route.name);
+            
+            return {
+              drawerType: isTablet ? 'permanent' : 'front',
+              drawerStyle: {
+                width: isTablet && isCollapsed ? DRAWER_WIDTH_COLLAPSED : DRAWER_WIDTH_EXPANDED,
+                backgroundColor: AppTheme.colors.surface
+              },
+              headerShown: true,
+              headerStyle: {
+                backgroundColor: AppTheme.colors.primary,
+              },
+              headerTintColor: '#ffffff',
+              headerTitleStyle: {
+                fontWeight: '600',
+                fontSize: 18,
+              },
+              // Use back button for hidden screens, menu button for main screens
+              headerLeft: isHiddenScreen 
+                ? () => <HeaderBackButton navigation={navigation} />
+                : () => <HeaderMenuButton navigation={navigation} />,
+              headerRight: null,
+              swipeEnabled: !isTablet,
+              overlayColor: 'rgba(0, 0, 0, 0.5)',
+              animationEnabled: true,
+            };
+          }}
         >
           <Drawer.Screen name="Dashboard" component={HomeScreen} options={{ title: 'Trang chủ', headerShown: true }} />
           <Drawer.Screen name="Quản lý người dùng" component={UserManagementScreen} />
-          <Drawer.Screen name="UserDetail" component={UserDetailScreen} options={{ drawerItemStyle: { display: 'none' } }} />
-          <Drawer.Screen name="UserForm" component={UserFormScreen} options={{ drawerItemStyle: { display: 'none' } }} />
+          <Drawer.Screen name="UserDetail" component={UserDetailScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Chi tiết người dùng' }} />
+          <Drawer.Screen name="UserForm" component={UserFormScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Người dùng' }} />
           <Drawer.Screen name="Quản lý vai trò" component={RoleListScreen} />
           <Drawer.Screen name="Quản lý phòng ban" component={DepartmentListScreen} />
           <Drawer.Screen name="Quản lý chức vụ" component={PositionListScreen} />
@@ -469,7 +474,7 @@ const AppLayout = () => {
           <Drawer.Screen name="Hồ sơ/CV" component={CVListScreen} />
           <Drawer.Screen name="Dự án" component={ProjectListScreen} />
           <Drawer.Screen name="Cài đặt hệ thống" component={SettingsScreen} />
-          <Drawer.Screen name="Profile" component={ProfileScreen} options={{ drawerItemStyle: { display: 'none' } }} />
+          <Drawer.Screen name="Profile" component={ProfileScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Hồ sơ cá nhân' }} />
         </Drawer.Navigator>
       </View>
     </PaperProvider>

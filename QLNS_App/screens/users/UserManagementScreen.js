@@ -9,6 +9,7 @@ import {
   Dimensions,
   StatusBar 
 } from 'react-native';
+import { useIsFocused } from '@react-navigation/native';
 import { 
   Surface, 
   Text, 
@@ -35,6 +36,7 @@ const isTablet = width >= 768;
 const PAGE_SIZE = 10;
 
 const UserManagementScreen = ({ navigation }) => {
+  const isFocused = useIsFocused(); // Track if this screen is focused
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -462,19 +464,21 @@ const UserManagementScreen = ({ navigation }) => {
         </View>
       )}
 
-      {/* FAB BUTTON */}
-      <Portal>
-        <FAB
-          icon="plus"
-          style={styles.fab}
-          onPress={() => {
-            console.log('➕ Add user button pressed');
-            navigation.navigate('UserForm', { mode: 'create' });
-          }}
-          label="Thêm mới"
-          color="#ffffff"
-        />
-      </Portal>
+      {/* FAB BUTTON - Only show when this screen is focused */}
+      {isFocused && (
+        <Portal>
+          <FAB
+            icon="plus"
+            style={styles.fab}
+            onPress={() => {
+              console.log('➕ Add user button pressed');
+              navigation.navigate('UserForm', { mode: 'create' });
+            }}
+            label="Thêm mới"
+            color="#ffffff"
+          />
+        </Portal>
+      )}
     </Surface>
   );
 };

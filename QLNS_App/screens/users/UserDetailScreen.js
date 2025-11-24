@@ -38,8 +38,11 @@ const UserDetailScreen = ({ route, navigation }) => {
   const loadUserDetail = async () => {
     try {
       setLoading(true);
-      console.log('📥 [UserDetail] Loading user detail:', userId);
-      const response = await UserService.getUserDetail(userId);
+      // Convert userId to number if it's a string
+      const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
+      console.log('📥 [UserDetail] Loading user detail with ID:', numericUserId, 'Type:', typeof numericUserId);
+      
+      const response = await UserService.getUserDetail(numericUserId);
       setUser(response);
       console.log('✅ [UserDetail] Loaded:', response);
     } catch (error) {

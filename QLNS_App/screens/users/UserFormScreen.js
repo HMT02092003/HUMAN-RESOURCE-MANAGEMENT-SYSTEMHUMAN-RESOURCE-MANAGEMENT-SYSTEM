@@ -107,8 +107,15 @@ const UserFormScreen = ({ route, navigation }) => {
 
       // If edit mode, load user data
       if (isEdit && userId) {
-        const userData = await UserService.getUserDetail(userId);
-        setForm({
+        // Convert userId to number if it's a string
+        const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
+        console.log('📥 [UserForm] Loading user detail with ID:', numericUserId, 'Type:', typeof numericUserId);
+        
+        const userData = await UserService.getUserDetail(numericUserId);
+        console.log('✅ [UserForm] User data loaded:', JSON.stringify(userData, null, 2));
+        
+        // Parse and set form data
+        const formData = {
           username: userData.username || '',
           password: '',
           rePassword: '',
@@ -123,7 +130,11 @@ const UserFormScreen = ({ route, navigation }) => {
           chevronId: userData.chevron?.id || null,
           departmentId: userData.department?.id || null,
           identificationPhoto: userData.identificationPhoto || null,
-        });
+        };
+        
+        console.log('📝 [UserForm] Form data to set:', JSON.stringify(formData, null, 2));
+        setForm(formData);
+        console.log('✅ [UserForm] Form state updated');
       }
     } catch (error) {
       console.error('❌ [UserForm] Error loading data:', error);
@@ -241,7 +252,11 @@ const UserFormScreen = ({ route, navigation }) => {
       }
 
       if (isEdit) {
-        await UserService.updateUser(userId, payload);
+        // Convert userId to number if it's a string
+        const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
+        console.log('✏️ [UserForm] Updating user ID:', numericUserId, 'Type:', typeof numericUserId);
+        
+        await UserService.updateUser(numericUserId, payload);
         Alert.alert('Thành công', 'Cập nhật người dùng thành công', [
           { text: 'OK', onPress: () => navigation.goBack() }
         ]);
