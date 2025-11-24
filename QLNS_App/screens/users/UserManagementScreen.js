@@ -23,7 +23,8 @@ import {
   Badge,
   Divider,
   Portal,
-  Button
+  Button,
+  Menu
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -42,6 +43,7 @@ const UserManagementScreen = () => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [totalUsers, setTotalUsers] = useState(0);
+  const [visibleMenuId, setVisibleMenuId] = useState(null);
   const theme = useTheme();
 
   useEffect(() => {
@@ -272,34 +274,56 @@ const UserManagementScreen = () => {
             )}
           </View>
           
-          {/* Actions */}
+
+          {/* Actions - Menu with 3 dots */}
           <View style={styles.actionsColumn}>
-            <IconButton
-              icon="eye-outline"
-              size={20}
-              iconColor="#1890ff"
-              onPress={() => {
-                Alert.alert(
-                  item.fullName,
-                  `📧 Email: ${item.email}\n� SĐT: ${item.phone || 'N/A'}\n🎂 Ngày sinh: ${formatDate(item.birthday)}\n${item.gender === 1 ? '👨' : '👩'} Giới tính: ${getGenderText(item.gender)}\n\n🛡️ Vai trò: ${item.role?.name || 'N/A'}\n🏢 Phòng ban: ${item.department?.name || 'N/A'}\n👔 Chức vụ: ${item.chevron?.name || 'N/A'}\n\n${item.status === '1' ? '✅' : '🚫'} Trạng thái: ${getStatusText(item.status)}`,
-                  [{ text: 'Đóng' }]
-                );
-              }}
-            />
-            <IconButton
-              icon={item.status === '1' ? 'pause-circle-outline' : 'play-circle-outline'}
-              size={20}
-              iconColor={item.status === '1' ? '#ff9800' : '#52c41a'}
-              onPress={() => handleChangeStatus(item.id, item.status, item.fullName)}
-            />
-            <IconButton
-              icon="delete-outline"
-              size={20}
-              iconColor="#ff4d4f"
-              onPress={() => handleDeleteUser(item.id, item.fullName)}
-            />
+            <Menu
+              visible={visibleMenuId === item.id}
+              onDismiss={() => setVisibleMenuId(null)}
+              anchor={
+                <IconButton
+                  icon="dots-vertical"
+                  size={24}
+                  iconColor="#595959"
+                  onPress={() => setVisibleMenuId(item.id)}
+                />
+              }
+            >
+              <Menu.Item
+                leadingIcon="eye-outline"
+                onPress={() => {
+                  setVisibleMenuId(null);
+                  Alert.alert(
+                    item.fullName,
+                    `📧 Email: ${item.email}\n📱 SĐT: ${item.phone || 'N/A'}\n🎂 Ngày sinh: ${formatDate(item.birthday)}\n${item.gender === 1 ? '👨' : '👩'} Giới tính: ${getGenderText(item.gender)}\n\n🛡️ Vai trò: ${item.role?.name || 'N/A'}\n🏢 Phòng ban: ${item.department?.name || 'N/A'}\n👔 Chức vụ: ${item.chevron?.name || 'N/A'}\n\n${item.status === '1' ? '✅' : '🚫'} Trạng thái: ${getStatusText(item.status)}`,
+                    [{ text: 'Đóng' }]
+                  );
+                }}
+                title="Xem chi tiết"
+              />
+              <Menu.Item
+                leadingIcon="pencil-outline"
+                onPress={() => {
+                  setVisibleMenuId(null);
+                  Alert.alert('Thông báo', 'Chức năng chỉnh sửa đang phát triển');
+                }}
+                title="Chỉnh sửa"
+              />
+              <Divider />
+              <Menu.Item
+                leadingIcon="delete-outline"
+                onPress={() => {
+                  setVisibleMenuId(null);
+                  handleDeleteUser(item.id, item.fullName);
+                }}
+                title="Xóa"
+                titleStyle={{ color: '#ff4d4f' }}
+              />
+            </Menu>
           </View>
         </View>
+
+        <Divider style={styles.divider} />
 
         <Divider style={styles.divider} />
 
