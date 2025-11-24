@@ -69,3 +69,28 @@ env/
 # Public assets (images, uploads)
 # =========================
 public/
+
+# =========================
+# QLNS_App (React Native / Expo)
+# =========================
+# Expo cache and device config
+QLNS_App/.expo/
+QLNS_App/.expo/*
+QLNS_App/.expo/web/
+QLNS_App/.expo/web/cache/
+
+# Local Metro / bundler caches
+QLNS_App/.metro/
+QLNS_App/.cache/
+
+# Dependency lockfiles (if you want to ignore them in the subproject)
+QLNS_App/yarn.lock
+QLNS_App/package-lock.json
+
+# Local envs
+QLNS_App/.env
+QLNS_App/.env.*
+
+# Build output
+QLNS_App/build/
+QLNS_App/dist/
