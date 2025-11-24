@@ -16,6 +16,7 @@ const DRAWER_WIDTH_COLLAPSED = 72;
 import HomeScreen from '../../screens/home/HomeScreen';
 import UserManagementScreen from '../../screens/users/UserManagementScreen';
 import UserDetailScreen from '../../screens/users/UserDetailScreen';
+import UserFormScreen from '../../screens/users/UserFormScreen';
 import RoleListScreen from '../../screens/roles/RoleListScreen';
 import DepartmentListScreen from '../../screens/departments/DepartmentListScreen';
 import PositionListScreen from '../../screens/positions/PositionListScreen';
@@ -457,6 +458,7 @@ const AppLayout = () => {
           <Drawer.Screen name="Dashboard" component={HomeScreen} options={{ title: 'Trang chủ', headerShown: true }} />
           <Drawer.Screen name="Quản lý người dùng" component={UserManagementScreen} />
           <Drawer.Screen name="UserDetail" component={UserDetailScreen} options={{ drawerItemStyle: { display: 'none' } }} />
+          <Drawer.Screen name="UserForm" component={UserFormScreen} options={{ drawerItemStyle: { display: 'none' } }} />
           <Drawer.Screen name="Quản lý vai trò" component={RoleListScreen} />
           <Drawer.Screen name="Quản lý phòng ban" component={DepartmentListScreen} />
           <Drawer.Screen name="Quản lý chức vụ" component={PositionListScreen} />
