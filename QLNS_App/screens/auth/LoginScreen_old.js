@@ -6,8 +6,6 @@ import {
   ScrollView,
   Platform,
   Dimensions,
-  Image,
-  ImageBackground, // Import ImageBackground
 } from 'react-native';
 import {
   TextInput,
@@ -18,9 +16,12 @@ import {
   useTheme,
   Provider as PaperProvider,
   DefaultTheme,
+  Surface,
 } from 'react-native-paper';
 import { StatusBar } from 'expo-status-bar';
-import { useAuth } from '../../services/AuthContext';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import AuthTokenManager from '../../services/AuthTokenManager';
 
 const { width } = Dimensions.get('window');
 
@@ -47,9 +48,11 @@ function LoginScreenContent({ navigation }) {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const paperTheme = useTheme();
-  
-  // Sử dụng AuthContext để quản lý auth state
-  const { login } = useAuth();
+
+  // Auto-login check is now handled by AppNavigator
+  // useEffect(() => {
+  //   checkAutoLogin();
+  // }, []);
 
   const handleLogin = async () => {
     // Validation giống web
@@ -72,13 +75,14 @@ function LoginScreenContent({ navigation }) {
     setLoading(true);
 
     try {
-      console.log('🔐 [LoginScreen] Attempting login...');
-      // Gọi login từ AuthContext - nó sẽ tự động update auth state
-      await login(username, password);
-      console.log('✅ [LoginScreen] Login successful - AuthContext will handle navigation');
-      // Không cần navigate thủ công - AuthContext sẽ tự động chuyển màn hình
+      // Call API giống web
+      const response = await AuthTokenManager.loginAndSave(username, password);
+
+      console.log('✅ [LOGIN] Login successful, navigating to Main...');
+      // Success - Navigate to Main (which will load AppLayout after re-auth check)
+      navigation.replace('Main');
     } catch (err) {
-      console.error('❌ [LoginScreen] Login failed:', err);
+      console.error('Đăng nhập thất bại:', err);
       setError(err.message || 'Đăng nhập thất bại');
     } finally {
       setLoading(false);
@@ -87,11 +91,12 @@ function LoginScreenContent({ navigation }) {
 
   return (
     <>
-      <StatusBar style="dark" />
-      {/* Use ImageBackground for the full screen */}
-      <ImageBackground
-        source={require('../../assets/background.png')} // Updated to background.png
-        style={styles.backgroundImage}
+      <StatusBar style="light" />
+      <LinearGradient
+        colors={['#0077BE', '#00A8CC', '#40C4FF']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.backgroundGradient}
       >
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -102,29 +107,28 @@ function LoginScreenContent({ navigation }) {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Logo */}
-            <View style={styles.logoContainer}>
-              <Image
-                source={require('../../assets/logo.png')}
-                style={styles.logo}
-                resizeMode="contain"
-              />
-            </View>
+            <Surface style={styles.loginCard}>
+              {/* Logo Icon */}
+              <View style={styles.logoContainer}>
+                <View style={styles.logoCircle}>
+                  <MaterialCommunityIcons name="briefcase-account" size={80} color="#0077BE" />
+                </View>
+              </View>
 
-            {/* Title */}
-            <Title style={styles.title}>Đăng nhập</Title>
+              {/* Title */}
+              <Title style={styles.title}>Đăng nhập</Title>
 
-            {/* Subtitle */}
-            <Paragraph style={styles.subtitle}>
-              Vui lòng đăng nhập vào tài khoản của bạn
-            </Paragraph>
+              {/* Subtitle */}
+              <Paragraph style={styles.subtitle}>
+                Vui lòng đăng nhập vào tài khoản của bạn
+              </Paragraph>
 
-            {/* Error Message */}
-            {error ? (
-              <HelperText type="error" visible={true} style={styles.errorText}>
-                {error}
-              </HelperText>
-            ) : null}
+              {/* Error Message */}
+              {error ? (
+                <HelperText type="error" visible={true} style={styles.errorText}>
+                  {error}
+                </HelperText>
+              ) : null}
 
             {/* Username Input */}
             <TextInput
@@ -194,9 +198,10 @@ function LoginScreenContent({ navigation }) {
             >
               Quên mật khẩu?
             </Button>
+            </Surface>
           </ScrollView>
         </KeyboardAvoidingView>
-      </ImageBackground>
+      </LinearGradient>
     </>
   );
 }
@@ -210,39 +215,47 @@ export default function LoginScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  backgroundImage: {
+  backgroundGradient: {
     flex: 1,
-    resizeMode: 'cover', // Ensure the background covers the whole screen
     justifyContent: 'center',
+    alignItems: 'center',
   },
   keyboardView: {
     flex: 1,
+    width: '100%',
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 24, // Keep reasonable padding
+    paddingHorizontal: 24,
     paddingVertical: 40,
     width: '100%',
-    maxWidth: 350, // Reduced maxWidth for a more compact look, similar to the reference image
-    alignSelf: 'center',
+  },
+  loginCard: {
+    width: '100%',
+    maxWidth: 400,
+    padding: 32,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   logoContainer: {
     alignItems: 'center',
-    // Removed background, padding, shadow to make logo "subtle/blended in"
-    padding: 0,
-    backgroundColor: 'transparent',
-    borderRadius: 0,
-    // web uses boxShadow; native uses shadow/elevation
-    ...Platform.select({
-      web: {
-        boxShadow: 'none',
-      },
-      default: {
-        shadowColor: 'transparent',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0,
+    marginBottom: 24,
+  },
+  logoCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(0, 119, 190, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
         shadowRadius: 0,
         elevation: 0,
       },

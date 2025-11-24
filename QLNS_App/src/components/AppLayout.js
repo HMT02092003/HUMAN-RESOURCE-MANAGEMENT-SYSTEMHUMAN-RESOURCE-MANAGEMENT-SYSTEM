@@ -5,6 +5,7 @@ import { useNavigation, DrawerActions, useNavigationState, CommonActions } from 
 import { Avatar, Divider, useTheme, MD3LightTheme, Provider as PaperProvider, Surface, ActivityIndicator, List, Portal, Dialog, Button, Paragraph } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AuthTokenManager from '../../services/AuthTokenManager';
+import { useAuth } from '../../services/AuthContext';
 import { decodePermissions } from '../utils/decodePermission';
 
 const { width } = Dimensions.get('window');
@@ -135,6 +136,9 @@ const CustomDrawerContent = ({ isCollapsed, setIsCollapsed, userPermissions, ...
   const navigation = useNavigation();
   const theme = useTheme();
   const currentRoute = useNavigationState((state) => state?.routes[state.index]?.name);
+  
+  // Sử dụng AuthContext để logout
+  const { logout } = useAuth();
 
   useEffect(() => {
     loadUserData();
@@ -169,29 +173,14 @@ const CustomDrawerContent = ({ isCollapsed, setIsCollapsed, userPermissions, ...
     console.log('🔴 [LOGOUT] Bắt đầu quá trình đăng xuất...');
     
     try {
-      console.log('🔴 [LOGOUT] Đang xóa tokens...');
-      await AuthTokenManager.clearTokens();
-      console.log('✅ [LOGOUT] Đã xóa tokens thành công');
-      
-      console.log('🔴 [LOGOUT] Đang reset navigation...');
-      // Reset navigation state to Login screen
-      navigation.dispatch(
-        CommonActions.reset({
-          index: 0,
-          routes: [{ name: 'Login' }],
-        })
-      );
-      console.log('✅ [LOGOUT] Đã reset navigation thành công');
+      console.log('🔴 [LOGOUT] Calling logout from AuthContext...');
+      // Gọi logout từ AuthContext - nó sẽ xóa tokens và update auth state
+      await logout();
+      console.log('✅ [LOGOUT] Logout successful - AuthContext will handle navigation to Login');
+      // Không cần navigate thủ công - AuthContext sẽ tự động chuyển về Login
     } catch (error) {
       console.error('❌ [LOGOUT] Lỗi:', error);
       console.error('❌ [LOGOUT] Stack:', error.stack);
-      // Fallback if something fails
-      try {
-        console.log('🔴 [LOGOUT] Thử fallback navigation...');
-        navigation.navigate('Login');
-      } catch (navError) {
-        console.error('❌ [LOGOUT] Fallback thất bại:', navError);
-      }
     }
   };
 

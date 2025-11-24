@@ -231,178 +231,127 @@ const UserManagementScreen = () => {
   };
 
   const renderUserCard = ({ item, index }) => (
-    <Card style={styles.userCard} mode="elevated" elevation={3}>
-      <TouchableOpacity 
-        onPress={() => {
-          console.log('👤 [UserManagement] User card tapped:', item.username);
-          Alert.alert(
-            'Thông tin chi tiết',
-            `Họ tên: ${item.fullName}\nEmail: ${item.email}\nSĐT: ${item.phone || 'N/A'}\nNgày sinh: ${formatDate(item.birthday)}\nGiới tính: ${getGenderText(item.gender)}\n\nVai trò: ${item.role?.name || 'N/A'}\nPhòng ban: ${item.department?.name || 'N/A'}\nChức vụ: ${item.chevron?.name || 'N/A'}\n\nNgày vào: ${formatDate(item.startDate)}\nSố ngày nghỉ: ${item.monthly_leave_balance || 0}`,
-            [{ text: 'Đóng' }]
-          );
-        }}
-        activeOpacity={0.7}
-      >
-        <LinearGradient
-          colors={['#ffffff', '#f8f9fa']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.cardGradient}
-        >
-          <Card.Content style={styles.cardContent}>
-            {/* ROW 1: AVATAR + MAIN INFO + ACTIONS */}
-            <View style={styles.mainRow}>
-              {/* COL 1: AVATAR */}
-              <View style={styles.avatarSection}>
-                <View style={styles.avatarContainer}>
-                  <Avatar.Text 
-                    size={isTablet ? 64 : 56}
-                    label={item.fullName?.substring(0, 2).toUpperCase() || 'NA'}
-                    style={[styles.avatar, { backgroundColor: getAvatarColor(index) }]}
-                    labelStyle={styles.avatarLabel}
-                  />
-                  <Badge
-                    size={16}
-                    style={[
-                      styles.statusBadge,
-                      { backgroundColor: getStatusColor(item.status) }
-                    ]}
-                  />
-                </View>
-              </View>
-              
-              {/* COL 2: USER INFO */}
-              <View style={styles.infoSection}>
-                <Text style={styles.userName} numberOfLines={1}>
-                  {item.fullName || 'N/A'}
-                </Text>
-                
-                {/* Username & Gender */}
-                <View style={styles.infoRow}>
-                  <MaterialCommunityIcons 
-                    name={item.gender === 1 ? "gender-male" : "gender-female"} 
-                    size={14} 
-                    color={item.gender === 1 ? "#1890ff" : "#eb2f96"} 
-                  />
-                  <Text style={styles.userUsername}>@{item.username}</Text>
-                </View>
-                
-                {/* Email */}
-                <View style={styles.infoRow}>
-                  <MaterialCommunityIcons name="email" size={14} color="#52c41a" />
-                  <Text style={styles.infoText} numberOfLines={1}>{item.email}</Text>
-                </View>
-                
-                {/* Phone */}
-                {item.phone && (
-                  <View style={styles.infoRow}>
-                    <MaterialCommunityIcons name="phone" size={14} color="#fa8c16" />
-                    <Text style={styles.infoText}>{item.phone}</Text>
-                  </View>
-                )}
-              </View>
-              
-              {/* COL 3: ACTION BUTTONS */}
-              <View style={styles.actionSection}>
-                <IconButton
-                  icon="eye"
-                  size={20}
-                  iconColor="#1890ff"
-                  containerColor="#e6f7ff"
-                  style={styles.iconButton}
-                  onPress={() => {
-                    console.log('👁️ View user:', item.id);
-                    Alert.alert('Chi tiết', JSON.stringify(item, null, 2));
-                  }}
-                />
-                <IconButton
-                  icon={item.status === '1' ? 'pause-circle' : 'play-circle'}
-                  size={20}
-                  iconColor={item.status === '1' ? '#ff9800' : '#52c41a'}
-                  containerColor={item.status === '1' ? '#fff7e6' : '#f6ffed'}
-                  style={styles.iconButton}
-                  onPress={() => handleChangeStatus(item.id, item.status === '1' ? 'active' : 'inactive', item.fullName)}
-                />
-                <IconButton
-                  icon="delete"
-                  size={20}
-                  iconColor="#ff4d4f"
-                  containerColor="#fff1f0"
-                  style={styles.iconButton}
-                  onPress={() => handleDeleteUser(item.id, item.fullName)}
-                />
-              </View>
+    <Card style={styles.userCard} mode="elevated" elevation={2}>
+      <Card.Content style={styles.cardContent}>
+        {/* ROW 1: AVATAR + BASIC INFO */}
+        <View style={styles.topRow}>
+          {/* Avatar with status badge */}
+          <View style={styles.avatarWrapper}>
+            <Avatar.Text 
+              size={56}
+              label={item.fullName?.substring(0, 2).toUpperCase() || 'NA'}
+              style={[styles.avatar, { backgroundColor: getAvatarColor(index) }]}
+            />
+            <Badge
+              size={14}
+              style={[
+                styles.statusBadge,
+                { backgroundColor: getStatusColor(item.status) }
+              ]}
+            />
+          </View>
+          
+          {/* Basic Info */}
+          <View style={styles.basicInfo}>
+            <Text style={styles.fullName} numberOfLines={1}>
+              {item.fullName || 'N/A'}
+            </Text>
+            
+            {/* Email */}
+            <View style={styles.infoRow}>
+              <MaterialCommunityIcons name="email-outline" size={14} color="#52c41a" />
+              <Text style={styles.infoText} numberOfLines={1}>{item.email}</Text>
             </View>
-
-            <Divider style={styles.divider} />
-
-            {/* ROW 2: TAGS & INFO GRID */}
-            <View style={styles.tagsRow}>
-              {/* Role Tag */}
-              <Chip 
-                mode="flat" 
-                compact 
-                icon="shield-account"
-                style={[styles.chip, { backgroundColor: getRoleColor(item.role?.name) + '15' }]}
-                textStyle={[styles.chipText, { color: getRoleColor(item.role?.name) }]}
-              >
-                {item.role?.name || 'N/A'}
-              </Chip>
-              
-              {/* Department Tag */}
-              {item.department && (
-                <Chip 
-                  mode="flat" 
-                  compact 
-                  icon="office-building"
-                  style={[styles.chip, { backgroundColor: '#52c41a15' }]}
-                  textStyle={[styles.chipText, { color: '#52c41a' }]}
-                >
-                  {item.department.name}
-                </Chip>
-              )}
-              
-              {/* Chevron Tag */}
-              {item.chevron && (
-                <Chip 
-                  mode="flat" 
-                  compact 
-                  icon="badge-account"
-                  style={[styles.chip, { backgroundColor: '#fa8c1615' }]}
-                  textStyle={[styles.chipText, { color: '#fa8c16' }]}
-                >
-                  {item.chevron.name}
-                </Chip>
-              )}
-            </View>
-
-            {/* ROW 3: ADDITIONAL INFO GRID */}
-            <View style={styles.gridRow}>
-              {/* Birthday */}
-              {item.birthday && (
-                <View style={styles.gridItem}>
-                  <MaterialCommunityIcons name="cake-variant" size={14} color="#722ed1" />
-                  <Text style={styles.gridText}>{formatDate(item.birthday)}</Text>
-                </View>
-              )}
-              
-              {/* Start Date */}
-              {item.startDate && (
-                <View style={styles.gridItem}>
-                  <MaterialCommunityIcons name="calendar-check" size={14} color="#13c2c2" />
-                  <Text style={styles.gridText}>{formatDate(item.startDate)}</Text>
-                </View>
-              )}
-              
-              {/* Leave Balance */}
-              <View style={styles.gridItem}>
-                <MaterialCommunityIcons name="beach" size={14} color="#eb2f96" />
-                <Text style={styles.gridText}>{item.monthly_leave_balance || 0} ngày</Text>
+            
+            {/* Phone */}
+            {item.phone && (
+              <View style={styles.infoRow}>
+                <MaterialCommunityIcons name="phone-outline" size={14} color="#1890ff" />
+                <Text style={styles.infoText}>{item.phone}</Text>
               </View>
+            )}
+          </View>
+          
+          {/* Actions */}
+          <View style={styles.actionsColumn}>
+            <IconButton
+              icon="eye-outline"
+              size={20}
+              iconColor="#1890ff"
+              onPress={() => {
+                Alert.alert(
+                  item.fullName,
+                  `📧 Email: ${item.email}\n� SĐT: ${item.phone || 'N/A'}\n🎂 Ngày sinh: ${formatDate(item.birthday)}\n${item.gender === 1 ? '👨' : '👩'} Giới tính: ${getGenderText(item.gender)}\n\n🛡️ Vai trò: ${item.role?.name || 'N/A'}\n🏢 Phòng ban: ${item.department?.name || 'N/A'}\n👔 Chức vụ: ${item.chevron?.name || 'N/A'}\n\n${item.status === '1' ? '✅' : '🚫'} Trạng thái: ${getStatusText(item.status)}`,
+                  [{ text: 'Đóng' }]
+                );
+              }}
+            />
+            <IconButton
+              icon={item.status === '1' ? 'pause-circle-outline' : 'play-circle-outline'}
+              size={20}
+              iconColor={item.status === '1' ? '#ff9800' : '#52c41a'}
+              onPress={() => handleChangeStatus(item.id, item.status, item.fullName)}
+            />
+            <IconButton
+              icon="delete-outline"
+              size={20}
+              iconColor="#ff4d4f"
+              onPress={() => handleDeleteUser(item.id, item.fullName)}
+            />
+          </View>
+        </View>
+
+        <Divider style={styles.divider} />
+
+        {/* ROW 2: DETAILED INFO GRID */}
+        <View style={styles.detailsGrid}>
+          {/* Birthday & Gender */}
+          {item.birthday && (
+            <View style={styles.detailItem}>
+              <MaterialCommunityIcons 
+                name={item.gender === 1 ? "gender-male" : "gender-female"} 
+                size={16} 
+                color={item.gender === 1 ? "#1890ff" : "#eb2f96"} 
+              />
+              <Text style={styles.detailText}>{formatDate(item.birthday)}</Text>
             </View>
-          </Card.Content>
-        </LinearGradient>
-      </TouchableOpacity>
+          )}
+          
+          {/* Role */}
+          <View style={styles.detailItem}>
+            <MaterialCommunityIcons name="shield-account-outline" size={16} color="#722ed1" />
+            <Text style={styles.detailText}>{item.role?.name || 'N/A'}</Text>
+          </View>
+          
+          {/* Department */}
+          {item.department && (
+            <View style={styles.detailItem}>
+              <MaterialCommunityIcons name="office-building-outline" size={16} color="#52c41a" />
+              <Text style={styles.detailText}>{item.department.name}</Text>
+            </View>
+          )}
+          
+          {/* Position/Chevron */}
+          {item.chevron && (
+            <View style={styles.detailItem}>
+              <MaterialCommunityIcons name="badge-account-outline" size={16} color="#fa8c16" />
+              <Text style={styles.detailText}>{item.chevron.name}</Text>
+            </View>
+          )}
+          
+          {/* Status */}
+          <View style={styles.detailItem}>
+            <MaterialCommunityIcons 
+              name={item.status === '1' ? "check-circle-outline" : "close-circle-outline"} 
+              size={16} 
+              color={getStatusColor(item.status)} 
+            />
+            <Text style={[styles.detailText, { color: getStatusColor(item.status) }]}>
+              {getStatusText(item.status)}
+            </Text>
+          </View>
+        </View>
+      </Card.Content>
     </Card>
   );
 
@@ -445,26 +394,13 @@ const UserManagementScreen = () => {
     <Surface style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       
-      {/* HEADER WITH GRADIENT */}
-      <LinearGradient
-        colors={['#1890ff', '#096dd9']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.headerGradient}
-      >
-        <View style={styles.header}>
-          <MaterialCommunityIcons name="account-group" size={32} color="#ffffff" />
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.title}>Quản lý người dùng</Text>
-            <View style={styles.statsContainer}>
-              <MaterialCommunityIcons name="account-multiple" size={16} color="#ffffff" />
-              <Text style={styles.subtitle}>
-                {totalUsers} người dùng
-              </Text>
-            </View>
-          </View>
+      {/* HEADER - Simple with total count */}
+      <View style={styles.headerSimple}>
+        <View style={styles.statsRow}>
+          <MaterialCommunityIcons name="account-multiple" size={20} color="#1890ff" />
+          <Text style={styles.totalText}>{totalUsers} người dùng</Text>
         </View>
-      </LinearGradient>
+      </View>
 
       {/* SEARCH BAR */}
       <View style={styles.searchContainer}>
@@ -476,7 +412,7 @@ const UserManagementScreen = () => {
           icon="magnify"
           clearIcon="close-circle"
           iconColor="#1890ff"
-          elevation={3}
+          elevation={2}
         />
       </View>
 
@@ -534,34 +470,23 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f0f2f5'
   },
-  headerGradient: {
-    paddingTop: StatusBar.currentHeight || 0,
+  // Simple header (no gradient, compact)
+  headerSimple: {
+    backgroundColor: '#ffffff',
+    padding: 16,
+    paddingTop: (StatusBar.currentHeight || 0) + 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0'
   },
-  header: {
-    padding: 20,
-    paddingBottom: 16,
+  statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12
+    gap: 8
   },
-  headerTextContainer: {
-    flex: 1
-  },
-  title: {
-    fontSize: isTablet ? 28 : 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 6
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
-  },
-  subtitle: {
-    fontSize: isTablet ? 16 : 14,
-    color: 'rgba(255, 255, 255, 0.95)',
-    fontWeight: '600'
+  totalText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#262626'
   },
   searchContainer: {
     padding: 16,
@@ -569,7 +494,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f0f2f5'
   },
   searchbar: {
-    elevation: 3,
+    elevation: 2,
     borderRadius: 12,
     backgroundColor: '#ffffff'
   },
@@ -579,23 +504,85 @@ const styles = StyleSheet.create({
     flexGrow: 1
   },
   userCard: {
-    marginBottom: 16,
-    borderRadius: 16,
-    overflow: 'hidden',
+    marginBottom: 12,
+    borderRadius: 12,
     backgroundColor: '#ffffff'
   },
-  cardGradient: {
-    borderRadius: 16
-  },
   cardContent: {
-    padding: isTablet ? 20 : 16
+    paddingVertical: 16,
+    paddingHorizontal: 16
   },
   
-  // ROW 1: Main Info Layout (Avatar + Info + Actions)
-  mainRow: {
+  // Top row: Avatar + Basic Info + Actions
+  topRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 12
+  },
+  avatarWrapper: {
+    position: 'relative'
+  },
+  avatar: {
+    // backgroundColor set dynamically
+  },
+  statusBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    borderWidth: 2,
+    borderColor: '#ffffff'
+  },
+  basicInfo: {
+    flex: 1,
+    gap: 4
+  },
+  fullName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#262626',
+    marginBottom: 4
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  infoText: {
+    fontSize: 13,
+    color: '#595959',
+    flex: 1
+  },
+  actionsColumn: {
+    flexDirection: 'column',
+    gap: -8
+  },
+  
+  divider: {
+    marginVertical: 12,
+    backgroundColor: '#f0f0f0'
+  },
+  
+  // Details grid
+  detailsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12
+  },
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: '#fafafa',
+    borderRadius: 8,
+    minWidth: '45%'
+  },
+  detailText: {
+    fontSize: 12,
+    color: '#595959',
+    fontWeight: '500'
   },
   
   // COL 1: Avatar Section
@@ -622,85 +609,6 @@ const styles = StyleSheet.create({
     elevation: 2
   },
   
-  // COL 2: Info Section
-  infoSection: {
-    flex: 1,
-    gap: 4
-  },
-  userName: {
-    fontSize: isTablet ? 20 : 18,
-    fontWeight: 'bold',
-    color: '#262626',
-    marginBottom: 2
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
-  },
-  userUsername: {
-    fontSize: isTablet ? 14 : 13,
-    color: '#1890ff',
-    fontWeight: '600'
-  },
-  infoText: {
-    fontSize: isTablet ? 13 : 12,
-    color: '#595959',
-    flex: 1
-  },
-  
-  // COL 3: Action Section
-  actionSection: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 4
-  },
-  iconButton: {
-    margin: 0
-  },
-  
-  divider: {
-    marginVertical: 14,
-    backgroundColor: '#f0f0f0'
-  },
-  
-  // ROW 2: Tags Row (Responsive Chips)
-  tagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 12
-  },
-  chip: {
-    height: 28,
-    borderRadius: 6
-  },
-  chipText: {
-    fontSize: 11,
-    marginVertical: 0,
-    fontWeight: '600'
-  },
-  
-  // ROW 3: Grid Info (3 columns responsive)
-  gridRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginTop: 4
-  },
-  gridItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    minWidth: isTablet ? '30%' : '45%',
-    paddingVertical: 4
-  },
-  gridText: {
-    fontSize: isTablet ? 13 : 12,
-    color: '#595959',
-    fontWeight: '500'
-  },
-  
   // Footer & Empty State
   footerLoader: {
     paddingVertical: 20,
@@ -720,7 +628,7 @@ const styles = StyleSheet.create({
     paddingVertical: 80
   },
   emptyText: {
-    fontSize: isTablet ? 18 : 16,
+    fontSize: 16,
     color: '#8c8c8c',
     marginTop: 16,
     fontWeight: '500'
