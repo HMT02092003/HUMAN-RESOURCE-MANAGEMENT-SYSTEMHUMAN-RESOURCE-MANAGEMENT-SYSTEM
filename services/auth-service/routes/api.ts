@@ -44,6 +44,7 @@ import {
   getUsersByIds,
   getUserBulk,
   getAllUsersAllForSelect,
+  searchUsers,
 } from '@/src/controller/UserController';
 
 const router = Router();
@@ -129,6 +130,7 @@ const roleRoutes = [
 // ===================================
 const userRoutes = [
   { method: 'get', path: '/users', handler: getAllUsers, auth: true },
+  { method: 'get', path: '/users/search', handler: searchUsers, auth: true },
   { method: 'get', path: '/users/all', handler: getAllUsersAll, auth: true },
   { method: 'get', path: '/users/allForSelect', handler: getAllUsersAllForSelect, auth: true },
   { method: 'get', path: '/users/by-department', handler: getUsersByDepartment, auth: true },

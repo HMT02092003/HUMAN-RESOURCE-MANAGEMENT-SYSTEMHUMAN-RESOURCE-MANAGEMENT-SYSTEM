@@ -26,6 +26,7 @@ export const getApiBaseUrl = () => {
       
       // KHÔNG dùng localhost - luôn dùng IP
       if (host !== 'localhost' && host !== '127.0.0.1') {
+        // ✅ GIỮ NGUYÊN /api ở đây vì đây là base URL đúng
         const apiUrl = `http://${host}:4000/api`;
         console.log('🌐 Auto-detected API URL from Expo:', apiUrl);
         return apiUrl;
@@ -42,11 +43,13 @@ export const getApiBaseUrl = () => {
   if (Platform.OS === 'android') {
     // Android Emulator
     console.log('🤖 Using Android Emulator IP');
+    // ✅ GIỮ NGUYÊN /api
     return 'http://10.0.2.2:4000/api';
   }
   
   // KHÔNG trả về localhost - buộc phải có IP
   console.error('❌ KHÔNG THỂ XÁC ĐỊNH IP - Vui lòng chạy: yarn setup-env');
+  // ✅ GIỮ NGUYÊN /api
   return 'http://192.168.1.6:4000/api'; // IP mặc định từ setup-env
 };
 

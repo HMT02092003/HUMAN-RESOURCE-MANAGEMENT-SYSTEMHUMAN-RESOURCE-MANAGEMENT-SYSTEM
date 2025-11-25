@@ -5,7 +5,8 @@ class ChevronService {
   static async getAllChevrons() {
     try {
       console.log('👔 [ChevronService] Fetching all chevrons');
-      const response = await apiService.get('/employee/chevrons/all');
+      // ✅ BỎ /api vì base URL đã có /api rồi
+      const response = await apiService.get('/employee/getAllChevrons');
       console.log('✅ [ChevronService] Got chevrons:', response.data.length);
       return response.data;
     } catch (error) {

@@ -5,6 +5,7 @@ class UserService {
   static async getAllUsers(params = { page: 1, pageSize: 10 }) {
     try {
       console.log('👥 [UserService] Getting users with params:', params);
+      // ✅ BỎ /api vì base URL đã có /api rồi
       const response = await apiService.get('/auth/users', {
         params: {
           page: params.page,
@@ -29,6 +30,26 @@ class UserService {
       return response.data;
     } catch (error) {
       console.error('❌ [UserService] Error fetching all users:', error);
+      throw error;
+    }
+  }
+
+  // Tìm kiếm users theo keyword (tên, sđt, email)
+  static async searchUsers(keyword = '', params = { page: 1, pageSize: 10 }) {
+    try {
+      console.log('🔍 [UserService] Searching users with keyword:', keyword);
+      const response = await apiService.get('/auth/users/search', {
+        params: {
+          keyword,
+          page: params.page,
+          pageSize: params.pageSize,
+          _t: Date.now() // Cache buster
+        }
+      });
+      console.log('✅ [UserService] Search results:', response.data.total, 'total');
+      return response.data; // { results: [...], total: N }
+    } catch (error) {
+      console.error('❌ [UserService] Error searching users:', error);
       throw error;
     }
   }
@@ -104,7 +125,9 @@ class UserService {
   static async deleteMultipleUsers(ids) {
     try {
       console.log('🗑️ [UserService] Deleting multiple users:', ids.length);
-      const response = await apiService.delete('/auth/users', {
+      // Backend exposes a dedicated endpoint for batch delete
+      // Route: DELETE /auth/users/multiple
+      const response = await apiService.delete('/auth/users/multiple', {
         data: { ids }
       });
       console.log('✅ [UserService] Users deleted');

@@ -104,6 +104,107 @@ const deleteOldIdentificationPhoto = (oldPhotoPath: string): void => {
 };
 
 /**
+ * Unified search API - Search users by keyword (fullName, phone, or email)
+ */
+export const searchUsers = async (req: any, res: Response) => {
+  try {
+    const { auth } = req as any;
+    const scope = "users";
+    
+    // Get keyword from query
+    const keyword = (req.query.keyword as string || '').trim();
+  // Accept 1-based page from clients, but work if page=0 is provided.
+  const rawPage = req.query.page !== undefined ? parseInt(req.query.page as string, 10) : 1;
+  const page = Math.max(0, (isNaN(rawPage) ? 1 : rawPage) - 1);
+  const pageSize = parseInt(req.query.pageSize as string, 10) || 10;
+    
+    let userIds: number[] = await UserModel.checkScope(scope, req);
+    
+    // Build query with keyword search using OR
+    let query = UserModel.query()
+      .select(['users.*'])
+      .whereIn("users.id", userIds)
+      .whereNot("users.id", auth.id)
+      .where("users.status", 1);
+    
+    // Apply keyword search if provided
+    if (keyword) {
+      query = query.where(function() {
+        this.where('users.fullName', 'like', `%${keyword}%`)
+          .orWhere('users.phone', 'like', `%${keyword}%`)
+          .orWhere('users.email', 'like', `%${keyword}%`);
+      });
+    }
+    
+    // Execute query with pagination
+    let result: any = await query
+      .withGraphJoined("[role]")
+      .page(page, pageSize);
+    
+    console.log('🔍 [searchUsers] Query results:', {
+      total: result.total,
+      resultsCount: result.results?.length || 0,
+      keyword,
+      page,
+      pageSize
+    });
+    
+    // If no results, return early
+    if (!result.results || result.results.length === 0) {
+      console.log('⚠️ [searchUsers] No results found');
+      return res.status(200).json(result);
+    }
+    
+    // Enrich with department and chevron details
+    const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
+    const headers: any = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    const usersWithDetails = await Promise.all(result.results.map(async (user: any) => {
+      let department = null;
+      let chevron = null;
+      try {
+        if (user.departmentId) {
+          const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${user.departmentId}`, { headers });
+          department = depRes.data || null;
+        }
+      } catch (e: any) {
+        console.error(`Error fetching department ${user.departmentId}:`, e.message || 'Unknown error');
+      }
+      try {
+        if (user.chevronId) {
+          const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: user.chevronId }, { headers });
+          chevron = chvRes.data || null;
+        }
+      } catch (e: any) {
+        console.error(`Error fetching chevron ${user.chevronId}:`, e.message || 'Unknown error');
+      }
+      return {
+        ...user,
+        department,
+        chevron,
+      };
+    }));
+  
+    result.results = usersWithDetails;
+    
+    console.log('✅ [searchUsers] Enriched results:', {
+      resultsCount: result.results?.length || 0,
+      total: result.total
+    });
+    
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Error searching users:", error);
+    return res.status(500).json({
+      error: error instanceof Error ? error.message : "Internal Server Error",
+    });
+  }
+};
+
+/**
  * Get all users with pagination and filtering
  */
 export const getAllUsers = async (req: any, res: Response) => {
@@ -121,8 +222,10 @@ export const getAllUsers = async (req: any, res: Response) => {
 
     // Retrieve page and pageSize from query parameters, defaulting to 0 and 10
     // Ensure these are treated as numbers
-    const page = parseInt(req.query.page as string) || 0;
-    const pageSize = parseInt(req.query.pageSize as string) || 10;
+  // Accept 1-based page from clients, but work if page=0 is provided.
+  const rawPage = req.query.page !== undefined ? parseInt(req.query.page as string, 10) : 1;
+  const page = Math.max(0, (isNaN(rawPage) ? 1 : rawPage) - 1);
+  const pageSize = parseInt(req.query.pageSize as string, 10) || 10;
 
     // Fetch users WITHOUT joins
     let result: any = (await UserModel.query()
@@ -412,10 +515,11 @@ export const createUser = async (req: Request, res: Response) => {
       params.startDate = params.startDate.toISOString();
     }
 
+    // ✅ BỎ VALIDATION BẮT BUỘC ẢNH - Cho phép tạo user không cần ảnh
     // Validate required identificationPhoto presence on create
-    if (!params.identificationPhoto) {
-      return res.status(400).json({ message: "Vui lòng tải ảnh đại diện (identificationPhoto)", code: 7002 });
-    }
+    // if (!params.identificationPhoto) {
+    //   return res.status(400).json({ message: "Vui lòng tải ảnh đại diện (identificationPhoto)", code: 7002 });
+    // }
 
     // Check for existing user by username or email
     const existingUser = await UserModel.query()

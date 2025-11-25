@@ -17,6 +17,8 @@ import HomeScreen from '../../screens/home/HomeScreen';
 import UserManagementScreen from '../../screens/users/UserManagementScreen';
 import UserDetailScreen from '../../screens/users/UserDetailScreen';
 import UserFormScreen from '../../screens/users/UserFormScreen';
+import UserCreateScreen from '../../screens/users/UserCreateScreen';
+import UserEditScreen from '../../screens/users/UserEditScreen';
 import RoleListScreen from '../../screens/roles/RoleListScreen';
 import DepartmentListScreen from '../../screens/departments/DepartmentListScreen';
 import PositionListScreen from '../../screens/positions/PositionListScreen';
@@ -432,7 +434,7 @@ const AppLayout = () => {
           )}
           screenOptions={({ navigation, route }) => {
             // Check if this is a hidden screen (detail/form screens)
-            const isHiddenScreen = ['UserDetail', 'UserForm', 'Profile'].includes(route.name);
+            const isHiddenScreen = ['UserDetail', 'UserForm', 'UserCreate', 'UserEdit', 'Profile'].includes(route.name);
             
             return {
               drawerType: isTablet ? 'permanent' : 'front',
@@ -464,6 +466,8 @@ const AppLayout = () => {
           <Drawer.Screen name="Quản lý người dùng" component={UserManagementScreen} />
           <Drawer.Screen name="UserDetail" component={UserDetailScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Chi tiết người dùng' }} />
           <Drawer.Screen name="UserForm" component={UserFormScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Người dùng' }} />
+          <Drawer.Screen name="UserCreate" component={UserCreateScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Tạo người dùng' }} />
+          <Drawer.Screen name="UserEdit" component={UserEditScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Chỉnh sửa người dùng' }} />
           <Drawer.Screen name="Quản lý vai trò" component={RoleListScreen} />
           <Drawer.Screen name="Quản lý phòng ban" component={DepartmentListScreen} />
           <Drawer.Screen name="Quản lý chức vụ" component={PositionListScreen} />

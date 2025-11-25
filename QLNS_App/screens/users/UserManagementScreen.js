@@ -25,7 +25,9 @@ import {
   Divider,
   Portal,
   Button,
-  Menu
+  Menu,
+  Dialog,
+  Paragraph
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -38,7 +40,6 @@ const PAGE_SIZE = 10;
 const UserManagementScreen = ({ navigation }) => {
   const isFocused = useIsFocused(); // Track if this screen is focused
   const [users, setUsers] = useState([]);
-  const [filteredUsers, setFilteredUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,29 +47,23 @@ const UserManagementScreen = ({ navigation }) => {
   const [hasMore, setHasMore] = useState(true);
   const [totalUsers, setTotalUsers] = useState(0);
   const [visibleMenuId, setVisibleMenuId] = useState(null);
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [confirmTarget, setConfirmTarget] = useState({ id: null, name: '' });
+  const [deleting, setDeleting] = useState(false);
   const theme = useTheme();
 
   useEffect(() => {
     loadUsers(1, true);
   }, []);
 
+  // Debounced search effect
   useEffect(() => {
-    if (searchQuery.trim() === '') {
-      setFilteredUsers(users);
-    } else {
-      const query = searchQuery.toLowerCase();
-      const filtered = users.filter(
-        (user) =>
-          user.username?.toLowerCase().includes(query) ||
-          user.fullName?.toLowerCase().includes(query) ||
-          user.email?.toLowerCase().includes(query) ||
-          user.phone?.toLowerCase().includes(query) ||
-          user.role?.name?.toLowerCase().includes(query) ||
-          user.department?.name?.toLowerCase().includes(query)
-      );
-      setFilteredUsers(filtered);
-    }
-  }, [searchQuery, users]);
+    const delayTimer = setTimeout(() => {
+      loadUsers(1, true);
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(delayTimer);
+  }, [searchQuery]);
 
   const loadUsers = async (pageNumber = 1, isRefresh = false) => {
     if (loading) return;
@@ -76,12 +71,22 @@ const UserManagementScreen = ({ navigation }) => {
 
     try {
       setLoading(true);
-      console.log('📥 [UserManagement] Loading users page:', pageNumber);
+      console.log('📥 [UserManagement] Loading users page:', pageNumber, 'keyword:', searchQuery);
       
-      const response = await UserService.getAllUsers({
-        page: pageNumber,
-        pageSize: PAGE_SIZE
-      });
+      let response;
+      if (searchQuery.trim()) {
+        // Use search API when keyword is present
+        response = await UserService.searchUsers(searchQuery, {
+          page: pageNumber,
+          pageSize: PAGE_SIZE
+        });
+      } else {
+        // Use regular getAllUsers when no search
+        response = await UserService.getAllUsers({
+          page: pageNumber,
+          pageSize: PAGE_SIZE
+        });
+      }
 
       const newUsers = response.results || [];
       const total = response.total || 0;
@@ -127,35 +132,29 @@ const UserManagementScreen = ({ navigation }) => {
   };
 
   const handleDeleteUser = (userId, userName) => {
-    Alert.alert(
-      '🗑️ Xác nhận xóa',
-      `Bạn có chắc chắn muốn xóa người dùng "${userName}"?\n\nThao tác này không thể hoàn tác.`,
-      [
-        { 
-          text: 'Hủy', 
-          style: 'cancel',
-          onPress: () => console.log('❌ Delete cancelled')
-        },
-        {
-          text: 'Xóa',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('🗑️ [UserManagement] Deleting user:', userId);
-              await UserService.deleteUser(userId);
-              Alert.alert('✅ Thành công', 'Đã xóa người dùng');
-              onRefresh();
-            } catch (error) {
-              console.error('❌ [UserManagement] Delete failed:', error);
-              Alert.alert(
-                'Lỗi', 
-                error.response?.data?.message || 'Không thể xóa người dùng'
-              );
-            }
-          }
-        }
-      ]
-    );
+    // Open confirmation dialog (handled in component)
+    console.log('🗑️ [UserManagement] Open delete confirmation for', userId);
+    setConfirmTarget({ id: userId, name: userName });
+    setConfirmVisible(true);
+  };
+
+  const confirmDelete = async () => {
+    const userId = confirmTarget.id;
+    if (!userId) return;
+    setDeleting(true);
+    try {
+      console.log('🗑️ [UserManagement] Deleting user (confirmed):', userId);
+      await UserService.deleteMultipleUsers([userId]);
+      setConfirmVisible(false);
+      setConfirmTarget({ id: null, name: '' });
+      Alert.alert('✅ Thành công', 'Đã xóa người dùng');
+      onRefresh();
+    } catch (error) {
+      console.error('❌ [UserManagement] Delete failed:', error);
+      Alert.alert('Lỗi', error.response?.data?.message || 'Không thể xóa người dùng');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const handleChangeStatus = async (userId, currentStatus, userName) => {
@@ -285,36 +284,50 @@ const UserManagementScreen = ({ navigation }) => {
                   icon="dots-vertical"
                   size={24}
                   iconColor="#595959"
-                  onPress={() => setVisibleMenuId(item.id)}
+                  onPress={() => {
+                    console.log('⋯ [UserManagement] Menu anchor pressed for', item.id);
+                    setVisibleMenuId(item.id);
+                  }}
                 />
               }
             >
-              <Menu.Item
-                leadingIcon="eye-outline"
+              <TouchableOpacity
+                style={styles.menuItemRow}
                 onPress={() => {
+                  console.log('👁️ [UserManagement] View pressed for', item.id);
                   setVisibleMenuId(null);
                   navigation.navigate('UserDetail', { userId: item.id });
                 }}
-                title="Xem chi tiết"
-              />
-              <Menu.Item
-                leadingIcon="pencil-outline"
+              >
+                <MaterialCommunityIcons name="eye-outline" size={18} color="#595959" style={styles.menuIcon} />
+                <Text style={styles.menuItemText}>Xem chi tiết</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.menuItemRow}
                 onPress={() => {
+                  console.log('✏️ [UserManagement] Edit pressed for', item.id);
                   setVisibleMenuId(null);
-                  navigation.navigate('UserForm', { userId: item.id, mode: 'edit' });
+                  navigation.navigate('UserEdit', { userId: item.id });
                 }}
-                title="Chỉnh sửa"
-              />
+              >
+                <MaterialCommunityIcons name="pencil-outline" size={18} color="#595959" style={styles.menuIcon} />
+                <Text style={styles.menuItemText}>Chỉnh sửa</Text>
+              </TouchableOpacity>
+
               <Divider />
-              <Menu.Item
-                leadingIcon="delete-outline"
+
+              <TouchableOpacity
+                style={styles.menuItemRow}
                 onPress={() => {
+                  console.log('🗑️ [UserManagement] Delete menu pressed for', item.id);
                   setVisibleMenuId(null);
                   handleDeleteUser(item.id, item.fullName);
                 }}
-                title="Xóa"
-                titleStyle={{ color: '#ff4d4f' }}
-              />
+              >
+                <MaterialCommunityIcons name="delete-outline" size={18} color="#ff4d4f" style={styles.menuIcon} />
+                <Text style={[styles.menuItemText, { color: '#ff4d4f' }]}>Xóa</Text>
+              </TouchableOpacity>
             </Menu>
           </View>
         </View>
@@ -421,7 +434,7 @@ const UserManagementScreen = ({ navigation }) => {
       {/* SEARCH BAR */}
       <View style={styles.searchContainer}>
         <Searchbar
-          placeholder="Tìm kiếm theo tên, email, SĐT..."
+          placeholder="Tìm kiếm theo tên, số điện thoại hoặc email..."
           onChangeText={setSearchQuery}
           value={searchQuery}
           style={styles.searchbar}
@@ -434,7 +447,7 @@ const UserManagementScreen = ({ navigation }) => {
 
       {/* USER LIST */}
       <FlatList
-        data={filteredUsers}
+        data={users}
         renderItem={renderUserCard}
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.listContainer}
@@ -456,6 +469,30 @@ const UserManagementScreen = ({ navigation }) => {
         windowSize={10}
       />
 
+        {/* CONFIRM DELETE DIALOG */}
+        <Portal>
+          <Dialog visible={confirmVisible} onDismiss={() => setConfirmVisible(false)}>
+            <Dialog.Title>🗑️ Xác nhận xóa</Dialog.Title>
+            <Dialog.Content>
+              <Paragraph>
+                Bạn có chắc chắn muốn xóa người dùng "{confirmTarget.name}"? Thao tác này không thể hoàn tác.
+              </Paragraph>
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button onPress={() => setConfirmVisible(false)}>Hủy</Button>
+              <Button
+                mode="contained"
+                onPress={confirmDelete}
+                loading={deleting}
+                disabled={deleting}
+                style={{ backgroundColor: '#ff4d4f', marginLeft: 8 }}
+              >
+                Xóa
+              </Button>
+            </Dialog.Actions>
+          </Dialog>
+        </Portal>
+
       {/* LOADING OVERLAY */}
       {loading && page === 1 && (
         <View style={styles.loadingOverlay}>
@@ -472,7 +509,7 @@ const UserManagementScreen = ({ navigation }) => {
             style={styles.fab}
             onPress={() => {
               console.log('➕ Add user button pressed');
-              navigation.navigate('UserForm', { mode: 'create' });
+              navigation.navigate('UserCreate');
             }}
             label="Thêm mới"
             color="#ffffff"
@@ -573,7 +610,11 @@ const styles = StyleSheet.create({
   },
   actionsColumn: {
     flexDirection: 'column',
-    gap: -8
+    // ensure menu anchor area sits above other elements
+    zIndex: 20,
+    elevation: 6,
+    // avoid negative gaps which break touch areas on some devices
+    paddingLeft: 4
   },
   
   divider: {
@@ -638,6 +679,25 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 14,
     color: '#8c8c8c'
+  },
+  menuItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    minWidth: 160,
+    // ensure the row occupies full width and text can wrap/truncate properly
+    justifyContent: 'flex-start'
+  },
+  menuIcon: {
+    width: 24,
+    textAlign: 'center'
+  },
+  menuItemText: {
+    marginLeft: 12,
+    fontSize: 16,
+    color: '#595959',
+    flex: 1
   },
   emptyContainer: {
     flex: 1,

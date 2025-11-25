@@ -15,7 +15,7 @@
 
 import axios from 'axios';
 import { Alert, Platform } from 'react-native';
-import * as moment from 'moment-timezone';
+import { DateTime } from 'luxon';
 import AuthTokenManager from './AuthTokenManager';
 import { getApiBaseUrl } from './apiConfig';
 
@@ -98,7 +98,18 @@ const createApiInstance = () => {
       }
 
       // 2. THÊM TIMEZONE HEADER (giống Frontend)
-      const timezone = moment.tz.guess() || 'Asia/Ho_Chi_Minh';
+      // Determine timezone using Luxon first, then Intl, then a sensible default.
+      let timezone = 'Asia/Ho_Chi_Minh';
+      try {
+        const luxonZone = DateTime.local().zoneName;
+        if (luxonZone) timezone = luxonZone;
+        else if (Intl && typeof Intl.DateTimeFormat === 'function') {
+          const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          if (tz) timezone = tz;
+        }
+      } catch (e) {
+        // ignore and keep default
+      }
       config.headers['TimeZone'] = timezone;
       console.log('🕒 [API] Timezone:', timezone);
 

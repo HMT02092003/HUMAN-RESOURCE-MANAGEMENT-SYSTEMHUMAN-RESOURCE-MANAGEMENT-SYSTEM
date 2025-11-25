@@ -17,11 +17,10 @@ import {
   HelperText,
   useTheme,
   ActivityIndicator,
-  IconButton,
   Card,
-  Chip,
   Divider,
   Menu,
+  IconButton,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -31,6 +30,20 @@ import UserService from '../../services/UserService';
 import DepartmentService from '../../services/DepartmentService';
 import RoleService from '../../services/RoleService';
 import ChevronService from '../../services/ChevronService';
+
+/**
+ * ============================================
+ * USER FORM SCREEN - CREATE & EDIT
+ * ============================================
+ * 
+ * Chức năng:
+ * - CREATE: Tạo user mới (không cần ảnh, có thể thêm sau)
+ * - EDIT: Chỉnh sửa user (load data theo ID từ danh sách)
+ * 
+ * Route params:
+ * - mode: 'create' | 'edit'
+ * - userId: number (only for edit mode)
+ */
 
 const UserFormScreen = ({ route, navigation }) => {
   const { userId, mode } = route.params || {}; // mode: 'create' or 'edit'
@@ -88,43 +101,56 @@ const UserFormScreen = ({ route, navigation }) => {
 
   useEffect(() => {
     loadFormData();
-  }, [userId]);
+  }, [userId, mode]);
 
+  /**
+   * Load dropdown data và user data (CHỈ khi edit)
+   */
   const loadFormData = async () => {
     try {
       setDataLoading(true);
 
-      // Load dropdown options
+      console.log('📥 [UserForm] Loading form data...', { mode, userId });
+
+      // Load dropdown options (LUÔN load cho cả create và edit)
       const [rolesData, departmentsData, chevronsData] = await Promise.all([
         RoleService.getAllRoles(),
         DepartmentService.getAllDepartments(),
         ChevronService.getAllChevrons(),
       ]);
 
+      console.log('✅ [UserForm] Dropdown data loaded:', {
+        roles: rolesData?.length || 0,
+        departments: departmentsData?.length || 0,
+        chevrons: chevronsData?.length || 0,
+      });
+
       setRoles(rolesData || []);
       setDepartments(departmentsData || []);
       setChevrons(chevronsData || []);
 
-      // If edit mode, load user data
+      // CHỈ load user data khi ở chế độ EDIT
       if (isEdit && userId) {
-        // Convert userId to number if it's a string
-        const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
-        console.log('📥 [UserForm] Loading user detail with ID:', numericUserId, 'Type:', typeof numericUserId);
+        console.log('📥 [UserForm] EDIT MODE - Loading user detail with ID:', userId);
         
-        const userData = await UserService.getUserDetail(numericUserId);
-        console.log('✅ [UserForm] User data loaded:', JSON.stringify(userData, null, 2));
+        const userData = await UserService.getUserDetail(userId);
+        console.log('✅ [UserForm] User data loaded:', {
+          id: userData.id,
+          username: userData.username,
+          fullName: userData.fullName,
+        });
         
-        // Parse and set form data
+        // Parse and set form data từ API
         const formData = {
           username: userData.username || '',
-          password: '',
+          password: '', // Không hiển thị password khi edit
           rePassword: '',
           fullName: userData.fullName || '',
           email: userData.email || '',
           birthday: userData.birthday ? new Date(userData.birthday) : null,
           gender: userData.gender || null,
           phone: userData.phone || '',
-          status: userData.status === '1' || userData.status === 'active' ? 1 : 0,
+          status: userData.status === '1' || userData.status === 1 ? 1 : 0,
           roleId: userData.role?.id || null,
           startDate: userData.startDate ? new Date(userData.startDate) : new Date(),
           chevronId: userData.chevron?.id || null,
@@ -132,9 +158,10 @@ const UserFormScreen = ({ route, navigation }) => {
           identificationPhoto: userData.identificationPhoto || null,
         };
         
-        console.log('📝 [UserForm] Form data to set:', JSON.stringify(formData, null, 2));
+        console.log('📝 [UserForm] Setting form state:', formData);
         setForm(formData);
-        console.log('✅ [UserForm] Form state updated');
+      } else if (!isEdit) {
+        console.log('➕ [UserForm] CREATE MODE - Form empty');
       }
     } catch (error) {
       console.error('❌ [UserForm] Error loading data:', error);
@@ -154,7 +181,7 @@ const UserFormScreen = ({ route, navigation }) => {
       newErrors.username = 'Tên đăng nhập phải có ít nhất 3 ký tự';
     }
 
-    // Password (only for create mode)
+    // Password (CHỈ bắt buộc khi CREATE)
     if (!isEdit) {
       if (!form.password?.trim()) {
         newErrors.password = 'Vui lòng nhập mật khẩu';
@@ -172,8 +199,6 @@ const UserFormScreen = ({ route, navigation }) => {
     // Full name
     if (!form.fullName?.trim()) {
       newErrors.fullName = 'Vui lòng nhập họ và tên';
-    } else if (form.fullName.length > 100) {
-      newErrors.fullName = 'Họ và tên không được vượt quá 100 ký tự';
     }
 
     // Email
@@ -190,22 +215,19 @@ const UserFormScreen = ({ route, navigation }) => {
       newErrors.phone = 'SĐT phải bắt đầu bằng 0 và có 10 chữ số';
     }
 
-    // Required fields
+    // Required dropdowns
     if (!form.roleId) newErrors.roleId = 'Vui lòng chọn vai trò';
     if (!form.startDate) newErrors.startDate = 'Vui lòng chọn ngày bắt đầu';
     if (!form.chevronId) newErrors.chevronId = 'Vui lòng chọn chức vụ';
     if (!form.departmentId) newErrors.departmentId = 'Vui lòng chọn phòng ban';
-
-    // Photo (only required for create mode)
-    if (!isEdit && !form.identificationPhoto) {
-      newErrors.identificationPhoto = 'Vui lòng tải ảnh nhận diện';
-    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async () => {
+    console.log('📤 [UserForm] Submit clicked, mode:', mode);
+
     if (!validateForm()) {
       Alert.alert('Lỗi', 'Vui lòng kiểm tra lại thông tin');
       return;
@@ -214,7 +236,7 @@ const UserFormScreen = ({ route, navigation }) => {
     try {
       setLoading(true);
 
-      // Format dates to YYYY-MM-DD
+      // Format dates to YYYY-MM-DD (giống Web)
       const payload = {
         username: form.username,
         fullName: form.fullName,
@@ -229,39 +251,23 @@ const UserFormScreen = ({ route, navigation }) => {
         departmentId: form.departmentId,
       };
 
-      // Add password only for create mode
+      // Add password CHỈ khi CREATE
       if (!isEdit) {
         payload.password = form.password;
       }
 
-      // Handle photo upload if changed
-      if (form.identificationPhoto && typeof form.identificationPhoto === 'object' && form.identificationPhoto.uri) {
-        // Photo is a new upload, need to send as multipart
-        const formData = new FormData();
-        Object.keys(payload).forEach(key => {
-          formData.append(key, payload[key]);
-        });
-        
-        const photoFile = {
-          uri: form.identificationPhoto.uri,
-          type: 'image/jpeg',
-          name: 'identificationPhoto.jpg',
-        };
-        formData.append('identificationPhoto', photoFile);
-        payload._formData = formData;
-      }
+      console.log('📤 [UserForm] Payload:', JSON.stringify(payload, null, 2));
 
       if (isEdit) {
-        // Convert userId to number if it's a string
-        const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
-        console.log('✏️ [UserForm] Updating user ID:', numericUserId, 'Type:', typeof numericUserId);
-        
-        await UserService.updateUser(numericUserId, payload);
+        console.log('✏️ [UserForm] Updating user ID:', userId);
+        await UserService.updateUser(userId, payload);
         Alert.alert('Thành công', 'Cập nhật người dùng thành công', [
           { text: 'OK', onPress: () => navigation.goBack() }
         ]);
       } else {
-        await UserService.createUser(payload);
+        console.log('➕ [UserForm] Creating new user');
+        const result = await UserService.createUser(payload);
+        console.log('✅ [UserForm] User created with ID:', result.id);
         Alert.alert('Thành công', 'Tạo người dùng thành công', [
           { text: 'OK', onPress: () => navigation.goBack() }
         ]);
@@ -368,22 +374,21 @@ const UserFormScreen = ({ route, navigation }) => {
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
         >
-          {/* Photo Section */}
+          {/* Photo Upload (Optional) */}
           <Card style={styles.card}>
             <Card.Content>
-              <Text style={styles.sectionTitle}>Ảnh nhận diện</Text>
+              <Text style={styles.sectionTitle}>Ảnh nhận diện (Tùy chọn)</Text>
               <Divider style={styles.divider} />
-              
+
               <View style={styles.photoContainer}>
                 {form.identificationPhoto ? (
                   <View style={styles.photoWrapper}>
                     <Image
                       source={{
                         uri: typeof form.identificationPhoto === 'string'
-                          ? (form.identificationPhoto.startsWith('/')
-                              ? `${process.env.EXPO_PUBLIC_API_GATEWAY_URL}${form.identificationPhoto}`
+                          ? (form.identificationPhoto.startsWith('http')
+                              ? form.identificationPhoto
                               : form.identificationPhoto)
                           : form.identificationPhoto.uri
                       }}
@@ -413,15 +418,10 @@ const UserFormScreen = ({ route, navigation }) => {
                   </Button>
                 )}
               </View>
-              {errors.identificationPhoto && (
-                <HelperText type="error" visible={true}>
-                  {errors.identificationPhoto}
-                </HelperText>
-              )}
             </Card.Content>
           </Card>
 
-          {/* Login Info (for create mode) */}
+          {/* Login Info - CHỈ hiển thị khi CREATE hoặc EDIT (read-only) */}
           {!isEdit && (
             <Card style={styles.card}>
               <Card.Content>
@@ -490,7 +490,7 @@ const UserFormScreen = ({ route, navigation }) => {
             </Card>
           )}
 
-          {/* Edit mode: Show username as read-only */}
+          {/* EDIT mode: Show username as read-only */}
           {isEdit && (
             <Card style={styles.card}>
               <Card.Content>
@@ -602,7 +602,6 @@ const UserFormScreen = ({ route, navigation }) => {
                 error={!!errors.phone}
                 left={<TextInput.Icon icon="phone" />}
                 keyboardType="phone-pad"
-                maxLength={10}
                 style={styles.input}
               />
               {errors.phone && (
@@ -618,36 +617,6 @@ const UserFormScreen = ({ route, navigation }) => {
             <Card.Content>
               <Text style={styles.sectionTitle}>Thông tin công việc</Text>
               <Divider style={styles.divider} />
-
-              <Menu
-                visible={statusMenuVisible}
-                onDismiss={() => setStatusMenuVisible(false)}
-                anchor={
-                  <TouchableOpacity onPress={() => setStatusMenuVisible(true)}>
-                    <TextInput
-                      label="Trạng thái *"
-                      value={getStatusLabel()}
-                      mode="outlined"
-                      editable={false}
-                      error={!!errors.status}
-                      left={<TextInput.Icon icon="information" />}
-                      right={<TextInput.Icon icon="chevron-down" />}
-                      style={styles.input}
-                    />
-                  </TouchableOpacity>
-                }
-              >
-                {statusOptions.map((option) => (
-                  <Menu.Item
-                    key={option.value}
-                    onPress={() => {
-                      setForm({ ...form, status: option.value });
-                      setStatusMenuVisible(false);
-                    }}
-                    title={option.label}
-                  />
-                ))}
-              </Menu>
 
               <Menu
                 visible={roleMenuVisible}
@@ -667,41 +636,21 @@ const UserFormScreen = ({ route, navigation }) => {
                   </TouchableOpacity>
                 }
               >
-                <ScrollView style={{ maxHeight: 300 }}>
-                  {roles.map((role) => (
-                    <Menu.Item
-                      key={role.id}
-                      onPress={() => {
-                        setForm({ ...form, roleId: role.id });
-                        setErrors({ ...errors, roleId: null });
-                        setRoleMenuVisible(false);
-                      }}
-                      title={role.name}
-                    />
-                  ))}
-                </ScrollView>
+                {roles.map((role) => (
+                  <Menu.Item
+                    key={role.id}
+                    onPress={() => {
+                      setForm({ ...form, roleId: role.id });
+                      setErrors({ ...errors, roleId: null });
+                      setRoleMenuVisible(false);
+                    }}
+                    title={role.name}
+                  />
+                ))}
               </Menu>
               {errors.roleId && (
                 <HelperText type="error" visible={true}>
                   {errors.roleId}
-                </HelperText>
-              )}
-
-              <TouchableOpacity onPress={() => setShowStartDatePicker(true)}>
-                <TextInput
-                  label="Ngày bắt đầu làm việc *"
-                  value={formatDateDisplay(form.startDate)}
-                  mode="outlined"
-                  editable={false}
-                  error={!!errors.startDate}
-                  left={<TextInput.Icon icon="calendar-start" />}
-                  right={<TextInput.Icon icon="chevron-down" />}
-                  style={styles.input}
-                />
-              </TouchableOpacity>
-              {errors.startDate && (
-                <HelperText type="error" visible={true}>
-                  {errors.startDate}
                 </HelperText>
               )}
 
@@ -723,19 +672,17 @@ const UserFormScreen = ({ route, navigation }) => {
                   </TouchableOpacity>
                 }
               >
-                <ScrollView style={{ maxHeight: 300 }}>
-                  {departments.map((dept) => (
-                    <Menu.Item
-                      key={dept.id}
-                      onPress={() => {
-                        setForm({ ...form, departmentId: dept.id });
-                        setErrors({ ...errors, departmentId: null });
-                        setDepartmentMenuVisible(false);
-                      }}
-                      title={dept.name}
-                    />
-                  ))}
-                </ScrollView>
+                {departments.map((dept) => (
+                  <Menu.Item
+                    key={dept.id}
+                    onPress={() => {
+                      setForm({ ...form, departmentId: dept.id });
+                      setErrors({ ...errors, departmentId: null });
+                      setDepartmentMenuVisible(false);
+                    }}
+                    title={dept.name}
+                  />
+                ))}
               </Menu>
               {errors.departmentId && (
                 <HelperText type="error" visible={true}>
@@ -754,66 +701,79 @@ const UserFormScreen = ({ route, navigation }) => {
                       mode="outlined"
                       editable={false}
                       error={!!errors.chevronId}
-                      left={<TextInput.Icon icon="badge-account" />}
+                      left={<TextInput.Icon icon="badge-account-horizontal" />}
                       right={<TextInput.Icon icon="chevron-down" />}
                       style={styles.input}
                     />
                   </TouchableOpacity>
                 }
               >
-                <ScrollView style={{ maxHeight: 300 }}>
-                  {chevrons.map((chev) => (
-                    <Menu.Item
-                      key={chev.id}
-                      onPress={() => {
-                        setForm({ ...form, chevronId: chev.id });
-                        setErrors({ ...errors, chevronId: null });
-                        setChevronMenuVisible(false);
-                      }}
-                      title={chev.name}
-                    />
-                  ))}
-                </ScrollView>
+                {chevrons.map((chev) => (
+                  <Menu.Item
+                    key={chev.id}
+                    onPress={() => {
+                      setForm({ ...form, chevronId: chev.id });
+                      setErrors({ ...errors, chevronId: null });
+                      setChevronMenuVisible(false);
+                    }}
+                    title={chev.name}
+                  />
+                ))}
               </Menu>
               {errors.chevronId && (
                 <HelperText type="error" visible={true}>
                   {errors.chevronId}
                 </HelperText>
               )}
+
+              <TouchableOpacity onPress={() => setShowStartDatePicker(true)}>
+                <TextInput
+                  label="Ngày bắt đầu *"
+                  value={formatDateDisplay(form.startDate)}
+                  mode="outlined"
+                  editable={false}
+                  error={!!errors.startDate}
+                  left={<TextInput.Icon icon="calendar-start" />}
+                  right={<TextInput.Icon icon="chevron-down" />}
+                  style={styles.input}
+                />
+              </TouchableOpacity>
+              {errors.startDate && (
+                <HelperText type="error" visible={true}>
+                  {errors.startDate}
+                </HelperText>
+              )}
+
+              <Menu
+                visible={statusMenuVisible}
+                onDismiss={() => setStatusMenuVisible(false)}
+                anchor={
+                  <TouchableOpacity onPress={() => setStatusMenuVisible(true)}>
+                    <TextInput
+                      label="Trạng thái *"
+                      value={getStatusLabel()}
+                      mode="outlined"
+                      editable={false}
+                      left={<TextInput.Icon icon="checkbox-marked-circle" />}
+                      right={<TextInput.Icon icon="chevron-down" />}
+                      style={styles.input}
+                    />
+                  </TouchableOpacity>
+                }
+              >
+                {statusOptions.map((option) => (
+                  <Menu.Item
+                    key={option.value}
+                    onPress={() => {
+                      setForm({ ...form, status: option.value });
+                      setStatusMenuVisible(false);
+                    }}
+                    title={option.label}
+                  />
+                ))}
+              </Menu>
             </Card.Content>
           </Card>
-
-          {/* Date Pickers */}
-          {showBirthdayPicker && (
-            <DateTimePicker
-              value={form.birthday || new Date()}
-              mode="date"
-              display="default"
-              onChange={(event, selectedDate) => {
-                setShowBirthdayPicker(false);
-                if (selectedDate) {
-                  setForm({ ...form, birthday: selectedDate });
-                }
-              }}
-              maximumDate={new Date()}
-            />
-          )}
-
-          {showStartDatePicker && (
-            <DateTimePicker
-              value={form.startDate || new Date()}
-              mode="date"
-              display="default"
-              onChange={(event, selectedDate) => {
-                setShowStartDatePicker(false);
-                if (selectedDate) {
-                  setForm({ ...form, startDate: selectedDate });
-                  setErrors({ ...errors, startDate: null });
-                }
-              }}
-              maximumDate={new Date()}
-            />
-          )}
 
           {/* Action Buttons */}
           <View style={styles.buttonContainer}>
@@ -839,6 +799,36 @@ const UserFormScreen = ({ route, navigation }) => {
           <View style={{ height: 24 }} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Date Pickers */}
+      {showBirthdayPicker && (
+        <DateTimePicker
+          value={form.birthday || new Date()}
+          mode="date"
+          display="default"
+          onChange={(event, selectedDate) => {
+            setShowBirthdayPicker(false);
+            if (selectedDate) {
+              setForm({ ...form, birthday: selectedDate });
+            }
+          }}
+        />
+      )}
+
+      {showStartDatePicker && (
+        <DateTimePicker
+          value={form.startDate || new Date()}
+          mode="date"
+          display="default"
+          onChange={(event, selectedDate) => {
+            setShowStartDatePicker(false);
+            if (selectedDate) {
+              setForm({ ...form, startDate: selectedDate });
+              setErrors({ ...errors, startDate: null });
+            }
+          }}
+        />
+      )}
     </Surface>
   );
 };
