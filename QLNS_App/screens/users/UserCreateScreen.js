@@ -4,7 +4,8 @@ import { ActivityIndicator, Surface, Text } from 'react-native-paper';
 import UserFormComponent from '../../components/UserFormComponent';
 import RoleService from '../../services/RoleService';
 import DepartmentService from '../../services/DepartmentService';
-import ChevronService from '../../services/ChevronService';
+import { ChevronService } from '../../services/ChevronService';
+import { ContractTypeService } from '../../services/ContractTypeService';
 import UserService from '../../services/UserService';
 
 const UserCreateScreen = ({ navigation }) => {
@@ -12,6 +13,7 @@ const UserCreateScreen = ({ navigation }) => {
   const [roles, setRoles] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [chevrons, setChevrons] = useState([]);
+  const [contractTypes, setContractTypes] = useState([]);
 
   useEffect(() => {
     loadDropdowns();
@@ -20,16 +22,48 @@ const UserCreateScreen = ({ navigation }) => {
   const loadDropdowns = async () => {
     try {
       setLoading(true);
-      const [r, d, c] = await Promise.all([
+      console.log('📋 [UserCreateScreen] Loading dropdowns...');
+      
+      // Load tất cả dropdown song song
+      const results = await Promise.allSettled([
         RoleService.getAllRoles(),
         DepartmentService.getAllDepartments(),
         ChevronService.getAllChevrons(),
+        ContractTypeService.getAllContractTypes(),
       ]);
-      setRoles(r || []);
-      setDepartments(d || []);
-      setChevrons(c || []);
+      
+      // Xử lý kết quả - chỉ set data nếu thành công
+      if (results[0].status === 'fulfilled') {
+        setRoles(results[0].value || []);
+        console.log('✅ [UserCreateScreen] Roles loaded:', results[0].value?.length || 0);
+      } else {
+        console.error('❌ [UserCreateScreen] Roles failed:', results[0].reason);
+      }
+      
+      if (results[1].status === 'fulfilled') {
+        setDepartments(results[1].value || []);
+        console.log('✅ [UserCreateScreen] Departments loaded:', results[1].value?.length || 0);
+      } else {
+        console.error('❌ [UserCreateScreen] Departments failed:', results[1].reason);
+      }
+      
+      if (results[2].status === 'fulfilled') {
+        setChevrons(results[2].value || []);
+        console.log('✅ [UserCreateScreen] Chevrons loaded:', results[2].value?.length || 0);
+      } else {
+        console.error('❌ [UserCreateScreen] Chevrons failed:', results[2].reason);
+      }
+      
+      if (results[3].status === 'fulfilled') {
+        setContractTypes(results[3].value || []);
+        console.log('✅ [UserCreateScreen] ContractTypes loaded:', results[3].value?.length || 0);
+      } else {
+        console.error('❌ [UserCreateScreen] ContractTypes failed:', results[3].reason);
+        setContractTypes([]);
+      }
+      
     } catch (err) {
-      console.error('load dropdowns error', err);
+      console.error('❌ [UserCreateScreen] load dropdowns error', err);
       Alert.alert('Lỗi', 'Không thể tải dữ liệu');
     } finally {
       setLoading(false);
@@ -63,6 +97,7 @@ const UserCreateScreen = ({ navigation }) => {
             roles={roles}
             departments={departments}
             chevrons={chevrons}
+            contractTypes={contractTypes}
             onSubmit={handleSubmit}
             onCancel={() => navigation.goBack()}
           />

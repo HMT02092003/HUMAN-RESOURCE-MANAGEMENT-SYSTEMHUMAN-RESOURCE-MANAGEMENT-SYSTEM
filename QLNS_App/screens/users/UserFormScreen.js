@@ -30,7 +30,7 @@ import * as ImagePicker from 'expo-image-picker';
 import UserService from '../../services/UserService';
 import DepartmentService from '../../services/DepartmentService';
 import RoleService from '../../services/RoleService';
-import ChevronService from '../../services/ChevronService';
+import { ChevronService } from '../../services/ChevronService';
 
 const UserFormScreen = ({ route, navigation }) => {
   const { userId, mode } = route.params || {}; // mode: 'create' or 'edit'

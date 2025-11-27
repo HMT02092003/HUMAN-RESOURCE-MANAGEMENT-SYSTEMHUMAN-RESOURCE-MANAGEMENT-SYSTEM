@@ -174,17 +174,23 @@ const createApiInstance = () => {
             refreshToken,
           });
 
-          if (refreshResponse.data && refreshResponse.data.token) {
+          console.log('🔄 [API] Refresh response:', JSON.stringify(refreshResponse.data, null, 2));
+
+          // Handle cả 2 format response: { token: ... } hoặc { accessToken: ... }
+          const newToken = refreshResponse.data?.token || refreshResponse.data?.accessToken;
+          
+          if (newToken) {
             console.log('✅ [API] Token refreshed successfully');
 
             // LƯU TOKEN MỚI
-            await AuthTokenManager.saveAccessToken(refreshResponse.data.token);
+            await AuthTokenManager.saveAccessToken(newToken);
 
             // CẬP NHẬT HEADER VÀ GỌI LẠI REQUEST CŨ
-            originalRequest.headers.Authorization = `Bearer ${refreshResponse.data.token}`;
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
             return instance(originalRequest);
           } else {
-            throw new Error('Invalid refresh response');
+            console.error('❌ [API] No token in refresh response');
+            throw new Error('Invalid refresh response - no token');
           }
         } catch (refreshError) {
           console.error('❌ [API] Refresh token failed:', refreshError);

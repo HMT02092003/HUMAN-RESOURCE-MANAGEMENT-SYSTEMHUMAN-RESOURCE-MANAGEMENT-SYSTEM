@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Image, Platform, Modal, ScrollView, FlatList } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Image, Platform, Modal, ScrollView } from 'react-native';
 import { Card, Text, TextInput, HelperText, Button, Divider, IconButton, List } from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Picker } from '@react-native-picker/picker';
+import { ContractTypeService } from '../services/ContractTypeService';
 
 /**
  * Props:
@@ -13,7 +15,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
  * - onSubmit(values, photo) => Promise
  * - onCancel()
  */
-const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], departments = [], chevrons = [], onSubmit, onCancel }) => {
+const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], departments = [], chevrons = [], contractTypes = [], onSubmit, onCancel }) => {
   const [form, setForm] = useState({
     username: '',
     password: '',
@@ -27,6 +29,7 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
     roleId: null,
     startDate: new Date(),
     chevronId: null,
+    contractTypeId: null,
     departmentId: null,
     identificationPhoto: null,
   });
@@ -42,7 +45,11 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [showDepartmentModal, setShowDepartmentModal] = useState(false);
   const [showChevronModal, setShowChevronModal] = useState(false);
+  const [showContractTypeModal, setShowContractTypeModal] = useState(false);
+  
+  const [localContractTypes, setLocalContractTypes] = useState(contractTypes || []);
   const [showGenderModal, setShowGenderModal] = useState(false);
+  const [contractTypesLoading, setContractTypesLoading] = useState(false);
 
   const genderOptions = [
     { key: 1, value: 'Nam' },
@@ -65,6 +72,9 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
         startDate: initialValues.startDate ? new Date(initialValues.startDate) : new Date(),
         chevronId: initialValues.chevron?.id || null,
         departmentId: initialValues.department?.id || null,
+  contractTypeId: initialValues.contractTypeId || initialValues.contractType?.id || null,
+  contractTerm: initialValues.contractTerm || initialValues.contractType?.contractTerm || null,
+  contractInsurance: initialValues.insurance || initialValues.contractType?.insurance || null,
         identificationPhoto: initialValues.identificationPhoto || null,
       }));
     } else {
@@ -83,11 +93,54 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
         startDate: new Date(),
         chevronId: null,
         departmentId: null,
+  contractTypeId: null,
+  contractTerm: null,
+  contractInsurance: null,
         identificationPhoto: null,
       });
     }
     setErrors({});
   }, [initialValues]);
+
+  useEffect(() => {
+    // debug: log contractTypes passed from parent
+    console.log('[UserFormComponent] contractTypes prop received:', Array.isArray(contractTypes) ? contractTypes.length : 'not-array');
+    if (Array.isArray(contractTypes) && contractTypes.length > 0) {
+      console.log('[UserFormComponent] First 3 contractTypes:', JSON.stringify(contractTypes.slice(0, 3), null, 2));
+    }
+  }, [contractTypes]);
+
+  useEffect(() => {
+    setLocalContractTypes(contractTypes || []);
+  }, [contractTypes]);
+
+  // Tự động load contract types nếu prop rỗng
+  useEffect(() => {
+    if ((!contractTypes || contractTypes.length === 0) && !contractTypesLoading) {
+      console.log('[UserFormComponent] contractTypes empty, auto-loading...');
+      reloadContractTypes();
+    }
+  }, []);
+
+  const reloadContractTypes = async () => {
+    console.log('[UserFormComponent] reloadContractTypes called');
+    setContractTypesLoading(true);
+    try {
+      const types = await ContractTypeService.getAllContractTypes();
+      console.log('[UserFormComponent] reloadContractTypes fetched:', types?.length || 0);
+      if (Array.isArray(types)) {
+        setLocalContractTypes(types);
+      } else {
+        console.warn('[UserFormComponent] Unexpected response type:', typeof types);
+        setLocalContractTypes([]);
+      }
+    } catch (err) {
+      console.error('[UserFormComponent] reloadContractTypes failed:', err.message);
+      setLocalContractTypes([]);
+    } finally {
+      setContractTypesLoading(false);
+    }
+  };
 
   const formatDateToYYYYMMDD = (date) => {
     if (!date) return null;
@@ -149,6 +202,7 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
       roleId: form.roleId,
       startDate: formatDateToYYYYMMDD(form.startDate),
       chevronId: form.chevronId,
+      contractTypeId: form.contractTypeId,
       departmentId: form.departmentId,
     };
     if (!isEdit) payload.password = form.password;
@@ -170,8 +224,12 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
   };
 
   const getLabelById = (list, id, fallback) => {
-    const found = list?.find((i) => i.id === id);
-    return found ? found.name || found.label || fallback : fallback;
+    if (!list || list.length === 0) return fallback;
+    const found = list.find((i) => {
+      // support multiple id field names
+      return i?.id === id || i?._id === id || i?.value === id || i?.key === id;
+    });
+    return found ? found.name || found.label || found.value || fallback : fallback;
   };
 
   const getGenderLabel = () => {
@@ -188,20 +246,21 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
             <IconButton icon="close" size={24} onPress={() => setVisible(false)} />
           </View>
           <Divider />
-          <FlatList
-            data={items}
-            keyExtractor={(item) => String(item.id || item.key)}
-            renderItem={({ item }) => (
+          <ScrollView>
+            {(items || []).map((item, index) => (
               <List.Item
+                key={String(item?.id || item?._id || item?.key || index)}
                 title={item.name || item.value || item.label}
+                description={item.description}
                 onPress={() => {
+                  console.log('Selection modal pick:', title, item);
                   onSelect(item);
                   setVisible(false);
                 }}
                 style={styles.listItem}
               />
-            )}
-          />
+            ))}
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -279,6 +338,27 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
             <TextInput label="Phòng ban *" value={getLabelById(departments, form.departmentId, 'Chọn phòng ban')} editable={false} style={styles.input} pointerEvents="none" right={<TextInput.Icon icon="chevron-down" />} />
           </TouchableOpacity>
           {errors.departmentId && <HelperText type="error">{errors.departmentId}</HelperText>}
+          <View>
+            <TouchableOpacity onPress={() => setShowContractTypeModal(true)}>
+              <TextInput label="Loại hợp đồng" value={getLabelById(localContractTypes, form.contractTypeId, 'Chọn loại hợp đồng')} editable={false} style={styles.input} pointerEvents="none" right={<TextInput.Icon icon="chevron-down" />} />
+            </TouchableOpacity>
+            {contractTypesLoading ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                <Text style={{ color: '#1890ff', marginRight: 8 }}>Đang tải loại hợp đồng...</Text>
+              </View>
+            ) : (!localContractTypes || localContractTypes.length === 0) && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6 }}>
+                <Text style={{ color: '#8c8c8c', marginRight: 8 }}>Không có loại hợp đồng</Text>
+                <Button mode="outlined" compact onPress={reloadContractTypes}>Tải lại</Button>
+              </View>
+            )}
+          </View>
+        
+          {/* Show read-only contract fields populated from selected contract type */}
+          <View style={{ marginTop: 8 }}>
+            <TextInput label="Thời hạn hợp đồng (tháng)" value={form.contractTerm !== null && form.contractTerm !== undefined ? String(form.contractTerm) : ''} editable={false} style={styles.input} />
+            <TextInput label="Bảo hiểm (VND)" value={form.contractInsurance !== null && form.contractInsurance !== undefined ? String(form.contractInsurance) : ''} editable={false} style={styles.input} />
+          </View>
           <TouchableOpacity onPress={() => setShowChevronModal(true)}>
             <TextInput label="Chức vụ *" value={getLabelById(chevrons, form.chevronId, 'Chọn chức vụ')} editable={false} style={styles.input} pointerEvents="none" right={<TextInput.Icon icon="chevron-down" />} />
           </TouchableOpacity>
@@ -319,6 +399,15 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
         setErrors({ ...errors, chevronId: null });
       }, 'Chọn chức vụ')}
 
+      {renderSelectionModal(showContractTypeModal, setShowContractTypeModal, localContractTypes, (item) => {
+        setForm({
+          ...form,
+          contractTypeId: item.id || item._id || item.key || item.value,
+          contractTerm: item.contractTerm || item.contractTerm === 0 ? item.contractTerm : form.contractTerm,
+          contractInsurance: item.insurance || item.insurance === 0 ? item.insurance : form.contractInsurance,
+        });
+      }, 'Chọn loại hợp đồng')}
+
       {renderSelectionModal(showGenderModal, setShowGenderModal, genderOptions, (item) => {
         setForm({ ...form, gender: item.key });
       }, 'Chọn giới tính')}
@@ -357,6 +446,13 @@ const styles = StyleSheet.create({
   },
   listItem: {
     paddingVertical: 12,
+  },
+  pickerContainer: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#d9d9d9',
+    borderRadius: 4,
+    overflow: 'hidden',
   },
 });
 

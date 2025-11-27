@@ -189,7 +189,16 @@ const Index: React.FC = () => {
       sorter: (a: ContractType, b: ContractType) => a.type - b.type,
       ...getColumnSearchProps('type'),
       render: (value: number) => {
-        const text = value === 1 ? "Hợp đồng thực tập" : value === 2 ? "Hợp đồng chính thức" : " ";
+        const typeLabels: { [key: number]: string } = {
+          1: "Hợp đồng Thực tập",
+          2: "Hợp đồng Thử việc",
+          3: "Hợp đồng Lao động (Có thời hạn)",
+          4: "Hợp đồng Lao động (Không thời hạn)",
+          5: "Hợp đồng Đào tạo nghề",
+          6: "Hợp đồng Cộng tác viên (CTV)",
+          7: "Hợp đồng Khoán việc",
+        };
+        const text = typeLabels[value] || "Khác";
         return searchedColumn === 'type' ? (
           <MyHighlighter
             highlightStyle={{ backgroundColor: '#ffc069', padding: 0 }}

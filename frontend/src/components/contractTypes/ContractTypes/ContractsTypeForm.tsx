@@ -26,8 +26,13 @@ const ContractTypesForm = () => {
                     allowClear
                     showSearch
                 >
-                    <Select.Option value={1}>Thực tập sinh</Select.Option>
-                    <Select.Option value={2}>Nhân viên chính thức</Select.Option>
+                    <Select.Option value={1}>Hợp đồng Thực tập</Select.Option>
+                    <Select.Option value={2}>Hợp đồng Thử việc</Select.Option>
+                    <Select.Option value={3}>Hợp đồng Lao động (Có thời hạn)</Select.Option>
+                    <Select.Option value={4}>Hợp đồng Lao động (Không thời hạn)</Select.Option>
+                    <Select.Option value={5}>Hợp đồng Đào tạo nghề</Select.Option>
+                    <Select.Option value={6}>Hợp đồng Cộng tác viên (CTV)</Select.Option>
+                    <Select.Option value={7}>Hợp đồng Khoán việc</Select.Option>
                 </Select>
             </Form.Item>
             <Form.Item

@@ -14,22 +14,23 @@ const DRAWER_WIDTH_EXPANDED = isTablet ? 280 : 260;
 const DRAWER_WIDTH_COLLAPSED = 72;
 
 import HomeScreen from '../../screens/home/HomeScreen';
-import UserManagementScreen from '../../screens/users/UserManagementScreen';
-import UserDetailScreen from '../../screens/users/UserDetailScreen';
-import UserFormScreen from '../../screens/users/UserFormScreen';
-import UserCreateScreen from '../../screens/users/UserCreateScreen';
-import UserEditScreen from '../../screens/users/UserEditScreen';
 import RoleListScreen from '../../screens/roles/RoleListScreen';
-import DepartmentListScreen from '../../screens/departments/DepartmentListScreen';
-import PositionListScreen from '../../screens/positions/PositionListScreen';
+import RoleNavigator from '../navigation/RoleNavigator';
+
 import ContractListScreen from '../../screens/contracts/ContractListScreen';
-import ApplicationListScreen from '../../screens/applications/ApplicationListScreen';
 import AttendanceListScreen from '../../screens/attendance/AttendanceListScreen';
 import SettingsScreen from '../../screens/settings/SettingsScreen';
 import SalaryListScreen from '../../screens/salary/SalaryListScreen';
 import CVListScreen from '../../screens/cvs/CVListScreen';
 import ProjectListScreen from '../../screens/projects/ProjectListScreen';
 import ProfileScreen from '../../screens/profile/ProfileScreen';
+
+// Stack Navigators
+import DepartmentNavigator from '../navigation/DepartmentNavigator';
+import UserNavigator from '../navigation/UserNavigator';
+import ApplicationNavigator from '../navigation/ApplicationNavigator';
+import ChevronNavigator from '../navigation/ChevronNavigator';
+import ContractTypeNavigator from '../navigation/ContractTypeNavigator';
 
 const Drawer = createDrawerNavigator();
 
@@ -89,7 +90,8 @@ const BASE_MENU_ITEMS = [
   },
   { key: 'departments', label: 'Quản lý phòng ban', icon: 'office-building', route: 'Quản lý phòng ban', permission: 'departments' },
   { key: 'positions', label: 'Quản lý chức vụ', icon: 'badge-account-horizontal', route: 'Quản lý chức vụ', permission: 'chevrons' },
-  { key: 'contracts', label: 'Quản lý hợp đồng', icon: 'file-document', route: 'Quản lý hợp đồng', permission: 'contractTypes' },
+  { key: 'contractTypes', label: 'Quản lý loại hợp đồng', icon: 'file-document-edit', route: 'Quản lý loại hợp đồng', permission: 'contractTypes' },
+  { key: 'contracts', label: 'Quản lý hợp đồng', icon: 'file-document', route: 'Quản lý hợp đồng', permission: 'contracts' },
   {
     key: 'applications_parent',
     label: 'Danh sách đơn từ',
@@ -137,7 +139,7 @@ const CustomDrawerContent = ({ isCollapsed, setIsCollapsed, userPermissions, ...
   const navigation = useNavigation();
   const theme = useTheme();
   const currentRoute = useNavigationState((state) => state?.routes[state.index]?.name);
-  
+
   // Sử dụng AuthContext để logout
   const { logout } = useAuth();
 
@@ -170,9 +172,9 @@ const CustomDrawerContent = ({ isCollapsed, setIsCollapsed, userPermissions, ...
   const confirmLogout = async () => {
     console.log('🔴 [LOGOUT] Người dùng xác nhận đăng xuất');
     setLogoutDialogVisible(false);
-    
+
     console.log('🔴 [LOGOUT] Bắt đầu quá trình đăng xuất...');
-    
+
     try {
       console.log('🔴 [LOGOUT] Calling logout from AuthContext...');
       // Gọi logout từ AuthContext - nó sẽ xóa tokens và update auth state
@@ -301,14 +303,18 @@ const CustomDrawerContent = ({ isCollapsed, setIsCollapsed, userPermissions, ...
       return (
         <List.Accordion
           key={item.key}
-          title={item.label}
-          left={() => (
-            <View style={styles.iconWrapper}>
-              <MaterialCommunityIcons name={item.icon} size={22} color={theme.colors.onSurfaceVariant} />
+          title={
+            <View style={{ flexDirection: 'row', alignItems: 'center', height: 24 }}>
+              <View style={styles.iconWrapper}>
+                <MaterialCommunityIcons name={item.icon} size={22} color={theme.colors.onSurfaceVariant} />
+              </View>
+              <Text style={[styles.menuItemText, { marginLeft: 8 }]}>{item.label}</Text>
             </View>
-          )}
-          style={styles.menuItem}
-          titleStyle={styles.menuItemText}
+          }
+          left={null}
+          style={[styles.menuItem, { paddingVertical: 0, justifyContent: 'center' }]}
+          titleStyle={{ margin: 0, padding: 0 }} // Reset title styles
+          theme={{ colors: { background: 'transparent' } }}
         >
           {item.children.map(child => renderMenuItem(child, true))}
         </List.Accordion>
@@ -378,8 +384,8 @@ const CustomDrawerContent = ({ isCollapsed, setIsCollapsed, userPermissions, ...
         )}
       </ScrollView>
       <Divider />
-      <TouchableOpacity 
-        style={styles.logoutButton} 
+      <TouchableOpacity
+        style={styles.logoutButton}
         onPress={() => {
           console.log('🟢 [UI] Nút Đăng xuất được bấm từ TouchableOpacity');
           handleLogout();
@@ -388,7 +394,7 @@ const CustomDrawerContent = ({ isCollapsed, setIsCollapsed, userPermissions, ...
         <MaterialCommunityIcons name="logout" size={22} color={theme.colors.error} />
         {!isCollapsed && <Text style={styles.logoutText}>Đăng xuất</Text>}
       </TouchableOpacity>
-      
+
       {/* Logout Confirmation Dialog */}
       <Portal>
         <Dialog visible={logoutDialogVisible} onDismiss={cancelLogout}>
@@ -435,7 +441,7 @@ const AppLayout = () => {
           screenOptions={({ navigation, route }) => {
             // Check if this is a hidden screen (detail/form screens)
             const isHiddenScreen = ['UserDetail', 'UserForm', 'UserCreate', 'UserEdit', 'Profile'].includes(route.name);
-            
+
             return {
               drawerType: isTablet ? 'permanent' : 'front',
               drawerStyle: {
@@ -452,7 +458,7 @@ const AppLayout = () => {
                 fontSize: 18,
               },
               // Use back button for hidden screens, menu button for main screens
-              headerLeft: isHiddenScreen 
+              headerLeft: isHiddenScreen
                 ? () => <HeaderBackButton navigation={navigation} />
                 : () => <HeaderMenuButton navigation={navigation} />,
               headerRight: null,
@@ -463,16 +469,17 @@ const AppLayout = () => {
           }}
         >
           <Drawer.Screen name="Dashboard" component={HomeScreen} options={{ title: 'Trang chủ', headerShown: true }} />
-          <Drawer.Screen name="Quản lý người dùng" component={UserManagementScreen} />
-          <Drawer.Screen name="UserDetail" component={UserDetailScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Chi tiết người dùng' }} />
-          <Drawer.Screen name="UserForm" component={UserFormScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Người dùng' }} />
-          <Drawer.Screen name="UserCreate" component={UserCreateScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Tạo người dùng' }} />
-          <Drawer.Screen name="UserEdit" component={UserEditScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Chỉnh sửa người dùng' }} />
-          <Drawer.Screen name="Quản lý vai trò" component={RoleListScreen} />
-          <Drawer.Screen name="Quản lý phòng ban" component={DepartmentListScreen} />
-          <Drawer.Screen name="Quản lý chức vụ" component={PositionListScreen} />
+
+          {/* Stack Navigators */}
+          <Drawer.Screen name="Quản lý người dùng" component={UserNavigator} />
+          <Drawer.Screen name="Quản lý phòng ban" component={DepartmentNavigator} />
+          <Drawer.Screen name="Danh sách đơn từ" component={ApplicationNavigator} />
+
+          {/* Other screens still flat for now */}
+          <Drawer.Screen name="Quản lý vai trò" component={RoleNavigator} />
+          <Drawer.Screen name="Quản lý chức vụ" component={ChevronNavigator} />
+          <Drawer.Screen name="Quản lý loại hợp đồng" component={ContractTypeNavigator} />
           <Drawer.Screen name="Quản lý hợp đồng" component={ContractListScreen} />
-          <Drawer.Screen name="Danh sách đơn từ" component={ApplicationListScreen} />
           <Drawer.Screen name="Chấm công" component={AttendanceListScreen} />
           <Drawer.Screen name="Quản lý lương" component={SalaryListScreen} />
           <Drawer.Screen name="Hồ sơ/CV" component={CVListScreen} />
@@ -505,8 +512,9 @@ const styles = StyleSheet.create({
   loadingContainer: { padding: 24, alignItems: 'center' },
   menuItem: { borderRadius: 8, marginVertical: 2, overflow: 'hidden' },
   menuItemActive: { backgroundColor: AppTheme.colors.primaryContainer },
-  menuItemContent: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12 },
-  menuItemText: { fontSize: 14, fontWeight: '500', color: AppTheme.colors.onSurface, marginLeft: 12, flex: 1 },
+  // ensure consistent vertical centering and spacing between icon and text
+  menuItemContent: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, minHeight: 44 },
+  menuItemText: { fontSize: 14, fontWeight: '500', color: AppTheme.colors.onSurface, marginLeft: 8, flex: 1, includeFontPadding: false },
   menuItemTextActive: { color: AppTheme.colors.primary, fontWeight: '600' },
   expandIcon: { marginLeft: 'auto' },
   submenuContainer: { marginTop: 4 },

@@ -150,12 +150,62 @@ class AuthTokenManager {
       const token = await storageHandler.getItem(this.ACCESS_TOKEN_KEY);
       if (token) {
         console.log('🔑 [AUTH] Access token retrieved, length:', token.length);
+        // Try to decode token payload (JWT) to inspect exp claim for debugging
+        try {
+          const payload = this.decodeJwt(token);
+          if (payload && payload.exp) {
+            const expMs = payload.exp * 1000;
+            const nowMs = Date.now();
+            const secsLeft = Math.max(0, Math.floor((expMs - nowMs) / 1000));
+            console.log(`⏳ [AUTH] Access token exp (unix): ${payload.exp}, expires in ${secsLeft} seconds`);
+          } else {
+            console.log('⏳ [AUTH] Could not find exp in token payload');
+          }
+        } catch (e) {
+          console.warn('⚠️ [AUTH] Could not decode JWT payload for token inspection', e);
+        }
       } else {
         console.warn('⚠️ [AUTH] No access token found');
       }
       return token;
     } catch (error) {
       console.error('❌ [AUTH] Error getting access token:', error);
+      return null;
+    }
+  }
+
+  // Decode JWT payload without verifying signature. Returns parsed payload or null.
+  static decodeJwt(token) {
+    try {
+      if (!token || typeof token !== 'string') return null;
+      const parts = token.split('.');
+      if (parts.length < 2) return null;
+      const base64Url = parts[1];
+      // base64url -> base64
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+
+      // atob may not exist in some RN environments; try global.atob then Buffer
+      let jsonPayload = null;
+      if (typeof global !== 'undefined' && typeof global.atob === 'function') {
+        const decoded = global.atob(base64);
+        jsonPayload = decodeURIComponent(decoded.split('').map(function(c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+      } else if (typeof Buffer !== 'undefined') {
+        const decoded = Buffer.from(base64, 'base64').toString('utf8');
+        jsonPayload = decoded;
+      } else if (typeof atob === 'function') {
+        const decoded = atob(base64);
+        jsonPayload = decodeURIComponent(decoded.split('').map(function(c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+      } else {
+        // Cannot decode in this environment
+        throw new Error('No base64 decode available (atob/Buffer)');
+      }
+
+      return JSON.parse(jsonPayload);
+    } catch (err) {
       return null;
     }
   }
@@ -205,23 +255,32 @@ class AuthTokenManager {
   // Refresh access token
   static async refreshAccessToken() {
     try {
+      console.log('🔄 [AUTH] Attempting to refresh access token...');
       const refreshToken = await this.getRefreshToken();
       if (!refreshToken) {
+        console.error('❌ [AUTH] No refresh token available for refresh');
         throw new Error('No refresh token available');
       }
 
+      console.log('🔄 [AUTH] Calling refresh endpoint...');
       const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, {
         refreshToken,
       });
 
-      const { accessToken } = response.data;
-      if (accessToken) {
-        await storageHandler.setItem(this.ACCESS_TOKEN_KEY, accessToken);
-      }
+      console.log('🔄 [AUTH] Refresh response received:', JSON.stringify(response.data, null, 2));
 
-      return accessToken;
+      // Backend có thể trả về "token" hoặc "accessToken" - handle cả hai
+      const newToken = response.data.token || response.data.accessToken;
+      if (newToken) {
+        await storageHandler.setItem(this.ACCESS_TOKEN_KEY, newToken);
+        console.log('✅ [AUTH] New access token saved after refresh');
+        return newToken;
+      } else {
+        console.error('❌ [AUTH] No token in refresh response');
+        throw new Error('No token in refresh response');
+      }
     } catch (error) {
-      console.error('Error refreshing token:', error);
+      console.error('❌ [AUTH] Error refreshing token:', error.response?.data || error.message);
       await this.clearTokens();
       throw error;
     }

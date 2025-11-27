@@ -61,17 +61,20 @@ api.interceptors.response.use(
 
             try {
                 // Thử refresh token
+                console.log('🔄 [API] Calling AuthTokenManager.refreshAccessToken()...');
                 const newToken = await AuthTokenManager.refreshAccessToken();
 
                 if (newToken) {
-                    console.log('✅ [API] Token refreshed successfully');
+                    console.log('✅ [API] Token refreshed successfully, retrying original request');
                     // Update header cho request cũ và gọi lại
                     originalRequest.headers.Authorization = `Bearer ${newToken}`;
                     return api(originalRequest);
+                } else {
+                    console.error('❌ [API] refreshAccessToken returned null/undefined');
                 }
             } catch (refreshError) {
                 // Refresh thất bại -> Logout
-                console.error('❌ [API] Session expired, logging out:', refreshError);
+                console.error('❌ [API] Session expired, refresh failed:', refreshError.message);
                 await AuthTokenManager.clearTokens();
                 
                 // Thông báo cho người dùng

@@ -434,7 +434,7 @@ const UserManagementScreen = ({ navigation }) => {
       {/* SEARCH BAR */}
       <View style={styles.searchContainer}>
         <Searchbar
-          placeholder="Tìm kiếm theo tên, số điện thoại hoặc email..."
+          placeholder="Tìm kiếm theo tên, số điện thoại hoặc email"
           onChangeText={setSearchQuery}
           value={searchQuery}
           style={styles.searchbar}
