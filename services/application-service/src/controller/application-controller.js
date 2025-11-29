@@ -605,10 +605,13 @@ export class ApplicationController {
 
       if (approvedUsersInfo && approvedUsersInfo.length > 0) {
         const approve = approvedUsersInfo[0];
+        // Build a robust fullName: fall back to username if first/last name missing
+        let approverFullName = `${approve.firstName || ''} ${approve.lastName || ''}`.trim();
+        if (!approverFullName) approverFullName = approve.username || `ID: ${approve.id}`;
         application.approvedByInfo = {
           id: approve.id,
           username: approve.username,
-          fullName: `${approve.firstName} ${approve.lastName}`.trim(),
+          fullName: approverFullName,
           email: approve.email,
           identificationPhoto: approve.identificationPhoto
         };

@@ -9,6 +9,10 @@ import MonthlySummaryModel from '@/Models/MonthlySummaryModel';
 import SalaryService from '@/services/SalaryService';
 import { MonthlyReportService } from '@/services/MonthlyReportService';
 import { getDecodedToken } from '@/utils/decode-token';
+import TimeAttendanceModel from '@/Models/TimeAttendanceModel';
+import AttendanceCalculationService from '@/services/attendance/AttendanceCalculationService';
+import { getShiftForUserAndDate } from '@/services/attendance/ShiftHelper';
+import dayjs from 'dayjs';
 
 /**
  * API: Duyệt bảng công tháng
@@ -355,6 +359,184 @@ export const bulkCalculateMonthly = async (req: Request, res: Response) => {
     return res.status(500).json({ 
       success: false, 
       message: error.message || 'Internal error' 
+    });
+  }
+};
+
+/**
+ * API: Cập nhật chấm công từ đơn quên check in/out
+ * POST /api/attendance/update-forgot-check
+ * Body: { userId, forgotDate, forgotTime, forgotType }
+ * 
+ * Flow:
+ * 1. Cập nhật checkInTime hoặc checkOutTime trong time_attendances
+ * 2. Tính toán lại các chỉ số công cho ngày đó (giống recordAttendance)
+ * 3. Tính toán lại thông tin chấm công tháng (monthly_attendances)
+ */
+export const updateForgotCheck = async (req: Request, res: Response) => {
+  try {
+    const { userId, forgotDate, forgotTime, forgotType } = req.body;
+
+    console.log('📝 [updateForgotCheck] Received request:', { userId, forgotDate, forgotTime, forgotType });
+
+    if (!userId || !forgotDate || !forgotTime || !forgotType) {
+      return res.status(400).json({
+        success: false,
+        message: 'Thiếu thông tin bắt buộc: userId, forgotDate, forgotTime, forgotType'
+      });
+    }
+
+    // Validate forgotType
+    if (!['check-in', 'check-out'].includes(forgotType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'forgotType phải là "check-in" hoặc "check-out"'
+      });
+    }
+
+    // Lấy token từ request để tính toán
+    const token = req.cookies?.['token'] ||
+      req.headers.authorization?.replace('Bearer ', '') ||
+      req.headers.authorization?.split(' ')[1];
+
+    // Kết hợp forgotDate và forgotTime thành timestamp đầy đủ
+    // forgotDate: "2025-11-29", forgotTime: "09:00" -> "2025-11-29T09:00:00"
+    const fullTimestamp = `${forgotDate}T${forgotTime}:00`;
+    console.log('📝 [updateForgotCheck] Full timestamp:', fullTimestamp);
+
+    // Tìm bản ghi chấm công theo userId và date
+    let attendanceRecord = await TimeAttendanceModel.query()
+      .where('userId', userId)
+      .where('date', forgotDate)
+      .first();
+
+    let record: any;
+
+    if (attendanceRecord) {
+      // Cập nhật bản ghi hiện có
+      console.log(`📝 [updateForgotCheck] Updating existing record for user ${userId} on ${forgotDate}`);
+      
+      const updateData: any = {
+        updated_at: new Date().toISOString()
+      };
+      
+      if (forgotType === 'check-in') {
+        updateData.checkInTime = fullTimestamp;
+      } else {
+        updateData.checkOutTime = fullTimestamp;
+      }
+      
+      record = await TimeAttendanceModel.query()
+        .patchAndFetchById(attendanceRecord.id, updateData);
+    } else {
+      // Tạo bản ghi mới nếu chưa tồn tại
+      console.log(`📝 [updateForgotCheck] Creating new record for user ${userId} on ${forgotDate}`);
+      
+      const newRecordData: any = {
+        userId,
+        date: forgotDate,
+        checkInTime: forgotType === 'check-in' ? fullTimestamp : null,
+        checkOutTime: forgotType === 'check-out' ? fullTimestamp : null,
+        dailyTotalWorkHours: 0,
+        lateMinutes: 0,
+        earlyDepartureMinutes: 0,
+        dailyWorkingUnit: 0,
+        totalWorkingUnit: 0,
+        otWorkingUnit: 0,
+        earlyLeavePenalty: 0,
+        lateArrivalPenalty: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      record = await TimeAttendanceModel.query().insertAndFetch(newRecordData);
+    }
+
+    // ============================================
+    // ✨ TÍNH TOÁN LẠI CÔNG CHO NGÀY
+    // ============================================
+    console.log(`🔄 [updateForgotCheck] Recalculating attendance for user ${userId} on ${forgotDate}...`);
+
+    // Lấy shift cho user vào ngày này
+    const shift = await getShiftForUserAndDate(userId, forgotDate);
+    console.log(`📋 [updateForgotCheck] Shift cho user ${userId} ngày ${forgotDate}:`, shift);
+
+    // Lấy thông tin OT đã duyệt
+    const overtimeApp = await AttendanceCalculationService.getApprovedOvertimeApplication(userId, forgotDate);
+    let otEndTime: string | undefined;
+    if (overtimeApp) {
+      const appData = typeof overtimeApp.data === 'string' ? JSON.parse(overtimeApp.data) : overtimeApp.data;
+      if (appData.endTime) {
+        otEndTime = dayjs(`${forgotDate} ${appData.endTime}`).toISOString();
+      }
+    }
+
+    // Tính toán lại công cho ngày
+    const calculation = await AttendanceCalculationService.calculateAttendance(
+      record.checkInTime,
+      record.checkOutTime,
+      forgotDate,
+      userId,
+      token,
+      otEndTime,
+      undefined, // isHoliday - sẽ được tính trong calculateAttendance
+      shift // Truyền shift info
+    );
+
+    console.log(`📊 [updateForgotCheck] Calculation result:`, calculation);
+
+    // Cập nhật record với thông tin công mới
+    const updatedRecord = await TimeAttendanceModel.query().patchAndFetchById(record.id, {
+      dailyTotalWorkHours: calculation.workHours || 0,
+      dailyWorkingUnit: calculation.dailyWorkingUnit || 0,
+      totalWorkingUnit: calculation.totalWorkingUnit || 0,
+      otWorkingUnit: calculation.otWorkingUnit || 0,
+      lateMinutes: calculation.lateMinutes || 0,
+      earlyDepartureMinutes: calculation.earlyDepartureMinutes || 0,
+      lateArrivalPenalty: calculation.latePenaltyAmount || 0,
+      earlyLeavePenalty: calculation.earlyLeavePenaltyAmount || 0,
+      updated_at: new Date().toISOString()
+    });
+
+    console.log(`✅ [updateForgotCheck] Updated daily attendance record:`, updatedRecord);
+
+    // ============================================
+    // ✨ TÍNH TOÁN LẠI CÔNG CHO THÁNG
+    // ============================================
+    try {
+      console.log(`🔄 [updateForgotCheck] Triggering monthly calculation...`);
+      const monthlyResult = await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, forgotDate);
+      console.log(`✅ [updateForgotCheck] Monthly calculation result:`, monthlyResult);
+    } catch (monthlyErr: any) {
+      console.error(`❌ [updateForgotCheck] Failed to update monthly summary:`, monthlyErr);
+      // Không throw error, vì việc cập nhật ngày đã thành công
+    }
+
+    console.log(`✅ [updateForgotCheck] Successfully updated attendance for user ${userId} on ${forgotDate}`);
+
+    return res.json({
+      success: true,
+      message: `Đã cập nhật ${forgotType === 'check-in' ? 'giờ check-in' : 'giờ check-out'} và tính toán lại công thành công`,
+      data: {
+        userId,
+        date: forgotDate,
+        [forgotType === 'check-in' ? 'checkInTime' : 'checkOutTime']: fullTimestamp,
+        calculation: {
+          workHours: calculation.workHours,
+          dailyWorkingUnit: calculation.dailyWorkingUnit,
+          totalWorkingUnit: calculation.totalWorkingUnit,
+          otWorkingUnit: calculation.otWorkingUnit,
+          lateMinutes: calculation.lateMinutes,
+          earlyDepartureMinutes: calculation.earlyDepartureMinutes
+        }
+      }
+    });
+  } catch (error: any) {
+    console.error('❌ [updateForgotCheck] Error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi khi cập nhật chấm công',
+      error: error.message
     });
   }
 };

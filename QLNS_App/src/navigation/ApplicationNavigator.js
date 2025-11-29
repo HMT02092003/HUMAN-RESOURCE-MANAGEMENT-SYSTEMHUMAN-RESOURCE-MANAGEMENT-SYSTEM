@@ -1,23 +1,65 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import ApplicationListScreen from '../../screens/applications/ApplicationListScreen';
-// Import other application screens if they exist, e.g., Create, Detail
-// Based on the file list, only ListScreen exists for now, but we should prepare the stack.
-// If create/edit are modals or not yet implemented, we just have the list.
-// But usually there should be a form. Let's assume just List for now if no others found.
+import MyApplicationListScreen from '../../screens/applications/MyApplicationListScreen';
+import ApplicationManagementScreen from '../../screens/applications/ApplicationManagementScreen';
+import SelectApplicationTypeScreen from '../../screens/applications/SelectApplicationTypeScreen';
+import LeaveApplicationScreen from '../../screens/applications/LeaveApplicationScreen';
+import OvertimeApplicationScreen from '../../screens/applications/OvertimeApplicationScreen';
+import ForgotCheckApplicationScreen from '../../screens/applications/ForgotCheckApplicationScreen';
+import BusinessTripApplicationScreen from '../../screens/applications/BusinessTripApplicationScreen';
+import ResignationApplicationScreen from '../../screens/applications/ResignationApplicationScreen';
 
 const Stack = createNativeStackNavigator();
 
-const ApplicationNavigator = () => {
+// Navigator cho đơn từ cá nhân (My Applications)
+export const MyApplicationNavigator = () => {
     return (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen
-                name="ApplicationList"
-                component={ApplicationListScreen}
+                name="MyApplicationList"
+                component={MyApplicationListScreen}
             />
-            {/* Add Create/Edit screens here when available */}
+            <Stack.Screen
+                name="SelectApplicationType"
+                component={SelectApplicationTypeScreen}
+            />
+            <Stack.Screen
+                name="LeaveApplication"
+                component={LeaveApplicationScreen}
+            />
+            <Stack.Screen
+                name="OvertimeApplication"
+                component={OvertimeApplicationScreen}
+            />
+            <Stack.Screen
+                name="ForgotCheckApplication"
+                component={ForgotCheckApplicationScreen}
+            />
+            <Stack.Screen
+                name="BusinessTripApplication"
+                component={BusinessTripApplicationScreen}
+            />
+            <Stack.Screen
+                name="ResignationApplication"
+                component={ResignationApplicationScreen}
+            />
         </Stack.Navigator>
     );
 };
+
+// Navigator cho quản lý đơn từ (Application Management)
+export const ApplicationManagementNavigator = () => {
+    return (
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+            <Stack.Screen
+                name="ApplicationManagementList"
+                component={ApplicationManagementScreen}
+            />
+        </Stack.Navigator>
+    );
+};
+
+// Default export - đơn từ cá nhân
+const ApplicationNavigator = MyApplicationNavigator;
 
 export default ApplicationNavigator;

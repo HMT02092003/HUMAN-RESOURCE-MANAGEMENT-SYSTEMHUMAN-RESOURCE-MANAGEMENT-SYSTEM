@@ -28,9 +28,10 @@ import ProfileScreen from '../../screens/profile/ProfileScreen';
 // Stack Navigators
 import DepartmentNavigator from '../navigation/DepartmentNavigator';
 import UserNavigator from '../navigation/UserNavigator';
-import ApplicationNavigator from '../navigation/ApplicationNavigator';
+import { MyApplicationNavigator, ApplicationManagementNavigator } from '../navigation/ApplicationNavigator';
 import ChevronNavigator from '../navigation/ChevronNavigator';
 import ContractTypeNavigator from '../navigation/ContractTypeNavigator';
+import { ShiftRegistrationNavigator, ShiftApprovalNavigator, ShiftConfigurationNavigator } from '../navigation/ShiftNavigator';
 
 const Drawer = createDrawerNavigator();
 
@@ -97,9 +98,13 @@ const BASE_MENU_ITEMS = [
     label: 'Danh sách đơn từ',
     icon: 'file-multiple',
     children: [
-      { key: 'applications', label: 'Danh sách đơn từ', icon: 'file-document-edit', route: 'Danh sách đơn từ', permission: 'applications' },
+      { key: 'my_applications', label: 'Đơn từ cá nhân', icon: 'file-account', route: 'Đơn từ cá nhân' },
+      { key: 'application_management', label: 'Quản lý đơn từ', icon: 'file-document-edit', route: 'Quản lý đơn từ', permission: 'applications', requirePermission: 'approve' },
+      { key: 'shift_registration', label: 'Đăng ký ca', icon: 'calendar-plus', route: 'Đăng ký ca', permission: 'shiftRegistration', requirePermission: 'create' },
+      { key: 'shift_approval', label: 'Duyệt đơn đăng ký ca', icon: 'calendar-check', route: 'Duyệt đơn đăng ký ca', permission: 'shiftApproval', requirePermission: 'approve' },
+      { key: 'shift_configuration', label: 'Cấu hình ca', icon: 'clock-time-four-outline', route: 'Cấu hình ca', permission: 'shiftConfiguration' },
     ],
-    permissions: ['applications']
+    permissions: ['applications', 'shiftRegistration', 'shiftApproval', 'shiftConfiguration']
   },
   {
     key: 'attendance_parent',
@@ -473,7 +478,11 @@ const AppLayout = () => {
           {/* Stack Navigators */}
           <Drawer.Screen name="Quản lý người dùng" component={UserNavigator} />
           <Drawer.Screen name="Quản lý phòng ban" component={DepartmentNavigator} />
-          <Drawer.Screen name="Danh sách đơn từ" component={ApplicationNavigator} />
+          <Drawer.Screen name="Đơn từ cá nhân" component={MyApplicationNavigator} />
+          <Drawer.Screen name="Quản lý đơn từ" component={ApplicationManagementNavigator} />
+          <Drawer.Screen name="Đăng ký ca" component={ShiftRegistrationNavigator} />
+          <Drawer.Screen name="Duyệt đơn đăng ký ca" component={ShiftApprovalNavigator} />
+          <Drawer.Screen name="Cấu hình ca" component={ShiftConfigurationNavigator} />
 
           {/* Other screens still flat for now */}
           <Drawer.Screen name="Quản lý vai trò" component={RoleNavigator} />

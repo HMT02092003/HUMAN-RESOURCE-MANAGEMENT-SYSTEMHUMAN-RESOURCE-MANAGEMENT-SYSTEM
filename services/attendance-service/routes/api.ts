@@ -10,7 +10,8 @@ import {
   recordAttendance, 
   approveMonthlyAttendance, 
   calculateAndSaveMonthly,
-  bulkCalculateMonthly
+  bulkCalculateMonthly,
+  updateForgotCheck
 } from '../src/controller/AttendanceController';
 import {
   getSettings,
@@ -43,6 +44,12 @@ router.get('/user/:userId/monthly-full', authenticateToken, async (req: Request,
 // POST /api/attendance/record (from gateway) -> /api/record (in service)
 router.post('/record', authenticateToken, async (req: Request, res: Response) => {
   await recordAttendance(req, res);
+});
+
+// API: Cập nhật chấm công từ đơn quên check in/out
+// POST /api/attendance/update-forgot-check (from gateway) -> /api/update-forgot-check (in service)
+router.post('/update-forgot-check', authenticateToken, async (req: Request, res: Response) => {
+  await updateForgotCheck(req, res);
 });
 
 // Admin helper: calculate and upsert monthly_attendances for a user/month
