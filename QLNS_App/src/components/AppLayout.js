@@ -19,6 +19,7 @@ import RoleNavigator from '../navigation/RoleNavigator';
 
 import ContractListScreen from '../../screens/contracts/ContractListScreen';
 import AttendanceListScreen from '../../screens/attendance/AttendanceListScreen';
+import AttendanceApprovalScreen from '../../screens/attendance/AttendanceApprovalScreen';
 import SettingsScreen from '../../screens/settings/SettingsScreen';
 import SalaryListScreen from '../../screens/salary/SalaryListScreen';
 import CVListScreen from '../../screens/cvs/CVListScreen';
@@ -111,7 +112,8 @@ const BASE_MENU_ITEMS = [
     label: 'Chấm công',
     icon: 'clock-check',
     children: [
-      { key: 'attendance', label: 'Chấm công', icon: 'calendar-clock', route: 'Chấm công', permission: 'timeAttendance' },
+      { key: 'attendance', label: 'Bảng chấm công', icon: 'calendar-clock', route: 'Chấm công', permission: 'timeAttendance' },
+      { key: 'attendance_approval', label: 'Duyệt bảng chấm...', icon: 'check-decagram', route: 'Duyệt bảng chấm công', permission: 'timeAttendance', requirePermission: 'approve' },
     ],
     permissions: ['timeAttendance']
   },
@@ -490,6 +492,7 @@ const AppLayout = () => {
           <Drawer.Screen name="Quản lý loại hợp đồng" component={ContractTypeNavigator} />
           <Drawer.Screen name="Quản lý hợp đồng" component={ContractListScreen} />
           <Drawer.Screen name="Chấm công" component={AttendanceListScreen} />
+          <Drawer.Screen name="Duyệt bảng chấm công" component={AttendanceApprovalScreen} />
           <Drawer.Screen name="Quản lý lương" component={SalaryListScreen} />
           <Drawer.Screen name="Hồ sơ/CV" component={CVListScreen} />
           <Drawer.Screen name="Dự án" component={ProjectListScreen} />
