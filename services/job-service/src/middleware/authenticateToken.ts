@@ -13,18 +13,25 @@ export const authenticateToken = (
   res: Response, 
   next: NextFunction
 ): void => {
-  const token = req.headers['authorization'];
+  // Support both 'authorization' and 'Authorization' headers
+  const token = req.headers['authorization'] || req.headers['Authorization'] as string;
+  
+  console.log('🔐 [Job Auth] Authorization header:', token ? `Bearer ${token.substring(7, 20)}...` : 'NOT FOUND');
   
   if (!token) {
+    console.log('❌ [Job Auth] No token provided');
     res.status(401).json({ success: false, message: 'No token provided' });
     return;
   }
 
   try {
     const tokenValue = token.startsWith('Bearer ') ? token.substring(7) : token;
+    console.log('🔐 [Job Auth] Verifying token...');
     const decoded: any = jwt.verify(tokenValue, JWT_SECRET);
+    console.log('✅ [Job Auth] Token decoded:', { sub: decoded.sub, username: decoded.username });
     
     if (!decoded || typeof decoded !== 'object') {
+      console.log('❌ [Job Auth] Invalid token structure');
       res.status(401).json({ success: false, message: 'Invalid access token' });
       return;
     }
@@ -40,6 +47,7 @@ export const authenticateToken = (
     req.user = authData;
     next();
   } catch (error: any) {
+    console.log('❌ [Job Auth] Error:', error.name, error.message);
     if (error.name === 'TokenExpiredError') {
       res.status(401).json({ success: false, message: 'Access token expired, please refresh' });
       return;

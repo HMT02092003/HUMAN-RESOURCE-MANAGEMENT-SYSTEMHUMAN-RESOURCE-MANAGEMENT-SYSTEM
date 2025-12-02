@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Table, Button, Tooltip, ConfigProvider, Modal, message, Tag, Row, Col, Grid, Input, Typography, Select, DatePicker } from 'antd';
 import {
   PlusCircleOutlined,
@@ -33,18 +33,16 @@ interface SorterState {
 const UserTable = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [userData, setUserData] = useState<any[]>([]);
-  // Store full dataset locally for client-side search/sort
-  const [allUsers, setAllUsers] = useState<any[]>([]);
   // per-column search map. Values can be string, number, array (for ranges), etc.
   const [columnSearch, setColumnSearch] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   
-  // 💡 KHỞI TẠO SẮP XẾP MẶC ĐỊNH: ID giảm dần (mới nhất lên đầu)
+  // 💡 Sắp xếp mặc định: ID giảm dần (mới nhất lên đầu)
   const [sorter, setSorter] = useState<SorterState>({
-    field: 'id', // Hoặc 'createdAt' nếu muốn sắp xếp theo ngày tạo
-    order: 'descend' // Mới nhất (giảm dần)
+    field: 'id',
+    order: 'descend'
   });
 
   const [pagination, setPagination] = useState({
@@ -60,22 +58,62 @@ const UserTable = () => {
   const deletePer = true;
   const viewPer = true;
 
-  // Fetch the full user list once and perform search/sort locally
-  useEffect(() => {
-    fetchAllUsers();
-  }, []);
-
-  const fetchAllUsers = async () => {
+  // 🔥 Server-side: Gọi API mỗi khi thay đổi pagination, sort, hoặc filter
+  const fetchUsers = useCallback(async () => {
     setLoading(true);
     try {
-      // Use the endpoint that returns all users (no pagination) for client-side operations
-      const response = await UserService.getAllUsersAll();
-      const users = Array.isArray(response) ? response : [];
-      setAllUsers(users);
-      // initialize pagination total
-      setPagination(prev => ({ ...prev, total: users.length }));
-  // compute initial page slice
-  setUserData(applySearchSortSlice(users, columnSearch, sorter, pagination));
+      // Chuẩn bị params để gửi lên server
+      const params: any = {
+        page: pagination.current,
+        pageSize: pagination.pageSize,
+        sortField: sorter.field,
+        sortOrder: sorter.order,
+      };
+
+      // Thêm các column filters
+      Object.keys(columnSearch).forEach(key => {
+        const value = columnSearch[key];
+        if (value !== undefined && value !== null && value !== '') {
+          // Xử lý date range
+          if (Array.isArray(value) && value.length === 2) {
+            if (key === 'birthday') {
+              params.birthdayFrom = value[0];
+              params.birthdayTo = value[1];
+            } else if (key === 'startDate') {
+              params.startDateFrom = value[0];
+              params.startDateTo = value[1];
+            } else if (key === 'createdAt') {
+              params.createdAtFrom = value[0];
+              params.createdAtTo = value[1];
+            }
+          } else {
+            // Map column key to API param
+            const paramMap: Record<string, string> = {
+              'id': 'search', // ID tìm kiếm global
+              'username': 'username',
+              'fullName': 'fullName',
+              'email': 'email',
+              'phone': 'phone',
+              'gender': 'gender',
+              'status': 'status',
+              'role.name': 'search', // Role search via global
+              'department.name': 'search', // Department search via global
+              'chevron.name': 'search', // Chevron search via global
+            };
+            const paramKey = paramMap[key] || key;
+            params[paramKey] = value;
+          }
+        }
+      });
+
+      const response = await UserService.getAllUsersAll(params);
+      
+      // API trả về { results: [...], total: N, page: N, pageSize: N }
+      const users = response.results || response || [];
+      const total = response.total || users.length;
+      
+      setUserData(users);
+      setPagination(prev => ({ ...prev, total }));
     } catch (error: any) {
       const data = error?.response?.data;
       message.destroy();
@@ -83,105 +121,12 @@ const UserTable = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pagination.current, pagination.pageSize, sorter.field, sorter.order, columnSearch]);
 
-  // Helper: convert record value to searchable string (global or per-field)
-  const recordToSearchString = (record: any, field?: string) => {
-    if (!field) {
-      const parts: string[] = [];
-      parts.push(String(record.id || '').toLowerCase());
-      parts.push(String(record.username || '').toLowerCase());
-      parts.push(String(record.fullName || '').toLowerCase());
-      parts.push(String(record.email || '').toLowerCase());
-      parts.push(String(record.phone || '').toLowerCase());
-      parts.push(String(record.role?.name || '').toLowerCase());
-      parts.push(String(record.department?.name || '').toLowerCase());
-      parts.push(String(record.chevron?.name || '').toLowerCase());
-      parts.push(String(record.status || '').toLowerCase());
-      parts.push(String(record.gender || '').toLowerCase());
-      parts.push(String(record.startDate || '').toLowerCase());
-      parts.push(String(record.createdAt || '').toLowerCase());
-      return parts.join(' | ');
-    }
-    const getVal = (obj: any, f: string) => {
-      if (f === 'fullName') return (obj.fullName || '').toLowerCase();
-      if (f.includes('.')) return f.split('.').reduce((acc, k) => (acc ? acc[k] : undefined), obj);
-      return obj[f];
-    };
-    const v = getVal(record, field);
-    return (v === undefined || v === null) ? '' : String(v).toLowerCase();
-  };
-
-  // Apply search and sort and then slice for pagination
-  // data: full array, columnFilters: { field: text }
-  const applySearchSortSlice = (data: any[], columnFilters: Record<string,any>, sorterState: SorterState, pag: any) => {
-    let filtered = data;
-    const filterKeys = Object.keys(columnFilters || {}).filter(k => {
-      const v = columnFilters[k];
-      if (v === undefined || v === null) return false;
-      if (Array.isArray(v)) {
-        // for ranges or array values: include if any non-empty item exists
-        return v.length > 0 && v.some((it: any) => it !== undefined && it !== null && String(it).trim() !== '');
-      }
-      if (typeof v === 'string') return v.trim() !== '';
-      // numbers/booleans/etc. - include if not empty
-      return String(v) !== '';
-    });
-    if (filterKeys.length > 0) {
-      filtered = data.filter((r) => {
-        return filterKeys.every((k) => {
-          // special handling for date range filters
-          const filterVal = columnFilters[k];
-          if (Array.isArray(filterVal) && filterVal.length === 2 && filterVal[0] && filterVal[1]) {
-            // treat field as date-like
-            const getVal = (obj: any, f: string) => {
-              if (f.includes('.')) return f.split('.').reduce((acc, kk) => (acc ? acc[kk] : undefined), obj);
-              return obj[f];
-            };
-            const raw = getVal(r, k);
-            const time = raw ? new Date(raw).getTime() : null;
-            const start = new Date(filterVal[0]).setHours(0,0,0,0);
-            const end = new Date(filterVal[1]).setHours(23,59,59,999);
-            if (!time) return false;
-            return time >= start && time <= end;
-          }
-          // fallback: substring match
-          const val = recordToSearchString(r, k);
-          return val.includes(String(columnFilters[k] || '').toLowerCase());
-        });
-      });
-    }
-
-    // Sorting
-    if (sorterState && sorterState.field) {
-      const field = sorterState.field;
-      const order = sorterState.order;
-      filtered = [...filtered].sort((a: any, b: any) => {
-        const getVal = (obj: any, f: string) => {
-          // support nested keys like 'role.name' or array path
-          if (f.includes('.')) {
-            return f.split('.').reduce((acc, k) => (acc ? acc[k] : undefined), obj);
-          }
-          return obj[f];
-        };
-        let va = getVal(a, field);
-        let vb = getVal(b, field);
-        if (va === undefined || va === null) va = '';
-        if (vb === undefined || vb === null) vb = '';
-        // normalize dates
-        if (typeof va === 'string' && Date.parse(va)) va = new Date(va).getTime();
-        if (typeof vb === 'string' && Date.parse(vb)) vb = new Date(vb).getTime();
-        if (va < vb) return order === 'ascend' ? -1 : 1;
-        if (va > vb) return order === 'ascend' ? 1 : -1;
-        return 0;
-      });
-    }
-
-    // Pagination slice
-    const start = (pag.current - 1) * pag.pageSize;
-    const end = start + pag.pageSize;
-    return filtered.slice(start, end);
-  };
+  // 🔥 Gọi API khi các dependencies thay đổi
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
 
   const handleDelete = async () => {
     setLoading(true);
@@ -189,8 +134,8 @@ const UserTable = () => {
       await UserService.deleteMultipleUsers(selectedRowKeys as number[]);
       setSelectedRowKeys([]);
       setIsDeleteModalVisible(false);
-      // Reload full dataset after deletion
-      await fetchAllUsers();
+      // Reload sau khi xóa
+      fetchUsers();
     } catch (error: any) {
       console.error('Error deleting users:', error);
       const data = error?.response?.data;
@@ -213,36 +158,28 @@ const UserTable = () => {
     setSelectedRowKeys(newSelectedRowKeys);
   };
 
-  // 💡 CẬP NHẬT handleTableChange để lưu trạng thái sắp xếp
+  // � handleTableChange: Gọi API khi thay đổi pagination hoặc sort
   const handleTableChange = (
     newPagination: any, 
     filters: any, 
     newSorter: any
   ) => {
-    // Client-side pagination and sorting only (do NOT call API)
-    setPagination(newPagination);
+    // Cập nhật pagination
+    setPagination(prev => ({
+      ...prev,
+      current: newPagination.current,
+      pageSize: newPagination.pageSize,
+    }));
 
-    // Update sorter state used for client-side sorting
+    // Cập nhật sorter
     if (newSorter && newSorter.field) {
-      const newState = {
+      setSorter({
         field: newSorter.field,
         order: newSorter.order as 'ascend' | 'descend' | undefined,
-      };
-      setSorter(newState);
-      // Recompute displayed data
-      setUserData(applySearchSortSlice(allUsers, columnSearch, newState, newPagination));
-      setPagination(prev => ({ ...prev, total: (allUsers || []).filter((r:any) => {
-        if (Object.keys(columnSearch || {}).length === 0) return true;
-        return Object.keys(columnSearch || {}).filter(k => columnSearch[k]).every(k => recordToSearchString(r, k).includes(columnSearch[k].toLowerCase()));
-      }).length }));
-    } else {
-      const defaultState: SorterState = { field: 'id', order: 'descend' };
-      setSorter(defaultState);
-      setUserData(applySearchSortSlice(allUsers, columnSearch, defaultState, newPagination));
-      setPagination(prev => ({ ...prev, total: (allUsers || []).filter((r:any) => {
-        if (Object.keys(columnSearch || {}).length === 0) return true;
-        return Object.keys(columnSearch || {}).filter(k => columnSearch[k]).every(k => recordToSearchString(r, k).includes(columnSearch[k].toLowerCase()));
-      }).length }));
+      });
+    } else if (!newSorter || !newSorter.order) {
+      // Reset to default sort when sort is cleared
+      setSorter({ field: 'id', order: 'descend' });
     }
   };
 
@@ -253,6 +190,91 @@ const UserTable = () => {
       disabled: record.id === 1,
     }),
   };
+
+  // 🔥 handleColumnSearch: Cập nhật filter và reset về trang 1
+  function handleColumnSearch(value: any, dataIndex: string) {
+    const newFilters = { ...columnSearch };
+    if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
+      delete newFilters[dataIndex];
+    } else {
+      newFilters[dataIndex] = value;
+    }
+    setColumnSearch(newFilters);
+    // Reset về trang 1 khi filter thay đổi
+    setPagination(prev => ({ ...prev, current: 1 }));
+  }
+
+  function getColumnSearchProps(dataIndex: string, opts?: { type?: 'input' | 'select' | 'dateRange'; options?: { value: any; label: string }[]; placeholder?: string }) {
+    const type = opts?.type || 'input';
+    const placeholder = opts?.placeholder || dataIndex;
+    return {
+      filteredValue: columnSearch[dataIndex] ? (Array.isArray(columnSearch[dataIndex]) ? [columnSearch[dataIndex]] : [columnSearch[dataIndex]]) : null,
+      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: any) => (
+        <div style={{ padding: 8 }}>
+          {type === 'select' ? (
+            <Select
+              placeholder={`Chọn ${placeholder}`}
+              value={(selectedKeys && selectedKeys[0]) ?? columnSearch[dataIndex] ?? undefined}
+              onChange={(v) => setSelectedKeys(v !== undefined && v !== null ? [v] : [])}
+              options={opts?.options?.map(o => ({ value: o.value, label: o.label }))}
+              style={{ width: 188, marginBottom: 8, display: 'block' }}
+              allowClear
+              onSelect={() => {
+                const val = (selectedKeys && selectedKeys[0]) ?? columnSearch[dataIndex] ?? undefined;
+                handleColumnSearch(val, dataIndex);
+                confirm();
+              }}
+            />
+          ) : type === 'dateRange' ? (
+            <DatePicker.RangePicker
+              value={(selectedKeys && selectedKeys[0]) ? [dayjs(selectedKeys[0][0]), dayjs(selectedKeys[0][1])] : (columnSearch[dataIndex] ? [dayjs(columnSearch[dataIndex][0]), dayjs(columnSearch[dataIndex][1])] : undefined)}
+              onChange={(vals: any) => {
+                if (!vals || vals.length === 0) {
+                  setSelectedKeys([]);
+                  return;
+                }
+                const start = vals[0] ? vals[0].toISOString() : null;
+                const end = vals[1] ? vals[1].toISOString() : null;
+                setSelectedKeys(start && end ? [[start, end]] : []);
+                if (start && end) {
+                  handleColumnSearch([start, end], dataIndex);
+                  confirm();
+                }
+              }}
+              style={{ width: 250, marginBottom: 8, display: 'block' }}
+            />
+          ) : (
+            <Input
+              placeholder={`Tìm ${placeholder}`}
+              value={(selectedKeys && selectedKeys[0]) ?? columnSearch[dataIndex] ?? ''}
+              onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
+              onPressEnter={() => { handleColumnSearch((selectedKeys && selectedKeys[0]) || '', dataIndex); confirm(); }}
+              style={{ width: 188, marginBottom: 8, display: 'block' }}
+            />
+          )}
+          <Button
+            type="primary"
+            size="small"
+            onClick={() => { handleColumnSearch((selectedKeys && selectedKeys[0]) || '', dataIndex); confirm(); }}
+          >
+            Tìm
+          </Button>
+          <Button
+            size="small"
+            onClick={() => { 
+              clearFilters && clearFilters(); 
+              handleColumnSearch('', dataIndex); 
+            }}
+            style={{ marginLeft: 8 }}
+          >
+            Xóa
+          </Button>
+        </div>
+      ),
+      filterIcon: (filtered: any) => <SearchOutlined style={{ color: columnSearch[dataIndex] ? '#1890ff' : undefined }} />,
+      onFilter: () => true, // Server-side filtering
+    };
+  }
 
   const columns = [
     {
@@ -476,108 +498,6 @@ const UserTable = () => {
       ),
     },
   ];
-
-  // Per-column search helpers (function declarations so they are available to column definitions above)
-  function handleColumnSearch(value: any, dataIndex: string) {
-    const newFilters = { ...(columnSearch || {}), [dataIndex]: value };
-    setColumnSearch(newFilters);
-    const newPag = { ...pagination, current: 1 };
-    setPagination(newPag);
-    setUserData(applySearchSortSlice(allUsers, newFilters, sorter, newPag));
-    setPagination(prev => ({ ...prev, total: (allUsers || []).filter((r:any) => {
-      const keys = Object.keys(newFilters).filter(k => newFilters[k]);
-      if (keys.length === 0) return true;
-      return keys.every(k => {
-        const filterVal = newFilters[k];
-        if (Array.isArray(filterVal) && filterVal.length === 2 && filterVal[0] && filterVal[1]) {
-          const getVal = (obj: any, f: string) => {
-            if (f.includes('.')) return f.split('.').reduce((acc, kk) => (acc ? acc[kk] : undefined), obj);
-            return obj[f];
-          };
-          const raw = getVal(r, k);
-          const time = raw ? new Date(raw).getTime() : null;
-          const start = new Date(filterVal[0]).setHours(0,0,0,0);
-          const end = new Date(filterVal[1]).setHours(23,59,59,999);
-          if (!time) return false;
-          return time >= start && time <= end;
-        }
-        return recordToSearchString(r, k).includes(String(filterVal).toLowerCase());
-      });
-    }).length }));
-  }
-
-  function getColumnSearchProps(dataIndex: string, opts?: { type?: 'input' | 'select' | 'dateRange'; options?: { value: any; label: string }[]; placeholder?: string }) {
-    const type = opts?.type || 'input';
-    const placeholder = opts?.placeholder || dataIndex;
-    return {
-      // Keep filteredValue in sync with our columnSearch state so the UI shows current filter
-      filteredValue: columnSearch[dataIndex] ? (Array.isArray(columnSearch[dataIndex]) ? [columnSearch[dataIndex]] : [columnSearch[dataIndex]]) : null,
-      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: any) => (
-        <div style={{ padding: 8 }}>
-          {type === 'select' ? (
-            <Select
-              placeholder={`Chọn ${placeholder}`}
-              value={(selectedKeys && selectedKeys[0]) ?? columnSearch[dataIndex] ?? undefined}
-              onChange={(v) => setSelectedKeys(v !== undefined && v !== null ? [v] : [])}
-              options={opts?.options?.map(o => ({ value: o.value, label: o.label }))}
-              style={{ width: 188, marginBottom: 8, display: 'block' }}
-              allowClear
-              onSelect={() => {
-                // apply filter immediately when selecting
-                const val = (selectedKeys && selectedKeys[0]) ?? columnSearch[dataIndex] ?? undefined;
-                handleColumnSearch(val, dataIndex);
-                confirm();
-              }}
-            />
-          ) : type === 'dateRange' ? (
-            <DatePicker.RangePicker
-              value={(selectedKeys && selectedKeys[0]) ? [dayjs(selectedKeys[0][0]), dayjs(selectedKeys[0][1])] : (columnSearch[dataIndex] ? [dayjs(columnSearch[dataIndex][0]), dayjs(columnSearch[dataIndex][1])] : undefined)}
-              onChange={(vals: any) => {
-                if (!vals || vals.length === 0) {
-                  setSelectedKeys([]);
-                  return;
-                }
-                const start = vals[0] ? vals[0].toISOString() : null;
-                const end = vals[1] ? vals[1].toISOString() : null;
-                setSelectedKeys(start && end ? [[start, end]] : []);
-                if (start && end) {
-                  // apply immediately
-                  handleColumnSearch([start, end], dataIndex);
-                  confirm();
-                }
-              }}
-              style={{ width: 250, marginBottom: 8, display: 'block' }}
-            />
-          ) : (
-            <Input
-              placeholder={`Tìm ${placeholder}`}
-              value={(selectedKeys && selectedKeys[0]) ?? columnSearch[dataIndex] ?? ''}
-              onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-              onPressEnter={() => { handleColumnSearch((selectedKeys && selectedKeys[0]) || columnSearch[dataIndex] || '', dataIndex); confirm(); }}
-              style={{ width: 188, marginBottom: 8, display: 'block' }}
-            />
-          )}
-          <Button
-            type="primary"
-            size="small"
-            onClick={() => { handleColumnSearch((selectedKeys && selectedKeys[0]) || columnSearch[dataIndex] || '', dataIndex); confirm(); }}
-          >
-            Tìm
-          </Button>
-          <Button
-            size="small"
-            onClick={() => { clearFilters && clearFilters(); handleColumnSearch('', dataIndex); }}
-            style={{ marginLeft: 8 }}
-          >
-            Xóa
-          </Button>
-        </div>
-      ),
-      filterIcon: (filtered: any) => <SearchOutlined style={{ color: columnSearch[dataIndex] ? '#1890ff' : undefined }} />,
-      // We override onFilter because filtering done client-side by applySearchSortSlice
-      onFilter: (_: any, __: any) => true,
-    };
-  }
 
   // column-specific search handled via getColumnSearchProps and handleColumnSearch
 

@@ -133,11 +133,43 @@ const UserService = {
     }
   },
 
-  // Lấy tất cả users không phân trang (một lần) - useful for selects
-  getAllUsersAll: async (params?: { scope?: string }) => {
+  // Lấy danh sách users với server-side pagination, sorting và filtering
+  // Dùng cho bảng quản lý users
+  getAllUsersAll: async (params?: {
+    scope?: string;
+    page?: number;
+    pageSize?: number;
+    sortField?: string;
+    sortOrder?: 'ascend' | 'descend';
+    search?: string;
+    // Column filters
+    username?: string;
+    fullName?: string;
+    email?: string;
+    phone?: string;
+    gender?: string;
+    status?: string;
+    roleId?: number;
+    departmentId?: number;
+    chevronId?: number;
+    startDateFrom?: string;
+    startDateTo?: string;
+    createdAtFrom?: string;
+    createdAtTo?: string;
+  }) => {
     try {
-      const response = await api.get('/api/auth/users/all', { params: { ...(params || {}), _t: Date.now() } });
-      return response.data; // array of users
+      const response = await api.get('/api/auth/users/all', { 
+        params: { 
+          ...(params || {}), 
+          _t: Date.now() 
+        },
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+      return response.data; // { results: [...], total: N, page: N, pageSize: N }
     } catch (error) {
       throw error;
     }

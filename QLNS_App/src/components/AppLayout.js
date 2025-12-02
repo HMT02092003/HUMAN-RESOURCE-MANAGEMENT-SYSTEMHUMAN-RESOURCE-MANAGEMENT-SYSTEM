@@ -22,8 +22,14 @@ import AttendanceListScreen from '../../screens/attendance/AttendanceListScreen'
 import AttendanceApprovalScreen from '../../screens/attendance/AttendanceApprovalScreen';
 import SettingsScreen from '../../screens/settings/SettingsScreen';
 import SalaryListScreen from '../../screens/salary/SalaryListScreen';
+import AllowanceListScreen from '../../screens/salary/AllowanceListScreen';
+import AllowanceFormScreen from '../../screens/salary/AllowanceFormScreen';
+import SalaryManagementScreen from '../../screens/salary/SalaryManagementScreen';
+import MyPayslipScreen from '../../screens/salary/MyPayslipScreen';
 import CVListScreen from '../../screens/cvs/CVListScreen';
 import ProjectListScreen from '../../screens/projects/ProjectListScreen';
+import ProjectDetailScreen from '../../screens/projects/ProjectDetailScreen';
+import ProjectFormScreen from '../../screens/projects/ProjectFormScreen';
 import ProfileScreen from '../../screens/profile/ProfileScreen';
 
 // Stack Navigators
@@ -36,12 +42,31 @@ import { ShiftRegistrationNavigator, ShiftApprovalNavigator, ShiftConfigurationN
 
 const Drawer = createDrawerNavigator();
 
+// Mapping các màn hình con về màn hình cha tương ứng
+const backNavigationMap = {
+  'Chi tiết dự án': 'Dự án',
+  'Tạo dự án': 'Dự án',
+  'Sửa dự án': 'Dự án',
+  'Tạo phụ cấp': 'Cấu hình phụ cấp',
+  'Sửa phụ cấp': 'Cấu hình phụ cấp',
+  'UserDetail': 'Quản lý người dùng',
+  'UserForm': 'Quản lý người dùng',
+  'UserCreate': 'Quản lý người dùng',
+  'UserEdit': 'Quản lý người dùng',
+  'Profile': 'Dashboard',
+};
+
 // Header Buttons Components - Isolated to avoid Reanimated conflicts
-const HeaderBackButton = ({ navigation }) => (
+const HeaderBackButton = ({ navigation, routeName }) => (
   <TouchableOpacity
     onPress={() => {
-      console.log('⬅️ [Navigation] Back button pressed');
-      navigation.goBack();
+      console.log('⬅️ [Navigation] Back button pressed from:', routeName);
+      const targetScreen = backNavigationMap[routeName];
+      if (targetScreen) {
+        navigation.navigate(targetScreen);
+      } else {
+        navigation.goBack();
+      }
     }}
     style={{ paddingHorizontal: 16, paddingVertical: 8 }}
     activeOpacity={0.7}
@@ -122,7 +147,9 @@ const BASE_MENU_ITEMS = [
     label: 'Quản lý lương',
     icon: 'cash-multiple',
     children: [
-      { key: 'salary', label: 'Quản lý lương', icon: 'cash', route: 'Quản lý lương', permission: 'salaries' },
+      { key: 'my_payslip', label: 'Bảng lương cá nhân', icon: 'cash', route: 'Bảng lương cá nhân' },
+      { key: 'salary_management', label: 'Quản lý bảng lương', icon: 'file-document-multiple', route: 'Quản lý bảng lương', permission: 'salaries' },
+      { key: 'allowance_config', label: 'Cấu hình phụ cấp', icon: 'currency-usd', route: 'Cấu hình phụ cấp', permission: 'salary_allowances' },
     ],
     permissions: ['salaries', 'salary_allowances', 'personal_salary_info'],
     requireAllPermissions: false
@@ -132,8 +159,8 @@ const BASE_MENU_ITEMS = [
     label: 'Quản lý công việc',
     icon: 'briefcase',
     children: [
-      { key: 'cv', label: 'Hồ sơ/CV', icon: 'file-account', route: 'Hồ sơ/CV' },
       { key: 'projects', label: 'Dự án', icon: 'folder-multiple', route: 'Dự án' },
+      { key: 'cv', label: 'Hồ sơ/CV', icon: 'file-account', route: 'Hồ sơ/CV' },
     ]
   },
   { key: 'settings', label: 'Cài đặt hệ thống', icon: 'cog', route: 'Cài đặt hệ thống', permission: 'settings' },
@@ -447,7 +474,7 @@ const AppLayout = () => {
           )}
           screenOptions={({ navigation, route }) => {
             // Check if this is a hidden screen (detail/form screens)
-            const isHiddenScreen = ['UserDetail', 'UserForm', 'UserCreate', 'UserEdit', 'Profile'].includes(route.name);
+            const isHiddenScreen = ['UserDetail', 'UserForm', 'UserCreate', 'UserEdit', 'Profile', 'Tạo phụ cấp', 'Sửa phụ cấp', 'Chi tiết dự án', 'Tạo dự án', 'Sửa dự án'].includes(route.name);
 
             return {
               drawerType: isTablet ? 'permanent' : 'front',
@@ -466,7 +493,7 @@ const AppLayout = () => {
               },
               // Use back button for hidden screens, menu button for main screens
               headerLeft: isHiddenScreen
-                ? () => <HeaderBackButton navigation={navigation} />
+                ? () => <HeaderBackButton navigation={navigation} routeName={route.name} />
                 : () => <HeaderMenuButton navigation={navigation} />,
               headerRight: null,
               swipeEnabled: !isTablet,
@@ -494,8 +521,16 @@ const AppLayout = () => {
           <Drawer.Screen name="Chấm công" component={AttendanceListScreen} />
           <Drawer.Screen name="Duyệt bảng chấm công" component={AttendanceApprovalScreen} />
           <Drawer.Screen name="Quản lý lương" component={SalaryListScreen} />
+          <Drawer.Screen name="Bảng lương cá nhân" component={MyPayslipScreen} />
+          <Drawer.Screen name="Quản lý bảng lương" component={SalaryManagementScreen} />
+          <Drawer.Screen name="Cấu hình phụ cấp" component={AllowanceListScreen} />
+          <Drawer.Screen name="Tạo phụ cấp" component={AllowanceFormScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Tạo phụ cấp' }} />
+          <Drawer.Screen name="Sửa phụ cấp" component={AllowanceFormScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Sửa phụ cấp' }} />
           <Drawer.Screen name="Hồ sơ/CV" component={CVListScreen} />
           <Drawer.Screen name="Dự án" component={ProjectListScreen} />
+          <Drawer.Screen name="Chi tiết dự án" component={ProjectDetailScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Chi tiết dự án' }} />
+          <Drawer.Screen name="Tạo dự án" component={ProjectFormScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Tạo dự án' }} />
+          <Drawer.Screen name="Sửa dự án" component={ProjectFormScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Sửa dự án' }} />
           <Drawer.Screen name="Cài đặt hệ thống" component={SettingsScreen} />
           <Drawer.Screen name="Profile" component={ProfileScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Hồ sơ cá nhân' }} />
         </Drawer.Navigator>

@@ -285,34 +285,140 @@ export const getAllUsers = async (req: any, res: Response) => {
 }
 
 /**
- * Get all users without pagination (optionally filtered by scope)
- * Returns an array of user objects instead of a paginated result.
+ * Get all users with server-side pagination, sorting, and filtering
+ * Query params:
+ *   - page: page number (1-based, default 1)
+ *   - pageSize: items per page (default 10)
+ *   - sortField: field to sort by (e.g., 'id', 'fullName', 'email', 'createdAt')
+ *   - sortOrder: 'ascend' | 'descend' (default 'descend')
+ *   - search: global search keyword
+ *   - username, fullName, email, phone, gender, status, roleId, departmentId, chevronId: column filters
+ *   - startDateFrom, startDateTo: date range for startDate
+ *   - createdAtFrom, createdAtTo: date range for createdAt
  */
 export const getAllUsersAll = async (req: any, res: Response) => {
   try {
     const { auth } = req as any;
     const scope = req.query.scope || 'users';
 
+    // Pagination params
+    const rawPage = req.query.page !== undefined ? parseInt(req.query.page as string, 10) : 1;
+    const page = Math.max(0, (isNaN(rawPage) ? 1 : rawPage) - 1); // Convert to 0-based
+    const pageSize = parseInt(req.query.pageSize as string, 10) || 10;
+
+    // Sort params
+    const sortField = (req.query.sortField as string) || 'id';
+    const sortOrder = req.query.sortOrder === 'ascend' ? 'asc' : 'desc';
+
+    // Filter params
+    const search = (req.query.search as string || '').trim();
+    const usernameFilter = (req.query.username as string || '').trim();
+    const fullNameFilter = (req.query.fullName as string || '').trim();
+    const emailFilter = (req.query.email as string || '').trim();
+    const phoneFilter = (req.query.phone as string || '').trim();
+    const genderFilter = req.query.gender as string;
+    const statusFilter = req.query.status as string;
+    const roleIdFilter = req.query.roleId ? parseInt(req.query.roleId as string, 10) : null;
+    const departmentIdFilter = req.query.departmentId ? parseInt(req.query.departmentId as string, 10) : null;
+    const chevronIdFilter = req.query.chevronId ? parseInt(req.query.chevronId as string, 10) : null;
+    const startDateFrom = req.query.startDateFrom as string;
+    const startDateTo = req.query.startDateTo as string;
+    const createdAtFrom = req.query.createdAtFrom as string;
+    const createdAtTo = req.query.createdAtTo as string;
+
     // Determine which user IDs are visible under the provided scope
     let userIds: number[] = await UserModel.checkScope(scope, req);
-    console.log('getAllUsersAll - userIds from checkScope:', userIds, 'length:', userIds.length);
+    console.log('getAllUsersAll - userIds from checkScope:', userIds.length);
 
-    // Fetch users (no pagination)
-    let users: any[] = await UserModel.query()
+    // Build query
+    let query = UserModel.query()
       .select(['users.*'])
       .whereIn('users.id', userIds)
       .whereNot('users.id', auth?.id)
-      .where('users.status', 1)
-      .withGraphJoined('[role]');
+      .where('users.status', 1);
 
-    console.log('getAllUsersAll - users after query:', users.length);
+    // Apply global search (OR across multiple fields)
+    if (search) {
+      query = query.where(function() {
+        this.where('users.username', 'like', `%${search}%`)
+          .orWhere('users.fullName', 'like', `%${search}%`)
+          .orWhere('users.email', 'like', `%${search}%`)
+          .orWhere('users.phone', 'like', `%${search}%`);
+      });
+    }
 
-    // Enrich with department and chevron details (reuse same logic as paginated endpoint)
+    // Apply column-specific filters (AND)
+    if (usernameFilter) {
+      query = query.where('users.username', 'like', `%${usernameFilter}%`);
+    }
+    if (fullNameFilter) {
+      query = query.where('users.fullName', 'like', `%${fullNameFilter}%`);
+    }
+    if (emailFilter) {
+      query = query.where('users.email', 'like', `%${emailFilter}%`);
+    }
+    if (phoneFilter) {
+      query = query.where('users.phone', 'like', `%${phoneFilter}%`);
+    }
+    if (genderFilter) {
+      query = query.where('users.gender', genderFilter);
+    }
+    if (statusFilter) {
+      query = query.where('users.status', statusFilter);
+    }
+    if (roleIdFilter) {
+      query = query.where('users.roleId', roleIdFilter);
+    }
+    if (departmentIdFilter) {
+      query = query.where('users.departmentId', departmentIdFilter);
+    }
+    if (chevronIdFilter) {
+      query = query.where('users.chevronId', chevronIdFilter);
+    }
+    if (startDateFrom) {
+      query = query.where('users.startDate', '>=', startDateFrom);
+    }
+    if (startDateTo) {
+      query = query.where('users.startDate', '<=', startDateTo);
+    }
+    if (createdAtFrom) {
+      query = query.where('users.createdAt', '>=', createdAtFrom);
+    }
+    if (createdAtTo) {
+      query = query.where('users.createdAt', '<=', createdAtTo);
+    }
+
+    // Apply sorting
+    // Map sortField to actual DB column (handle nested fields)
+    const sortFieldMap: Record<string, string> = {
+      'id': 'users.id',
+      'username': 'users.username',
+      'fullName': 'users.fullName',
+      'email': 'users.email',
+      'phone': 'users.phone',
+      'gender': 'users.gender',
+      'status': 'users.status',
+      'startDate': 'users.startDate',
+      'createdAt': 'users.createdAt',
+      'birthday': 'users.birthday',
+      'role.name': 'role.name',
+    };
+    const dbSortField = sortFieldMap[sortField] || 'users.id';
+    query = query.orderBy(dbSortField, sortOrder);
+
+    // Execute with pagination and join role
+    const result: any = await query
+      .withGraphJoined('[role]')
+      .page(page, pageSize);
+
+    console.log('getAllUsersAll - query result:', result.results?.length, 'total:', result.total);
+
+    // Enrich with department and chevron details
     const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
     const headers: any = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const usersWithDetails = await Promise.all(users.map(async (user: any) => {
+    const usersWithDetails = await Promise.all((result.results || []).map(async (user: any) => {
       let department = null;
       let chevron = null;
       try {
@@ -338,7 +444,13 @@ export const getAllUsersAll = async (req: any, res: Response) => {
       };
     }));
 
-    return res.status(200).json(usersWithDetails);
+    // Return paginated response
+    return res.status(200).json({
+      results: usersWithDetails,
+      total: result.total,
+      page: page + 1, // Return 1-based page
+      pageSize,
+    });
   } catch (error) {
     console.error("Error fetching users (all):", error);
     return res.status(500).json({
