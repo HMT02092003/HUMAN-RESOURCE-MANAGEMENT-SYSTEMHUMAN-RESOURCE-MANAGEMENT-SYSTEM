@@ -206,22 +206,22 @@ const Roles: React.FC = () => {
         <Col xs={24}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <Popconfirm
-                title="Bạn có chắc chắn muốn xóa các vai trò đã chọn?"
-                onConfirm={handleDelete}
-                okText="Có"
-                cancelText="Không"
-                disabled={selectedRowKeys.length === 0}
-              >
-                <Button
-                  type="primary"
-                  danger
-                  icon={<DeleteOutlined />}
-                  disabled={selectedRowKeys.length === 0}
+              {selectedRowKeys.length > 0 && (
+                <Popconfirm
+                  title="Bạn có chắc chắn muốn xóa các vai trò đã chọn?"
+                  onConfirm={handleDelete}
+                  okText="Có"
+                  cancelText="Không"
                 >
-                  Xóa đã chọn
-                </Button>
-              </Popconfirm>
+                  <Button
+                    type="primary"
+                    danger
+                    icon={<DeleteOutlined />}
+                  >
+                    Xóa đã chọn
+                  </Button>
+                </Popconfirm>
+              )}
 
               <Button
                 onClick={() => {

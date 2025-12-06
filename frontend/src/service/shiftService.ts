@@ -216,6 +216,19 @@ export const getShiftStatusColor = (status: string): string => {
   return colors[status] || 'default';
 };
 
+// ==================== HOLIDAYS APIs ====================
+
+/**
+ * Lấy danh sách ngày lễ
+ */
+export const getHolidays = async (year?: number, month?: number) => {
+  let url = '/api/holidays';
+  if (year && month) {
+    url += `?year=${year}&month=${month}`;
+  }
+  return apiService.get(url);
+};
+
 export default {
   // Configuration
   getAllShiftConfigurations,
@@ -242,6 +255,9 @@ export default {
   getSchedulesForApproval,
   bulkApproveSchedules,
   approveMonthSchedules,
+  
+  // Holidays
+  getHolidays,
   
   // Helpers
   SHIFT_STATUS,

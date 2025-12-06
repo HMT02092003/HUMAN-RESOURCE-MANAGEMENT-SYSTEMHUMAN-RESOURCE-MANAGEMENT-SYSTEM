@@ -367,7 +367,7 @@ export const bulkCalculateMonthly = async (req: Request, res: Response) => {
  * API: Cập nhật chấm công từ đơn quên check in/out
  * POST /api/attendance/update-forgot-check
  * Body: { userId, forgotDate, forgotTime, forgotType }
- * 
+ *
  * Flow:
  * 1. Cập nhật checkInTime hoặc checkOutTime trong time_attendances
  * 2. Tính toán lại các chỉ số công cho ngày đó (giống recordAttendance)
@@ -415,23 +415,23 @@ export const updateForgotCheck = async (req: Request, res: Response) => {
     if (attendanceRecord) {
       // Cập nhật bản ghi hiện có
       console.log(`📝 [updateForgotCheck] Updating existing record for user ${userId} on ${forgotDate}`);
-      
+
       const updateData: any = {
         updated_at: new Date().toISOString()
       };
-      
+
       if (forgotType === 'check-in') {
         updateData.checkInTime = fullTimestamp;
       } else {
         updateData.checkOutTime = fullTimestamp;
       }
-      
+
       record = await TimeAttendanceModel.query()
         .patchAndFetchById(attendanceRecord.id, updateData);
     } else {
       // Tạo bản ghi mới nếu chưa tồn tại
       console.log(`📝 [updateForgotCheck] Creating new record for user ${userId} on ${forgotDate}`);
-      
+
       const newRecordData: any = {
         userId,
         date: forgotDate,

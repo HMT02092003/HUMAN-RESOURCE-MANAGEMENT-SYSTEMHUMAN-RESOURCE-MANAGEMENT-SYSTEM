@@ -32,14 +32,18 @@ import {
   WarningOutlined,
   EnvironmentOutlined,
   FileTextOutlined,
-  InfoCircleOutlined
+  InfoCircleOutlined,
+  ScheduleOutlined
 } from '@ant-design/icons';
 import { attendanceService, AttendanceData, MonthlyStats, MonthlyAttendanceDetailResponse, DailyAttendanceDetail } from '@/service/attendanceService';
+import SettingsService from '@/service/settingsService';
+import shiftService from '@/service/shiftService';
 import Cookies from 'js-cookie';
 import { getDecodedToken } from '@/utils/decode-token';
 import { useSearchParams } from 'next/navigation';
 import constants from '@/config/constant';
 import './penalty-styles.css';
+import MonthlyStatsCard from './MonthlyStatsCard';
 
 // Configure dayjs plugins once
 dayjs.extend(localeData);
@@ -85,6 +89,21 @@ const AttendanceSimplePage = () => {
     totalPenalty: 0
   });
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  
+  // OT rate từ settings (mặc định 1.5)
+  const [otRate, setOtRate] = useState<number>(1.5);
+  
+  // Shifts và schedules cho hiển thị lịch ca
+  const [shifts, setShifts] = useState<any[]>([]);
+  const [schedules, setSchedules] = useState<any[]>([]);
+  const defaultShift = { id: 1, name: 'Ca hành chính', start_time: '08:00', end_time: '17:00' };
+
+  // Handler để mở modal chi tiết ngày
+  const handleDateClick = (date: Date) => {
+    setSelectedDate(date);
+    setDetailModalVisible(true);
+  };
 
   // Kiểm tra xem có phải quản lý đang xem chấm công của nhân viên không
   const isManagerViewing = !!userIdFromUrl; // Có userId trong URL = quản lý đang xem
@@ -138,6 +157,56 @@ const AttendanceSimplePage = () => {
       }
     });
   };
+
+  // Fetch OT rate từ settings
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const settings = await SettingsService.getAllSettings();
+        // Try OvertimeRateInUnits first (from attendance DB), then OvertimeRate
+        const otSetting = settings.OvertimeRateInUnits || settings.OvertimeRate;
+        if (otSetting && otSetting.rate) {
+          setOtRate(otSetting.rate);
+          console.log('📊 OT Rate loaded:', otSetting.rate);
+        }
+      } catch (error) {
+        console.error('Error fetching OT rate settings:', error);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  // Fetch shifts và schedules
+  useEffect(() => {
+    const fetchShiftsAndSchedules = async () => {
+      try {
+        // Fetch tất cả ca làm việc
+        const shiftsRes = await shiftService.getAllShiftConfigurations();
+        if (shiftsRes.data?.success) {
+          setShifts(shiftsRes.data.data);
+        }
+
+        // Fetch lịch đăng ký ca của user (chỉ lấy approved)
+        const currentYear = currentDate.getFullYear();
+        const currentMonth = currentDate.getMonth() + 1;
+        const fromDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
+        const toDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${new Date(currentYear, currentMonth, 0).getDate()}`;
+        
+        const schedulesRes = await shiftService.getMyShiftRegistrations({
+          status: 'approved',
+          fromDate,
+          toDate
+        });
+        if (schedulesRes.data?.success) {
+          setSchedules(schedulesRes.data.data);
+          console.log('📅 Schedules loaded:', schedulesRes.data.data);
+        }
+      } catch (error) {
+        console.error('Error fetching shifts/schedules:', error);
+      }
+    };
+    fetchShiftsAndSchedules();
+  }, [currentDate]);
 
   // Lấy dữ liệu chấm công từ API
   useEffect(() => {
@@ -198,6 +267,7 @@ const AttendanceSimplePage = () => {
             totalOvertimePay: monthlyStats.totalOvertimePay ?? monthlyStats.totalOvertimeSalary ?? 0,
             totalWorkingUnits: monthlyStats.totalWorkingUnits ?? monthlyStats.totalWorkingUnits ?? 0,
             totalOtWorkingUnits: monthlyStats.totalOtWorkingUnits ?? monthlyStats.totalOtWorkingUnits ?? 0,
+            totalEffectiveOtWorkingUnits: monthlyStats.totalEffectiveOtWorkingUnits ?? 0,
             totalLateMinutes: monthlyStats.totalLateMinutes ?? monthlyStats.totalLateMinutes ?? 0,
             totalEarlyLeaveMinutes: monthlyStats.totalEarlyLeaveMinutes ?? monthlyStats.totalEarlyLeaveMinutes ?? 0,
             unauthorizedAbsenceDays: monthlyStats.unauthorizedAbsenceDays ?? monthlyStats.unauthorizedAbsenceDays ?? 0,
@@ -347,6 +417,32 @@ const AttendanceSimplePage = () => {
     }
     return map;
   }, [monthlyDetail]);
+
+  // Map lịch đăng ký ca theo ngày
+  const scheduleMap = useMemo(() => {
+    const map = new Map<string, any>();
+    schedules.forEach((schedule) => {
+      const dateKey = dayjs(schedule.date).format('YYYY-MM-DD');
+      map.set(dateKey, schedule);
+    });
+    console.log(`📅 scheduleMap created with ${map.size} entries`);
+    return map;
+  }, [schedules]);
+
+  // Hàm lấy ca làm việc cho ngày
+  const getShiftForDate = (dateStr: string) => {
+    const schedule = scheduleMap.get(dateStr);
+    if (schedule) {
+      // Có đăng ký ca -> trả về thông tin ca
+      return {
+        name: schedule.shift_name,
+        start_time: schedule.start_time?.substring(0, 5),
+        end_time: schedule.end_time?.substring(0, 5)
+      };
+    }
+    // Mặc định là ca hành chính
+    return defaultShift;
+  };
 
   // Helper: Get cell style based on status
   const getCellStyle = (dailyDetail: DailyAttendanceDetail | undefined, isCurrentMonth: boolean) => {
@@ -587,11 +683,11 @@ const AttendanceSimplePage = () => {
                 }
 
                 return (
-                  <div className="calendar-cell-content" onClick={() => setSelectedDate(date)}>
+                  <div className="calendar-cell-content" onClick={() => handleDateClick(date)}>
                     {/* ✨ Ưu tiên hiển thị: Công tác > Nghỉ phép > Nghỉ không phép > Chấm công > Tên ngày lễ (nếu không có gì) */}
                     {dailyDetail && dailyDetail.status === 'business_trip' ? (
                       // Công tác: chữ tím (nền xanh nếu là ngày lễ)
-                      <div style={{
+                <div style={{
                         textAlign: 'center',
                         padding: '2px',
                         fontSize: isMobile ? 9 : 11,
@@ -599,10 +695,10 @@ const AttendanceSimplePage = () => {
                         fontWeight: 500
                       }}>
                         Công tác
-                      </div>
+                </div>
                     ) : dailyDetail && dailyDetail.status === 'approved_leave' ? (
                       // Nghỉ phép: chữ vàng cam (nền xanh nếu là ngày lễ)
-                      <div style={{
+                <div style={{
                         textAlign: 'center',
                         padding: '2px',
                         fontSize: isMobile ? 9 : 11,
@@ -610,10 +706,10 @@ const AttendanceSimplePage = () => {
                         fontWeight: 500
                       }}>
                         Nghỉ phép
-                      </div>
+                </div>
                     ) : dailyDetail && dailyDetail.status === 'absent' && isPastOrToday ? (
                       // Nghỉ không phép: chỉ hiển thị cho ngày <= hôm nay
-                      <div style={{
+                <div style={{
                         textAlign: 'center',
                         padding: '2px',
                         fontSize: isMobile ? 9 : 11,
@@ -621,22 +717,22 @@ const AttendanceSimplePage = () => {
                         fontWeight: 500
                       }}>
                         Nghỉ
-                      </div>
+                </div>
                     ) : attendance ? (
                       // Có chấm công: hiển thị giờ vào - giờ ra (nền xanh nếu là ngày lễ)
-                      <div className="calendar-cell-info">
-                        {attendance.overtime > 0 && (
-                          <div style={{ color: '#52c41a', fontSize: isMobile ? 9 : 11, fontWeight: 'bold' }}>
-                            +{attendance.overtime}
+                <div className="calendar-cell-info">
+                        {(attendance.effectiveOtWorkingUnit > 0 || attendance.otWorkingUnit > 0 || attendance.overtime > 0) && (
+                          <div style={{ color: '#d97706', fontSize: isMobile ? 9 : 11, fontWeight: 'bold' }}>
+                            +{(attendance.effectiveOtWorkingUnit || (attendance.otWorkingUnit || (attendance.overtime / 8)) * otRate).toFixed(2)}
                           </div>
                         )}
                         <div style={{ color: hasTimePenalty ? '#ff4d4f' : '#666', fontSize: isMobile ? 9 : 11 }}>
                           {attendance.checkInTime || '--:--'} - {attendance.checkOutTime || '--:--'}
                         </div>
-                      </div>
+                </div>
                     ) : isHoliday ? (
                       // ✨ Ngày lễ không có chấm công/công tác/nghỉ phép → hiển thị tên ngày lễ
-                      <div style={{
+                <div style={{
                         textAlign: 'center',
                         padding: '2px',
                         fontSize: isMobile ? 9 : 11,
@@ -644,7 +740,7 @@ const AttendanceSimplePage = () => {
                         fontWeight: 600
                       }}>
                         {holidayName}
-                      </div>
+                </div>
                     ) : null}
                   </div>
                 );
@@ -739,7 +835,7 @@ const AttendanceSimplePage = () => {
                       marginRight: 8,
                       position: 'relative'
                     }}>
-                      <Text style={{
+                <Text style={{
                         position: 'absolute',
                         top: '50%',
                         left: '50%',
@@ -772,491 +868,65 @@ const AttendanceSimplePage = () => {
 
         {/* Stats Section - 30% */}
         <Col xs={24} lg={7} style={{ height: '100vh', overflowY: 'auto' }}>
-          <Card title="Thống kê tháng" style={{ marginBottom: 16 }}>
-            <Row gutter={[12, 12]}>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#fffbe6',
-                  border: '1px solid #ffe58f',
-                  height: '100%'
-                }}>
-                  <CalendarOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#faad14', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#faad14' }}>{monthlyStats.totalDays}</Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#faad14', fontWeight: 500 }}>
-                      Tổng ngày làm việc trong tháng
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#f6ffed',
-                  border: '1px solid #b7eb8f',
-                  height: '100%'
-                }}>
-                  <CheckCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#52c41a', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#52c41a' }}>{monthlyStats.presentDays}</Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#52c41a', fontWeight: 500 }}>
-                      Số ngày làm việc trong tháng
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#fff1f0',
-                  border: '1px solid #ffccc7',
-                  height: '100%'
-                }}>
-                  <ClockCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#ff4d4f', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#ff4d4f' }}>{monthlyStats.lateDays}</Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#ff4d4f', fontWeight: 500 }}>
-                      Đi muộn
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#fff2e8',
-                  border: '1px solid #ffd591',
-                  height: '100%'
-                }}>
-                  <ExclamationCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#fa8c16', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#fa8c16' }}>{monthlyStats.earlyLeaveDays}</Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#fa8c16', fontWeight: 500 }}>
-                      Về sớm
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#fffbe6',
-                  border: '1px solid #ffe58f',
-                  height: '100%'
-                }}>
-                  <CalendarOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#faad14', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#faad14' }}>
-                      {monthlyStats.approvedLeaveDays || 0}
-                    </Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#faad14', fontWeight: 500 }}>
-                      Nghỉ phép
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#f0f0f0',
-                  border: '1px solid #d9d9d9',
-                  height: '100%'
-                }}>
-                  <CloseCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#8c8c8c', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#8c8c8c' }}>{monthlyStats.absentDays}</Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#8c8c8c', fontWeight: 500 }}>
-                      Vắng mặt
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#fff1f0',
-                  border: '1px solid #ffa39e',
-                  height: '100%'
-                }}>
-                  <MinusCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#cf1322', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#cf1322' }}>
-                      {monthlyStats.unauthorizedAbsenceDays || 0}
-                    </Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#cf1322', fontWeight: 500 }}>
-                      Nghỉ không phép
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#fff0f6',
-                  border: '1px solid #ffadd2',
-                  height: '100%'
-                }}>
-                  <MinusCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#cf1322', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#cf1322' }}>{formatVND(monthlyStats.unauthorizedAbsencePenaltyPerDay || 0)}đ</Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#cf1322', fontWeight: 500 }}>
-                      Tiền phạt nghỉ không phép
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#e6fffb',
-                  border: '1px solid #d9d9d9',
-                  height: '100%'
-                }}>
-                  <FieldTimeOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#8bc3b9ff', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#8bc3b9ff' }}>{monthlyStats.overtimeHours}</Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#8bc3b9ff', fontWeight: 500 }}>
-                      Số giờ tăng ca
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#f6ffed',
-                  border: '1px solid #d9d9d9',
-                  height: '100%'
-                }}>
-                  <DollarOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#9ec775ff', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#9ec775ff' }}>{formatVND(monthlyStats.totalOvertimePay || 0)}đ</Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#9ec775ff', fontWeight: 500 }}>
-                      Lương tăng ca
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-            </Row>
-            {/* ✨ NEW: Working Units (Số công) */}
-            <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#fff7e6',
-                  border: '1px solid #ffd591',
-                  height: '100%'
-                }}>
-                  <TrophyOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#fa8c16', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#fa8c16' }}>
-                      {(monthlyStats.totalWorkingUnits || 0).toFixed(2)}
-                    </Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#fa8c16', fontWeight: 500 }}>
-                      Tổng số công
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#fff1f0',
-                  border: '1px solid #ffccc7',
-                  height: '100%'
-                }}>
-                  <FireOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#ff4d4f', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#ff4d4f' }}>
-                      {(monthlyStats.totalOtWorkingUnits || 0).toFixed(2)}
-                    </Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#ff4d4f', fontWeight: 500 }}>
-                      Công OT
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-            </Row>
-            <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#e6f7ff',
-                  border: '1px solid #91d5ff',
-                  height: '100%'
-                }}>
-                  <FieldTimeOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#1890ff', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#1890ff' }}>{monthlyStats.totalHours.toFixed(1)}h</Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#1890ff', fontWeight: 500 }}>
-                      Tổng giờ làm
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#f9f0ff',
-                  border: '1px solid #d3adf7',
-                  height: '100%'
-                }}>
-                  <TrophyOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#722ed1', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#722ed1' }}>{monthlyStats.overtimeHours.toFixed(1)}h</Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#722ed1', fontWeight: 500 }}>
-                      Làm thêm
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#f0f5ff',
-                  border: '1px solid #adc6ff',
-                  height: '100%'
-                }}>
-                  <InfoCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#5b8cff', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#5b8cff' }}>{monthlyStats.averageHours.toFixed(2)}h</Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#5b8cff', fontWeight: 500 }}>
-                      Giờ trung bình/ngày
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-              {/* New: totalWorkingUnits */}
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#e6fffb',
-                  border: '1px solid #b7eb8f',
-                  height: '100%'
-                }}>
-                  <UserOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#13c2c2', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#13c2c2' }}>
-                      {(monthlyStats.totalWorkingUnits || 0).toFixed(2)}
-                    </Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#13c2c2', fontWeight: 500 }}>
-                      Tổng công (công)
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-            </Row>
+          {/* New redesigned MonthlyStatsCard component */}
+          <MonthlyStatsCard 
+            monthlyStats={monthlyStats} 
+            otRate={otRate} 
+            isMobile={isMobile}
+            defaultShift={defaultShift}
+          />
+        </Col>
+      </Row>
 
-            {/* Thống kê phút muộn/sớm */}
-            <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#fff1f0',
-                  border: '1px solid #ffccc7',
-                  height: '100%'
-                }}>
-                  <WarningOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#ff4d4f', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#ff4d4f' }}>
-                      {monthlyStats.totalLateMinutes || 0}
-                    </Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#ff4d4f', fontWeight: 500 }}>
-                      Phút đi muộn
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-              <Col xs={12} sm={12} lg={12}>
-                <div style={{
-                  textAlign: 'center',
-                  padding: isMobile ? 12 : 16,
-                  borderRadius: 8,
-                  background: '#fff7e6',
-                  border: '1px solid #ffd591',
-                  height: '100%'
-                }}>
-                  <ExclamationCircleOutlined style={{ fontSize: isMobile ? 20 : 24, color: '#fa8c16', marginBottom: 4 }} />
-                  <div>
-                    <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#fa8c16' }}>
-                      {monthlyStats.totalEarlyLeaveMinutes || 0}
-                    </Title>
-                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#fa8c16', fontWeight: 500 }}>
-                      Phút về sớm
-                    </Text>
-                  </div>
-                </div>
-              </Col>
-            </Row>
+      {/* Modal Chi tiết ngày */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <CalendarOutlined style={{ marginRight: 8, color: '#1890ff' }} />
+            Chi tiết ngày {selectedDate ? dayjs(selectedDate).format('DD/MM/YYYY') : ''}
+          </div>
+        }
+        open={detailModalVisible}
+        onCancel={() => setDetailModalVisible(false)}
+        footer={null}
+        width={isMobile ? '95%' : 500}
+        centered
+      >
+        {selectedDate && (() => {
+          // Sử dụng dayjs để format date đúng timezone thay vì toISOString() 
+          const dateStr = dayjs(selectedDate).format('YYYY-MM-DD');
+          // Lấy dữ liệu từ attendanceMap và dailyDetailMap thay vì attendanceData cũ
+          const selectedDateData = attendanceMap.get(dateStr);
+          const dailyDetail = dailyDetailMap.get(dateStr);
+          const shiftForDate = getShiftForDate(dateStr);
 
-            {/* Thông tin tiền phạt */}
-            <Divider style={{ margin: '16px 0' }} />
-            <div style={{
-              background: '#fff2f0',
-              padding: isMobile ? 12 : 16,
-              borderRadius: 8,
-              border: '1px solid #ffccc7'
-            }}>
-              <Row style={{ marginBottom: 12 }}>
-                <Col span={24} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <DollarOutlined style={{ fontSize: isMobile ? 16 : 18, color: '#ff4d4f', marginRight: 8 }} />
-                  <Text strong style={{ fontSize: isMobile ? 14 : 16, color: '#ff4d4f' }}>Tiền phạt tháng này</Text>
-                </Col>
-              </Row>
-              <Row gutter={[8, 8]}>
-                <Col xs={24} sm={24}>
-                  <div style={{
-                    textAlign: 'center',
-                    padding: isMobile ? 8 : 12,
-                    background: 'white',
-                    borderRadius: 6,
-                    border: '1px solid #ffccc7'
-                  }}>
-                    <WarningOutlined style={{ fontSize: isMobile ? 14 : 16, color: '#ff4d4f', marginBottom: 4 }} />
-                    <div>
-                      <Text style={{ fontSize: isMobile ? 10 : 11, color: '#8c8c8c', display: 'block' }}>Đi muộn</Text>
-                      <Text strong style={{ color: '#ff4d4f', fontSize: isMobile ? 12 : 14 }}>
-                        {formatVND(monthlyStats.totalLatePenalty || 0)}đ
-                      </Text>
-                    </div>
-                  </div>
-                </Col>
-                <Col xs={24} sm={24}>
-                  <div style={{
-                    textAlign: 'center',
-                    padding: isMobile ? 8 : 12,
-                    background: 'white',
-                    borderRadius: 6,
-                    border: '1px solid #ffccc7'
-                  }}>
-                    <ExclamationCircleOutlined style={{ fontSize: isMobile ? 14 : 16, color: '#fa8c16', marginBottom: 4 }} />
-                    <div>
-                      <Text style={{ fontSize: isMobile ? 10 : 11, color: '#8c8c8c', display: 'block' }}>Về sớm</Text>
-                      <Text strong style={{ color: '#fa8c16', fontSize: isMobile ? 12 : 14 }}>
-                        {formatVND(monthlyStats.totalEarlyLeavePenalty || 0)}đ
-                      </Text>
-                    </div>
-                  </div>
-                </Col>
-                <Col xs={24} sm={24}>
-                  <div style={{
-                    textAlign: 'center',
-                    padding: isMobile ? 8 : 12,
-                    background: 'white',
-                    borderRadius: 6,
-                    border: '1px solid #ffccc7'
-                  }}>
-                    <MinusCircleOutlined style={{ fontSize: isMobile ? 14 : 16, color: '#cf1322', marginBottom: 4 }} />
-                    <div>
-                      <Text style={{ fontSize: isMobile ? 10 : 11, color: '#8c8c8c', display: 'block' }}>Nghỉ không phép</Text>
-                      <Text strong style={{ color: '#cf1322', fontSize: isMobile ? 12 : 14 }}>
-                        {formatVND(monthlyStats.totalUnauthorizedAbsencePenalty || 0)}đ
-                      </Text>
-                      {( (monthlyStats.unauthorizedAbsenceDays || 0) > 0 ) && (
-                        <div style={{ marginTop: 4 }}>
-                          <Text style={{ fontSize: isMobile ? 9 : 10, color: '#8c8c8c' }}>
-                            ({(monthlyStats.unauthorizedAbsenceDays || 0).toLocaleString('vi-VN')} ngày)
-                          </Text>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </Col>
-              </Row>
-              <div style={{
-                marginTop: 12,
-                paddingTop: 12,
-                borderTop: '1px solid #ffccc7',
-                textAlign: 'center'
-              }}>
-                <Text style={{ fontSize: isMobile ? 11 : 12, color: '#8c8c8c' }}>Tổng cộng</Text>
+          console.log(`🔍 Modal clicked date:`, {
+            selectedDate,
+            dateStr,
+            hasAttendanceData: !!selectedDateData,
+            hasDailyDetail: !!dailyDetail,
+            dailyDetailStatus: dailyDetail?.status
+          });
+
+          // Hiển thị thông tin dựa trên status
+          if (dailyDetail) {
+            // Case 1: Nghỉ phép
+            if (dailyDetail.status === 'approved_leave' && dailyDetail.leaveData) {
+              // ✨ Lấy thông tin loại nghỉ từ leaveData object
+              const leaveTypeKey = dailyDetail.leaveData.leaveType || 'leave';
+              const leaveConfig = constants.LeaveTypeConfig[leaveTypeKey as keyof typeof constants.LeaveTypeConfig];
+              return (
                 <div>
-                  <Text strong style={{ color: '#ff4d4f', fontSize: isMobile ? 16 : 18 }}>
-                    {formatVND((monthlyStats.totalPenalty || 0))}đ
-                  </Text>
-                </div>
-              </div>
-            </div>
-          </Card>
+                  <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#fffbe6', borderRadius: 8 }}>
+                    <CheckCircleOutlined style={{ fontSize: 18, color: '#faad14', marginRight: 8 }} />
+                    <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline', color: '#faad14' }}>
+                      {formatDate(dateStr)}
+                    </Title>
+                  </div>
 
-          <Card
-            title={
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <CalendarOutlined style={{ marginRight: 8, color: '#1890ff' }} />
-                Chi tiết ngày
-              </div>
-            }
-          >
-            {selectedDate ? (
-              (() => {
-                // Sử dụng dayjs để format date đúng timezone thay vì toISOString() 
-                const dateStr = dayjs(selectedDate).format('YYYY-MM-DD');
-                // Lấy dữ liệu từ attendanceMap và dailyDetailMap thay vì attendanceData cũ
-                const selectedDateData = attendanceMap.get(dateStr);
-                const dailyDetail = dailyDetailMap.get(dateStr);
-
-                console.log(`🔍 Modal clicked date:`, {
-                  selectedDate,
-                  dateStr,
-                  hasAttendanceData: !!selectedDateData,
-                  hasDailyDetail: !!dailyDetail,
-                  dailyDetailStatus: dailyDetail?.status
-                });
-
-                // Hiển thị thông tin dựa trên status
-                if (dailyDetail) {
-                  // Case 1: Nghỉ phép
-                  if (dailyDetail.status === 'approved_leave' && dailyDetail.leaveData) {
-                    // ✨ Lấy thông tin loại nghỉ từ leaveData object
-                    const leaveTypeKey = dailyDetail.leaveData.leaveType || 'leave';
-                    const leaveConfig = constants.LeaveTypeConfig[leaveTypeKey as keyof typeof constants.LeaveTypeConfig]
-                    return (
-                      <div>
-                        <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#fffbe6', borderRadius: 8 }}>
-                          <CheckCircleOutlined style={{ fontSize: 18, color: '#faad14', marginRight: 8 }} />
-                          <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline', color: '#faad14' }}>
-                            {formatDate(dateStr)}
-                          </Title>
-                        </div>
-
-                        <div style={{
-                          padding: 16,
-                          background: '#fffbe6',
+                  <div style={{
+                    padding: 16,
+                    background: '#fffbe6',
                           borderRadius: 8,
                           border: '1px solid #ffe58f',
                           marginBottom: 16
@@ -1304,14 +974,14 @@ const AttendanceSimplePage = () => {
                             );
                           })()}
                         </div>
-                      </div>
+                </div>
                     );
                   }
 
                   // Case 2: Công tác
                   if (dailyDetail.status === 'business_trip' && dailyDetail.businessTripData) {
                     return (
-                      <div>
+                <div>
                         <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#f9f0ff', borderRadius: 8 }}>
                           <CalendarOutlined style={{ fontSize: 18, color: '#722ed1', marginRight: 8 }} />
                           <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline', color: '#722ed1' }}>
@@ -1399,14 +1069,14 @@ const AttendanceSimplePage = () => {
                             </Text>
                           </div>
                         </div>
-                      </div>
+                </div>
                     );
                   }
 
                   // Case 3: Nghỉ không phép
                   if (dailyDetail.status === 'absent') {
                     return (
-                      <div>
+                <div>
                         <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#fff1f0', borderRadius: 8 }}>
                           <CloseCircleOutlined style={{ fontSize: 18, color: '#ff4d4f', marginRight: 8 }} />
                           <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline', color: '#ff4d4f' }}>
@@ -1443,14 +1113,14 @@ const AttendanceSimplePage = () => {
                             </div>
                           )}
                         </div>
-                      </div>
+                </div>
                     );
                   }
 
                   // Case 4: Weekend
                   if (dailyDetail.status === 'weekend') {
                     return (
-                      <div>
+                <div>
                         <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#fafafa', borderRadius: 8 }}>
                           <CalendarOutlined style={{ fontSize: 18, color: '#8c8c8c', marginRight: 8 }} />
                           <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline', color: '#8c8c8c' }}>
@@ -1490,7 +1160,7 @@ const AttendanceSimplePage = () => {
                             </div>
                           )}
                         </div>
-                      </div>
+                </div>
                     );
                   }
                 }
@@ -1499,21 +1169,42 @@ const AttendanceSimplePage = () => {
                 return selectedDateData ? (
                   <div>
                     <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#fafafa', borderRadius: 8 }}>
-                      <CalendarOutlined style={{ fontSize: 18, color: '#1890ff', marginRight: 8 }} />
-                      <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline' }}>{formatDate(selectedDateData.date)}</Title>
+                <CalendarOutlined style={{ fontSize: 18, color: '#1890ff', marginRight: 8 }} />
+                <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline' }}>{formatDate(selectedDateData.date)}</Title>
+                    </div>
+
+                    {/* Ca làm việc section */}
+                    <div style={{ marginBottom: 16, padding: 12, background: shiftForDate ? '#e6f7ff' : '#f5f5f5', borderRadius: 8, border: shiftForDate ? '1px solid #91d5ff' : '1px solid #d9d9d9' }}>
+                      <Row gutter={[12, 8]} align="middle">
+                        <Col span={24}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <ScheduleOutlined style={{ marginRight: 8, color: shiftForDate ? '#1890ff' : '#8c8c8c', fontSize: 16 }} />
+                            <Text strong style={{ fontSize: isMobile ? 13 : 14, color: shiftForDate ? '#1890ff' : '#8c8c8c' }}>
+                              Ca làm việc: {shiftForDate?.name || 'Hành chính'}
+                            </Text>
+                          </div>
+                          {shiftForDate && (
+                            <div style={{ textAlign: 'center', marginTop: 4 }}>
+                              <Text style={{ fontSize: 12, color: '#595959' }}>
+                                ({shiftForDate.start_time} - {shiftForDate.end_time})
+                              </Text>
+                            </div>
+                          )}
+                        </Col>
+                      </Row>
                     </div>
 
                     {/* Thời gian section */}
                     <div style={{ marginBottom: 16 }}>
-                      <Row gutter={[12, 8]} style={{ marginBottom: 8 }}>
+                <Row gutter={[12, 8]} style={{ marginBottom: 8 }}>
                         <Col span={24}>
                           <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#595959' }}>
                             <ClockCircleOutlined style={{ marginRight: 6 }} />
                             Thời gian làm việc
                           </Text>
                         </Col>
-                      </Row>
-                      <Row gutter={[12, 8]}>
+                </Row>
+                <Row gutter={[12, 8]}>
                         <Col xs={12} sm={12}>
                           <div style={{ textAlign: 'center', padding: 8, background: '#f6ffed', borderRadius: 6, border: '1px solid #b7eb8f' }}>
                             <Text style={{ fontSize: isMobile ? 10 : 11, color: '#52c41a', display: 'block' }}>Vào làm</Text>
@@ -1530,20 +1221,20 @@ const AttendanceSimplePage = () => {
                             </Text>
                           </div>
                         </Col>
-                      </Row>
+                </Row>
                     </div>
 
                     {/* Thống kê section */}
                     <div style={{ marginBottom: 16 }}>
-                      <Row gutter={[12, 8]} style={{ marginBottom: 8 }}>
+                <Row gutter={[12, 8]} style={{ marginBottom: 8 }}>
                         <Col span={24}>
                           <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#595959' }}>
                             <FieldTimeOutlined style={{ marginRight: 6 }} />
                             Thống kê
                           </Text>
                         </Col>
-                      </Row>
-                      <Row gutter={[8, 8]}>
+                </Row>
+                <Row gutter={[8, 8]}>
                         <Col xs={12} sm={12}>
                           <div style={{ textAlign: 'center', padding: 8, background: '#e6f7ff', borderRadius: 6, border: '1px solid #91d5ff' }}>
                             <Text style={{ fontSize: isMobile ? 10 : 11, color: '#1890ff', display: 'block' }}>Tổng giờ</Text>
@@ -1587,17 +1278,17 @@ const AttendanceSimplePage = () => {
                         </Col>
                         <Col xs={12} sm={12}>
                           <div style={{ textAlign: 'center', padding: 8, background: '#fff1f0', borderRadius: 6, border: '1px solid #ffccc7' }}>
-                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#cf1322', display: 'block' }}>Công OT</Text>
+                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#cf1322', display: 'block' }}>Công OT (đã nhân hệ số)</Text>
                             <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#cf1322' }}>
-                              {((selectedDateData as any).otWorkingUnit || 0).toFixed(2)}
+                              {((selectedDateData as any).effectiveOtWorkingUnit || (selectedDateData as any).otWorkingUnit || 0).toFixed(2)}
                             </Text>
                           </div>
                         </Col>
-                      </Row>
+                </Row>
                     </div>
 
                     {selectedDateData.overtime > 0 ? (
-                      <div style={{ marginBottom: 16 }}>
+                <div style={{ marginBottom: 16 }}>
                         <Row gutter={[12, 8]} style={{ marginBottom: 8 }}>
                           <Col span={24}>
                             <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#595959' }}>
@@ -1624,12 +1315,12 @@ const AttendanceSimplePage = () => {
                             </div>
                           </Col>
                         </Row>
-                      </div>
+                </div>
                     ) : null}
 
                     {/* Thông tin tiền phạt cho ngày này */}
                     {(selectedDateData.lateArrivalPenalty > 0 || selectedDateData.earlyLeavePenalty > 0) && (
-                      <div style={{
+                <div style={{
                         background: '#fff2f0',
                         padding: isMobile ? 12 : 16,
                         borderRadius: 8,
@@ -1695,7 +1386,7 @@ const AttendanceSimplePage = () => {
                             </Text>
                           </div>
                         </div>
-                      </div>
+                </div>
                     )}
                   </div>
                 ) : (
@@ -1703,15 +1394,8 @@ const AttendanceSimplePage = () => {
                     <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>Không có dữ liệu chấm công cho ngày này</Text>
                   </div>
                 );
-              })()
-            ) : (
-              <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>Chọn một ngày để xem chi tiết</Text>
-              </div>
-            )}
-          </Card>
-        </Col>
-      </Row>
+              })()}
+      </Modal>
     </div>
   );
 };

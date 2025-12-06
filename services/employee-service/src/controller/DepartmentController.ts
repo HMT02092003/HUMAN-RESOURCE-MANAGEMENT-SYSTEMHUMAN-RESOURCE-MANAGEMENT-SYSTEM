@@ -2,9 +2,7 @@ import { Request, Response } from "express";
 import DepartmentModel from "@/src/Models/DepartmentModel";
 import UserModel from "@/src/Models/UserModel";
 import { validate, ValidationException } from "@/src/utils/validation-utility";
-import axios from 'axios';
-
-const authServiceUrl = process.env.AUTH_SERVICE_URL;
+import AuthService from "@/src/integrations/AuthService";
 /**
  * Get all departments from the database
  */
@@ -71,9 +69,9 @@ export const createDepartment = async (req: Request, res: Response) => {
 
     // Validation độ dài tên department (tối đa 20 ký tự)
     if (params.name && params.name.length > 20) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "Tên phòng ban không được vượt quá 20 ký tự!",
-        code: 400 
+        code: 400
       });
     }
 
@@ -206,9 +204,9 @@ export const updateDepartment = async (req: Request, res: Response) => {
 
     // Validation độ dài tên department (tối đa 20 ký tự)
     if (params.name && params.name.length > 20) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "Tên phòng ban không được vượt quá 20 ký tự!",
-        code: 400 
+        code: 400
       });
     }
 
@@ -282,10 +280,7 @@ export const deleteDepartment = async (req: Request, res: Response) => {
       headers.Authorization = authHeader;
     }
 
-    const { data: users } = await axios.get(`${authServiceUrl}/api/users/by-department`, {
-      params: { departmentId: params.id },
-      headers: headers
-    });
+    const users = await AuthService.getUsersByDepartment(params.id, headers.Authorization);
     if (users && users.length > 0) {
       return res.status(400).json({ error: "Phòng ban đang được sử dụng, không thể xóa!" });
     }
@@ -344,10 +339,7 @@ export const deleteMultipleDepartments = async (req: Request, res: Response) => 
     }
 
     // Gửi departmentIds dưới dạng array thay vì string
-    const { data: users } = await axios.get(`${authServiceUrl}/api/users/by-department`, {
-      params: { departmentIds: params.ids }, // Không cần .join(',')
-      headers: headers
-    });
+    const users = await AuthService.getUsersByDepartment(params.ids, headers.Authorization);
     if (users && users.length > 0) {
       return res.status(400).json({ error: "Phòng ban đang được sử dụng, không thể xóa!" });
     }

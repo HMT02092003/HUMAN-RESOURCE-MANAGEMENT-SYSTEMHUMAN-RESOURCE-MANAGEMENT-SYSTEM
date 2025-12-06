@@ -20,14 +20,14 @@ class AuthService {
   async login(credentials: LoginCredentials) {
     try {
       const response = await api.post(`/api/auth/login`, credentials);
-      
+
       if (response.data.refreshToken) {
         Cookies.set('refreshToken', response.data.refreshToken);
       }
 
       if (response.data.token) {
-  Cookies.set('token', response.data.token);
-  if (typeof window !== 'undefined') window.localStorage?.setItem('token', response.data.token);
+        Cookies.set('token', response.data.token);
+        if (typeof window !== 'undefined') window.localStorage?.setItem('token', response.data.token);
       }
 
       const token = Cookies.get('token');
@@ -68,12 +68,12 @@ class AuthService {
   async refreshToken(refreshToken: string) {
     try {
       const response = await api.post(`/api/refresh-token`, { refreshToken });
-      
+
       if (response.data.token) {
-    Cookies.set('token', response.data.token);
-    if (typeof window !== 'undefined') window.localStorage?.setItem('token', response.data.token);
+        Cookies.set('token', response.data.token);
+        if (typeof window !== 'undefined') window.localStorage?.setItem('token', response.data.token);
       }
-      
+
       return response.data;
     } catch (error: any) {
       throw error;
@@ -93,7 +93,7 @@ class AuthService {
           Authorization: `Bearer ${token}`
         }
       });
-      
+
       return response.data;
     } catch (error: any) {
       throw error;
@@ -104,8 +104,31 @@ class AuthService {
   logout() {
     Cookies.remove('token');
     Cookies.remove('refreshToken');
-  if (typeof window !== 'undefined') window.localStorage?.removeItem('token');
+    if (typeof window !== 'undefined') {
+      window.localStorage?.removeItem('token');
+      window.localStorage?.removeItem('user');
+    }
+  }
+
+  // Change password
+  async changePassword(password: string) {
+    try {
+      const response = await api.post(`/api/auth/change-password`, { password });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  }
+
+  // Get current user info
+  async getCurrentUser() {
+    try {
+      const response = await api.get(`/api/me`);
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
   }
 }
 
-export const authService = new AuthService(); 
+export const authService = new AuthService();

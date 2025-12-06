@@ -279,7 +279,7 @@ export class ApplicationController {
         userInfo = {
           id: user.id,
           username: user.username,
-          fullName: `${user.lastName || ''} ${user.firstName || ''}`.trim(),
+          fullName: `${user.lastName || ''} ${user.firstName || ''}`.trim() || user.username || 'N/A',
           email: user.email,
           identificationPhoto: user.identificationPhoto
         };
@@ -291,7 +291,7 @@ export class ApplicationController {
         approvedUsersMap[approve.id] = {
           id: approve.id,
           username: approve.username,
-          fullName: `${approve.firstName || ''} ${approve.lastName || ''}`.trim(),
+          fullName: `${approve.lastName || ''} ${approve.firstName || ''}`.trim() || approve.username || 'N/A',
           email: approve.email,
           identificationPhoto: approve.identificationPhoto
         };
@@ -394,6 +394,37 @@ export class ApplicationController {
               });
             }
             
+            return isInMonth;
+          }
+          
+          // ✨ Đối với đơn forgot-check, dùng forgotDate
+          if (app.type === 'forgot-check' && app.data && app.data.forgotDate) {
+            const forgotDate = new Date(app.data.forgotDate);
+            const isInMonth = forgotDate.getFullYear() === targetYear && 
+                              forgotDate.getMonth() + 1 === targetMonth;
+            if (isInMonth) {
+              console.log(`✅ forgot-check application in month ${targetYear}-${targetMonth}:`, {
+                id: app.id,
+                forgotDate: app.data.forgotDate,
+                forgotType: app.data.forgotType
+              });
+            }
+            return isInMonth;
+          }
+          
+          // ✨ Đối với đơn overtime, dùng date
+          if (app.type === 'overtime' && app.data && app.data.date) {
+            const otDate = new Date(app.data.date);
+            const isInMonth = otDate.getFullYear() === targetYear && 
+                              otDate.getMonth() + 1 === targetMonth;
+            if (isInMonth) {
+              console.log(`✅ overtime application in month ${targetYear}-${targetMonth}:`, {
+                id: app.id,
+                date: app.data.date,
+                startTime: app.data.startTime,
+                endTime: app.data.endTime
+              });
+            }
             return isInMonth;
           }
           
@@ -597,7 +628,7 @@ export class ApplicationController {
         userInfo = {
           id: user.id,
           username: user.username,
-          fullName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+          fullName: `${user.lastName || ''} ${user.firstName || ''}`.trim() || user.username || 'N/A',
           email: user.email,
           identificationPhoto: user.identificationPhoto
         };
@@ -605,13 +636,10 @@ export class ApplicationController {
 
       if (approvedUsersInfo && approvedUsersInfo.length > 0) {
         const approve = approvedUsersInfo[0];
-        // Build a robust fullName: fall back to username if first/last name missing
-        let approverFullName = `${approve.firstName || ''} ${approve.lastName || ''}`.trim();
-        if (!approverFullName) approverFullName = approve.username || `ID: ${approve.id}`;
         application.approvedByInfo = {
           id: approve.id,
           username: approve.username,
-          fullName: approverFullName,
+          fullName: `${approve.lastName || ''} ${approve.firstName || ''}`.trim() || approve.username || 'N/A',
           email: approve.email,
           identificationPhoto: approve.identificationPhoto
         };
@@ -995,7 +1023,7 @@ export class ApplicationController {
         usersMap[user.id] = {
           id: user.id,
           username: user.username,
-          fullName: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+          fullName: `${user.lastName || ''} ${user.firstName || ''}`.trim() || user.username || 'N/A',
           email: user.email,
           identificationPhoto: user.identificationPhoto
         };
@@ -1007,7 +1035,7 @@ export class ApplicationController {
         approvedUsersMap[approve.id] = {
           id: approve.id,
           username: approve.username,
-          fullName: `${approve.firstName || ''} ${approve.lastName || ''}`.trim(),
+          fullName: `${approve.lastName || ''} ${approve.firstName || ''}`.trim() || approve.username || 'N/A',
           email: approve.email,
           identificationPhoto: approve.identificationPhoto
         };

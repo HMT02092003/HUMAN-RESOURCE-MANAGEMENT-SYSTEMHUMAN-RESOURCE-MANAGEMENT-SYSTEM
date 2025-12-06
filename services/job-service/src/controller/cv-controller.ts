@@ -11,7 +11,7 @@ import { UserSkillModel } from '../Models/UserSkillModel.ts';
 import { getTextFromPdf } from '../services/pdfParser.ts';
 import { analyzeCvText } from '../services/geminiService.ts';
 import { validate, ValidationException } from '../ulitis/validation-utility.ts';
-import CheckScopeService from '../services/checkScope.ts';
+import AuthService from '../integrations/AuthService.ts';
 import { fileURLToPath } from 'url';
 
 const uploadDir = path.resolve(process.cwd(), 'uploads');
@@ -196,151 +196,121 @@ export const CvController = {
     }
   }) as RequestHandler,
 
-listCvs: (async (req: Request, res: Response): Promise<any> => {
-  try {
-    const { page = '1', pageSize = '10', sortField = 'uploaded_at', sortOrder = 'desc' } = req.query;
-    
-    const pageNum = Math.max(1, parseInt(page as string, 10));
-    const pageSizeNum = Math.min(100, Math.max(1, parseInt(pageSize as string, 10)));
-    const offset = (pageNum - 1) * pageSizeNum;
+  listCvs: (async (req: Request, res: Response): Promise<any> => {
+    try {
+      const { page = '1', pageSize = '10', sortField = 'uploaded_at', sortOrder = 'desc' } = req.query;
 
-    const validSortFields = ['cv_id', 'user_id', 'file_path', 'uploaded_at'];
-    const safeSortField = validSortFields.includes(sortField as string) ? (sortField as string) : 'uploaded_at';
-    const safeSortOrder = sortOrder === 'asc' ? 'asc' : 'desc';
+      const pageNum = Math.max(1, parseInt(page as string, 10));
+      const pageSizeNum = Math.min(100, Math.max(1, parseInt(pageSize as string, 10)));
+      const offset = (pageNum - 1) * pageSizeNum;
 
-    // Prefer token from Authorization header, fall back to cookie token
-    const headerAuth = (req.headers.authorization as string) || null;
-    const cookieToken = (req as any).cookies?.token;
-    const tokenToSend = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : null);
+      const validSortFields = ['cv_id', 'user_id', 'file_path', 'uploaded_at'];
+      const safeSortField = validSortFields.includes(sortField as string) ? (sortField as string) : 'uploaded_at';
+      const safeSortOrder = sortOrder === 'asc' ? 'asc' : 'desc';
 
-    if (!tokenToSend) {
-      console.warn('[listCvs] No token provided');
-      res.status(401).json({ success: false, message: 'Access token required' });
-      return;
-    }
+      // Prefer token from Authorization header, fall back to cookie token
+      const headerAuth = (req.headers.authorization as string) || null;
+      const cookieToken = (req as any).cookies?.token;
+      const tokenToSend = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : null);
 
-    // Check scope - auth-service trả về userIds đã filter theo scope
-    const scopeResult = await CheckScopeService.checkUserScope('CV', tokenToSend);
-    console.log('DEBUG - User scope result:', scopeResult);
+      if (!tokenToSend) {
+        console.warn('[listCvs] No token provided');
+        res.status(401).json({ success: false, message: 'Access token required' });
+        return;
+      }
 
-    // Normalize userIds
-    const allowedUserIds: number[] = (scopeResult?.userIds || [])
-      .map((id: any) => Number(id))
-      .filter((n: number) => !Number.isNaN(n));
-    
-    if (allowedUserIds.length === 0) {
-      // Không có quyền truy cập bất kỳ CV nào
+      // Check scope - auth-service trả về userIds đã filter theo scope
+      const scopeResult = await AuthService.checkUserScope('CV', tokenToSend);
+      console.log('DEBUG - User scope result:', scopeResult);
+
+      // Normalize userIds
+      const allowedUserIds: number[] = (scopeResult?.userIds || [])
+        .map((id: any) => Number(id))
+        .filter((n: number) => !Number.isNaN(n));
+
+      if (allowedUserIds.length === 0) {
+        // Không có quyền truy cập bất kỳ CV nào
+        return res.json({
+          success: true,
+          data: [],
+          pagination: {
+            page: pageNum,
+            pageSize: pageSizeNum,
+            total: 0,
+            totalPages: 0
+          },
+          total: 0
+        });
+      }
+
+      console.log(`User has ${scopeResult.scope} scope access to ${allowedUserIds.length} users:`, allowedUserIds);
+
+      // Query CVs - auth-service đã xử lý scope, chỉ whereIn allowedUserIds
+      const rows = await knex('cvs')
+        .select('cv_id', 'user_id', 'file_path', 'original_text', 'uploaded_at')
+        .whereIn('user_id', allowedUserIds)
+        .orderBy(safeSortField, safeSortOrder)
+        .limit(pageSizeNum)
+        .offset(offset);
+
+      // Đếm tổng số với cùng filter
+      const countResult = await knex('cvs')
+        .whereIn('user_id', allowedUserIds)
+        .count('* as count')
+        .first();
+      const total = parseInt(String(countResult?.count || 0), 10);
+
+      // Lấy thông tin user
+      const userIds = [...new Set(rows.map((r: any) => r.user_id))];
+      let rowsWithUsers = rows;
+
+      if (userIds.length > 0) {
+        try {
+          const usersInfo = await AuthService.getUsersByIds(userIds, tokenToSend);
+
+          const usersById = new Map(usersInfo.map((u: any) => [
+            u.id,
+            {
+              id: u.id,
+              username: u.username,
+              fullName: u.fullName || '',
+              email: u.email,
+              identificationPhoto: u.identificationPhoto
+            }
+          ]));
+
+          rowsWithUsers = rows.map((r: any) => ({
+            ...r,
+            userInfo: usersById.get(r.user_id) || null
+          }));
+        } catch (err) {
+          console.error('Failed to fetch users:', err);
+          rowsWithUsers = rows.map((r: any) => ({ ...r, userInfo: null }));
+        }
+      }
+
       return res.json({
         success: true,
-        data: [],
+        data: rowsWithUsers,
         pagination: {
           page: pageNum,
           pageSize: pageSizeNum,
-          total: 0,
-          totalPages: 0
+          total,
+          totalPages: Math.ceil(total / pageSizeNum)
         },
-        total: 0
+        total
+      });
+
+    } catch (err: any) {
+      console.error('[listCvs] Error:', err);
+      return res.status(500).json({
+        success: false,
+        message: err?.message || 'Có lỗi xảy ra khi lấy danh sách CV'
       });
     }
-
-    console.log(`User has ${scopeResult.scope} scope access to ${allowedUserIds.length} users:`, allowedUserIds);
-
-    // Query CVs - auth-service đã xử lý scope, chỉ whereIn allowedUserIds
-    const rows = await knex('cvs')
-      .select('cv_id', 'user_id', 'file_path', 'original_text', 'uploaded_at')
-      .whereIn('user_id', allowedUserIds)
-      .orderBy(safeSortField, safeSortOrder)
-      .limit(pageSizeNum)
-      .offset(offset);
-
-    // Đếm tổng số với cùng filter
-    const countResult = await knex('cvs')
-      .whereIn('user_id', allowedUserIds)
-      .count('* as count')
-      .first();
-    const total = parseInt(String(countResult?.count || 0), 10);
-
-    // Lấy thông tin user
-    const userIds = [...new Set(rows.map((r: any) => r.user_id))];
-    let rowsWithUsers = rows;
-
-    if (userIds.length > 0) {
-      try {
-        const usersInfo = await CheckScopeService.getUsersByIds(userIds);
-        
-        const usersById = new Map(usersInfo.map((u: any) => [
-          u.id, 
-          {
-            id: u.id,
-            username: u.username,
-            fullName: u.fullName || '',
-            email: u.email,
-            identificationPhoto: u.identificationPhoto
-          }
-        ]));
-        
-        rowsWithUsers = rows.map((r: any) => ({ 
-          ...r, 
-          userInfo: usersById.get(r.user_id) || null 
-        }));
-      } catch (err) {
-        console.error('Failed to fetch users:', err);
-        rowsWithUsers = rows.map((r: any) => ({ ...r, userInfo: null }));
-      }
-    }
-
-    return res.json({
-      success: true,
-      data: rowsWithUsers,
-      pagination: {
-        page: pageNum,
-        pageSize: pageSizeNum,
-        total,
-        totalPages: Math.ceil(total / pageSizeNum)
-      },
-      total
-    });
-
-  } catch (err: any) {
-    console.error('[listCvs] Error:', err);
-    return res.status(500).json({ 
-      success: false, 
-      message: err?.message || 'Có lỗi xảy ra khi lấy danh sách CV' 
-    });
-  }
-}) as RequestHandler,
-
-  // Serve CV file by cv_id (looks up DB and streams file from uploads folder)
-  serveCvFile: (async (req: Request, res: Response): Promise<any> => {
-    try {
-      const { id } = req.params;
-      const cv = await CvModel.query().findById(id);
-      if (!cv || !cv.file_path) {
-        return res.status(404).json({ success: false, message: 'CV not found' });
-      }
-
-      // Normalize and extract filename
-      const normalized = cv.file_path.replace(/\\/g, '/').replace(/^\/+/, '');
-      const parts = normalized.split('/');
-      const filename = parts.pop();
-      if (!filename) return res.status(404).json({ success: false, message: 'File not found' });
-
-      // Resolve uploads folder relative to this file (safe regardless of cwd)
-      const __filename = fileURLToPath(import.meta.url);
-      const controllerDir = path.dirname(__filename); // src/controller
-      const uploadsDir = path.resolve(controllerDir, '..', '..', 'uploads');
-      const filePath = path.join(uploadsDir, filename);
-
-      if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ success: false, message: 'File not found on disk' });
-      }
-
-      return res.sendFile(filePath);
-    } catch (err: any) {
-      console.error('serveCvFile error', err);
-      return res.status(500).json({ success: false, message: err?.message || 'Internal error' });
-    }
   }) as RequestHandler,
+
+
 
   deleteCv: (async (req: Request, res: Response): Promise<any> => {
     try {

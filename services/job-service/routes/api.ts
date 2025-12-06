@@ -8,7 +8,7 @@ const router = Router();
 // CV endpoints (register before generic job endpoints to avoid route conflicts)
 router.post('/cvs/upload', authenticateToken, upload.single('file') as any, CvController.uploadCv);
 router.get('/cvs', authenticateToken, CvController.listCvs);
-router.get('/cvs/:id/file', authenticateToken, CvController.serveCvFile);
+
 router.delete('/cvs/:id', authenticateToken, CvController.deleteCv);
 router.post('/cvs/bulk-delete', authenticateToken, CvController.bulkDeleteCvs);
 
@@ -42,7 +42,6 @@ router.get('/projects/:id', authenticateToken, ProjectController.getProjectById)
 router.put('/projects/:id', authenticateToken, ProjectController.updateProject);
 // Support bulk delete via DELETE /projects with body { ids: [...] }
 router.delete('/projects', authenticateToken, ProjectController.deleteProject);
-// Keep single-delete route (by id) for compatibility
-router.delete('/projects/:id', authenticateToken, ProjectController.deleteProject);
+
 
 export default router;

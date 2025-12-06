@@ -17,11 +17,12 @@ import {
     ReadOutlined,
     DashboardOutlined,
     CheckCircleOutlined,
-    ClockCircleOutlined
+    ClockCircleOutlined,
+    LockOutlined
 } from '@ant-design/icons';
 
 import type { MenuProps } from 'antd';
-import { Breadcrumb, Layout, Menu, theme, Avatar, Dropdown, Modal, Button, Descriptions, message, Grid } from 'antd';
+import { Breadcrumb, Layout, Menu, theme, Avatar, Dropdown, Modal, Button, Descriptions, message, Grid, Form, Input, Spin } from 'antd';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import TopBarProgress from 'react-topbar-progress-indicator';
@@ -29,6 +30,13 @@ import { decodePermissions } from '@/utils/decode-permisison';
 import LoadingProgress from '@/components/LoadingProgress';
 import { authService } from '@/service/authService';
 import { get } from 'lodash';
+import Cookies from 'js-cookie';
+import { getDecodedToken } from '@/utils/decode-token';
+import userService from '@/service/userService';
+import dayjs from 'dayjs';
+import constantConfig from "@/config/constant";
+
+const { statusOptions, TypeOfStatusSalary } = constantConfig;
 
 const { Header, Content, Footer, Sider } = Layout;
 
@@ -174,7 +182,7 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         ['salary_allowances']
     ),
 
-        getItem(
+    getItem(
         'Quản lý công việc',
         'job_management_parent',
         <ProfileOutlined />,
@@ -183,7 +191,7 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
             getItem('Danh sách dự án', 'projects', <FileTextOutlined />),
         ],
     ),
-    
+
 ];
 
 const isDeepEqual = (obj1: any, obj2: any): boolean => {
@@ -239,6 +247,14 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
     const [menuItems, setMenuItems] = useState<ExtendedMenuItem[]>([]);
     const pathname = usePathname();
 
+    // Profile Modal State
+    const [userProfile, setUserProfile] = useState<any>(null);
+    const [loadingProfile, setLoadingProfile] = useState(false);
+
+    // Change Password Modal State
+    const [passwordForm] = Form.useForm();
+    const [changingPassword, setChangingPassword] = useState(false);
+
     const menuItemsRef = useRef(menuItems);
 
     useEffect(() => {
@@ -259,10 +275,10 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
 
     const filterMenuItems = useCallback((items: ExtendedMenuItem[]): ExtendedMenuItem[] => {
         console.log('🔍 [FILTER-MENU] Starting menu filter...');
-        
+
         return items.flatMap(item => {
             console.log(`\n📌 [FILTER-MENU] Checking item: "${item.label}" (key: ${item.key})`);
-            
+
             // Hàm helper để kiểm tra permissions
             const hasPermissionAccess = (permissionKeys: string[], requireAll: boolean = false) => {
                 if (!permissionKeys || permissionKeys.length === 0) return false;
@@ -270,13 +286,13 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                 const permissionChecks = permissionKeys.map(key => {
                     const permissionValue = userPermissions[key];
                     console.log(`  🔑 Permission key "${key}":`, permissionValue);
-                    
+
                     // ✅ Kiểm tra kỹ hơn: value phải tồn tại và không phải null/undefined
                     if (permissionValue === undefined || permissionValue === null || permissionValue === '') {
                         console.log(`  ❌ Permission "${key}" is undefined/null/empty`);
                         return false;
                     }
-                    
+
                     try {
                         const hasRead = decodePermissions(parseInt(permissionValue)).read;
                         console.log(`  📖 Has read permission for "${key}":`, hasRead);
@@ -290,7 +306,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                 const result = requireAll ?
                     permissionChecks.every(check => check) :
                     permissionChecks.some(check => check);
-                
+
                 console.log(`  📊 Permission check result (requireAll=${requireAll}):`, result);
                 return result;
             };
@@ -313,10 +329,10 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
 
                 const parentPermissionKey = item.permission;
                 const hasParentPermission = !parentPermissionKey ||
-                    (userPermissions[parentPermissionKey] && 
-                     userPermissions[parentPermissionKey] !== null && 
-                     userPermissions[parentPermissionKey] !== '' &&
-                     decodePermissions(parseInt(userPermissions[parentPermissionKey])).read);
+                    (userPermissions[parentPermissionKey] &&
+                        userPermissions[parentPermissionKey] !== null &&
+                        userPermissions[parentPermissionKey] !== '' &&
+                        decodePermissions(parseInt(userPermissions[parentPermissionKey])).read);
 
                 if (hasParentPermission) {
                     return [{ ...item, children: filteredChildren }];
@@ -362,7 +378,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
 
             const permissionValue = userPermissions[permissionKey];
             console.log(`  🔑 Single permission check for "${permissionKey}":`, permissionValue);
-            
+
             // ✅ Kiểm tra kỹ hơn
             if (permissionValue === undefined || permissionValue === null || permissionValue === '') {
                 console.log(`  ❌ Permission value is undefined/null/empty - denying access`);
@@ -387,7 +403,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
         console.log('🎨 [ADMIN-LAYOUT] ===== FILTERING MENU ITEMS =====');
         console.log('🔒 User permissions received:', userPermissions);
         console.log('📊 Permissions count:', userPermissions ? Object.keys(userPermissions).length : 0);
-        
+
         if (userPermissions && Object.keys(userPermissions).length > 0) {
             console.log('✅ [ADMIN-LAYOUT] User has permissions - filtering menu...');
             const filteredItems = filterMenuItems(baseMenuItemsList);
@@ -414,11 +430,11 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
         if (pathname === '/attendance') return ['attendance'];
         if (pathname.startsWith('/attendance')) return ['attendance_parent'];
 
-    if (pathname === '/user') return ['users'];
-    if (pathname === '/roles') return ['roles'];
-    if (pathname.startsWith('/salary/allowances')) return ['salary_allowances'];
-    if (pathname === '/salary/management') return ['salaries'];
-    if (pathname.startsWith('/salary')) return ['salary_parent'];
+        if (pathname === '/user') return ['users'];
+        if (pathname === '/roles') return ['roles'];
+        if (pathname.startsWith('/salary/allowances')) return ['salary_allowances'];
+        if (pathname === '/salary/management') return ['salaries'];
+        if (pathname.startsWith('/salary')) return ['salary_parent'];
 
         const pathSegment = pathname.split('/')[1];
         return [pathSegment || 'home'];
@@ -501,9 +517,49 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
         }
     };
 
-    const changePasswordHandler = async () => {
-        setIsPasswordModalVisible(false);
-        router.push('/change-password');
+    const fetchUserProfile = async () => {
+        setLoadingProfile(true);
+        try {
+            const token = Cookies.get('token');
+            if (!token) {
+                message.error('Không tìm thấy token xác thực');
+                return;
+            }
+            const decoded = getDecodedToken(token);
+            if (!decoded || !decoded.sub) {
+                message.error('Token không hợp lệ');
+                return;
+            }
+
+            const userId = parseInt(decoded.sub);
+            const data = await userService.getUserDetail(userId);
+            setUserProfile(data);
+        } catch (error) {
+            console.error('Error fetching user profile:', error);
+            message.error('Không thể tải thông tin người dùng');
+        } finally {
+            setLoadingProfile(false);
+        }
+    };
+
+    const handleOpenProfile = () => {
+        setIsUserModalVisible(true);
+        fetchUserProfile();
+    };
+
+    const handleChangePassword = async (values: any) => {
+        setChangingPassword(true);
+        try {
+            await authService.changePassword(values.newPassword);
+            message.success('Đổi mật khẩu thành công');
+            setIsPasswordModalVisible(false);
+            passwordForm.resetFields();
+        } catch (error: any) {
+            console.error(error);
+            message.error(error.response?.data?.message || 'Đổi mật khẩu thất bại');
+        } finally {
+            setChangingPassword(false);
+        }
     };
 
     const userMenuItems: MenuProps['items'] = [
@@ -511,7 +567,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
             key: '1',
             label: 'Thông tin tài khoản',
             icon: <InfoCircleOutlined />,
-            onClick: () => setIsUserModalVisible(true),
+            onClick: handleOpenProfile,
         },
         {
             key: '2',
@@ -584,7 +640,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                         onClick={handleMenuClick}
                         selectedKeys={getSelectedKeys()}
                         // Ensure salary section is open on initial load in addition to other defaults
-                        defaultOpenKeys={[ 'applications_parent', 'account_management_parent', 'attendance_parent', 'shifts_parent', 'salary_parent', 'job_management_parent', pathname && pathname.startsWith('/salary') ? 'salary_parent' : '' ].filter(Boolean)}
+                        defaultOpenKeys={['applications_parent', 'account_management_parent', 'attendance_parent', 'shifts_parent', 'salary_parent', 'job_management_parent', pathname && pathname.startsWith('/salary') ? 'salary_parent' : ''].filter(Boolean)}
                     />
                 </Sider>
 
@@ -739,31 +795,100 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                         Đóng
                     </Button>
                 ]}
+                width={800}
             >
-                <Descriptions column={1}>
-                    <Descriptions.Item label="Tên đăng nhập">{userData?.user?.username || 'N/A'}</Descriptions.Item>
-                    <Descriptions.Item label="Họ và tên">{userData?.user?.fullName || 'N/A'}</Descriptions.Item>
-                    <Descriptions.Item label="Email">{userData?.user?.email || 'N/A'}</Descriptions.Item>
-                    <Descriptions.Item label="Ngày tạo">{userData?.user?.createdAt ? new Date(userData.user.createdAt).toLocaleDateString() : 'N/A'}</Descriptions.Item>
-                    <Descriptions.Item label="Số điện thoại">{userData?.user?.phone || 'N/A'}</Descriptions.Item>
-                    <Descriptions.Item label="Vai trò">{userData?.user?.role || 'N/A'}</Descriptions.Item>
-                </Descriptions>
+                {loadingProfile ? (
+                    <div style={{ textAlign: 'center', padding: '20px' }}>
+                        <Spin size="large" />
+                    </div>
+                ) : userProfile ? (
+                    <Descriptions bordered column={{ xxl: 2, xl: 2, lg: 2, md: 1, sm: 1, xs: 1 }}>
+                        <Descriptions.Item label="Ảnh nhận diện" span={2}>
+                            {userProfile.identificationPhoto ? (
+                                <img
+                                    src={userProfile.identificationPhoto.startsWith('/') ? `${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${userProfile.identificationPhoto}` : userProfile.identificationPhoto}
+                                    alt="Avatar"
+                                    style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: '50%' }}
+                                />
+                            ) : 'Chưa có ảnh'}
+                        </Descriptions.Item>
+                        <Descriptions.Item label="Tên đăng nhập">{userProfile.username}</Descriptions.Item>
+                        <Descriptions.Item label="Họ và tên">{userProfile.fullName}</Descriptions.Item>
+                        <Descriptions.Item label="Email">{userProfile.email}</Descriptions.Item>
+                        <Descriptions.Item label="Số điện thoại">{userProfile.phone}</Descriptions.Item>
+                        <Descriptions.Item label="Ngày sinh">{userProfile.birthday ? dayjs(userProfile.birthday).format('DD/MM/YYYY') : 'N/A'}</Descriptions.Item>
+                        <Descriptions.Item label="Giới tính">{userProfile.gender === 'MALE' ? 'Nam' : userProfile.gender === 'FEMALE' ? 'Nữ' : 'Khác'}</Descriptions.Item>
+                        <Descriptions.Item label="Vai trò">{userProfile.role?.name || 'N/A'}</Descriptions.Item>
+                        <Descriptions.Item label="Phòng ban">{userProfile.department?.name || 'N/A'}</Descriptions.Item>
+                        <Descriptions.Item label="Chức vụ">{userProfile.chevron?.name || 'N/A'}</Descriptions.Item>
+                        <Descriptions.Item label="Ngày bắt đầu">{userProfile.startDate ? dayjs(userProfile.startDate).format('DD/MM/YYYY') : 'N/A'}</Descriptions.Item>
+                        <Descriptions.Item label="Trạng thái">
+                            {statusOptions.find((option) => option.value == userProfile.status)?.label}
+                        </Descriptions.Item>
+                    </Descriptions>
+                ) : (
+                    <p>Không có dữ liệu</p>
+                )}
             </Modal>
 
             <Modal
                 title="Đổi mật khẩu"
                 open={isPasswordModalVisible}
-                onCancel={() => setIsPasswordModalVisible(false)}
-                footer={[
-                    <Button key="back" onClick={() => setIsPasswordModalVisible(false)}>
-                        Hủy
-                    </Button>,
-                    <Button key="submit" type="primary" onClick={changePasswordHandler}>
-                        Đồng ý
-                    </Button>,
-                ]}
+                onCancel={() => {
+                    setIsPasswordModalVisible(false);
+                    passwordForm.resetFields();
+                }}
+                footer={null}
             >
-                <p>Bạn có chắc chắn muốn đổi mật khẩu không?</p>
+                <Form
+                    form={passwordForm}
+                    layout="vertical"
+                    onFinish={handleChangePassword}
+                >
+                    <Form.Item
+                        name="newPassword"
+                        label="Mật khẩu mới"
+                        rules={[
+                            { required: true, message: 'Vui lòng nhập mật khẩu mới' },
+                            { min: 6, message: 'Mật khẩu phải có ít nhất 6 ký tự' }
+                        ]}
+                    >
+                        <Input.Password prefix={<LockOutlined />} placeholder="Nhập mật khẩu mới" />
+                    </Form.Item>
+
+                    <Form.Item
+                        name="confirmPassword"
+                        label="Xác nhận mật khẩu mới"
+                        dependencies={['newPassword']}
+                        rules={[
+                            { required: true, message: 'Vui lòng xác nhận mật khẩu mới' },
+                            ({ getFieldValue }) => ({
+                                validator(_, value) {
+                                    if (!value || getFieldValue('newPassword') === value) {
+                                        return Promise.resolve();
+                                    }
+                                    return Promise.reject(new Error('Mật khẩu xác nhận không khớp!'));
+                                },
+                            }),
+                        ]}
+                    >
+                        <Input.Password prefix={<LockOutlined />} placeholder="Nhập lại mật khẩu mới" />
+                    </Form.Item>
+
+                    <Form.Item>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                            <Button onClick={() => {
+                                setIsPasswordModalVisible(false);
+                                passwordForm.resetFields();
+                            }}>
+                                Hủy
+                            </Button>
+                            <Button type="primary" htmlType="submit" loading={changingPassword}>
+                                Đổi mật khẩu
+                            </Button>
+                        </div>
+                    </Form.Item>
+                </Form>
             </Modal>
         </Layout>
     );

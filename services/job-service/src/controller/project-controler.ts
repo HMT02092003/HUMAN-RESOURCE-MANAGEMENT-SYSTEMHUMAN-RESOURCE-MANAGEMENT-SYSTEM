@@ -9,8 +9,7 @@ import ProjectMemberModel from '../Models/ProjectMemberModel.ts';
 import ProjectTimelineModel from '../Models/ProjectTimelineModel.ts';
 import ProjectRequiredSkillModel from '../Models/ProjectRequiredSkillModel.ts';
 import ProjectSuggestionModel from '../Models/ProjectSuggestionModel.ts';
-import CheckScopeService from '../services/checkScope.ts';
-import axios from 'axios';
+import AuthService from '../integrations/AuthService.ts';
 import { TaskModel } from '../Models/TaskModel.ts';
 import { analyzeJobWithAI, JobAnalysisResult } from '../services/geminiService.ts';
 import { findMatchingCandidates, CandidateMatch } from '../services/candidateMatchingService.ts';
@@ -30,7 +29,7 @@ ProjectRequiredSkillModel.knex(knex);
 ProjectSuggestionModel.knex(knex);
 TaskModel.knex(knex);
 
-const AuthServiceUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:4001';
+
 
 export class ProjectController {
     static createProject: RequestHandler = async (req: Request, res: Response): Promise<void> => {
@@ -190,7 +189,7 @@ export class ProjectController {
             }
 
             // 3. Check scope (giữ nguyên)
-            const scopeResult = await CheckScopeService.checkUserScope('projects', authHeader);
+            const scopeResult = await AuthService.checkUserScope('projects', authHeader);
             console.log("checkScope result:", scopeResult);
 
             // 4. Normalize userIds (giữ nguyên)
@@ -247,24 +246,16 @@ export class ProjectController {
                 // Sắp xếp lại ở đây để đảm bảo thứ tự
                 .orderBy('created_at', 'desc');
 
-            let getUserBulk: any;
+            let users: any[] = [];
             try {
-                getUserBulk = await axios.post(
-                    `${AuthServiceUrl}/api/users/user-bulk`,
-                    { userIds: allowedUserIds },
-                    { headers: { Authorization: authHeader }, timeout: 5000 }
-                );
-
+                users = await AuthService.getUsersByIds(allowedUserIds, authHeader);
             } catch (err: any) {
-                console.error('Error calling auth service user-bulk:', err?.response?.status, err?.response?.data || err?.message || err);
+                console.error('Error calling auth service user-bulk:', err?.message || err);
                 // return an upstream error to the client so the request doesn't hang silently
                 res.status(502).json({ success: false, message: 'Failed to fetch users from auth service', error: err?.message || err });
                 return;
             }
 
-
-            // Extract users robustly (support various response shapes)
-            const users: any[] = Array.isArray(getUserBulk?.data.data) ? getUserBulk.data.data : [];
 
             // Build map by numeric id
             const userMap = new Map<number, any>(users.map(u => [Number(u.id ?? u.userId ?? u.user_id), u]));
@@ -311,9 +302,6 @@ export class ProjectController {
             let ids: number[] = [];
             if (Array.isArray(req.body?.ids) && req.body.ids.length) {
                 ids = req.body.ids.map((v: any) => Number(v)).filter((n: number) => !Number.isNaN(n));
-            } else if (req.params?.id) {
-                const n = Number(req.params.id);
-                if (!Number.isNaN(n)) ids = [n];
             }
 
             if (!ids.length) {
@@ -375,7 +363,7 @@ export class ProjectController {
             // Collect user IDs to fetch from auth service
             const userIdsSet = new Set<number>();
             if (project.manager_id) userIdsSet.add(Number(project.manager_id));
-            
+
             if (Array.isArray((project as any).members)) {
                 (project as any).members.forEach((m: any) => {
                     if (m.user_id) userIdsSet.add(Number(m.user_id));
@@ -398,12 +386,7 @@ export class ProjectController {
             let userBulkData: any[] = [];
             if (userIds.length && authHeader) {
                 try {
-                    const resp = await axios.post(
-                        `${AuthServiceUrl}/api/users/user-bulk`,
-                        { userIds },
-                        { headers: { Authorization: authHeader }, timeout: 5000 }
-                    );
-                    userBulkData = Array.isArray(resp?.data?.data) ? resp.data.data : [];
+                    userBulkData = await AuthService.getUsersByIds(userIds, authHeader);
                 } catch (err: any) {
                     console.error('Error fetching users from auth service for project.getById:', err?.message || err);
                 }
@@ -414,8 +397,8 @@ export class ProjectController {
             );
 
             // Enrich project with user objects
-            const projectJson: any = typeof (project as any).toJSON === 'function' 
-                ? (project as any).toJSON() 
+            const projectJson: any = typeof (project as any).toJSON === 'function'
+                ? (project as any).toJSON()
                 : { ...project };
 
             projectJson.manager_id = userMap.get(Number(projectJson.manager_id)) ?? null;
@@ -654,7 +637,7 @@ export class ProjectController {
                 // Enrich with user data (same as getById)
                 const userIdsSet = new Set<number>();
                 if (project!.manager_id) userIdsSet.add(Number(project!.manager_id));
-                
+
                 if (Array.isArray((project as any).members)) {
                     (project as any).members.forEach((m: any) => {
                         if (m.user_id) userIdsSet.add(Number(m.user_id));
@@ -670,12 +653,7 @@ export class ProjectController {
                 let userBulkData: any[] = [];
                 if (userIds.length && authHeader) {
                     try {
-                        const resp = await axios.post(
-                            `${AuthServiceUrl}/api/users/user-bulk`,
-                            { userIds },
-                            { headers: { Authorization: authHeader }, timeout: 5000 }
-                        );
-                        userBulkData = Array.isArray(resp?.data?.data) ? resp.data.data : [];
+                        userBulkData = await AuthService.getUsersByIds(userIds, authHeader);
                     } catch (err: any) {
                         console.error('Error fetching users from auth service for project.update:', err?.message || err);
                     }
@@ -685,8 +663,8 @@ export class ProjectController {
                     userBulkData.map((u: any) => [Number(u.id ?? u.user_id ?? u.userId), u])
                 );
 
-                const projectJson: any = typeof (project as any).toJSON === 'function' 
-                    ? (project as any).toJSON() 
+                const projectJson: any = typeof (project as any).toJSON === 'function'
+                    ? (project as any).toJSON()
                     : { ...project };
 
                 projectJson.manager_id = userMap.get(Number(projectJson.manager_id)) ?? null;
@@ -742,7 +720,7 @@ export class ProjectController {
                     const today = dayjs();
                     const endDate = dayjs(project.end_date);
                     const daysRemaining = endDate.diff(today, 'day');
-                    
+
                     projectContext = {
                         name: project.name,
                         start_date: project.start_date,
@@ -750,7 +728,7 @@ export class ProjectController {
                         days_remaining: daysRemaining,
                         status: project.status
                     };
-                    
+
                     console.log(`[Project Controller] Project context: ${project.name}, ${daysRemaining} days remaining`);
                 }
             }
@@ -783,7 +761,7 @@ export class ProjectController {
 
             for (const reqSkill of analysis.required_skills) {
                 const skill = await findOrCreateNormalizedSkill(reqSkill.name);
-                
+
                 if (!skill) {
                     continue; // Skill bị loại trừ
                 }
@@ -828,7 +806,7 @@ export class ProjectController {
             if (req.body.required_skills && !Array.isArray(req.body.required_skills)) {
                 req.body.required_skills = Object.values(req.body.required_skills);
             }
-            
+
             const allowFields = {
                 job_id: 'string',
                 job_title: 'string',
@@ -892,16 +870,14 @@ export class ProjectController {
             console.log(`[Project Controller] Found ${candidates.length} candidates by skills`);
 
             // Fetch user info for all candidates from Auth Service
-            const AuthServiceUrl = process.env.AUTH_SERVICE_URL || 'http://localhost:4001';
             console.log('[Project Controller] Fetching user info from auth-service...');
             const userInfoMap = new Map<number, { fullName: string; email: string }>();
-            
+
             try {
                 // Batch fetch all user IDs at once using auth-service /api/users/bulk
                 const userIds = candidates.map(c => c.user_id);
-                const userResp = await axios.post(`${AuthServiceUrl}/api/users/bulk`, { userIds });
-                const users = userResp.data?.data || userResp.data || [];
-                
+                const users = await AuthService.getUsersByIds(userIds);
+
                 users.forEach((user: any) => {
                     userInfoMap.set(user.id, {
                         fullName: user.fullName || user.username || `User ${user.id}`,
@@ -922,9 +898,9 @@ export class ProjectController {
             // Kiểm tra workload VÀ timeline conflict cho từng candidate
             const candidatesWithWorkload = await Promise.all(
                 candidates.map(async (candidate) => {
-                    const userInfo = userInfoMap.get(candidate.user_id) || { 
-                        fullName: `User ${candidate.user_id}`, 
-                        email: '' 
+                    const userInfo = userInfoMap.get(candidate.user_id) || {
+                        fullName: `User ${candidate.user_id}`,
+                        email: ''
                     };
 
                     if (!check_workload) {
@@ -943,7 +919,7 @@ export class ProjectController {
                         // Get current INCOMPLETE tasks for this user
                         const tasks = await TaskModel.query()
                             .where('assignee_id', candidate.user_id)
-                            .where(function() {
+                            .where(function () {
                                 this.where('status', 'todo')
                                     .orWhere('status', 'in-progress')
                                     .orWhere('status', 'in_progress');
@@ -1014,7 +990,7 @@ export class ProjectController {
                             // Fallback - không log chi tiết, chỉ dùng rule-based
                             const newTotal = totalEstimatedHours + jobEstimatedHours;
                             const totalDays = Math.ceil(newTotal / 8);
-                            
+
                             let can_take_more_work = true;
                             let risk_level: 'low' | 'medium' | 'high' = 'low';
 
@@ -1053,7 +1029,7 @@ export class ProjectController {
             );
 
             const suggestedCandidates = candidatesWithWorkload.filter(c => c.match_score > 0);
-            
+
             console.log(`[Project Controller] ${suggestedCandidates.length} candidates with matching skills, ${candidatesWithWorkload.length} total project members`);
 
             // Format candidate data
@@ -1085,7 +1061,7 @@ export class ProjectController {
             console.error('[Project Controller] Error finding candidates:', error);
             res.status(500).json({
                 error: 'Failed to find candidates',
-                details: error.message 
+                details: error.message
             });
         }
     };
@@ -1144,7 +1120,7 @@ export class ProjectController {
                 // ============ STEP 1: VALIDATE DEPENDENCIES ============
                 if (payload.depends_on && Array.isArray(payload.depends_on) && payload.depends_on.length > 0 && payload.project_id) {
                     const allProjectTasks = await TaskModel.query().where('project_id', payload.project_id);
-                    
+
                     const depValidation = await validateTaskDependencies({
                         depends_on: payload.depends_on,
                         allProjectTasks: allProjectTasks.map(t => ({
@@ -1195,7 +1171,7 @@ export class ProjectController {
 
                         // Call Gemini to analyze timeline (real-time, no cache)
                         console.log(`[Project Controller] Analyzing timeline for task "${payload.title}" (${payload.start_date} → ${payload.due_date})`);
-                        
+
                         timelineAnalysis = await analyzeTaskTimeline({
                             newTask: {
                                 title: payload.title,
@@ -1234,11 +1210,11 @@ export class ProjectController {
 
                     } catch (timelineError: any) {
                         console.error('[Project Controller] Timeline analysis failed:', timelineError);
-                        
+
                         // If Gemini failed and there's a fallback, use it
                         if (timelineError.code === 'AI_ANALYSIS_FAILED' && timelineError.fallback) {
                             timelineAnalysis = timelineError.fallback;
-                            
+
                             if (timelineAnalysis.risk_level === 'critical') {
                                 await trx.rollback();
                                 res.status(503).json({
@@ -1261,8 +1237,8 @@ export class ProjectController {
                 let aiAnalysis = null;
                 if (payload.ai_analysis_result) {
                     try {
-                        aiAnalysis = typeof payload.ai_analysis_result === 'string' 
-                            ? JSON.parse(payload.ai_analysis_result) 
+                        aiAnalysis = typeof payload.ai_analysis_result === 'string'
+                            ? JSON.parse(payload.ai_analysis_result)
                             : payload.ai_analysis_result;
                     } catch (e) {
                         console.warn('[Project Controller] Failed to parse ai_analysis_result:', e);
@@ -1488,15 +1464,12 @@ export class ProjectController {
             const tasks = await query;
 
             // Fetch assignee info from auth-service
-            const assigneeIds = [...new Set(tasks.map(t => t.assignee_id).filter(Boolean))];
+            const assigneeIds = [...new Set(tasks.map(t => t.assignee_id).filter((id): id is number => typeof id === 'number'))];
             const assigneeMap = new Map<number, { fullName: string; email: string }>();
 
             if (assigneeIds.length > 0) {
                 try {
-                    const userResp = await axios.post(`${AuthServiceUrl}/api/users/bulk`, { 
-                        userIds: assigneeIds 
-                    });
-                    const users = userResp.data?.data || userResp.data || [];
+                    const users = await AuthService.getUsersByIds(assigneeIds);
                     users.forEach((user: any) => {
                         assigneeMap.set(user.id, {
                             fullName: user.fullName || user.username || `User ${user.id}`,
@@ -1563,9 +1536,9 @@ export class ProjectController {
             // Validate status
             const validStatuses = ['todo', 'in_progress', 'done'];
             if (!validStatuses.includes(status)) {
-                res.status(400).json({ 
-                    error: 'Invalid status', 
-                    message: `Status must be one of: ${validStatuses.join(', ')}` 
+                res.status(400).json({
+                    error: 'Invalid status',
+                    message: `Status must be one of: ${validStatuses.join(', ')}`
                 });
                 return;
             }
@@ -1591,26 +1564,23 @@ export class ProjectController {
                     updated_at: new Date().toISOString()
                 });
 
-                // Add timeline event: task created
-                await ProjectTimelineModel.query().insert({
-                    project_id: task.project_id,
-                    event_type: 'task_updated',
-                    title: 'Cập nhật trạng thái task',
-                    description: `Task "${task.title}" đã được cập nhật trạng thái thành ${status} bởi user ${task.assignee_id || 'unknown'}`,
-                    user_id: task.assignee_id || null,
-                    event_time: dayjs().toISOString(),
-                    metadata: { task_id: updatedTask.task_id, new_status: status }
-                } as any);
+            // Add timeline event: task created
+            await ProjectTimelineModel.query().insert({
+                project_id: task.project_id,
+                event_type: 'task_updated',
+                title: 'Cập nhật trạng thái task',
+                description: `Task "${task.title}" đã được cập nhật trạng thái thành ${status} bởi user ${task.assignee_id || 'unknown'}`,
+                user_id: task.assignee_id || null,
+                event_time: dayjs().toISOString(),
+                metadata: { task_id: updatedTask.task_id, new_status: status }
+            } as any);
 
 
             // Fetch assignee info if exists
             let assigneeInfo = null;
             if (updatedTask.assignee_id) {
                 try {
-                    const userResp = await axios.post(`${AuthServiceUrl}/api/users/bulk`, { 
-                        userIds: [updatedTask.assignee_id] 
-                    });
-                    const users = userResp.data?.data || userResp.data || [];
+                    const users = await AuthService.getUsersByIds([updatedTask.assignee_id]);
                     if (users.length > 0) {
                         const user = users[0];
                         assigneeInfo = {
@@ -1704,7 +1674,7 @@ export class ProjectController {
                 const projects = await ProjectModel.query()
                     .whereIn('project_id', projectIds)
                     .select('project_id', 'name', 'status');
-                
+
                 projects.forEach(project => {
                     projectMap.set(project.project_id, project);
                 });
@@ -1751,7 +1721,7 @@ export class ProjectController {
                         status: t.status,
                         priority: t.priority,
                         estimated_hours: t.estimated_hours,
-                            start_date: t.start_date,
+                        start_date: t.start_date,
                         actual_hours: t.actual_hours,
                         due_date: t.due_date,
                         tags: t.tags,
@@ -1794,7 +1764,7 @@ export class ProjectController {
             // Tính toán thống kê
             const stats = {
                 total_tasks: tasks.length,
-                
+
                 by_status: {
                     todo: tasks.filter(t => t.status === 'todo').length,
                     in_progress: tasks.filter(t => t.status === 'in_progress').length,
@@ -1817,7 +1787,7 @@ export class ProjectController {
                         .reduce((sum, t) => sum + (t.actual_hours || 0), 0)
                 },
 
-                completion_rate: tasks.length > 0 
+                completion_rate: tasks.length > 0
                     ? Math.round((tasks.filter(t => t.status === 'done').length / tasks.length) * 100)
                     : 0,
 
@@ -1881,7 +1851,7 @@ export class ProjectController {
 
             // Group by date
             const dateMap = new Map<string, { todo: number; in_progress: number; done: number }>();
-            
+
             tasks.forEach(task => {
                 if (task.created_at) {
                     const date = dayjs(task.created_at).format('YYYY-MM-DD');
@@ -1942,8 +1912,7 @@ export class ProjectController {
             const userMap = new Map<number, any>();
 
             try {
-                const userResp = await axios.post(`${AuthServiceUrl}/api/users/bulk`, { userIds });
-                const users = userResp.data?.data || userResp.data || [];
+                const users = await AuthService.getUsersByIds(userIds);
                 users.forEach((user: any) => {
                     userMap.set(user.id, user);
                 });
@@ -2004,8 +1973,7 @@ export class ProjectController {
 
             if (userIds.length > 0) {
                 try {
-                    const userResp = await axios.post(`${AuthServiceUrl}/api/users/bulk`, { userIds });
-                    const users = userResp.data?.data || userResp.data || [];
+                    const users = await AuthService.getUsersByIds(userIds);
                     users.forEach((user: any) => {
                         userMap.set(user.id, {
                             id: user.id,
@@ -2218,7 +2186,7 @@ export class ProjectController {
 
             // Get project details
             const project = await ProjectModel.query().findById(Number(project_id));
-            
+
             if (!project) {
                 res.status(404).json({ error: 'Project not found' });
                 return;
@@ -2240,7 +2208,7 @@ export class ProjectController {
             };
 
             // Calculate progress based on completed tasks
-            const progress = tasks.length > 0 
+            const progress = tasks.length > 0
                 ? Math.round((taskStats.done / tasks.length) * 100)
                 : 0;
 

@@ -2,12 +2,7 @@ import { Request, Response } from 'express';
 import ContractModel from '@/src/Models/ContractModel';
 import ContractTypeModel from '@/src/Models/ContractTypeModel';
 import { validate, ValidationException } from '@/src/utils/validation-utility';
-import axios from 'axios';
-import fs from 'fs';
-import path from 'path';
-
-// Salary service in this workspace currently runs on 4007 (check /services/salary-service/server.js or env)
-const SALARY_SERVICE_URL = process.env.SALARY_SERVICE_URL || 'http://localhost:4007/api';
+import SalaryService from "@/src/integrations/SalaryService";
 
 /**
  * Create a contract for a user with salary profile
@@ -15,7 +10,7 @@ const SALARY_SERVICE_URL = process.env.SALARY_SERVICE_URL || 'http://localhost:4
 export const createContract = async (req: Request, res: Response) => {
   try {
     const params = req.body;
-    
+
     // Get userId from URL params or body (prioritize URL params)
     const userIdFromUrl = req.params.userId;
     const userId = userIdFromUrl ? parseInt(userIdFromUrl) : params.userId;
@@ -44,9 +39,9 @@ export const createContract = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Ngày bắt đầu phải sau hoặc bằng ngày ký!', code: 5012 });
     }
 
-  // Extract salary fields and strip contractTerm (not a column on contracts table)
-  // contractTerm belongs to contract_types, not contracts, so remove it if present
-  const { salary, allowance_type_ids, contractTerm, ...contractData } = params;
+    // Extract salary fields and strip contractTerm (not a column on contracts table)
+    // contractTerm belongs to contract_types, not contracts, so remove it if present
+    const { salary, allowance_type_ids, contractTerm, ...contractData } = params;
 
     // Prepare contract data with userId
     const data: any = {
@@ -74,12 +69,12 @@ export const createContract = async (req: Request, res: Response) => {
         if (isNaN(parsedSalary) || !isFinite(parsedSalary) || parsedSalary < 0) {
           // Invalid salary value
           // Rollback created contract and report error
-          try { await ContractModel.query().deleteById(contract.id); } catch (_) {}
+          try { await ContractModel.query().deleteById(contract.id); } catch (_) { }
           return res.status(400).json({ error: 'Giá trị lương không hợp lệ', code: 7010 });
         }
 
         if (Math.abs(parsedSalary) > MAX_SALARY) {
-          try { await ContractModel.query().deleteById(contract.id); } catch (_) {}
+          try { await ContractModel.query().deleteById(contract.id); } catch (_) { }
           return res.status(400).json({
             error: `Lương vượt quá giới hạn cho phép (tối đa ${MAX_SALARY.toLocaleString('en-US')}).`,
             code: 7011,
@@ -98,15 +93,12 @@ export const createContract = async (req: Request, res: Response) => {
 
         console.log('Creating salary profile:', salaryPayload);
 
-        const salaryResponse = await axios.post(
-          `${SALARY_SERVICE_URL}/contracts/${contract.id}/salary-profile`,
-          salaryPayload
-        );
+        const salaryResponse = await SalaryService.createSalaryProfile(contract.id, salaryPayload);
 
         console.log('Salary profile created successfully:', salaryResponse.data);
       } catch (salaryError: any) {
         console.error('Error creating salary profile:', salaryError.response?.data || salaryError.message);
-        
+
         // Rollback contract if salary creation fails
         try {
           await ContractModel.query().deleteById(contract.id);
@@ -114,8 +106,8 @@ export const createContract = async (req: Request, res: Response) => {
         } catch (rollbackErr) {
           console.error('Contract rollback failed:', rollbackErr);
         }
-        
-        return res.status(400).json({ 
+
+        return res.status(400).json({
           error: 'Tạo hồ sơ lương thất bại: ' + (salaryError.response?.data?.error || salaryError.message),
           code: 7002,
           details: { stage: 'salary', rolledBackContractId: contract.id }

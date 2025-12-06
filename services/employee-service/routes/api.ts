@@ -77,9 +77,7 @@ const routeGroups = [
     group: 'contracts',
     routes: [
       { method: 'post', path: '/users/:userId/contracts', handler: createContract, auth: true },
-  // DEBUG: temporary unauthenticated route to test incoming payloads directly
-  { method: 'post', path: '/debug/users/:userId/contracts', handler: createContract, auth: false },
-      { method: 'post', path: '/contracts', handler: createContract, auth: true }, // Backward compatible
+
       { method: 'get', path: '/contracts/user/:userId', handler: getContractsByUser, auth: true },
       { method: 'get', path: '/contracts/user/:userId/active', handler: getActiveContract, auth: false }, // For cross-service call
       { method: 'delete', path: '/contracts/user/:userId', handler: deleteContractsByUser, auth: true },
@@ -94,12 +92,12 @@ const registerRoutes = (groups: any[]) => {
   groups.forEach(({ group, routes }) => {
     routes.forEach((route: any) => {
       const middlewares: any[] = [];
-      
+
       // Add authentication middleware if required
       if (route.auth) {
         middlewares.push(authenticateToken);
       }
-      
+
       // Register route handler with error handling. Avoid noisy per-request registration logs;
       // instead we log registration once at startup below. The request-level logging is
       // handled by the server's middleware which prints timestamp + method + URL.
@@ -130,7 +128,7 @@ registerRoutes(routeGroups);
 // ===================================
 router.get('/', (req: Request, res: Response) => {
   const totalRoutes = routeGroups.reduce((sum, group) => sum + group.routes.length, 0);
-  
+
   const apiInfo = {
     service: 'Employee Service API v2.0',
     status: 'active',
@@ -152,9 +150,4 @@ router.get('/', (req: Request, res: Response) => {
 
 export default router;
 
-// DEBUG: temporary echo endpoint to inspect raw incoming JSON (no auth)
-// Use: POST /api/debug/echo
-// This is safe to remove after debugging
-router.post('/debug/echo', (req: Request, res: Response) => {
-  res.json({ receivedBody: req.body, receivedHeaders: req.headers });
-});
+

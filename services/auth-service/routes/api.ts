@@ -7,13 +7,11 @@ import path from 'path';
 import fs from 'fs';
 import {
   loginHandler,
-  logoutHandler,
-  registerHandler,
   refreshToken,
-  changePassword,
   sendOTPController,
   resetPasswordController,
   authenticateToken,
+  changePassword,
 } from '@/src/controller/auth-controller';
 import {
   getAllRoles,
@@ -36,15 +34,12 @@ import {
   deleteMultipleUsers,
   createContract,
   getUsersByDepartment,
-  getUsersByChevron,
   getAllUsersAll,
-  getUserByUsername,
   getNumberOfDaysOff,
   checkUserScope,
   getUsersByIds,
-  getUserBulk,
   getAllUsersAllForSelect,
-  searchUsers,
+  getUserInfo,
 } from '@/src/controller/UserController';
 
 const router = Router();
@@ -93,13 +88,10 @@ const upload = createUploadMiddleware();
 // AUTHENTICATION ROUTES
 // ===================================
 const authRoutes = [
-  { method: 'post', path: '/register', handler: registerHandler, auth: false },
   { method: 'post', path: '/login', handler: loginHandler, auth: false },
-  { method: 'post', path: '/logout', handler: logoutHandler, auth: false },
   { method: 'post', path: '/refresh-token', handler: refreshToken, auth: false },
   { method: 'post', path: '/forgot-password', handler: sendOTPController, auth: false },
   { method: 'post', path: '/reset-password', handler: resetPasswordController, auth: false },
-  { method: 'post', path: '/send-otp', handler: sendOTPController, auth: false },
   { method: 'post', path: '/change-password', handler: changePassword, auth: true },
   {
     method: 'get', path: '/check-auth', handler: (req: Request, res: Response) => {
@@ -130,24 +122,18 @@ const roleRoutes = [
 // ===================================
 const userRoutes = [
   { method: 'get', path: '/users', handler: getAllUsers, auth: true },
-  { method: 'get', path: '/users/search', handler: searchUsers, auth: true },
   { method: 'get', path: '/users/all', handler: getAllUsersAll, auth: true },
   { method: 'get', path: '/users/allForSelect', handler: getAllUsersAllForSelect, auth: true },
   { method: 'get', path: '/users/by-department', handler: getUsersByDepartment, auth: true },
-  { method: 'get', path: '/users/by-chevron', handler: getUsersByChevron, auth: true },
   { method: 'post', path: '/users/bulk', handler: getUsersByIds, auth: false }, // Internal bulk fetch
-  { method: 'get', path: '/users/username/:username', handler: getUserByUsername, auth: false }, // AI service
-  { method: 'get', path: '/users/by-username/:username', handler: getUserByUsername, auth: true },
   { method: 'delete', path: '/users/multiple', handler: deleteMultipleUsers, auth: true },
   { method: 'post', path: '/users/:id/contract', handler: createContract, auth: true },
   { method: 'get', path: '/users/detail/:id', handler: getUserDetail, auth: true },
   { method: 'get', path: '/users/:id', handler: getUserDetail, auth: true },
+  { method: 'get', path: '/me', handler: getUserInfo, auth: true },
   { method: 'delete', path: '/users/:id', handler: deleteUser, auth: true },
-  // Salary endpoints removed (salary/allowance/vacationDay were dropped from DB)
   { method: 'get', path: '/users/:id/number-of-days-off', handler: getNumberOfDaysOff, auth: false }, // Internal
   { method: 'post', path: '/users/check-scope', handler: checkUserScope, auth: true }, // Internal scope check
-  // { method: 'post', path: '/users/update-status-resignation', handler: updateUserStatusForResignation, auth: false }, // Internal resignation status update
-  { method: 'post', path: '/users/user-bulk', handler: getUserBulk, auth: true }, // Internal status update
 ];
 
 // Routes with file upload

@@ -1,16 +1,19 @@
 import { Request, Response } from "express";
 import fs from 'fs';
 import path from 'path';
+import FormData from 'form-data';
 import UserModel from "@/src/Models/UserModel";
 import RoleModel from "@/src/Models/RoleModel";
 import { validate, ValidationException } from "@/src/utils/validation-utility";
 import constantConfig from "@/src/config/constant";
 import bcrypt from 'bcryptjs';
 import _ from "lodash";
-import axios from 'axios';
+
 import { getDecodedToken } from "@/src/utils/decode-token";
 
 import os from 'os';
+import EmployeeService from "../integrations/EmployeeService";
+import AIService from "../integrations/AIService";
 
 function getLocalIpAddress(): string {
   const interfaces = os.networkInterfaces();
@@ -106,103 +109,7 @@ const deleteOldIdentificationPhoto = (oldPhotoPath: string): void => {
 /**
  * Unified search API - Search users by keyword (fullName, phone, or email)
  */
-export const searchUsers = async (req: any, res: Response) => {
-  try {
-    const { auth } = req as any;
-    const scope = "users";
-    
-    // Get keyword from query
-    const keyword = (req.query.keyword as string || '').trim();
-  // Accept 1-based page from clients, but work if page=0 is provided.
-  const rawPage = req.query.page !== undefined ? parseInt(req.query.page as string, 10) : 1;
-  const page = Math.max(0, (isNaN(rawPage) ? 1 : rawPage) - 1);
-  const pageSize = parseInt(req.query.pageSize as string, 10) || 10;
-    
-    let userIds: number[] = await UserModel.checkScope(scope, req);
-    
-    // Build query with keyword search using OR
-    let query = UserModel.query()
-      .select(['users.*'])
-      .whereIn("users.id", userIds)
-      .whereNot("users.id", auth.id)
-      .where("users.status", 1);
-    
-    // Apply keyword search if provided
-    if (keyword) {
-      query = query.where(function() {
-        this.where('users.fullName', 'like', `%${keyword}%`)
-          .orWhere('users.phone', 'like', `%${keyword}%`)
-          .orWhere('users.email', 'like', `%${keyword}%`);
-      });
-    }
-    
-    // Execute query with pagination
-    let result: any = await query
-      .withGraphJoined("[role]")
-      .page(page, pageSize);
-    
-    console.log('🔍 [searchUsers] Query results:', {
-      total: result.total,
-      resultsCount: result.results?.length || 0,
-      keyword,
-      page,
-      pageSize
-    });
-    
-    // If no results, return early
-    if (!result.results || result.results.length === 0) {
-      console.log('⚠️ [searchUsers] No results found');
-      return res.status(200).json(result);
-    }
-    
-    // Enrich with department and chevron details
-    const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
-    const headers: any = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-    
-    const usersWithDetails = await Promise.all(result.results.map(async (user: any) => {
-      let department = null;
-      let chevron = null;
-      try {
-        if (user.departmentId) {
-          const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${user.departmentId}`, { headers });
-          department = depRes.data || null;
-        }
-      } catch (e: any) {
-        console.error(`Error fetching department ${user.departmentId}:`, e.message || 'Unknown error');
-      }
-      try {
-        if (user.chevronId) {
-          const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: user.chevronId }, { headers });
-          chevron = chvRes.data || null;
-        }
-      } catch (e: any) {
-        console.error(`Error fetching chevron ${user.chevronId}:`, e.message || 'Unknown error');
-      }
-      return {
-        ...user,
-        department,
-        chevron,
-      };
-    }));
-  
-    result.results = usersWithDetails;
-    
-    console.log('✅ [searchUsers] Enriched results:', {
-      resultsCount: result.results?.length || 0,
-      total: result.total
-    });
-    
-    return res.status(200).json(result);
-  } catch (error) {
-    console.error("Error searching users:", error);
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : "Internal Server Error",
-    });
-  }
-};
+
 
 /**
  * Get all users with pagination and filtering
@@ -222,10 +129,10 @@ export const getAllUsers = async (req: any, res: Response) => {
 
     // Retrieve page and pageSize from query parameters, defaulting to 0 and 10
     // Ensure these are treated as numbers
-  // Accept 1-based page from clients, but work if page=0 is provided.
-  const rawPage = req.query.page !== undefined ? parseInt(req.query.page as string, 10) : 1;
-  const page = Math.max(0, (isNaN(rawPage) ? 1 : rawPage) - 1);
-  const pageSize = parseInt(req.query.pageSize as string, 10) || 10;
+    // Accept 1-based page from clients, but work if page=0 is provided.
+    const rawPage = req.query.page !== undefined ? parseInt(req.query.page as string, 10) : 1;
+    const page = Math.max(0, (isNaN(rawPage) ? 1 : rawPage) - 1);
+    const pageSize = parseInt(req.query.pageSize as string, 10) || 10;
 
     // Fetch users WITHOUT joins
     let result: any = (await UserModel.query()
@@ -249,9 +156,7 @@ export const getAllUsers = async (req: any, res: Response) => {
       try {
         if (user.departmentId) {
           // console.log("user.departmentId", user.departmentId);
-          const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${user.departmentId}`, { headers });
-          // console.log("depRes", depRes);
-          department = depRes.data || null;
+          department = await EmployeeService.getDepartmentById(user.departmentId, headers['Authorization']);
         }
       } catch (e: any) {
         console.error(`Error fetching department ${user.departmentId}:`, e.message || 'Unknown error');
@@ -259,9 +164,7 @@ export const getAllUsers = async (req: any, res: Response) => {
       try {
         if (user.chevronId) {
           // console.log("user.chevronId", user.chevronId);
-          const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: user.chevronId }, { headers });
-          // console.log("chvRes", chvRes);
-          chevron = chvRes.data || null;
+          chevron = await EmployeeService.getChevronDetail(user.chevronId, headers['Authorization']);
         }
       } catch (e: any) {
         console.error(`Error fetching chevron ${user.chevronId}:`, e.message || 'Unknown error');
@@ -339,7 +242,7 @@ export const getAllUsersAll = async (req: any, res: Response) => {
 
     // Apply global search (OR across multiple fields)
     if (search) {
-      query = query.where(function() {
+      query = query.where(function () {
         this.where('users.username', 'like', `%${search}%`)
           .orWhere('users.fullName', 'like', `%${search}%`)
           .orWhere('users.email', 'like', `%${search}%`)
@@ -423,16 +326,14 @@ export const getAllUsersAll = async (req: any, res: Response) => {
       let chevron = null;
       try {
         if (user.departmentId) {
-          const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${user.departmentId}`, { headers });
-          department = depRes.data || null;
+          department = await EmployeeService.getDepartmentById(user.departmentId, headers['Authorization']);
         }
       } catch (e: any) {
         console.error(`Error fetching department ${user.departmentId}:`, e.message || 'Unknown error');
       }
       try {
         if (user.chevronId) {
-          const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: user.chevronId }, { headers });
-          chevron = chvRes.data || null;
+          chevron = await EmployeeService.getChevronDetail(user.chevronId, headers['Authorization']);
         }
       } catch (e: any) {
         console.error(`Error fetching chevron ${user.chevronId}:`, e.message || 'Unknown error');
@@ -485,16 +386,14 @@ export const getAllUsersAllForSelect = async (req: any, res: Response) => {
       let chevron = null;
       try {
         if (user.departmentId) {
-          const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${user.departmentId}`, { headers });
-          department = depRes.data || null;
+          department = await EmployeeService.getDepartmentById(user.departmentId, headers['Authorization']);
         }
       } catch (e: any) {
         console.error(`Error fetching department ${user.departmentId}:`, e.message || 'Unknown error');
       }
       try {
         if (user.chevronId) {
-          const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: user.chevronId }, { headers });
-          chevron = chvRes.data || null;
+          chevron = await EmployeeService.getChevronDetail(user.chevronId, headers['Authorization']);
         }
       } catch (e: any) {
         console.error(`Error fetching chevron ${user.chevronId}:`, e.message || 'Unknown error');
@@ -660,8 +559,8 @@ export const createUser = async (req: Request, res: Response) => {
     }
 
     try {
-      const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${params.departmentId}`, { headers });
-      if (!depRes.data) {
+      const department = await EmployeeService.getDepartmentById(params.departmentId, headers['Authorization']);
+      if (!department) {
         return res.status(400).json({ message: "Phòng ban không tồn tại!", code: 5008 });
       }
     } catch (e) {
@@ -669,8 +568,8 @@ export const createUser = async (req: Request, res: Response) => {
     }
 
     try {
-      const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: params.chevronId }, { headers });
-      if (!chvRes.data) {
+      const chevron = await EmployeeService.getChevronDetail(params.chevronId, headers['Authorization']);
+      if (!chevron) {
         return res.status(400).json({ message: "Chức vụ không tồn tại!", code: 5007 });
       }
     } catch (e) {
@@ -729,8 +628,10 @@ export const createUser = async (req: Request, res: Response) => {
             }
 
             if (imageBuffer) {
-              const blob = new Blob([imageBuffer], { type: photoFile.mimetype || 'image/jpeg' });
-              formData.append('image', blob, imageName);
+              formData.append('image', imageBuffer, {
+                filename: imageName,
+                contentType: photoFile.mimetype || 'image/jpeg',
+              });
               formData.append('user_id', newUser.id.toString());
               formData.append('username', params.username);
 
@@ -738,8 +639,8 @@ export const createUser = async (req: Request, res: Response) => {
               const aiHeaders: any = {};
               if (token) aiHeaders['Authorization'] = `Bearer ${token}`;
 
-              const aiResponse = await axios.post(aiServiceUrl, formData, { headers: aiHeaders });
-              if (aiResponse.data.success) {
+              const aiResponse = await AIService.registerFace(formData, aiHeaders['Authorization']);
+              if (aiResponse.success) {
                 console.log('✅ [CREATE USER] Face embedding saved successfully');
               }
             }
@@ -775,11 +676,8 @@ export const createUser = async (req: Request, res: Response) => {
 
         // Verify contract type exists
         try {
-          const contractTypeRes = await axios.get(
-            `${API_GATEWAY_URL}/api/employee/contractTypes/${params.contract.contractTypeId}`,
-            { headers }
-          );
-          if (!contractTypeRes.data) {
+          const contractType = await EmployeeService.getContractTypeById(params.contract.contractTypeId, headers['Authorization']);
+          if (!contractType) {
             throw new Error("Loại hợp đồng không tồn tại!");
           }
         } catch (e) {
@@ -812,11 +710,8 @@ export const createUser = async (req: Request, res: Response) => {
         console.log('📝 Creating contract with params:', contractParams);
 
         // Call employee-service to create contract and salary
-        const contractResponse = await axios.post(
-          `${API_GATEWAY_URL}/api/employee/users/${newUser.id}/contracts`,
-          contractParams,
-          { headers }
-        );
+        // Call employee-service to create contract and salary
+        const contractResponse = await EmployeeService.createContract(newUser.id, contractParams, headers['Authorization']);
 
         console.log('✅ Contract and salary created successfully');
         createdContractId = contractResponse.data?.id || null;
@@ -911,35 +806,7 @@ export const getUsersByDepartment = async (req: Request, res: Response) => {
 /**
  * Get users by chevronId or chevronIds (for internal service use)
  */
-export const getUsersByChevron = async (req: Request, res: Response) => {
-  try {
-    let { chevronId, chevronIds } = req.query;
-    let query = UserModel.query().select('id', 'username', 'email', 'chevronId');
 
-    if (chevronId) {
-      // Ép kiểu về number (nếu là string)
-      const chvId = Array.isArray(chevronId) ? Number(chevronId[0]) : Number(chevronId);
-      query = query.where('chevronId', chvId);
-    } else if (chevronIds) {
-      // chevronIds có thể là chuỗi "1,2,3" hoặc mảng
-      let ids: number[] = [];
-      if (Array.isArray(chevronIds)) {
-        ids = chevronIds.map(id => Number(id));
-      } else {
-        ids = String(chevronIds).split(',').map(Number);
-      }
-      query = query.whereIn('chevronId', ids);
-    } else {
-      return res.status(400).json({ error: 'Missing chevronId or chevronIds' });
-    }
-
-    const users = await query;
-    return res.status(200).json(users);
-  } catch (error) {
-    console.error('Error fetching users by chevron:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  }
-};
 
 /**
  * Get user details by ID
@@ -1011,8 +878,7 @@ export const getUserDetail = async (req: Request, res: Response) => {
 
     try {
       if (result.departmentId) {
-        const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${result.departmentId}`, { headers });
-        department = depRes.data || null;
+        department = await EmployeeService.getDepartmentById(result.departmentId, headers['Authorization']);
       }
     } catch (e) {
       console.error('Error fetching department from gateway', e);
@@ -1020,18 +886,17 @@ export const getUserDetail = async (req: Request, res: Response) => {
 
     try {
       if (result.chevronId) {
-        const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: result.chevronId }, { headers });
-        chevron = chvRes.data || null;
+        chevron = await EmployeeService.getChevronDetail(result.chevronId, headers['Authorization']);
       }
     } catch (e) {
       console.error('Error fetching chevron from gateway', e);
     }
 
     // Get contract info from employee-service
+    // Get contract info from employee-service
     try {
-      const contractRes = await axios.get(`${API_GATEWAY_URL}/api/employee/contracts/user/${result.id}`, { headers });
-      if (contractRes.data && contractRes.data.length > 0) {
-        const contracts = contractRes.data;
+      const contracts = await EmployeeService.getContractsByUserId(result.id, headers['Authorization']);
+      if (contracts && contracts.length > 0) {
 
         // Classify: upcoming if now < activeDay; effective if activeDay <= now <= endDate (or endDate null);
         // past otherwise. Among effective ones, select the one with the latest activeDay <= now as current.
@@ -1196,20 +1061,26 @@ export const updateUser = async (req: Request, res: Response) => {
             const savedPhotoPath = resolvePhotoAbsolutePath(updateData.identificationPhoto);
             console.log('📂 [UPDATE USER] Reading saved photo from:', savedPhotoPath);
 
+            let imageBuffer = null;
+            let imageName = photoFile.originalname || 'face.jpg';
+            
             if (fs.existsSync(savedPhotoPath)) {
               console.log('📎 [UPDATE USER] Adding image from saved path');
-              const fileBuffer = fs.readFileSync(savedPhotoPath);
-              console.log('📎 [UPDATE USER] File buffer size:', fileBuffer.length);
-              const blob = new Blob([fileBuffer], { type: photoFile.mimetype || 'image/jpeg' });
-              formData.append('image', blob, path.basename(savedPhotoPath));
+              imageBuffer = fs.readFileSync(savedPhotoPath);
+              imageName = path.basename(savedPhotoPath);
+              console.log('📎 [UPDATE USER] File buffer size:', imageBuffer.length);
             } else if (photoFile.buffer) {
               console.log('📎 [UPDATE USER] Adding image from buffer, size:', photoFile.buffer.length);
-              const blob = new Blob([photoFile.buffer], { type: photoFile.mimetype || 'image/jpeg' });
-              formData.append('image', blob, photoFile.originalname || 'face.jpg');
+              imageBuffer = photoFile.buffer;
             } else {
               console.error('❌ [UPDATE USER] No valid image source found');
               throw new Error('No valid image source found');
             }
+
+            formData.append('image', imageBuffer, {
+              filename: imageName,
+              contentType: photoFile.mimetype || 'image/jpeg',
+            });
 
             formData.append('user_id', id.toString());
             formData.append('username', updateData.username);
@@ -1217,7 +1088,7 @@ export const updateUser = async (req: Request, res: Response) => {
             console.log('📦 [UPDATE USER] FormData contents:', {
               user_id: id.toString(),
               username: updateData.username,
-              hasImageField: formData.has('image')
+              imageSize: imageBuffer?.length
             });
 
             const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
@@ -1234,11 +1105,7 @@ export const updateUser = async (req: Request, res: Response) => {
             console.log('🚀 [UPDATE USER] Calling AI service...');
 
             // Gọi AI service
-            const aiResponse = await axios.post(aiServiceUrl, formData, {
-              headers: {
-                ...aiHeaders
-              }
-            });
+            const aiResponse = await AIService.registerFace(formData, aiHeaders['Authorization']);
 
             console.log('📥 [UPDATE USER] AI service response:', {
               status: aiResponse.status,
@@ -1360,8 +1227,8 @@ export const updateUser = async (req: Request, res: Response) => {
 
     try {
       if (updateData.departmentId) {
-        const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${updateData.departmentId}`, { headers });
-        if (!depRes.data) {
+        const department = await EmployeeService.getDepartmentById(updateData.departmentId, headers['Authorization']);
+        if (!department) {
           return res.status(400).json({ message: "Phòng ban không tồn tại!", code: 5008 });
         }
       }
@@ -1371,8 +1238,8 @@ export const updateUser = async (req: Request, res: Response) => {
 
     try {
       if (updateData.chevronId) {
-        const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: updateData.chevronId }, { headers });
-        if (!chvRes.data) {
+        const chevron = await EmployeeService.getChevronDetail(updateData.chevronId, headers['Authorization']);
+        if (!chevron) {
           return res.status(400).json({ message: "Chức vụ không tồn tại!", code: 5007 });
         }
       }
@@ -1613,8 +1480,8 @@ export const createContract = async (req: Request, res: Response) => {
     }
 
     try {
-      const contractTypeRes = await axios.get(`${API_GATEWAY_URL}/api/employee/contractTypes/${params.contractTypeId}`, { headers });
-      if (!contractTypeRes.data) {
+      const contractType = await EmployeeService.getContractTypeById(params.contractTypeId, headers['Authorization']);
+      if (!contractType) {
         return res.status(400).json({ message: "Loại hợp đồng không tồn tại!", code: 5011 });
       }
     } catch (e) {
@@ -1640,9 +1507,6 @@ export const createContract = async (req: Request, res: Response) => {
     delete params.id;
 
     // Create contract in employee-service (userId passed via URL)
-    // Keep salary and allowance_type_ids in contractData so employee-service
-    // can forward/create salary profile (employee-service expects these fields
-    // when creating from a contract in our flow).
     const contractData: any = {
       ...params,
       created_at: new Date(),
@@ -1661,8 +1525,8 @@ export const createContract = async (req: Request, res: Response) => {
 
     console.log("Contract data:", contractData);
 
-    const result = await axios.post(`${API_GATEWAY_URL}/api/employee/users/${inputs.id}/contracts`, contractData, { headers });
-    return res.status(201).json(result.data);
+    const result = await EmployeeService.createContract(inputs.id, contractData, headers['Authorization']);
+    return res.status(201).json(result);
   } catch (error) {
     console.error("Error creating contract:", error);
 
@@ -1681,99 +1545,7 @@ export const createContract = async (req: Request, res: Response) => {
 };
 
 // API lấy thông tin user theo username
-export const getUserByUsername = async (req: Request, res: Response) => {
-  try {
-    const { username } = req.params;
 
-    if (!username) {
-      return res.status(400).json({
-        success: false,
-        message: 'Username không được để trống',
-        code: 400
-      });
-    }
-
-    // Tìm user theo username
-    const user = await UserModel.query()
-      .select(
-        'id',
-        'username',
-        'email',
-        'fullName',
-        'status',
-        'identificationPhoto',
-        'departmentId',
-        'chevronId'
-      )
-      .where('username', username)
-      .where('status', 1)
-      .first();
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'Không tìm thấy người dùng với username này',
-        code: 404
-      });
-    }
-
-    // Lấy thông tin department và chevron nếu có
-    let department = null;
-    let chevron = null;
-
-    if (user.departmentId) {
-      try {
-        const deptResponse = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${user.departmentId}`);
-        if (deptResponse.data.success) {
-          department = deptResponse.data.data.name;
-        }
-      } catch (error) {
-        console.warn('Không thể lấy thông tin department:', error);
-      }
-    }
-
-    if (user.chevronId) {
-      try {
-        const chevronResponse = await axios.get(`${API_GATEWAY_URL}/api/employee/chevrons/${user.chevronId}`);
-        if (chevronResponse.data.success) {
-          chevron = chevronResponse.data.data.name;
-        }
-      } catch (error) {
-        console.warn('Không thể lấy thông tin chevron:', error);
-      }
-    }
-
-    // Tạo employeeId
-    const employeeId = `NV${user.id.toString().padStart(4, '0')}`;
-
-    const userInfo = {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      fullName: user.fullName || 'N/A',
-      employeeId,
-      department: department || 'N/A',
-      position: chevron || 'N/A',
-      identificationPhoto: user.identificationPhoto,
-      status: user.status
-    };
-
-    return res.status(200).json({
-      success: true,
-      message: 'Lấy thông tin người dùng thành công',
-      data: userInfo
-    });
-
-  } catch (error) {
-    console.error('Error getting user by username:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Lỗi máy chủ nội bộ',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      code: 500
-    });
-  }
-};
 
 // aintelligence787@gmail.com
 
@@ -1932,8 +1704,7 @@ export const getUsersByIds = async (req: Request, res: Response) => {
       let chevron = null;
       try {
         if (user.departmentId) {
-          const depRes = await axios.get(`${API_GATEWAY_URL}/api/employee/departments/${user.departmentId}`, { headers });
-          department = depRes.data || null;
+          department = await EmployeeService.getDepartmentById(user.departmentId, headers['Authorization']);
         }
       } catch (e: any) {
         console.error(`Error fetching department ${user.departmentId}:`, e?.message || e);
@@ -1941,8 +1712,7 @@ export const getUsersByIds = async (req: Request, res: Response) => {
 
       try {
         if (user.chevronId) {
-          const chvRes = await axios.post(`${API_GATEWAY_URL}/api/employee/getChevronDetail`, { id: user.chevronId }, { headers });
-          chevron = chvRes.data || null;
+          chevron = await EmployeeService.getChevronDetail(user.chevronId, headers['Authorization']);
         }
       } catch (e: any) {
         console.error(`Error fetching chevron ${user.chevronId}:`, e?.message || e);
@@ -1970,130 +1740,4 @@ export const getUsersByIds = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * Update user status for resignation processing
- * This function specifically handles updating user status to "resigned" (status: "2")
- * when a resignation application is approved
- */
-export const updateUserStatusForResignation = async (req: Request, res: Response) => {
-  try {
-    const { auth } = req as any;
-    const { userId } = req.body;
 
-    console.log("=== updateUserStatusForResignation Debug ===");
-    console.log("userId:", userId);
-    console.log("approvedBy:", auth?.id);
-
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "Thiếu ID người dùng!",
-        code: 9996
-      });
-    }
-
-    // Check if user exists
-    const existingUser = await UserModel.query().findById(userId);
-    if (!existingUser) {
-      return res.status(404).json({
-        success: false,
-        message: "Người dùng không tồn tại!",
-        code: 6006
-      });
-    }
-
-    // Check if user is already resigned
-    if (existingUser.status === "2") {
-      return res.status(400).json({
-        success: false,
-        message: "Người dùng đã có trạng thái nghỉ việc!",
-        code: 6023
-      });
-    }
-
-    // Update user status to "resigned" (status: "2")
-    const updateData = {
-      status: "2", // "Đã nghỉ việc" - Resigned
-      updatedBy: auth?.id || 1, // Default to admin if no auth
-      updatedAt: new Date(),
-    };
-
-    console.log("Updating user status to resigned:", updateData);
-
-    await UserModel.query().findById(userId).patch(updateData);
-
-    // Get updated user data (without password)
-    const updatedUser = await UserModel.query().findById(userId);
-    if (updatedUser) {
-      const { password, ...userWithoutPassword } = updatedUser;
-
-      console.log("✅ User status updated successfully:", {
-        userId: updatedUser.id,
-        username: updatedUser.username,
-        oldStatus: existingUser.status,
-        newStatus: updatedUser.status,
-        updatedBy: auth?.id || 1
-      });
-
-      return res.status(200).json({
-        success: true,
-        message: "Cập nhật trạng thái người dùng thành công - Đã nghỉ việc",
-        data: {
-          updated: userWithoutPassword,
-          old: { ...existingUser, password: undefined },
-          statusChange: {
-            from: existingUser.status,
-            to: "2",
-            meaning: "Đã nghỉ việc"
-          }
-        }
-      });
-    }
-
-    return res.status(500).json({
-      success: false,
-      message: "Không thể lấy thông tin người dùng sau khi cập nhật",
-      code: 500
-    });
-
-  } catch (error) {
-    console.error("Error updating user status for resignation:", error);
-    return res.status(500).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Lỗi máy chủ nội bộ",
-      code: 500
-    });
-  }
-};
-
-
-export const getUserBulk = async (req: Request, res: Response) => {
-  try {
-    const { userIds } = req.body;
-
-    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "userIds array is required"
-      });
-    }
-
-    // Fetch users in bulk
-    const users = await UserModel.query()
-      .whereIn('id', userIds)
-      .where('status', 1);
-
-    return res.status(200).json({
-      success: true,
-      data: users,
-      total: users.length
-    });
-
-  } catch (error) {
-    console.error("Error fetching users in bulk:", error);
-    return res.status(500).json({
-      success: false,
-      message: error instanceof Error ? error.message : "Internal Server Error",
-    });
-  }
-};

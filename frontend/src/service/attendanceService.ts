@@ -35,7 +35,8 @@ export interface MonthlyStats {
   totalOvertimeSalary?: number;  // alternative column name used in DB
   totalWorkingUnits?: number;    // Tổng số công trong tháng
   totalOvertimeHours?: number;   // Tổng giờ OT
-  totalOtWorkingUnits?: number;  // Tổng công OT
+  totalOtWorkingUnits?: number;  // Tổng công OT (chưa nhân hệ số)
+  totalEffectiveOtWorkingUnits?: number; // Tổng công OT đã nhân hệ số (1.5x/3x)
   totalLateMinutes?: number;
   totalEarlyLeaveMinutes?: number;
   unauthorizedAbsenceDays?: number;

@@ -1,9 +1,6 @@
 import { Request, Response } from "express";
 import ChevronModel from "@/src/Models/ChevronModel";
 import { validate, ValidationException } from "@/src/utils/validation-utility";
-import axios from 'axios';
-
-const authServiceUrl = process.env.AUTH_SERVICE_URL;
 
 /**
  * Get all chevrons from the database
@@ -172,70 +169,21 @@ export const updateChevron = async (req: Request, res: Response) => {
  */
 export const deleteChevron = async (req: Request, res: Response) => {
   try {
-    const allowFields = {
-      id: "number!",
-    };
-
-    let inputs = req.query;
-    let params = validate(inputs, allowFields, { removeNotAllow: true });
+    // Lấy id từ query và chuyển sang number
+    const id = parseInt(req.query.id as string, 10);
+    
+    if (isNaN(id)) {
+      return res.status(400).json({ error: "id phải là số!" });
+    }
 
     // Check if chevron exists
-    let exist = await ChevronModel.query().findById(params.id);
+    let exist = await ChevronModel.query().findById(id);
     if (!exist) {
       return res.status(404).json({ error: "Chevron doesn't exist!" });
     }
 
-    // Check if chevron is being used by users via auth-service
-    // Forward authorization header from original request
-    const authHeader = req.headers.authorization;
-    const headers: any = {};
-    if (authHeader) {
-      headers.Authorization = authHeader;
-    }
-
-    console.log('🔍 Checking if chevron is used by users...');
-    console.log('📡 Calling auth-service with:', {
-      url: `${authServiceUrl}/api/users/by-chevron`,
-      params: { chevronId: params.id },
-      headers: headers
-    });
-
-    try {
-      const response = await axios.get(`${authServiceUrl}/api/users/by-chevron`, {
-        params: { chevronId: params.id },
-        headers: headers
-      });
-      
-      console.log('✅ Auth-service response:', response.data);
-      
-      if (response.data && response.data.length > 0) {
-        return res.status(400).json({ error: "Chức vụ đang được sử dụng, không thể xóa!" });
-      }
-    } catch (apiError: any) {
-      console.error('❌ Error calling auth-service:', {
-        status: apiError.response?.status,
-        statusText: apiError.response?.statusText,
-        data: apiError.response?.data,
-        message: apiError.message
-      });
-      
-      // Nếu lỗi 400, trả về thông tin chi tiết
-      if (apiError.response?.status === 400) {
-        return res.status(400).json({ 
-          error: "Lỗi khi kiểm tra users: " + (apiError.response?.data?.error || apiError.message),
-          details: apiError.response?.data
-        });
-      }
-      
-      // Nếu lỗi khác, trả về lỗi chung
-      return res.status(500).json({ 
-        error: "Lỗi khi kiểm tra users từ auth-service",
-        details: apiError.message
-      });
-    }
-
     // Delete the chevron
-    await ChevronModel.query().deleteById(params.id);
+    await ChevronModel.query().deleteById(id);
 
     return res.status(200).json({
       message: "Delete successful",
@@ -243,13 +191,6 @@ export const deleteChevron = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error deleting chevron:", error);
-
-    if (error instanceof ValidationException) {
-      return res.status(error.status).json({
-        error: error.message,
-        code: error.status
-      });
-    }
 
     return res.status(500).json({
       error: error instanceof Error ? error.message : "Internal Server Error",
@@ -264,68 +205,30 @@ export const deleteChevron = async (req: Request, res: Response) => {
 export const deleteMultipleChevrons = async (req: Request, res: Response) => {
   try {
     console.log("Received request to delete multiple chevrons:", req.body);
-    const allowFields = {
-      ids: ["number!"],
-    };
-
-    let inputs = req.body;
-    let params = validate(inputs, allowFields, { removeNotAllow: true });
-
-    console.log("Validated params:", params);
-
-    // Check if all chevrons exist
-    let existingChevrons = await ChevronModel.query().whereIn("id", params.ids);
-    if (!existingChevrons || existingChevrons.length !== params.ids.length) {
-      return res.status(404).json({ error: "One or more chevrons don't exist!" });
+    
+    // Lấy ids trực tiếp từ body
+    const { ids } = req.body;
+    
+    // Kiểm tra ids có phải là mảng không
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: "ids phải là một mảng và không được rỗng!" });
     }
 
-    // Check if any chevron is being used by users via auth-service
-    // Forward authorization header from original request
-    const authHeader = req.headers.authorization;
-    const headers: any = {};
-    if (authHeader) {
-      headers.Authorization = authHeader;
-    }
-
-    console.log('🔍 Checking if chevrons are used by users...');
-    console.log('📡 Calling auth-service with:', {
-      url: `${authServiceUrl}/api/users/by-chevron`,
-      params: { chevronIds: params.ids },
-      headers: headers
+    // Chuyển đổi tất cả ids sang number
+    const numericIds: number[] = ids.map((id: any) => {
+      const numId = typeof id === 'number' ? id : parseInt(id, 10);
+      if (isNaN(numId)) {
+        throw new Error(`Invalid id: ${id}`);
+      }
+      return numId;
     });
 
-    try {
-      const response = await axios.get(`${authServiceUrl}/api/users/by-chevron`, {
-        params: { chevronIds: params.ids },
-        headers: headers
-      });
-      
-      console.log('✅ Auth-service response:', response.data);
-      
-      if (response.data && response.data.length > 0) {
-        return res.status(400).json({ error: "Chức vụ đang được sử dụng, không thể xóa!" });
-      }
-    } catch (apiError: any) {
-      console.error('❌ Error calling auth-service:', {
-        status: apiError.response?.status,
-        statusText: apiError.response?.statusText,
-        data: apiError.response?.data,
-        message: apiError.message
-      });
-      
-      // Nếu lỗi 400, trả về thông tin chi tiết
-      if (apiError.response?.status === 400) {
-        return res.status(400).json({ 
-          error: "Lỗi khi kiểm tra users: " + (apiError.response?.data?.error || apiError.message),
-          details: apiError.response?.data
-        });
-      }
-      
-      // Nếu lỗi khác, trả về lỗi chung
-      return res.status(500).json({ 
-        error: "Lỗi khi kiểm tra users từ auth-service",
-        details: apiError.message
-      });
+    console.log("Numeric IDs:", numericIds);
+
+    // Check if all chevrons exist
+    let existingChevrons = await ChevronModel.query().whereIn("id", numericIds);
+    if (!existingChevrons || existingChevrons.length !== numericIds.length) {
+      return res.status(404).json({ error: "One or more chevrons don't exist!" });
     }
 
     // Delete the chevrons
@@ -339,13 +242,6 @@ export const deleteMultipleChevrons = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error deleting multiple chevrons:", error);
-
-    if (error instanceof ValidationException) {
-      return res.status(error.status).json({
-        error: error.message,
-        code: error.status
-      });
-    }
 
     return res.status(500).json({
       error: error instanceof Error ? error.message : "Internal Server Error",

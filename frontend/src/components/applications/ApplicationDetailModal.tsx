@@ -12,10 +12,57 @@ import {
     CloseCircleOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import customParseFormat from 'dayjs/plugin/customParseFormat';
 import applicationService from '@/service/applicationService';
 import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS, FORGOT_CHECK_TYPE_LABELS } from '@/config/constant';
 
+// Extend dayjs với plugin customParseFormat
+dayjs.extend(customParseFormat);
+
 const { Title, Text, Paragraph } = Typography;
+
+// Helper function để parse thời gian từ nhiều định dạng
+const parseTime = (timeValue: any): string => {
+    if (!timeValue) return '--:--';
+    
+    // Nếu là string chỉ có giờ:phút (VD: "17:00" hoặc "17:00:00")
+    if (typeof timeValue === 'string') {
+        // Kiểm tra format HH:mm hoặc HH:mm:ss
+        const timeOnlyMatch = timeValue.match(/^(\d{1,2}):(\d{2})(:\d{2})?$/);
+        if (timeOnlyMatch) {
+            return `${timeOnlyMatch[1].padStart(2, '0')}:${timeOnlyMatch[2]}`;
+        }
+    }
+    
+    // Nếu là ISO string hoặc Date object, parse bằng dayjs
+    const parsed = dayjs(timeValue);
+    if (parsed.isValid()) {
+        return parsed.format('HH:mm');
+    }
+    
+    return '--:--';
+};
+
+// Helper function để parse ngày từ nhiều định dạng
+const parseDate = (dateValue: any): string => {
+    if (!dateValue) return '--/--/----';
+    
+    // Thử parse với dayjs
+    const parsed = dayjs(dateValue);
+    if (parsed.isValid()) {
+        return parsed.format('DD/MM/YYYY');
+    }
+    
+    // Thử parse format YYYY-MM-DD
+    if (typeof dateValue === 'string') {
+        const dateOnlyMatch = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (dateOnlyMatch) {
+            return `${dateOnlyMatch[3]}/${dateOnlyMatch[2]}/${dateOnlyMatch[1]}`;
+        }
+    }
+    
+    return '--/--/----';
+};
 
 interface ApplicationDetailModalProps {
     applicationId: number | null;
@@ -105,10 +152,10 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
         <>
             <Descriptions column={1} bordered size="small">
                 <Descriptions.Item label={<Text><CalendarOutlined /> Ngày tăng ca</Text>}>
-                    <Text strong>{dayjs(data.overtimeDate).format('DD/MM/YYYY')}</Text>
+                    <Text strong>{parseDate(data.overtimeDate)}</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label={<Text><ClockCircleOutlined /> Giờ bắt đầu tăng ca</Text>}>
-                    <Text strong>{dayjs(data.startTime).format('HH:mm')} giờ</Text>
+                    <Text strong>{parseTime(data.startTime)} giờ</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label={<Text><ClockCircleOutlined /> Số giờ tăng ca</Text>}>
                     <Text strong>{data.overtimeHours} giờ</Text>
