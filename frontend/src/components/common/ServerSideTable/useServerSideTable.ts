@@ -86,7 +86,7 @@ export function useServerSideTable<T = any>(options: UseServerSideTableOptions<T
       try {
         const params = buildQueryParams();
         console.log('[useServerSideTable] Loading data with params:', params);
-        const response = await fetchData(params);
+        const response: any = await fetchData(params);
 
         if (!isMountedRef.current) return;
 

@@ -29,8 +29,8 @@ export interface TableState {
     total: number;
   };
   sorter: {
-    field: string;
-    order: 'asc' | 'desc';
+    field?: string;
+    order?: 'asc' | 'desc';
   };
   filters: Record<string, any>;
   searchValues: Record<string, any>;
@@ -65,7 +65,8 @@ export interface ServerSideTableProps<T = any> extends Omit<TableProps<T>, 'colu
   // Columns với config mở rộng
   columns: ServerSideColumnType<T>[];
   // Function gọi API
-  fetchData: (params: TableQueryParams) => Promise<TableApiResponse<T>>;
+  // Accept flexible response shapes (some services return {results,total}, others {data,total})
+  fetchData: (params: TableQueryParams) => Promise<any>;
   // Row key
   rowKey: string | ((record: T) => string);
   // Default sort field
