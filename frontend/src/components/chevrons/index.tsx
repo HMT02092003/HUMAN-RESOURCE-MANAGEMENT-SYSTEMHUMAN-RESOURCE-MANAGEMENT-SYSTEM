@@ -4,9 +4,6 @@ import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, Sear
 import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
 import { chevronService } from '@/service/chevronService';
-import type { InputRef } from 'antd';
-import type { FilterDropdownProps } from 'antd/es/table/interface';
-import Highlighter from 'react-highlight-words';
 
 // Định nghĩa interfaces
 interface ChevronData {
@@ -27,20 +24,21 @@ const formatDate = (date: Date | string | null): string => {
   return dayjs(date).format('DD/MM/YYYY');
 };
 
-const MyHighlighter = Highlighter as unknown as React.FC<any>;
-
 const Index: React.FC = () => {
   const screens = Grid.useBreakpoint();
   const tableRef = useRef<TableRefType>(null);
-  const searchInput = useRef<InputRef>(null);
   const [hiddenDeleteBtn, setHiddenDeleteBtn] = useState<boolean>(true);
   const [selectedIds, setSelectedIds] = useState<React.Key[]>([]);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState<boolean>(false);
   const [chevronData, setChevronData] = useState<ChevronData[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [searchText, setSearchText] = useState('');
-  const [searchedColumn, setSearchedColumn] = useState('');
   const router = useRouter();
+
+  // 🔥 Server-side: State cho pagination, sort và search
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
+  const [sorter, setSorter] = useState<{ field: string; order: 'asc' | 'desc' }>({ field: 'created_at', order: 'desc' });
+  const [searchKeyword, setSearchKeyword] = useState<string>('');
+  const [searchField, setSearchField] = useState<string | undefined>(undefined);
 
   // Giả lập quyền hạn
   const createPer: boolean = true;
@@ -49,13 +47,26 @@ const Index: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [pagination.current, pagination.pageSize, sorter.field, sorter.order, searchKeyword]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const data = await chevronService.getAllChevrons();
-      setChevronData(data);
+      const params: any = {
+        page: pagination.current,
+        limit: pagination.pageSize,
+        sort: sorter.field,
+        order: sorter.order,
+      };
+
+      if (searchKeyword) {
+        params.search = searchKeyword;
+        if (searchField) params.search_field = searchField;
+      }
+
+      const response = await chevronService.getAllChevrons(params);
+      setChevronData(response.data || []);
+      setPagination(prev => ({ ...prev, total: response.total || 0 }));
     } catch (error) {
       console.error('Error loading data:', error);
       message.error('Đã xảy ra lỗi khi tải dữ liệu!');
@@ -64,176 +75,144 @@ const Index: React.FC = () => {
     }
   };
 
-  const handleSearch = (
-    selectedKeys: string[],
-    confirm: FilterDropdownProps['confirm'],
-    dataIndex: keyof ChevronData,
+  const handleTableChange = (
+    paginationConfig: any,
+    filters: any,
+    sorterConfig: any
   ) => {
-    confirm();
-    setSearchText(selectedKeys[0]);
-    setSearchedColumn(dataIndex);
+    setPagination({
+      current: paginationConfig.current,
+      pageSize: paginationConfig.pageSize,
+      total: pagination.total,
+    });
+
+    if (sorterConfig.field && sorterConfig.order) {
+      setSorter({
+        field: sorterConfig.field,
+        order: sorterConfig.order === 'ascend' ? 'asc' : 'desc',
+      });
+    } else {
+      setSorter({ field: 'created_at', order: 'desc' });
+    }
   };
 
-  const handleReset = (clearFilters: () => void) => {
-    clearFilters();
-    setSearchText('');
+  // 🔥 Server-side search handler
+  const handleSearch = (value: string) => {
+    // Global search
+    setSearchField(undefined);
+    setSearchKeyword(value);
+    setPagination(prev => ({ ...prev, current: 1 })); // Reset về trang 1 khi search
   };
 
-  const getColumnSearchProps = (dataIndex: keyof ChevronData) => ({
-    filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters, close }: FilterDropdownProps) => (
-      <div style={{ padding: 8 }} onKeyDown={(e) => e.stopPropagation()}>
-        <Input
-          ref={searchInput}
-          placeholder={`Tìm kiếm ${dataIndex}`}
-          value={selectedKeys[0]}
-          onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-          onPressEnter={() => handleSearch(selectedKeys as string[], confirm, dataIndex)}
-          style={{ marginBottom: 8, display: 'block' }}
-        />
-        <Space>
-          <Button
-            type="primary"
-            onClick={() => handleSearch(selectedKeys as string[], confirm, dataIndex)}
-            icon={<SearchOutlined />}
-            size="small"
-            style={{ width: 90 }}
-          >
-            Tìm kiếm
-          </Button>
-          <Button
-            onClick={() => clearFilters && handleReset(clearFilters)}
-            size="small"
-            style={{ width: 90 }}
-          >
-            Reset
-          </Button>
-        </Space>
-      </div>
-    ),
-    filterIcon: (filtered: boolean) => (
-      <SearchOutlined style={{ color: filtered ? '#1677ff' : undefined }} />
-    ),
-    onFilter: (value: boolean | React.Key, record: ChevronData) =>
-      record[dataIndex]
-        .toString()
-        .toLowerCase()
-        .includes((value as string).toLowerCase()),
-    filterDropdownProps: {
-      onOpenChange(open:any) {
-        if (open) {
-          setTimeout(() => searchInput.current?.select(), 100);
-        }
-      },
-    },
-    render: (text: string) =>
-      searchedColumn === dataIndex ? (
-        <MyHighlighter
-          highlightStyle={{ backgroundColor: '#ffc069', padding: 0 }}
-          searchWords={[searchText]}
-          autoEscape
-          textToHighlight={text ? text.toString() : ''}
-        />
-      ) : (
-        text
-      ),
-  });
+  const handleColumnSearch = (field: string, value: string) => {
+    setSearchField(field);
+    setSearchKeyword(value);
+    setPagination(prev => ({ ...prev, current: 1 }));
+  };
 
   const columns = [
     {
-      title: "Tên chức vụ",
+      title: 'Tên chức vụ',
       dataIndex: 'name',
       key: 'name',
-      sorter: (a: ChevronData, b: ChevronData) => a.name.localeCompare(b.name),
+      sorter: true,
       width: 200,
-      ...getColumnSearchProps('name'),
+      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: any) => (
+        <div style={{ padding: 8 }}>
+          <Input
+            placeholder="Tìm theo tên"
+            value={selectedKeys && selectedKeys[0] ? selectedKeys[0] : ''}
+            onChange={e => setSelectedKeys(e.target.value ? [e.target.value] : [])}
+            onPressEnter={() => {
+              const val = (selectedKeys && selectedKeys[0]) || '';
+              handleColumnSearch('name', val);
+              confirm();
+            }}
+            style={{ width: 188, marginBottom: 8, display: 'block' }}
+            size="small"
+          />
+          <Space>
+            <Button
+              type="primary"
+              onClick={() => {
+                const val = (selectedKeys && selectedKeys[0]) || '';
+                handleColumnSearch('name', val);
+                confirm();
+              }}
+              size="small"
+            >Tìm</Button>
+            <Button
+              onClick={() => {
+                clearFilters && clearFilters();
+                setSearchField(undefined);
+                setSearchKeyword('');
+                confirm();
+              }}
+              size="small"
+            >Xóa</Button>
+          </Space>
+        </div>
+      ),
+      filterIcon: (filtered: boolean) => <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />,
     },
     {
-      title: "Mô tả chức vụ",
+      title: 'Mô tả chức vụ',
       dataIndex: 'description',
       key: 'description',
-      sorter: (a: ChevronData, b: ChevronData) => a.description.localeCompare(b.description),
+      sorter: true,
       width: 300,
-      ...getColumnSearchProps('description'),
+      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: any) => (
+        <div style={{ padding: 8 }}>
+          <Input
+            placeholder="Tìm theo mô tả"
+            value={selectedKeys && selectedKeys[0] ? selectedKeys[0] : ''}
+            onChange={e => setSelectedKeys(e.target.value ? [e.target.value] : [])}
+            onPressEnter={() => {
+              const val = (selectedKeys && selectedKeys[0]) || '';
+              handleColumnSearch('description', val);
+              confirm();
+            }}
+            style={{ width: 220, marginBottom: 8, display: 'block' }}
+            size="small"
+          />
+          <Space>
+            <Button
+              type="primary"
+              onClick={() => {
+                const val = (selectedKeys && selectedKeys[0]) || '';
+                handleColumnSearch('description', val);
+                confirm();
+              }}
+              size="small"
+            >Tìm</Button>
+            <Button
+              onClick={() => {
+                clearFilters && clearFilters();
+                setSearchField(undefined);
+                setSearchKeyword('');
+                confirm();
+              }}
+              size="small"
+            >Xóa</Button>
+          </Space>
+        </div>
+      ),
+      filterIcon: (filtered: boolean) => <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />,
     },
     {
       title: "Hệ số chức vụ",
       dataIndex: 'chevronCoefficient',
       key: 'chevronCoefficient',
-      sorter: (a: ChevronData, b: ChevronData) => parseFloat(a.chevronCoefficient) - parseFloat(b.chevronCoefficient),
+      sorter: true,
       width: 150,
-      ...getColumnSearchProps('chevronCoefficient'),
     },
     {
       title: "Ngày tạo",
       dataIndex: "created_at",
       key: "created_at",
-      sorter: (a: ChevronData, b: ChevronData) => dayjs(a.created_at).unix() - dayjs(b.created_at).unix(),
+      sorter: true,
       width: 150,
-      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters, close }: FilterDropdownProps) => (
-        <div style={{ padding: 8 }} onKeyDown={(e) => e.stopPropagation()}>
-          <Input
-            ref={searchInput}
-            placeholder={`Tìm kiếm created_at`}
-            value={selectedKeys[0]}
-            onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-            onPressEnter={() => handleSearch(selectedKeys as string[], confirm, 'created_at')}
-            style={{ marginBottom: 8, display: 'block' }}
-          />
-          <Space>
-            <Button
-              type="primary"
-              onClick={() => handleSearch(selectedKeys as string[], confirm, 'created_at')}
-              icon={<SearchOutlined />}
-              size="small"
-              style={{ width: 90 }}
-            >
-              Tìm kiếm
-            </Button>
-            <Button
-              onClick={() => clearFilters && handleReset(clearFilters)}
-              size="small"
-              style={{ width: 90 }}
-            >
-              Reset
-            </Button>
-            <Button
-              type="link"
-              size="small"
-              onClick={() => {
-                close();
-              }}
-            >
-              Đóng
-            </Button>
-          </Space>
-        </div>
-      ),
-      filterIcon: (filtered: boolean) => (
-        <SearchOutlined style={{ color: filtered ? '#1677ff' : undefined }} />
-      ),
-      onFilter: (value: boolean | React.Key, record: ChevronData) =>
-        record['created_at']
-          .toString()
-          .toLowerCase()
-          .includes((value as string).toLowerCase()),
-      filterDropdownProps: {
-        onOpenChange(open:any) {
-          if (open) {
-            setTimeout(() => searchInput.current?.select(), 100);
-          }
-        },
-      },
-      render: (text: Date) => 
-        searchedColumn === 'created_at' ? (
-          <MyHighlighter
-            highlightStyle={{ backgroundColor: '#ffc069', padding: 0 }}
-            searchWords={[searchText]}
-            autoEscape
-            textToHighlight={formatDate(text)}
-          />
-        ) : (
-          formatDate(text)
-        ),
+      render: (text: Date) => formatDate(text),
     },
     {
       title: <>&nbsp;&nbsp;<SettingOutlined /></>,
@@ -292,9 +271,8 @@ const Index: React.FC = () => {
     try {
       await chevronService.deleteMultipleChevrons(selectedIds);
       
-      // Cập nhật lại dữ liệu sau khi xóa thành công
-      const newData = chevronData.filter(item => !selectedIds.includes(item.id));
-      setChevronData(newData);
+      // Reload data after successful deletion
+      await loadData();
       setSelectedIds([]);
       setHiddenDeleteBtn(true);
       message.success('Xóa thành công!');
@@ -311,29 +289,40 @@ const Index: React.FC = () => {
     <div style={{ padding: screens.lg ? 24 : 16 }}>
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24}>
-          <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
-            {selectedIds.length > 0 && (
-              <Button
-                danger
-                className='btn-top'
-                onClick={showDeleteConfirm}
-              >
-                <DeleteOutlined />
-                Xóa
-              </Button>
-            )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {selectedIds.length > 0 && (
+                <Button
+                  danger
+                  className='btn-top'
+                  onClick={showDeleteConfirm}
+                >
+                  <DeleteOutlined />
+                  Xóa
+                </Button>
+              )}
 
-            <Button
-              onClick={() => {
-                router.push('/chevrons/create');
-              }}
-              type="primary"
-              className='btn-top'
-              hidden={!createPer}
-            >
-              <PlusCircleOutlined />
-              Tạo mới chức vụ
-            </Button>
+              <Button
+                onClick={() => {
+                  router.push('/chevrons/create');
+                }}
+                type="primary"
+                className='btn-top'
+                hidden={!createPer}
+              >
+                <PlusCircleOutlined />
+                Tạo mới chức vụ
+              </Button>
+            </div>
+
+            {/* 🔥 Server-side search input */}
+            <Input.Search
+              placeholder="Tìm kiếm theo tên, mô tả..."
+              allowClear
+              onSearch={handleSearch}
+              style={{ width: screens.lg ? 300 : '100%' }}
+              enterButton={<SearchOutlined />}
+            />
           </div>
         </Col>
       </Row>
@@ -353,12 +342,15 @@ const Index: React.FC = () => {
               }}
               scroll={{ x: 'max-content' }}
               pagination={{
-                pageSize: 12,
+                current: pagination.current,
+                pageSize: pagination.pageSize,
+                total: pagination.total,
                 showSizeChanger: true,
-                pageSizeOptions: ['12', '24', '36', '48'],
+                pageSizeOptions: ['10', '50', '100', '500'],
                 showTotal: (total: number) => `Tổng số: ${total} bản ghi`,
                 size: screens.lg ? 'default' : 'small'
               }}
+              onChange={handleTableChange}
               rowClassName={(_, index) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
               size={screens.lg ? 'middle' : 'small'}
             />

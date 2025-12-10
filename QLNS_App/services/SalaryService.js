@@ -25,7 +25,8 @@ class SalaryService {
    */
   static async getAllAllowanceTypes() {
     try {
-      const response = await api.get('/salary/allowance-types/all');
+      // Call canonical non-paginated endpoint
+      const response = await api.get('/salary/all/allowance-types');
       return response.data;
     } catch (error) {
       console.error('Error getting all allowance types:', error);

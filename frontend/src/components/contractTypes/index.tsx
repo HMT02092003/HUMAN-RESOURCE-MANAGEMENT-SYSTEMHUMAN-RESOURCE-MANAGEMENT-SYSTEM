@@ -5,10 +5,6 @@ import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, Sear
 import { useRouter } from "next/navigation";
 import dayjs from 'dayjs';
 import { contractTypeService } from '@/service/contractTypeService';
-import type { InputRef } from 'antd';
-import type { FilterDropdownProps } from 'antd/es/table/interface';
-import Highlighter from 'react-highlight-words';
-const MyHighlighter = Highlighter as unknown as React.FC<any>;
 
 interface ContractType {
   id: number;
@@ -33,27 +29,46 @@ const formatDate = (date: Date | string | null): string => {
 const Index: React.FC = () => {
   const screens = Grid.useBreakpoint();
   const tableRef = useRef<TableRefType>(null);
-  const searchInput = useRef<InputRef>(null);
   const [hiddenDeleteBtn, setHiddenDeleteBtn] = useState<boolean>(true);
   const [selectedIds, setSelectedIds] = useState<React.Key[]>([]);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState<boolean>(false);
   const [contractTypes, setContractTypes] = useState<ContractType[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [searchText, setSearchText] = useState('');
-  const [searchedColumn, setSearchedColumn] = useState('');
   const router = useRouter();
+
+  // 🔥 Server-side: State cho pagination, sort và search
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
+  const [sorter, setSorter] = useState<{ field: string; order: 'asc' | 'desc' }>({ field: 'created_at', order: 'desc' });
+  const [searchKeyword, setSearchKeyword] = useState<string>('');
+  const [searchField, setSearchField] = useState<string | undefined>(undefined);
 
   // Giả lập quyền hạn
   const createPer: boolean = true;
   const updatePer: boolean = true;
   const deletePer: boolean = true;
 
+  useEffect(() => {
+    loadData();
+  }, [pagination.current, pagination.pageSize, sorter.field, sorter.order, searchKeyword]);
 
   const loadData = async () => {
     setLoading(true);
     try {
-      const data = await contractTypeService.getAllContractTypes();
-      setContractTypes(data);
+      const params: any = {
+        page: pagination.current,
+        limit: pagination.pageSize,
+        sort: sorter.field,
+        order: sorter.order,
+      };
+
+      if (searchKeyword) {
+        params.search = searchKeyword;
+        if (searchField) params.search_field = searchField;
+      }
+
+      const response = await contractTypeService.getAllContractTypes(params);
+      setContractTypes(response.data || []);
+      setPagination(prev => ({ ...prev, total: response.total || 0 }));
     } catch (error) {
       console.error('Error loading data:', error);
       message.error('Đã xảy ra lỗi khi tải dữ liệu!');
@@ -62,132 +77,148 @@ const Index: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const handleSearch = (
-    selectedKeys: string[],
-    confirm: FilterDropdownProps['confirm'],
-    dataIndex: keyof ContractType,
+  const handleTableChange = (
+    paginationConfig: any,
+    filters: any,
+    sorterConfig: any
   ) => {
-    confirm();
-    setSearchText(selectedKeys[0]);
-    setSearchedColumn(dataIndex);
+    setPagination({
+      current: paginationConfig.current,
+      pageSize: paginationConfig.pageSize,
+      total: pagination.total,
+    });
+
+    if (sorterConfig.field && sorterConfig.order) {
+      setSorter({
+        field: sorterConfig.field,
+        order: sorterConfig.order === 'ascend' ? 'asc' : 'desc',
+      });
+    } else {
+      setSorter({ field: 'created_at', order: 'desc' });
+    }
   };
 
-  const handleReset = (clearFilters: () => void) => {
-    clearFilters();
-    setSearchText('');
+  // 🔥 Server-side search handler
+  const handleSearch = (value: string) => {
+    // Global search
+    setSearchField(undefined);
+    setSearchKeyword(value);
+    setPagination(prev => ({ ...prev, current: 1 })); // Reset về trang 1 khi search
   };
 
-  const getColumnSearchProps = (dataIndex: keyof ContractType) => ({
-    filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters, close }: FilterDropdownProps) => (
-      <div style={{ padding: 8 }} onKeyDown={(e) => e.stopPropagation()}>
-        <Input
-          ref={searchInput}
-          placeholder={`Tìm kiếm ${dataIndex}`}
-          value={selectedKeys[0]}
-          onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-          onPressEnter={() => handleSearch(selectedKeys as string[], confirm, dataIndex)}
-          style={{ marginBottom: 8, display: 'block' }}
-        />
-        <Space>
-          <Button
-            type="primary"
-            onClick={() => handleSearch(selectedKeys as string[], confirm, dataIndex)}
-            icon={<SearchOutlined />}
-            size="small"
-            style={{ width: 90 }}
-          >
-            Tìm kiếm
-          </Button>
-          <Button
-            onClick={() => clearFilters && handleReset(clearFilters)}
-            size="small"
-            style={{ width: 90 }}
-          >
-            Reset
-          </Button>
-        </Space>
-      </div>
-    ),
-    filterIcon: (filtered: boolean) => (
-      <SearchOutlined style={{ color: filtered ? '#1677ff' : undefined }} />
-    ),
-    onFilter: (value: boolean | React.Key, record: ContractType) =>
-      record[dataIndex]
-        .toString()
-        .toLowerCase()
-        .includes((value as string).toLowerCase()),
-    filterDropdownProps: {
-      onOpenChange(open: boolean) {
-        if (open) {
-          setTimeout(() => searchInput.current?.select(), 100);
-        }
-      },
-    },
-    render: (text: string) =>
-      searchedColumn === text ? (
-        <MyHighlighter
-          highlightStyle={{ backgroundColor: '#ffc069', padding: 0 }}
-          searchWords={[searchText]}
-          autoEscape
-          textToHighlight={text}
-        />
-      ) : (
-        text
-      ),
-  });
+  const handleColumnSearch = (field: string, value: string) => {
+    setSearchField(field);
+    setSearchKeyword(value);
+    setPagination(prev => ({ ...prev, current: 1 }));
+  };
 
   const columns = [
     {
-      title: "Tên hợp đồng",
+      title: 'Tên hợp đồng',
       dataIndex: 'name',
-      key: 'contract_types.name',
-      sorter: (a: ContractType, b: ContractType) => a.name.localeCompare(b.name),
-      ...getColumnSearchProps('name'),
+      key: 'name',
+      sorter: true,
+      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: any) => (
+        <div style={{ padding: 8 }}>
+          <Input
+            placeholder="Tìm theo tên"
+            value={selectedKeys && selectedKeys[0] ? selectedKeys[0] : ''}
+            onChange={e => setSelectedKeys(e.target.value ? [e.target.value] : [])}
+            onPressEnter={() => {
+              const val = (selectedKeys && selectedKeys[0]) || '';
+              handleColumnSearch('name', val);
+              confirm();
+            }}
+            style={{ width: 188, marginBottom: 8, display: 'block' }}
+            size="small"
+          />
+          <Space>
+            <Button
+              type="primary"
+              onClick={() => {
+                const val = (selectedKeys && selectedKeys[0]) || '';
+                handleColumnSearch('name', val);
+                confirm();
+              }}
+              size="small"
+            >Tìm</Button>
+            <Button
+              onClick={() => {
+                clearFilters && clearFilters();
+                setSearchField(undefined);
+                setSearchKeyword('');
+                confirm();
+              }}
+              size="small"
+            >Xóa</Button>
+          </Space>
+        </div>
+      ),
+      filterIcon: (filtered: boolean) => <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />,
     },
     {
-      title: "Mô tả hợp đồng",
+      title: 'Mô tả hợp đồng',
       dataIndex: 'description',
-      key: 'contract_types.description',
-      sorter: (a: ContractType, b: ContractType) => a.description.localeCompare(b.description),
-      ...getColumnSearchProps('description'),
+      key: 'description',
+      sorter: true,
+      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: any) => (
+        <div style={{ padding: 8 }}>
+          <Input
+            placeholder="Tìm theo mô tả"
+            value={selectedKeys && selectedKeys[0] ? selectedKeys[0] : ''}
+            onChange={e => setSelectedKeys(e.target.value ? [e.target.value] : [])}
+            onPressEnter={() => {
+              const val = (selectedKeys && selectedKeys[0]) || '';
+              handleColumnSearch('description', val);
+              confirm();
+            }}
+            style={{ width: 220, marginBottom: 8, display: 'block' }}
+            size="small"
+          />
+          <Space>
+            <Button
+              type="primary"
+              onClick={() => {
+                const val = (selectedKeys && selectedKeys[0]) || '';
+                handleColumnSearch('description', val);
+                confirm();
+              }}
+              size="small"
+            >Tìm</Button>
+            <Button
+              onClick={() => {
+                clearFilters && clearFilters();
+                setSearchField(undefined);
+                setSearchKeyword('');
+                confirm();
+              }}
+              size="small"
+            >Xóa</Button>
+          </Space>
+        </div>
+      ),
+      filterIcon: (filtered: boolean) => <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />,
     },
     {
       title: "Mức bảo hiểm",
       dataIndex: 'insurance',
-      key: 'contract_types.insurance',
-      sorter: (a: ContractType, b: ContractType) => a.insurance - b.insurance,
-      ...getColumnSearchProps('insurance'),
+      key: 'insurance',
+      sorter: true,
     },
     {
       title: "Thời hạn hợp đồng",
       dataIndex: 'contractTerm',
-      key: 'contract_types.contractTerm',
-      sorter: (a: ContractType, b: ContractType) => a.contractTerm - b.contractTerm,
-      ...getColumnSearchProps('contractTerm'),
+      key: 'contractTerm',
+      sorter: true,
       render: (value: number) => {
-        const text = value ? `${value} tháng` : 'Vô thời hạn';
-        return searchedColumn === 'contractTerm' ? (
-          <MyHighlighter
-            highlightStyle={{ backgroundColor: '#ffc069', padding: 0 }}
-            searchWords={[searchText]}
-            autoEscape
-            textToHighlight={text}
-          />
-        ) : (
-          text
-        );
+        return value ? `${value} tháng` : 'Vô thời hạn';
       },
     },
     {
       title: "Loại hợp đồng",
       dataIndex: 'type',
-      key: 'contract_types.type',
-      sorter: (a: ContractType, b: ContractType) => a.type - b.type,
-      ...getColumnSearchProps('type'),
+      key: 'type',
+      sorter: true,
       render: (value: number) => {
         const typeLabels: { [key: number]: string } = {
           1: "Hợp đồng Thực tập",
@@ -198,38 +229,15 @@ const Index: React.FC = () => {
           6: "Hợp đồng Cộng tác viên (CTV)",
           7: "Hợp đồng Khoán việc",
         };
-        const text = typeLabels[value] || "Khác";
-        return searchedColumn === 'type' ? (
-          <MyHighlighter
-            highlightStyle={{ backgroundColor: '#ffc069', padding: 0 }}
-            searchWords={[searchText]}
-            autoEscape
-            textToHighlight={text}
-          />
-        ) : (
-          text
-        );
+        return typeLabels[value] || "Khác";
       },
     },
     {
       title: "Ngày tạo",
       dataIndex: "created_at",
-      key: "contractTypes.created_at",
-      sorter: (a: ContractType, b: ContractType) => dayjs(a.created_at).unix() - dayjs(b.created_at).unix(),
-      ...getColumnSearchProps('created_at'),
-      render: (text: Date) => {
-        const formattedDate = formatDate(text);
-        return searchedColumn === 'created_at' ? (
-          <MyHighlighter
-            highlightStyle={{ backgroundColor: '#ffc069', padding: 0 }}
-            searchWords={[searchText]}
-            autoEscape
-            textToHighlight={formattedDate}
-          />
-        ) : (
-          formattedDate
-        );
-      },
+      key: "created_at",
+      sorter: true,
+      render: (text: Date) => formatDate(text),
     },
     {
       title: <>&nbsp;&nbsp;<SettingOutlined /></>,
@@ -286,9 +294,8 @@ const Index: React.FC = () => {
     try {
       await contractTypeService.deleteMultipleContractTypes(selectedIds);
       
-      // Cập nhật lại dữ liệu sau khi xóa thành công
-      const newData = contractTypes.filter(item => !selectedIds.includes(item.id));
-      setContractTypes(newData);
+      // Reload data after successful deletion
+      await loadData();
       setSelectedIds([]);
       setHiddenDeleteBtn(true);
       message.success('Xóa thành công!');
@@ -305,28 +312,39 @@ const Index: React.FC = () => {
     <div style={{ padding: screens.lg ? 24 : 16 }}>
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24}>
-          <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
-            {selectedIds.length > 0 && (
-              <Button
-                danger
-                className='btn-top'
-                onClick={showDeleteConfirm}
-                hidden={hiddenDeleteBtn || !deletePer}
-              >
-                <DeleteOutlined />
-                Xóa
-              </Button>
-            )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {selectedIds.length > 0 && (
+                <Button
+                  danger
+                  className='btn-top'
+                  onClick={showDeleteConfirm}
+                  hidden={hiddenDeleteBtn || !deletePer}
+                >
+                  <DeleteOutlined />
+                  Xóa
+                </Button>
+              )}
 
-            <Button
-              onClick={() => router.push("/contractTypes/create")}
-              type="primary"
-              className='btn-top'
-              hidden={!createPer}
-            >
-              <PlusCircleOutlined />
-              Tạo mới hợp đồng
-            </Button>
+              <Button
+                onClick={() => router.push("/contractTypes/create")}
+                type="primary"
+                className='btn-top'
+                hidden={!createPer}
+              >
+                <PlusCircleOutlined />
+                Tạo mới hợp đồng
+              </Button>
+            </div>
+
+            {/* 🔥 Server-side search input */}
+            <Input.Search
+              placeholder="Tìm kiếm theo tên, mô tả..."
+              allowClear
+              onSearch={handleSearch}
+              style={{ width: screens.lg ? 300 : '100%' }}
+              enterButton={<SearchOutlined />}
+            />
           </div>
         </Col>
       </Row>
@@ -346,12 +364,15 @@ const Index: React.FC = () => {
               }}
               scroll={{ x: 'max-content' }}
               pagination={{
-                pageSize: 12,
+                current: pagination.current,
+                pageSize: pagination.pageSize,
+                total: pagination.total,
                 showSizeChanger: true,
-                pageSizeOptions: ['12', '24', '36', '48'],
+                pageSizeOptions: ['10', '50', '100', '500'],
                 showTotal: (total: number) => `Tổng số: ${total} bản ghi`,
                 size: screens.lg ? 'default' : 'small'
               }}
+              onChange={handleTableChange}
               rowClassName={(_, index) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
               size={screens.lg ? 'middle' : 'small'}
             />

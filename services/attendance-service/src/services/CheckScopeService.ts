@@ -95,6 +95,42 @@ class CheckScopeService {
       return [];
     }
   }
+
+  /**
+   * Tìm kiếm users theo tên từ Auth Service
+   * @param searchTerm - Từ khóa tìm kiếm
+   * @param token - Bearer token để xác thực
+   * @returns Array các user object phù hợp
+   */
+  static async searchUsers(searchTerm: string, token: string): Promise<any[]> {
+    try {
+      let authHeader = token || '';
+      if (authHeader && !authHeader.startsWith('Bearer ')) {
+        authHeader = `Bearer ${authHeader}`;
+      }
+
+      const response = await axios.get(
+        `${AUTH_SERVICE_URL}/api/users/search`,
+        {
+          params: { q: searchTerm },
+          headers: {
+            ...(authHeader ? { Authorization: authHeader } : {}),
+            'Content-Type': 'application/json'
+          },
+          timeout: 5000
+        }
+      );
+
+      if (response.data && response.data.success) {
+        return response.data.data || [];
+      }
+      
+      return [];
+    } catch (error: any) {
+      console.error('[CheckScopeService] Error searching users:', error.message);
+      return [];
+    }
+  }
 }
 
 export default CheckScopeService;

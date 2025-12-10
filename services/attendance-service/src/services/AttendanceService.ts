@@ -1,6 +1,8 @@
 // AttendanceService façade — delegates heavy work to small services
 import axios from 'axios';
 import os from 'os';
+import fs from 'fs';
+import path from 'path';
 import { MonthlyReportService } from './MonthlyReportService';
 import * as AttendanceRecordService from './attendance/AttendanceRecordService';
 import AttendanceCalculationService from './attendance/AttendanceCalculationService';
@@ -27,12 +29,25 @@ export class AttendanceService {
 
   /**
    * Get monthly_attendances rows based on permission scope resolved by auth-service
-   * Simple pattern: call auth-service directly, query DB, enrich with users
+   * Supports server-side filtering, sorting, and searching
    */
-  static async getMonthlySummariesByScope(permissionKey: string, req: any, pager?: { page?: number; pageSize?: number; month?: string | undefined }) {
+  static async getMonthlySummariesByScope(
+    permissionKey: string, 
+    req: any, 
+    pager?: { 
+      page?: number; 
+      pageSize?: number; 
+      month?: string;
+      sort?: string;
+      order?: string;
+      [key: string]: any; // Dynamic filter fields
+    }
+  ) {
     const page = Math.max(0, (pager?.page || 0));
     const pageSize = Math.min(200, pager?.pageSize || 20);
     const offset = page * pageSize;
+    const sortField = pager?.sort;
+    const sortOrder = (pager?.order || 'desc') as 'asc' | 'desc';
 
     try {
       const token = req.cookies?.token || (req.headers?.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
@@ -49,6 +64,13 @@ export class AttendanceService {
         { permissionKey },
         { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, timeout: 5000 }
       );
+      const scopeLog = (scopeResult && scopeResult.data) ? JSON.stringify(scopeResult.data) : String(scopeResult);
+      console.log('[AttendanceService] check-scope response:', scopeLog.slice(0,2000));
+      try {
+        const logDir = path.resolve(process.cwd(), 'logs');
+        try { fs.mkdirSync(logDir, { recursive: true }); } catch (e) {}
+        fs.appendFileSync(path.join(logDir, 'attendance-debug.log'), `\n=== CHECK-SCOPE RESPONSE (${new Date().toISOString()}) ===\n${scopeLog}\n`);
+      } catch (e) { /* swallow */ }
 
       const userIds: number[] = scopeResult?.data?.userIds || [];
       if (!userIds || userIds.length === 0) return { results: [], total: 0, page, pageSize };
@@ -64,12 +86,56 @@ export class AttendanceService {
 
       // Query monthly_attendances for those userIds
       const baseQuery = MonthlySummaryModel.query()
-        .whereIn('userId', userIds)
+        .whereIn('userId', userIds);
       if (currentUserId) baseQuery.whereNot('userId', currentUserId);
 
-      const [countResult] = await baseQuery.clone().count('* as count') as any;
+      // Apply filters for DB fields (with trim())
+      const dbFields = ['month', 'isApproved', 'totalScheduledDays', 'presentDays', 'absentDays',
+        'approvedLeaveDays', 'unauthorizedAbsenceDays', 'businessTripDays', 'totalWorkHours',
+        'averageWorkHours', 'totalWorkingUnits', 'totalOvertimeHours', 'totalOvertimeSalary',
+        'totalLatePenalty', 'totalEarlyLeavePenalty', 'totalUnauthorizedAbsencePenalty', 'totalPenalty'];
+      
+      for (const field of dbFields) {
+        const value = pager?.[field];
+        if (value !== undefined && value !== null && String(value).trim() !== '') {
+          const trimmedValue = String(value).trim();
+          if (field === 'isApproved') {
+            const boolValue = trimmedValue === 'true' || trimmedValue === '1';
+            baseQuery.where(field, boolValue);
+          } else if (field === 'month') {
+            baseQuery.where(field, 'ilike', `%${trimmedValue}%`);
+          } else {
+            // Numeric fields
+            baseQuery.where(field, 'like', `%${trimmedValue}%`);
+          }
+        }
+      }
+
+      // Determine sorting strategy
+      const userEnrichedFields = ['fullName', 'username', 'departmentName'];
+      const needsInMemorySort = sortField && userEnrichedFields.includes(sortField);
+      
+      // Apply SQL sorting for DB fields
+      if (sortField && !needsInMemorySort && dbFields.includes(sortField)) {
+        baseQuery.orderBy(sortField, sortOrder);
+      } else {
+        baseQuery.orderBy('month', 'desc'); // Default sort
+      }
+
+      // Ensure we don't order the count query by a non-selected column (Postgres rejects ORDER BY on aggregated query)
+      const countQuery: any = baseQuery.clone();
+      if (typeof countQuery.clearOrder === 'function') {
+        countQuery.clearOrder();
+      } else if (typeof countQuery.clearOrders === 'function') {
+        countQuery.clearOrders();
+      }
+      const [countResult] = await countQuery.count('* as count') as any;
+      console.log('[AttendanceService] DB count query result:', countResult);
+      try { fs.appendFileSync(path.resolve(process.cwd(), 'logs', 'attendance-debug.log'), `DB_COUNT:${JSON.stringify(countResult)}\n`); } catch (e) {}
       const total = Number(countResult.count || 0);
-      let results = await baseQuery.clone().orderBy('month', 'desc').limit(pageSize).offset(offset);
+      let results = await baseQuery.clone().limit(pageSize).offset(offset);
+      console.log('[AttendanceService] Retrieved results length after DB query:', Array.isArray(results) ? results.length : 0);
+      try { fs.appendFileSync(path.resolve(process.cwd(), 'logs', 'attendance-debug.log'), `DB_RESULTS_LENGTH:${Array.isArray(results) ? results.length : 0}\n`); } catch (e) {}
 
       // Enrich with user profiles (auth-service) and department info (employee-service)
       try {
@@ -83,22 +149,22 @@ export class AttendanceService {
         for (const u of users) usersById[u.id] = u;
 
         // Collect unique departmentIds from users
-  const rawDeptIds: number[] = users.filter((u: any) => u.departmentId).map((u: any) => Number(u.departmentId));
-  const deptIds: number[] = Array.from(new Set<number>(rawDeptIds));
+        const rawDeptIds: number[] = users.filter((u: any) => u.departmentId).map((u: any) => Number(u.departmentId));
+        const deptIds: number[] = Array.from(new Set<number>(rawDeptIds));
 
         const EMPLOYEE_SERVICE_URL = `http://${getLocalIpAddress()}:${process.env['EMPLOYEE_SERVICE_PORT'] || 4002}`;
 
         // Fetch department details in parallel (no bulk endpoint available). Small number expected.
         const deptById: Record<number, any> = {};
         if (deptIds.length > 0) {
-      await Promise.all(deptIds.map(async (did) => {
+          await Promise.all(deptIds.map(async (did) => {
             try {
               const resp = await axios.get(`${EMPLOYEE_SERVICE_URL}/api/departments/${did}`, { timeout: 4000 });
               // Department API returns data directly, not wrapped in { data: ... }
               if (resp?.data) deptById[did] = resp.data;
             } catch (depErr) {
               // Non-fatal: log and continue
-        logger.error(`Failed to fetch department ${did}`, (depErr as any)?.message || depErr);
+              logger.error(`Failed to fetch department ${did}`, (depErr as any)?.message || depErr);
             }
           }));
         }
@@ -126,8 +192,47 @@ export class AttendanceService {
         logger.error('Failed to enrich users or departments', e?.message || e);
       }
 
+      // Apply user-enriched field filters (after enrichment)
+      const fullNameFilter = pager?.['fullName'];
+      if (fullNameFilter && String(fullNameFilter).trim()) {
+        const trimmed = String(fullNameFilter).trim().toLowerCase();
+        results = results.filter((r: any) => 
+          r.fullName && String(r.fullName).toLowerCase().includes(trimmed)
+        );
+      }
+
+      const usernameFilter = pager?.['username'];
+      if (usernameFilter && String(usernameFilter).trim()) {
+        const trimmed = String(usernameFilter).trim().toLowerCase();
+        results = results.filter((r: any) => 
+          r.username && String(r.username).toLowerCase().includes(trimmed)
+        );
+      }
+
+      const deptFilter = pager?.['departmentName'];
+      if (deptFilter && String(deptFilter).trim()) {
+        const trimmed = String(deptFilter).trim().toLowerCase();
+        results = results.filter((r: any) => 
+          r.departmentName && String(r.departmentName).toLowerCase().includes(trimmed)
+        );
+      }
+
+      // Apply in-memory sorting for user-enriched fields
+      if (needsInMemorySort && sortField) {
+        results.sort((a: any, b: any) => {
+          const aVal = a[sortField] || '';
+          const bVal = b[sortField] || '';
+          const cmp = String(aVal).localeCompare(String(bVal));
+          return sortOrder === 'asc' ? cmp : -cmp;
+        });
+      }
+
       return { results, total, page, pageSize };
     } catch (err: any) {
+      try {
+        const logPath = path.resolve(process.cwd(), 'logs', 'attendance-debug.log');
+        fs.appendFileSync(logPath, `\n=== CATCH in getMonthlySummariesByScope (${new Date().toISOString()}) ===\n${err && err.stack ? err.stack : JSON.stringify(err)}\n`);
+      } catch (e) {}
       if (err?.response?.status === 401 || err?.status === 401) {
         const e: any = new Error(err?.response?.data?.message || err?.message || 'Unauthorized');
         e.status = 401;

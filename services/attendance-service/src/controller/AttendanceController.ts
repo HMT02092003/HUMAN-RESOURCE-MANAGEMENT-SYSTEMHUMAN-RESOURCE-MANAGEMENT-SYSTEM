@@ -213,19 +213,44 @@ export const getMonthlyAttendanceByMonth = async (req: Request, res: Response) =
 
 /**
  * Get monthly summaries according to permission scope returned by auth-service
- * GET /api/attendance/monthly-summaries-by-scope?permissionKey=users&page=0&pageSize=10&month=2025-09
+ * Supports server-side filtering, sorting, and searching
+ * GET /api/attendance/monthly-summaries-by-scope?permissionKey=users&page=1&pageSize=20&sort=month&order=desc&fullName=John
  */
 export const getMonthlySummariesByScopeController = async (req: Request, res: Response) => {
   try {
-  const permissionKey = String(req.query['permissionKey'] || req.body?.permissionKey || 'users');
-  const page = Number(req.query['page'] ?? req.body?.page ?? 0);
-  const pageSize = Number(req.query['pageSize'] ?? req.body?.pageSize ?? 10);
-  const monthRaw = req.query['month'] ?? req.body?.month ?? undefined;
-  const month = monthRaw ? String(monthRaw) : undefined;
+    const permissionKey = String(req.query['permissionKey'] || req.body?.permissionKey || 'users');
+    
+    // Frontend sends 1-based page from ServerSideTable via 'page' param
+    const pageFromFrontend = Number(req.query['page'] ?? req.body?.page ?? 1);
+    const page = Math.max(0, pageFromFrontend - 1); // Convert to 0-based
+    
+    // Accept both 'pageSize' and 'limit'
+    const pageSize = Number(req.query['pageSize'] ?? req.query['limit'] ?? req.body?.pageSize ?? req.body?.limit ?? 20);
+    
+    // Get all query params and pass to service
+    const params: any = {
+      page,
+      pageSize,
+      permissionKey
+    };
+    
+    // Pass through all filter/sort params
+    Object.keys(req.query).forEach(key => {
+      if (key !== 'permissionKey' && key !== 'page' && key !== 'pageSize' && key !== 'limit') {
+        params[key] = req.query[key];
+      }
+    });
+    
+    const result = await AttendanceService.getMonthlySummariesByScope(permissionKey, req, params);
 
-  const result = await AttendanceService.getMonthlySummariesByScope(permissionKey, req, { page, pageSize, month });
-
-    return res.status(200).json({ success: true, data: result });
+    // Convert page back to 1-based for frontend
+    return res.status(200).json({ 
+      success: true, 
+      data: {
+        ...result,
+        page: result.page + 1
+      }
+    });
   } catch (error: any) {
     console.error('Error in getMonthlySummariesByScopeController:', error);
     if (error?.status === 401) {

@@ -52,7 +52,7 @@ export const bulkDeleteShiftConfigurations = async (ids: number[]) => {
 // ==================== EMPLOYEE SCHEDULE APIs ====================
 
 /**
- * Lấy đăng ký ca của user hiện tại
+ * Lấy đăng ký ca của user hiện tại (không phân trang - lấy tất cả)
  */
 export const getMyShiftRegistrations = async (filters?: {
   status?: string;
@@ -61,6 +61,28 @@ export const getMyShiftRegistrations = async (filters?: {
   shift_id?: number;
 }) => {
   return apiService.get('/api/schedules/my', { params: filters });
+};
+
+/**
+ * Lấy đăng ký ca của user hiện tại có phân trang, tìm kiếm, sắp xếp
+ */
+export const getMyShiftRegistrationsPaginated = async (params?: {
+  page?: number;
+  limit?: number;
+  status?: string;
+  startDate?: string;
+  endDate?: string;
+  // Column-specific search
+  searchShiftName?: string;
+  searchNotes?: string;
+  // Created at date range
+  createdAtStart?: string;
+  createdAtEnd?: string;
+  // Sorting
+  sortField?: string;
+  sortOrder?: string;
+}) => {
+  return apiService.get('/api/schedules/my/paginated', { params });
 };
 
 /**
@@ -157,6 +179,19 @@ export const getSchedulesForApproval = async (params?: {
   startDate?: string;
   endDate?: string;
   user_id?: number;
+  // Column-specific search
+  searchShiftName?: string;
+  searchNotes?: string;
+  searchEmployee?: string;
+  searchDepartment?: string;
+  searchChevron?: string;
+  // Date range for date column
+  dateStart?: string;
+  dateEnd?: string;
+  // Date range for created_at column
+  createdAtStart?: string;
+  createdAtEnd?: string;
+  // Sorting
   sortField?: string;
   sortOrder?: string;
 }) => {
@@ -240,6 +275,7 @@ export default {
   
   // Registration
   getMyShiftRegistrations,
+  getMyShiftRegistrationsPaginated,
   getPendingShiftRegistrations,
   getShiftRegistrationById,
   createShiftRegistration,

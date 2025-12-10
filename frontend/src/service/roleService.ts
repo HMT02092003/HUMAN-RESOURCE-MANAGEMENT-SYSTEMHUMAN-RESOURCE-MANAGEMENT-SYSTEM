@@ -27,11 +27,25 @@ interface PermissionCategory {
 class RoleService {
   private baseURL = '';
 
-  // Get all roles
-  async getAllRoles() {
+  // Get all roles with optional params
+  async getAllRoles(params?: { page?: number; limit?: number; search?: string; sort?: string; order?: string }) {
+    try {
+      const response = await api.get(`/api/auth/roles`, { params });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  }
+
+  // Get all roles as a plain array for select dropdowns
+  // Some backend endpoints return a paginated object { data: [], total },
+  // callers that need a simple array should use this helper which
+  // returns response.data.data || response.data
+  async getAllRolesForSelect() {
     try {
       const response = await api.get(`/api/auth/roles`);
-      return response.data.data;
+      // If backend returns { data: [...], total }, prefer the inner array
+      return response.data?.data || response.data || [];
     } catch (error: any) {
       throw error;
     }

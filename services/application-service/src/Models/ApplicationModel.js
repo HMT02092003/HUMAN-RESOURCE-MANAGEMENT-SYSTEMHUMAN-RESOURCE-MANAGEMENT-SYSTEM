@@ -2,6 +2,7 @@ import { Model } from 'objection';
 import { ApplicationType, ApplicationStatus, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_LABELS } from '../config/application-constants.js';
 import { validate } from '../utils/validation-utility.js';
 import dayjs from 'dayjs';
+import { applySearch, applyFilters, applySorting, applyPagination } from '../utils/query-builder.js';
 
 export class ApplicationModel extends Model {
   static get tableName() {
@@ -623,5 +624,227 @@ export class ApplicationModel extends Model {
     if (application.length >= 2) {
       throw new Error('Bạn đã hết lượt tạo đơn quên chấm công trong tháng này (tối đa 2 đơn/tháng)');
     }
+  }
+
+  /**
+   * Lấy tất cả đơn với filters, search, sort cho admin - có pagination
+   * Sử dụng query-builder để giảm code trùng lặp
+   * @param {Object} filters - { allowedUserIds, userId, type, status, search, createdAtFrom, createdAtTo, sortField, sortOrder }
+   * @param {number} offset
+   * @param {number} limit
+   */
+  static async getAllApplicationsPaginatedWithSort(filters = {}, offset = 0, limit = 10) {
+    const { 
+      allowedUserIds, 
+      userId, 
+      type, 
+      status, 
+      search,
+      createdAtFrom,
+      createdAtTo,
+      approvedDateFrom,
+      approvedDateTo,
+      sortField = 'created_at',
+      sortOrder = 'desc'
+    } = filters;
+
+    // Field mapping cho sort và filter
+    const fieldMapping = {
+      createdAt: 'created_at',
+      created_at: 'created_at',
+      approvedDate: 'approvedDate',
+      // Frontend may request sorting by nested user info keys (e.g. approvedByInfo.fullName)
+      // Map those to real DB columns (approvedBy is a user id column)
+      'approvedByInfo.fullName': 'approvedBy',
+      'approvedByInfo': 'approvedBy',
+      // Allow sorting by creator's full name key if frontend uses userInfo.fullName
+      'userInfo.fullName': 'userId',
+      'userInfo': 'userId'
+    };
+
+    // Build base query
+    let query = this.query();
+
+    // Filter theo allowedUserIds (scope permission) - đặc biệt, không dùng query-builder
+    if (allowedUserIds && allowedUserIds.length > 0) {
+      query = query.whereIn('userId', allowedUserIds);
+    }
+
+    // Loại bỏ đơn của chính mình
+    if (userId) {
+      query = query.whereNot('userId', userId);
+    }
+
+    // Sử dụng query-builder cho filters thông thường
+    const filterParams = {};
+    if (type) filterParams.type = type;
+    if (status !== null && status !== undefined) filterParams.status = status;
+    if (createdAtFrom) filterParams.createdAtFrom = createdAtFrom;
+    if (createdAtTo) filterParams.createdAtTo = createdAtTo;
+    if (approvedDateFrom) filterParams.approvedDateFrom = approvedDateFrom;
+    if (approvedDateTo) filterParams.approvedDateTo = approvedDateTo;
+
+    // Apply filters
+    query = applyFilters(query, filterParams, { createdAt: 'created_at' });
+
+    // Apply sorting
+    query = applySorting(query, sortField, sortOrder, fieldMapping, { field: 'created_at', order: 'desc' });
+
+    // Apply pagination
+    return applyPagination(query, Math.floor(offset / limit) + 1, limit);
+  }
+
+  /**
+   * Đếm tổng số đơn với filters đầy đủ (search, type, status, date range)
+   * Sử dụng query-builder để giảm code trùng lặp
+   * @param {Object} filters
+   */
+  static async getAllApplicationsCountWithFilters(filters = {}) {
+    const { 
+      allowedUserIds, 
+      userId, 
+      type, 
+      status,
+      createdAtFrom,
+      createdAtTo,
+      approvedDateFrom,
+      approvedDateTo
+    } = filters;
+
+    // Build base query
+    let query = this.query();
+
+    // Filter theo allowedUserIds (scope permission)
+    if (allowedUserIds && allowedUserIds.length > 0) {
+      query = query.whereIn('userId', allowedUserIds);
+    }
+
+    // Loại bỏ đơn của chính mình
+    if (userId) {
+      query = query.whereNot('userId', userId);
+    }
+
+    // Sử dụng query-builder cho filters
+    const filterParams = {};
+    if (type) filterParams.type = type;
+    if (status !== null && status !== undefined) filterParams.status = status;
+    if (createdAtFrom) filterParams.createdAtFrom = createdAtFrom;
+    if (createdAtTo) filterParams.createdAtTo = createdAtTo;
+    if (approvedDateFrom) filterParams.approvedDateFrom = approvedDateFrom;
+    if (approvedDateTo) filterParams.approvedDateTo = approvedDateTo;
+
+    // Apply filters
+    query = applyFilters(query, filterParams, { createdAt: 'created_at' });
+
+    return query.resultSize();
+  }
+
+  /**
+   * Lấy danh sách đơn của user với server-side search, sort, filter và pagination
+   * @param {number} userId - ID của user
+   * @param {Object} filters - { search, type, status, createdAtFrom, createdAtTo, sortField, sortOrder }
+   * @param {number} offset
+   * @param {number} limit
+   */
+  static async getMyApplicationsPaginatedWithSort(userId, filters = {}, offset = 0, limit = 10) {
+    const { 
+      search,
+      type,
+      status,
+      createdAtFrom,
+      createdAtTo,
+      sortField = 'created_at',
+      sortOrder = 'desc'
+    } = filters;
+
+    // Field mapping cho sort và filter
+    const fieldMapping = {
+      createdAt: 'created_at',
+      created_at: 'created_at'
+      // Note: for my-applications pagination, sorting by nested user/approver fields
+      // is mapped to numeric id columns since there is no users table to join here.
+      , 'approvedByInfo.fullName': 'approvedBy',
+      'approvedByInfo': 'approvedBy',
+      'userInfo.fullName': 'userId',
+      'userInfo': 'userId'
+    };
+
+    // Searchable fields
+    const searchFields = ['type', 'reason', 'note'];
+
+    // Build base query
+    let query = this.query().where('userId', userId);
+
+    // If controller provided approvedBy filter (array of approver IDs), apply whereIn
+    if (filters && filters.approvedBy && Array.isArray(filters.approvedBy) && filters.approvedBy.length > 0) {
+      query = query.whereIn('approvedBy', filters.approvedBy);
+    }
+
+    // Sử dụng query-builder cho filters
+    const filterParams = {};
+    if (type) filterParams.type = type;
+    if (status !== null && status !== undefined && status !== '') filterParams.status = parseInt(status);
+    if (createdAtFrom) filterParams.createdAtFrom = createdAtFrom;
+    if (createdAtTo) filterParams.createdAtTo = createdAtTo;
+
+    // Apply filters
+    query = applyFilters(query, filterParams, { createdAt: 'created_at' });
+
+    // Apply search
+    if (search && search.trim()) {
+      query = applySearch(query, search, searchFields);
+    }
+
+    // Apply sorting
+    query = applySorting(query, sortField, sortOrder, fieldMapping, { field: 'created_at', order: 'desc' });
+
+    // Apply pagination
+    return applyPagination(query, Math.floor(offset / limit) + 1, limit);
+  }
+
+  /**
+   * Đếm tổng số đơn của user với filters
+   * Sử dụng query-builder để giảm code trùng lặp
+   * @param {number} userId
+   * @param {Object} filters
+   */
+  static async getMyApplicationsCountWithFilters(userId, filters = {}) {
+    const { search, type, status, createdAtFrom, createdAtTo } = filters;
+
+    // Searchable fields
+    const searchFields = ['type', 'reason', 'note'];
+
+    // Build base query
+    let query = this.query().where('userId', userId);
+    if (filters && filters.approvedBy && Array.isArray(filters.approvedBy) && filters.approvedBy.length > 0) {
+      query = query.whereIn('approvedBy', filters.approvedBy);
+    }
+
+    // Sử dụng query-builder cho filters
+    const filterParams = {};
+    if (type) filterParams.type = type;
+    if (status !== null && status !== undefined && status !== '') filterParams.status = parseInt(status);
+    if (createdAtFrom) filterParams.createdAtFrom = createdAtFrom;
+    if (createdAtTo) filterParams.createdAtTo = createdAtTo;
+
+    // Apply filters
+    query = applyFilters(query, filterParams, { createdAt: 'created_at' });
+
+    // Apply search
+    if (search && search.trim()) {
+      query = applySearch(query, search, searchFields);
+    }
+
+    return query.resultSize();
+  }
+
+  /**
+   * Lấy tất cả đơn của user (không phân trang) - dùng cho select/dropdown
+   * @param {number} userId
+   */
+  static async getAllMyApplicationsList(userId) {
+    return this.query()
+      .where('userId', userId)
+      .orderBy('created_at', 'desc');
   }
 }

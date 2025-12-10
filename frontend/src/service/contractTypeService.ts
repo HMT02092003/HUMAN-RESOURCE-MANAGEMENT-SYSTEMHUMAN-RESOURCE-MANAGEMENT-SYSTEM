@@ -13,11 +13,31 @@ interface ContractType {
 class ContractTypeService {
   private baseURL = '';
 
-  // Get all contract types
-  async getAllContractTypes() {
+  // Get all contract types with optional params
+  async getAllContractTypes(params?: { page?: number; limit?: number; search?: string; sort?: string; order?: string }) {
     try {
-      const response = await api.get(`/api/employee/contractTypes`);
-      return response.data.data;
+      const response = await api.get(`/api/employee/contractTypes`, { params });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  }
+
+  // Get all contract types for select dropdown (no pagination)
+  async getContractTypesForSelect() {
+    try {
+      const response = await api.get(`/api/employee/all/contractTypes`);
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  }
+
+  // Get all contract types as plain array for dropdowns
+  async getAllContractTypesForSelect() {
+    try {
+      const response = await api.get(`/api/employee/all/contractTypes`);
+      return response.data?.data || response.data || [];
     } catch (error: any) {
       throw error;
     }

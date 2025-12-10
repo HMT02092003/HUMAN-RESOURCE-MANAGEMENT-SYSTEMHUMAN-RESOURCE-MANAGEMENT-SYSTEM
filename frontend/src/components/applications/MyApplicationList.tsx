@@ -1,17 +1,22 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Card, Table, Button, Space, Typography, Empty, message, Tooltip, DatePicker, Input, Row, Col, Tag, Modal } from 'antd';
-import { PlusOutlined, EyeOutlined, DeleteOutlined, SearchOutlined, EditOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
-import type { FilterConfirmProps, FilterDropdownProps } from 'antd/es/table/interface';
-import dayjs from 'dayjs';
+import React, { useState, useMemo } from 'react';
+import { Button, Space, Typography, Empty, message, Tooltip, Tag, Modal } from 'antd';
+import { PlusOutlined, EyeOutlined, DeleteOutlined, EditOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import applicationService from '@/service/applicationService';
-import api from '@/service/apiService';
-import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS, FORGOT_CHECK_TYPE_LABELS } from '@/config/constant';
+import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS } from '@/config/constant';
+import { ServerSideTable } from '@/components/common/ServerSideTable';
+import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
 import ApplicationDetailModal from './ApplicationDetailModal';
-import commonGetColumnSearchProps from '@/components/common/getColumnSearchProps';
+import dayjs from 'dayjs';
+
+// Material icons for filters
+import BeachAccessIcon from '@mui/icons-material/BeachAccess';
+import FlightIcon from '@mui/icons-material/Flight';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import FingerprintIcon from '@mui/icons-material/Fingerprint';
+import EventIcon from '@mui/icons-material/Event';
 
 const { Title, Text } = Typography;
-const { RangePicker } = DatePicker;
 
 interface MyApplicationListProps {
     onCreateClick?: () => void;
@@ -23,90 +28,25 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
     onEditClick
 }) => {
     const router = useRouter();
-    const [applications, setApplications] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [currentPage, setCurrentPage] = useState(1);
-    const [pageSize, setPageSize] = useState(10);
-    const [total, setTotal] = useState(0);
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [selectedRows, setSelectedRows] = useState<any[]>([]);
     const [detailModalVisible, setDetailModalVisible] = useState(false);
     const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(null);
-    const searchInput = useRef<any>(null);
-    const fetchedApproversRef = useRef<Record<string, any>>({});
-    const fetchedUsersRef = useRef<Record<string, any>>({});
 
-    const fetchMyApplications = useCallback(async (page = 1, size = 10) => {
-        try {
-            setLoading(true);
-            const response = await applicationService.getMyApplications({
-                page: page,
-                pageSize: size
-            });
-            setApplications(response.data || []);
-            setTotal(response.total || response.data?.length || 0);
-            setCurrentPage(page);
-            setPageSize(size);
-        } catch (error) {
-            message.error('Lấy danh sách đơn từ thất bại');
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+    // Local filter options
+    const TYPE_FILTER_OPTIONS = [
+        { value: 'leave', label: 'Xin nghỉ phép', icon: <BeachAccessIcon fontSize="small" /> },
+        { value: 'business-trip', label: 'Công tác', icon: <FlightIcon fontSize="small" /> },
+        { value: 'overtime', label: 'Làm thêm giờ', icon: <AccessTimeIcon fontSize="small" /> },
+        { value: 'forgot-check', label: 'Quên check in/out', icon: <FingerprintIcon fontSize="small" /> },
+        { value: 'shift-registration', label: 'Đăng ký ca', icon: <EventIcon fontSize="small" /> },
+    ];
 
-    useEffect(() => {
-        fetchMyApplications(1, 10);
-    }, [fetchMyApplications]);
-
-    // Fetch missing user (creator) and approver details when backend omits nested fields
-    useEffect(() => {
-        if (!applications || applications.length === 0) return;
-
-        const missingUserIds = new Set<string>();
-        const missingApproverIds = new Set<string>();
-
-        applications.forEach((row: any) => {
-            if ((!row.userInfo || !row.userInfo.department || !row.userInfo.chevron) && row.userId) {
-                missingUserIds.add(String(row.userId));
-            }
-            if ((!row.approvedByInfo || !row.approvedByInfo.department || !row.approvedByInfo.chevron) && row.approvedBy) {
-                missingApproverIds.add(String(row.approvedBy));
-            }
-        });
-
-        const idsToFetch = Array.from(new Set([...Array.from(missingUserIds), ...Array.from(missingApproverIds)])).filter(id => !fetchedUsersRef.current[id]);
-        if (idsToFetch.length === 0) return;
-
-        (async () => {
-            try {
-                const promises = idsToFetch.map(id => api.get(`/api/auth/users/detail/${id}`).then(r => r.data).catch(() => null));
-                const results = await Promise.all(promises);
-                results.forEach((user: any, idx: number) => {
-                    const id = idsToFetch[idx];
-                    if (user) fetchedUsersRef.current[id] = user;
-                });
-                setApplications(prev => prev.map(app => {
-                    const updated = { ...app };
-                    if ((!updated.userInfo || !updated.userInfo.department || !updated.userInfo.chevron) && updated.userId) {
-                        const u = fetchedUsersRef.current[String(updated.userId)];
-                        if (u) updated.userInfo = { ...(updated.userInfo || {}), ...u };
-                    }
-                    if ((!updated.approvedByInfo || !updated.approvedByInfo.department || !updated.approvedByInfo.chevron) && updated.approvedBy) {
-                        const a = fetchedUsersRef.current[String(updated.approvedBy)];
-                        if (a) updated.approvedByInfo = { ...(updated.approvedByInfo || {}), ...a };
-                    }
-                    return updated;
-                }));
-            } catch (err) {
-                console.error('Error fetching user/approver details', err);
-            }
-        })();
-    }, [applications]);
-
-    const handleTableChange = (pagination: any) => {
-        const { current, pageSize: newPageSize } = pagination;
-        fetchMyApplications(current, newPageSize);
-    };
+    const STATUS_FILTER_OPTIONS = [
+        { value: 0, label: 'Chờ duyệt' },
+        { value: 1, label: 'Đã duyệt' },
+        { value: 2, label: 'Bị từ chối' },
+    ];
 
     const handleBulkDelete = () => {
         if (selectedRows.length === 0) {
@@ -123,12 +63,10 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
             cancelText: 'Hủy',
             onOk: async () => {
                 try {
-                    const selectedIds = selectedRowKeys;
-                    setApplications(prev => prev.filter(app => !selectedIds.includes(app.id)));
-                    setTotal(prev => prev - selectedRows.length);
+                    // TODO: Implement bulk delete API
+                    message.success(`Đã xóa ${selectedRows.length} đơn từ thành công`);
                     setSelectedRowKeys([]);
                     setSelectedRows([]);
-                    message.success(`Đã xóa ${selectedRows.length} đơn từ thành công`);
                 } catch (error) {
                     message.error('Xóa đơn từ thất bại');
                 }
@@ -142,7 +80,6 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
     };
 
     const handleEdit = (record: any) => {
-        // Chuyển đến trang edit tương ứng với loại đơn
         const typeRouteMap: { [key: string]: string } = {
             'leave': '/applications/leave',
             'overtime': '/applications/overtime',
@@ -173,7 +110,7 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
                     const response = await applicationService.deleteApplication(record.id);
                     if (response.success) {
                         message.success('Xóa đơn từ thành công');
-                        fetchMyApplications(currentPage, pageSize);
+                        // Table will auto-reload via ServerSideTable
                     }
                 } catch (error: any) {
                     message.error(error.response?.data?.message || 'Xóa đơn từ thất bại');
@@ -182,145 +119,36 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
         });
     };
 
-    const getColumnSearchProps = (dataIndex: string, placeholder: string = 'Tìm kiếm...'): any => ({
-        filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters, close }: FilterDropdownProps) => (
-            <div style={{ padding: 8 }} onKeyDown={(e) => e.stopPropagation()}>
-                <Input
-                    ref={searchInput}
-                    placeholder={placeholder}
-                    value={selectedKeys[0]}
-                    onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-                    onPressEnter={() => confirm()}
-                    style={{ marginBottom: 8, display: 'block' }}
-                />
-                <Space>
-                    <Button
-                        type="primary"
-                        onClick={() => confirm()}
-                        icon={<SearchOutlined />}
-                        size="small"
-                        style={{ width: 90 }}
-                    >
-                        Tìm
-                    </Button>
-                    <Button
-                        onClick={() => clearFilters && clearFilters()}
-                        size="small"
-                        style={{ width: 90 }}
-                    >
-                        Xóa
-                    </Button>
-                    <Button
-                        type="link"
-                        size="small"
-                        onClick={() => close()}
-                    >
-                        Đóng
-                    </Button>
-                </Space>
-            </div>
-        ),
-        filterIcon: (filtered: boolean) => (
-            <SearchOutlined style={{ color: filtered ? '#1677ff' : undefined }} />
-        ),
-        onFilter: (value: any, record: any) =>
-            record[dataIndex]
-                ?.toString()
-                .toLowerCase()
-                .includes((value as string).toLowerCase()),
-        onFilterDropdownOpenChange: (visible: boolean) => {
-            if (visible) {
-                setTimeout(() => searchInput.current?.select(), 100);
-            }
-        },
-    });
-
-    const getDateRangeFilter = () => ({
-        filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: FilterDropdownProps) => (
-            <div style={{ padding: 8 }}>
-                <RangePicker
-                    value={selectedKeys[0] ? [dayjs(String(selectedKeys[0]).split(',')[0]), dayjs(String(selectedKeys[0]).split(',')[1])] : null}
-                    onChange={(dates) => {
-                        if (dates) {
-                            setSelectedKeys([`${dates[0]?.format('YYYY-MM-DD')},${dates[1]?.format('YYYY-MM-DD')}`]);
-                        } else {
-                            setSelectedKeys([]);
-                        }
-                    }}
-                    style={{ marginBottom: 8, display: 'block' }}
-                />
-                <Space>
-                    <Button
-                        type="primary"
-                        onClick={() => confirm()}
-                        size="small"
-                        style={{ width: 90 }}
-                    >
-                        Áp dụng
-                    </Button>
-                    <Button
-                        onClick={() => clearFilters && clearFilters()}
-                        size="small"
-                        style={{ width: 90 }}
-                    >
-                        Xóa
-                    </Button>
-                </Space>
-            </div>
-        ),
-        filterIcon: (filtered: boolean) => (
-            <SearchOutlined style={{ color: filtered ? '#1677ff' : undefined }} />
-        ),
-        onFilter: (value: any, record: any) => {
-            if (!value) return true;
-            const [startDate, endDate] = String(value).split(',');
-            const recordDate = dayjs(record.applicationDate);
-            return recordDate.isAfter(dayjs(startDate).subtract(1, 'day')) &&
-                recordDate.isBefore(dayjs(endDate).add(1, 'day'));
-        },
-    });
-
-    const columns = useMemo(() => [
+    // Define columns với ServerSideTable format
+    const columns: ServerSideColumnType<any>[] = useMemo(() => [
         {
             title: 'STT',
             key: 'stt',
             width: 60,
+            searchable: false,
             render: (text: any, record: any, index: number) => {
-                const stt = (currentPage - 1) * pageSize + index + 1;
-                return <Text strong>{stt}</Text>;
+                return <Text strong>{index + 1}</Text>;
             },
         },
         {
             title: 'Loại đơn',
             dataIndex: 'type',
             key: 'type',
+            sortable: true,
+            filterType: 'select',
+            filterOptions: TYPE_FILTER_OPTIONS.map(opt => ({
+                value: opt.value,
+                label: <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{opt.icon}<span>{opt.label}</span></span>
+            })),
             render: (type: string) => APPLICATION_TYPE_LABELS[type as keyof typeof APPLICATION_TYPE_LABELS] || type,
-            filters: [
-                { text: '🏖️ Nghỉ phép', value: 'leave' },
-                { text: '⏰ Tăng ca', value: 'overtime' },
-                { text: '✈️ Công tác', value: 'business_trip' },
-                { text: '⏰ Quên check', value: 'forgot_check' },
-                { text: '🕒 Đăng ký ca', value: 'shift_registration' },
-                { text: '📄 Thôi việc', value: 'resignation' }
-            ],
-            onFilter: (value: any, record: any) => record.type === value,
-        },
-        {
-            title: 'Phòng ban',
-            dataIndex: ['userInfo', 'department', 'name'],
-            key: 'userInfo.department',
-            render: (text: any, record: any) => record?.userInfo?.department?.name || '-',
-        },
-        {
-            title: 'Chức vụ',
-            dataIndex: ['userInfo', 'chevron', 'name'],
-            key: 'userInfo.chevron',
-            render: (text: any, record: any) => record?.userInfo?.chevron?.name || '-',
         },
         {
             title: 'Trạng thái',
             dataIndex: 'status',
             key: 'status',
+            sortable: true,
+            filterType: 'select',
+            filterOptions: STATUS_FILTER_OPTIONS,
             render: (status: number) => {
                 const color = APPLICATION_STATUS_COLORS[status as keyof typeof APPLICATION_STATUS_COLORS] || 'default';
                 return (
@@ -329,59 +157,36 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
                     </Tag>
                 );
             },
-            filters: [
-                { text: '⏳ Chờ duyệt', value: 0 },
-                { text: '✅ Đã duyệt', value: 1 },
-                { text: '❌ Bị từ chối', value: 2 }
-            ],
-            onFilter: (value: any, record: any) => record.status === value,
         },
         {
             title: 'Người duyệt',
             dataIndex: ['approvedByInfo', 'fullName'],
             key: 'approvedByInfo.fullName',
-            sorter: (a: any, b: any) => {
-                const va = String(a.approvedByInfo?.fullName || '').toLowerCase();
-                const vb = String(b.approvedByInfo?.fullName || '').toLowerCase();
-                return va < vb ? -1 : va > vb ? 1 : 0;
-            },
-            ...commonGetColumnSearchProps('approvedByInfo.fullName', 'Tìm người duyệt...'),
+            searchField: 'approvedByInfo.fullName',
+            sortable: true,
+            filterType: 'text',
             render: (_: any, record: any) => {
                 const approver = record.approvedByInfo || {};
                 const name = approver.fullName || '-';
-                const dept = approver.department?.name || '-';
-                const chevron = approver.chevron?.name || '-';
-                return (
-                    <div>
-                        <div>{name}</div>
-                        <div style={{ fontSize: 12, color: '#888' }}>{dept} • {chevron}</div>
-                    </div>
-                );
+                return name;
             }
         },
         {
-            title: 'Ngày duyệt',
-            dataIndex: 'approvedDate',
-            key: 'approvedDate',
-            render: (date: string) => date ? dayjs(date).format('DD/MM/YYYY') : null,
-        },
-        {
             title: 'Ngày tạo',
-            dataIndex: 'applicationDate',
-            key: 'applicationDate',
-            render: (date: string) => (
-                <Text>{dayjs(date).format('DD/MM/YYYY')}</Text>
-            ),
-            sorter: (a: any, b: any) =>     
-                dayjs(a.applicationDate).unix() - dayjs(b.applicationDate).unix(),
-            ...getDateRangeFilter(),
+            dataIndex: 'created_at',
+            key: 'created_at',
+            searchField: 'createdAt',
+            sortable: true,
+            filterType: 'dateRange',
+            render: (date: string) => date ? dayjs(date).format('DD/MM/YYYY HH:mm') : '-',
         },
         {
             title: 'Thao tác',
             key: 'actions',
-            fixed: 'right' as const,     
+            fixed: 'right' as const,
             width: 150,
-            render: (record: any) => (
+            searchable: false,
+            render: (_: any, record: any) => (
                 <>
                     <Tooltip title="Xem chi tiết">
                         <Button
@@ -415,7 +220,7 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
                 </>
             )
         }
-    ], [currentPage, pageSize]);
+    ], []);
 
     // Row selection configuration
     const rowSelection = {
@@ -425,7 +230,7 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
             setSelectedRows(selectedRows);
         },
         getCheckboxProps: (record: any) => ({
-            disabled: record.status !== 0, 
+            disabled: record.status !== 0,
             name: record.id,
         }),
     };
@@ -433,13 +238,28 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
     return (
         <div style={{ padding: '0px' }}>
             {/* Header */}
-            <Row justify="space-between" align="middle" style={{ marginBottom: '24px' }}>
-                <Col>
-                    <Space>
+            <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Space>
+                    <Button
+                        type="primary"
+                        icon={<PlusOutlined />}
+                        onClick={onCreateClick}
+                        style={{
+                            borderRadius: '8px',
+                            height: '48px',
+                            paddingLeft: '24px',
+                            paddingRight: '24px',
+                            fontSize: '16px',
+                            fontWeight: '500'
+                        }}
+                    >
+                        Tạo đơn mới
+                    </Button>
+                    {selectedRowKeys.length > 0 && (
                         <Button
-                            type="primary"
-                            icon={<PlusOutlined />}
-                            onClick={onCreateClick}
+                            danger
+                            icon={<DeleteOutlined />}
+                            onClick={handleBulkDelete}
                             style={{
                                 borderRadius: '8px',
                                 height: '48px',
@@ -449,60 +269,21 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
                                 fontWeight: '500'
                             }}
                         >
-                            Tạo đơn mới
+                            Xóa đã chọn ({selectedRowKeys.length})
                         </Button>
-                        {selectedRowKeys.length > 0 && (
-                            <Button
-                                danger
-                                icon={<DeleteOutlined />}
-                                onClick={handleBulkDelete}
-                                style={{
-                                    borderRadius: '8px',
-                                    height: '48px',
-                                    paddingLeft: '24px',
-                                    paddingRight: '24px',
-                                    fontSize: '16px',
-                                    fontWeight: '500'
-                                }}
-                            >
-                                Xóa đã chọn ({selectedRowKeys.length})
-                            </Button>
-                        )}
-                    </Space>
-                </Col>
-                <Col>
-                    <Space direction="vertical" size={0} align="end">
-                        <Text type="secondary" style={{ fontSize: '16px' }}>
-                            Tổng số: <Text strong style={{ color: '#1677ff' }}>{total}</Text> đơn từ
-                        </Text>
-                        {selectedRowKeys.length > 0 && (
-                            <Text type="secondary" style={{ fontSize: '14px', color: '#ff4d4f' }}>
-                                Đã chọn: <Text strong>{selectedRowKeys.length}</Text> đơn từ
-                            </Text>
-                        )}
-                    </Space>
-                </Col>
-            </Row>
+                    )}
+                </Space>
+            </div>
 
-            {/* Applications Table */}
-            <Table
+            {/* Applications Table với ServerSideTable */}
+            <ServerSideTable
                 columns={columns}
-                dataSource={applications}
+                fetchData={applicationService.getMyApplications}
                 rowKey="id"
-                loading={loading}
-                onChange={handleTableChange}
                 rowSelection={rowSelection}
-                pagination={{
-                    current: currentPage,
-                    pageSize: pageSize,
-                    total: total,
-                    showSizeChanger: true,
-                    showQuickJumper: true,
-                    showTotal: (total, range) =>
-                        `${range[0]}-${range[1]} của ${total} đơn từ`,
-                    pageSizeOptions: ['10', '20', '50', '100'],
-                    style: { marginTop: '24px' }
-                }}
+                defaultPageSize={10}
+                scroll={{ x: 'auto' }}
+                bordered
                 locale={{
                     emptyText: (
                         <Empty
@@ -519,13 +300,6 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
                         />
                     )
                 }}
-                style={{
-                    background: 'white',
-                    borderRadius: '8px'
-                }}
-                size="middle"
-                scroll={{ x: 'auto' }}
-                bordered
             />
 
             {/* Detail Modal */}

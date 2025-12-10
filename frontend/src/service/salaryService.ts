@@ -9,7 +9,7 @@ export default {
 
   // get all allowance types (no pagination)
   getAllowanceTypes() {
-    return api.get('/api/salary/allowance-types/all').then(r => r.data);
+    return api.get('/api/salary/all/allowance-types').then(r => r.data);
   },
 
 

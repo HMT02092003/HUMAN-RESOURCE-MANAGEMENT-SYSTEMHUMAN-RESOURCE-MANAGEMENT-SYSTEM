@@ -10,11 +10,37 @@ interface DepartmentData {
 class DepartmentService {
   private baseURL = '';
 
-  // Get all departments
-  async getAllDepartments() {
+  // Get all departments with optional server-side params (search, sort, pagination)
+  async getAllDepartments(params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    sort?: string;
+    order?: 'asc' | 'desc';
+  }) {
     try {
-      const response = await api.get(`/api/employee/departments`);
-      return response.data.data;
+      const response = await api.get(`/api/employee/departments`, { params });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  }
+
+  // Get all departments for select dropdown (no pagination)
+  async getDepartmentsForSelect() {
+    try {
+      const response = await api.get(`/api/employee/all/departments`);
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  }
+
+  // Get all departments as plain array for dropdowns
+  async getAllDepartmentsForSelect() {
+    try {
+      const response = await api.get(`/api/employee/all/departments`);
+      return response.data?.data || response.data || [];
     } catch (error: any) {
       throw error;
     }

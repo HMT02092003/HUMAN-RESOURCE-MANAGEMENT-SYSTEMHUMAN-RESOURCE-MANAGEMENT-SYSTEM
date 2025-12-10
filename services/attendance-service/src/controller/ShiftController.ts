@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { ShiftService } from '../services/ShiftService';
 import CheckScopeService from '../services/CheckScopeService';
+import { getDecodedToken } from '../utils/decode-token';
+import { getDecodedToken } from '../utils/decode-token';
 
 export class ShiftController {
   // ========== SHIFT MANAGEMENT (Quản lý mẫu ca) ==========
@@ -211,6 +213,94 @@ export class ShiftController {
       });
     } catch (error: any) {
       console.error('Error in getMySchedules:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Lỗi khi lấy danh sách lịch'
+      });
+    }
+  }
+
+  /**
+   * Lấy danh sách lịch của user hiện tại có phân trang, tìm kiếm, sắp xếp
+   * GET /schedules/my/paginated
+   */
+  static async getMySchedulesPaginated(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user?.id;
+      const page = parseInt(req.query['page'] as string) || 1;
+      const limit = parseInt(req.query['limit'] as string) || 10;
+      // Accept multiple possible query param names from frontend
+      const rawStatus = req.query['status'] as string | undefined;
+      const rawStartDate = (req.query['startDate'] || req.query['dateFrom'] || req.query['date_from']) as string | undefined;
+      const rawEndDate = (req.query['endDate'] || req.query['dateTo'] || req.query['date_to']) as string | undefined;
+      const rawSearchShiftName = (req.query['searchShiftName'] || req.query['shift_name'] || req.query['searchShift'] ) as string | undefined;
+      const rawSearchNotes = (req.query['searchNotes'] || req.query['notes'] || req.query['searchNotesText']) as string | undefined;
+      const rawCreatedAtFrom = (req.query['createdAtFrom'] || req.query['createdAtStart'] || req.query['created_at_from']) as string | undefined;
+      const rawCreatedAtTo = (req.query['createdAtTo'] || req.query['createdAtEnd'] || req.query['created_at_to']) as string | undefined;
+      const rawSort = (req.query['sort'] || req.query['sortField']) as string | undefined;
+      const rawOrder = (req.query['order'] || req.query['sortOrder']) as string | undefined;
+
+      // Normalize and map to the keys expected by ShiftService
+      const filters: any = {
+        status: rawStatus,
+        startDate: rawStartDate,
+        endDate: rawEndDate,
+        searchShiftName: rawSearchShiftName,
+        searchNotes: rawSearchNotes,
+        createdAtStart: rawCreatedAtFrom,
+        createdAtEnd: rawCreatedAtTo,
+        sortField: rawSort,
+        sortOrder: rawOrder
+      };
+
+        // Debug: log incoming sort params to help diagnose created_at sorting issues
+        try {
+          // Use console.debug so it's less noisy in production logs
+          console.debug('[ShiftController] Incoming sort params:', { rawSort, rawOrder });
+        } catch (e) {
+          // ignore
+        }
+
+      // Normalize sort field names that frontend may send (map search field names to logical column keys)
+      if (filters.sortField) {
+        const sf = String(filters.sortField);
+        const sortMap: Record<string,string> = {
+          'searchShiftName': 'shift_name',
+          'searchNotes': 'notes',
+          'shift_name': 'shift_name',
+          'notes': 'notes',
+          'createdAt': 'created_at',
+          'created_at': 'created_at',
+          'date': 'date'
+        };
+        if (sortMap[sf]) filters.sortField = sortMap[sf];
+      
+          // Debug: log the normalized sort field after mapping
+          try {
+            console.debug('[ShiftController] Normalized sortField ->', filters.sortField);
+          } catch (e) {
+            // ignore
+          }
+      }
+
+      // Normalize sort order values from frontend (e.g. 'ascend'/'descend' -> 'asc'/'desc')
+      if (filters.sortOrder) {
+        const so = String(filters.sortOrder).toLowerCase();
+        if (so === 'ascend' || so === 'asc') filters.sortOrder = 'asc';
+        else if (so === 'descend' || so === 'desc') filters.sortOrder = 'desc';
+        else filters.sortOrder = undefined;
+      }
+
+      const result = await ShiftService.getUserSchedulesPaginated(userId, filters, page, limit);
+
+      res.json({
+        success: true,
+        data: result.data,
+        pagination: result.pagination,
+        message: 'Lấy danh sách lịch thành công'
+      });
+    } catch (error: any) {
+      console.error('Error in getMySchedulesPaginated:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Lỗi khi lấy danh sách lịch'
@@ -565,21 +655,93 @@ export class ShiftController {
         });
       }
 
+      // Get current user ID from token to exclude their own schedules
+      let currentUserId: number | null = null;
+      try {
+        const decoded = getDecodedToken(token.replace('Bearer ', ''));
+        currentUserId = decoded?.id || null;
+      } catch (e) {
+        console.warn('[ShiftController] Could not decode token for current user ID', e);
+      }
+
       // Get query params
       const page = parseInt(req.query['page'] as string) || 1;
       const limit = parseInt(req.query['limit'] as string) || 20;
+
+      // Accept multiple possible query param names and normalize
+      const rawStatus = req.query['status'] as string | undefined;
+      const rawStartDate = (req.query['startDate'] || req.query['dateFrom'] || req.query['date_from']) as string | undefined;
+      const rawEndDate = (req.query['endDate'] || req.query['dateTo'] || req.query['date_to']) as string | undefined;
+      const rawUserId = req.query['user_id'] ? parseInt(req.query['user_id'] as string) : undefined;
+      const rawSearchShiftName = (req.query['searchShiftName'] || req.query['shift_name'] || req.query['searchShift']) as string | undefined;
+      const rawSearchNotes = (req.query['searchNotes'] || req.query['notes'] || req.query['searchNotesText']) as string | undefined;
+      const rawSearchEmployee = (req.query['searchEmployee'] || req.query['searchEmployeeName']) as string | undefined;
+      const rawSearchDepartment = (req.query['searchDepartment'] || req.query['department']) as string | undefined;
+      const rawSearchChevron = (req.query['searchChevron'] || req.query['chevron']) as string | undefined;
+      const rawDateStart = (req.query['dateStart'] || req.query['dateFrom']) as string | undefined;
+      const rawDateEnd = (req.query['dateEnd'] || req.query['dateTo']) as string | undefined;
+      const rawCreatedAtFrom = (req.query['createdAtFrom'] || req.query['createdAtStart'] || req.query['created_at_from']) as string | undefined;
+      const rawCreatedAtTo = (req.query['createdAtTo'] || req.query['createdAtEnd'] || req.query['created_at_to']) as string | undefined;
+      const rawSort = (req.query['sort'] || req.query['sortField']) as string | undefined;
+      const rawOrder = (req.query['order'] || req.query['sortOrder']) as string | undefined;
+
       const filters: any = {
-        status: req.query['status'] as string,
-        startDate: req.query['startDate'] as string,
-        endDate: req.query['endDate'] as string,
-        user_id: req.query['user_id'] ? parseInt(req.query['user_id'] as string) : undefined,
+        status: rawStatus,
+        startDate: rawStartDate || rawDateStart,
+        endDate: rawEndDate || rawDateEnd,
+        user_id: rawUserId,
+        searchShiftName: rawSearchShiftName,
+        searchNotes: rawSearchNotes,
+        searchEmployee: rawSearchEmployee,
+        searchDepartment: rawSearchDepartment,
+        searchChevron: rawSearchChevron,
+        dateStart: rawDateStart,
+        dateEnd: rawDateEnd,
+        createdAtStart: rawCreatedAtFrom,
+        createdAtEnd: rawCreatedAtTo,
         searchField: req.query['searchField'] as string,
         searchText: req.query['searchText'] as string,
-        sortField: req.query['sortField'] as string,
-        sortOrder: req.query['sortOrder'] as string
+        sortField: rawSort,
+        sortOrder: rawOrder
       };
 
-  // sanitize scope userIds coming from auth service
+      // Normalize sort field keys and order
+      if (filters.sortField) {
+        const sf = String(filters.sortField);
+        const sortMap: Record<string,string> = {
+          'searchShiftName': 'shift_name',
+          'searchNotes': 'notes',
+          'shift_name': 'shift_name',
+          'notes': 'notes',
+          'createdAt': 'created_at',
+          'created_at': 'created_at',
+          'date': 'date',
+          'status': 'status',
+          'employeeName': 'user_fullName',
+          'fullName': 'user_fullName',
+          'user.fullName': 'user_fullName',
+          'departmentName': 'user_department_name',
+          'department_name': 'user_department_name',
+          'department.name': 'user_department_name',
+          'user.Department.name': 'user_department_name',
+          'user.department.name': 'user_department_name',
+          'chevronName': 'user_chevron_name',
+          'chevron_name': 'user_chevron_name',
+          'chevron.name': 'user_chevron_name',
+          'user.Chevron.name': 'user_chevron_name',
+          'user.chevron.name': 'user_chevron_name'
+        };
+        if (sortMap[sf]) filters.sortField = sortMap[sf];
+      }
+
+      if (filters.sortOrder) {
+        const so = String(filters.sortOrder).toLowerCase();
+        if (so === 'ascend' || so === 'asc') filters.sortOrder = 'asc';
+        else if (so === 'descend' || so === 'desc') filters.sortOrder = 'desc';
+        else filters.sortOrder = undefined;
+      }
+
+      // sanitize scope userIds coming from auth service
       let scopedUserIds: number[] = [];
       try {
         if (Array.isArray(scopeResult.userIds) && scopeResult.userIds.length > 0) {
@@ -593,11 +755,73 @@ export class ShiftController {
         scopedUserIds = [];
       }
 
+      // Handle employee search - find users by name and filter scopedUserIds
+      let filteredUserIds = [...scopedUserIds];
+      if (filters.searchEmployee) {
+        try {
+          const searchedUsers = await CheckScopeService.searchUsers(filters.searchEmployee, token);
+          const searchedUserIds = searchedUsers.map((u: any) => u.id);
+          
+          // Filter scopedUserIds to only include users that match the search
+          if (scopedUserIds.length > 0) {
+            filteredUserIds = scopedUserIds.filter((id: number) => searchedUserIds.includes(id));
+          } else {
+            filteredUserIds = searchedUserIds;
+          }
+        } catch (e) {
+          console.error('[ShiftController] error searching users', e);
+          filteredUserIds = [];
+        }
+      }
+
+      // Handle department search - find users by department and filter
+      if (filters.searchDepartment) {
+        try {
+          const allUsers = await CheckScopeService.getUsersByIds(scopedUserIds.length > 0 ? scopedUserIds : []);
+          const deptUsers = allUsers.filter((u: any) => 
+            u.department?.name?.toLowerCase().includes(filters.searchDepartment.toLowerCase())
+          );
+          const deptUserIds = deptUsers.map((u: any) => u.id);
+          
+          // Intersect with existing filteredUserIds
+          if (filteredUserIds.length > 0) {
+            filteredUserIds = filteredUserIds.filter((id: number) => deptUserIds.includes(id));
+          } else {
+            filteredUserIds = deptUserIds;
+          }
+        } catch (e) {
+          console.error('[ShiftController] error searching departments', e);
+          filteredUserIds = [];
+        }
+      }
+
+      // Handle chevron search - find users by chevron and filter
+      if (filters.searchChevron) {
+        try {
+          const allUsers = await CheckScopeService.getUsersByIds(scopedUserIds.length > 0 ? scopedUserIds : []);
+          const chevronUsers = allUsers.filter((u: any) => 
+            u.chevron?.name?.toLowerCase().includes(filters.searchChevron.toLowerCase())
+          );
+          const chevronUserIds = chevronUsers.map((u: any) => u.id);
+          
+          // Intersect with existing filteredUserIds
+          if (filteredUserIds.length > 0) {
+            filteredUserIds = filteredUserIds.filter((id: number) => chevronUserIds.includes(id));
+          } else {
+            filteredUserIds = chevronUserIds;
+          }
+        } catch (e) {
+          console.error('[ShiftController] error searching chevrons', e);
+          filteredUserIds = [];
+        }
+      }
+
       const result = await ShiftService.getSchedulesForApproval(
         filters,
         page,
         limit,
-        scopedUserIds
+        filteredUserIds,
+        currentUserId
       );
 
       // Fetch user details
@@ -614,10 +838,47 @@ export class ShiftController {
       const userMap = new Map(users.map((u: any) => [u.id, u]));
 
       // Enrich data with user info
-      const enrichedData = result.data.map((schedule: any) => ({
+      let enrichedData = result.data.map((schedule: any) => ({
         ...schedule,
         user: userMap.get(schedule.user_id) || null
       }));
+
+      // Handle sorting for user-related fields
+      // Map frontend field names to backend expected names
+      const sortFieldMap: Record<string, string> = {
+        'user.fullName': 'user_fullName',
+        'department_name': 'user_department_name',
+        'chevron_name': 'user_chevron_name'
+      };
+      
+      const mappedSortField = filters.sortField ? (sortFieldMap[filters.sortField] || filters.sortField) : null;
+      
+      if (mappedSortField && ['user_fullName', 'user_department_name', 'user_chevron_name'].includes(mappedSortField)) {
+        enrichedData.sort((a: any, b: any) => {
+          let aValue: string = '';
+          let bValue: string = '';
+
+          switch (mappedSortField) {
+            case 'user_fullName':
+              aValue = a.user?.fullName || a.user?.full_name || '';
+              bValue = b.user?.fullName || b.user?.full_name || '';
+              break;
+            case 'user_department_name':
+              aValue = a.user?.department?.name || a.user?.Department?.name || '';
+              bValue = b.user?.department?.name || b.user?.Department?.name || '';
+              break;
+            case 'user_chevron_name':
+              aValue = a.user?.chevron?.name || a.user?.Chevron?.name || '';
+              bValue = b.user?.chevron?.name || b.user?.Chevron?.name || '';
+              break;
+          }
+
+          // Handle string comparison with Vietnamese collation
+          const comparison = aValue.localeCompare(bValue, 'vi', { sensitivity: 'base' });
+          
+          return filters.sortOrder === 'desc' ? -comparison : comparison;
+        });
+      }
 
       return res.json({
         success: true,

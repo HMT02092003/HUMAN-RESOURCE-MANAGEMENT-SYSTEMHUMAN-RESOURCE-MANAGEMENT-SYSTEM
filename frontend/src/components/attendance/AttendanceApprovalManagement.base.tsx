@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from 'react';
-import { Button, Space, message, Tooltip, Tag } from 'antd';
+import React, { useState, useMemo } from 'react';
+import { Button, Space, Typography, message, Tooltip, Tag } from 'antd';
 import { CheckOutlined, CheckCircleOutlined } from '@ant-design/icons';
-import { ServerSideTable } from '@/components/common/ServerSideTable';
-import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
+import { BaseTableRender } from '@/components/base';
+import type { ServerSideColumnType } from '@/components/base';
 import { attendanceService } from '@/service/attendanceService';
 import dayjs from 'dayjs';
+
+const { Title } = Typography;
 
 const AttendanceApprovalManagement: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
@@ -18,8 +20,6 @@ const AttendanceApprovalManagement: React.FC = () => {
       await attendanceService.approveMonthlyAttendance([monthlyAttendanceId]);
       message.success('Đã duyệt bảng chấm công');
       setRefreshTrigger(prev => prev + 1);
-      setSelectedRowKeys([]);
-      setSelectedRows([]);
     } catch (error: any) {
       message.error(error.message || 'Có lỗi xảy ra khi duyệt chấm công!');
     }
@@ -38,28 +38,13 @@ const AttendanceApprovalManagement: React.FC = () => {
       }
       const ids = toApprove.map((r: any) => Number(r.id));
       await attendanceService.approveMonthlyAttendance(ids);
-      message.success(`Đã duyệt ${ids.length} bảng chấm công`);
+      message.success('Đã duyệt bảng chấm công cho các bản ghi đã chọn');
       setSelectedRowKeys([]);
-      setSelectedRows([]);
       setRefreshTrigger(prev => prev + 1);
     } catch (err: any) {
       message.error(err.message || 'Lỗi khi duyệt các bản ghi đã chọn');
     }
   };
-
-  // Wrapper to inject permissionKey into API call and normalize paging keys
-  const fetchData = useCallback(async (params: any) => {
-    const normalized = { ...params };
-    // our hook sends `limit`; backend expects `pageSize` in many routes — include both to be safe
-    if (normalized.limit && !normalized.pageSize) normalized.pageSize = normalized.limit;
-    // ensure page is present (frontend uses 1-based page)
-    if (normalized.page === undefined && normalized.current !== undefined) normalized.page = normalized.current;
-
-    return attendanceService.getMonthlySummariesByScope({
-      ...normalized,
-      permissionKey: 'users',
-    });
-  }, []);
 
   const columns: ServerSideColumnType<any>[] = useMemo(() => [
     {
@@ -69,7 +54,6 @@ const AttendanceApprovalManagement: React.FC = () => {
       searchField: 'fullName',
       sortable: true,
       filterType: 'text',
-      width: 180,
       render: (_: any, record: any) => {
         const u = record.user || {};
         return u.fullName || u.firstName || u.lastName || u.username || '—';
@@ -81,8 +65,7 @@ const AttendanceApprovalManagement: React.FC = () => {
       key: 'username',
       searchField: 'username',
       sortable: true,
-      filterType: 'text',
-      width: 150
+      filterType: 'text'
     },
     {
       title: 'Phòng ban',
@@ -90,8 +73,7 @@ const AttendanceApprovalManagement: React.FC = () => {
       key: 'departmentName',
       searchField: 'departmentName',
       sortable: true,
-      filterType: 'text',
-      width: 180
+      filterType: 'text'
     },
     {
       title: 'Tháng',
@@ -100,7 +82,6 @@ const AttendanceApprovalManagement: React.FC = () => {
       searchField: 'month',
       sortable: true,
       filterType: 'text',
-      width: 120,
       render: (val: string) => {
         if (!val) return '-';
         const parts = val.split('-');
@@ -109,7 +90,7 @@ const AttendanceApprovalManagement: React.FC = () => {
       }
     },
     {
-      title: 'Trạng thái',
+      title: 'Trạng thái duyệt',
       dataIndex: 'isApproved',
       key: 'isApproved',
       searchField: 'isApproved',
@@ -119,19 +100,17 @@ const AttendanceApprovalManagement: React.FC = () => {
         { value: 'true', label: 'Đã duyệt' },
         { value: 'false', label: 'Chưa duyệt' }
       ],
-      width: 130,
       render: (v: any) => (
         v ? <Tag color="green">Đã duyệt</Tag> : <Tag color="red">Chưa duyệt</Tag>
       )
     },
     {
-      title: 'Tổng ngày',
+      title: 'Tổng ngày dự kiến',
       dataIndex: 'totalScheduledDays',
       key: 'totalScheduledDays',
       searchField: 'totalScheduledDays',
       sortable: true,
-      filterType: 'number',
-      width: 110
+      filterType: 'text'
     },
     {
       title: 'Ngày công',
@@ -139,35 +118,31 @@ const AttendanceApprovalManagement: React.FC = () => {
       key: 'presentDays',
       searchField: 'presentDays',
       sortable: true,
-      filterType: 'number',
-      width: 110
+      filterType: 'text'
     },
     {
-      title: 'Vắng',
+      title: 'Ngày vắng',
       dataIndex: 'absentDays',
       key: 'absentDays',
       searchField: 'absentDays',
       sortable: true,
-      filterType: 'number',
-      width: 90
+      filterType: 'text'
     },
     {
-      title: 'Phép',
+      title: 'Ngày nghỉ phép',
       dataIndex: 'approvedLeaveDays',
       key: 'approvedLeaveDays',
       searchField: 'approvedLeaveDays',
       sortable: true,
-      filterType: 'number',
-      width: 90
+      filterType: 'text'
     },
     {
-      title: 'Vắng KLĐ',
+      title: 'Ngày nghỉ không lý do',
       dataIndex: 'unauthorizedAbsenceDays',
       key: 'unauthorizedAbsenceDays',
       searchField: 'unauthorizedAbsenceDays',
       sortable: true,
-      filterType: 'number',
-      width: 110
+      filterType: 'text'
     },
     {
       title: 'Công tác',
@@ -175,26 +150,23 @@ const AttendanceApprovalManagement: React.FC = () => {
       key: 'businessTripDays',
       searchField: 'businessTripDays',
       sortable: true,
-      filterType: 'number',
-      width: 100
+      filterType: 'text'
     },
     {
-      title: 'Tổng giờ',
+      title: 'Tổng giờ làm',
       dataIndex: 'totalWorkHours',
       key: 'totalWorkHours',
       searchField: 'totalWorkHours',
       sortable: true,
-      filterType: 'number',
-      width: 110
+      filterType: 'text'
     },
     {
-      title: 'TB giờ',
+      title: 'Trung bình giờ',
       dataIndex: 'averageWorkHours',
       key: 'averageWorkHours',
       searchField: 'averageWorkHours',
       sortable: true,
-      filterType: 'number',
-      width: 100
+      filterType: 'text'
     },
     {
       title: 'Tổng công',
@@ -202,44 +174,39 @@ const AttendanceApprovalManagement: React.FC = () => {
       key: 'totalWorkingUnits',
       searchField: 'totalWorkingUnits',
       sortable: true,
-      filterType: 'number',
-      width: 110
+      filterType: 'text'
     },
     {
-      title: 'OT (giờ)',
+      title: 'OT giờ',
       dataIndex: 'totalOvertimeHours',
       key: 'totalOvertimeHours',
       searchField: 'totalOvertimeHours',
       sortable: true,
-      filterType: 'number',
-      width: 100
+      filterType: 'text'
     },
     {
-      title: 'OT (lương)',
+      title: 'OT lương',
       dataIndex: 'totalOvertimeSalary',
       key: 'totalOvertimeSalary',
       searchField: 'totalOvertimeSalary',
       sortable: true,
-      filterType: 'number',
-      width: 130
+      filterType: 'text'
     },
     {
-      title: 'Phạt muộn',
+      title: 'Phạt đi muộn',
       dataIndex: 'totalLatePenalty',
       key: 'totalLatePenalty',
       searchField: 'totalLatePenalty',
       sortable: true,
-      filterType: 'number',
-      width: 120
+      filterType: 'text'
     },
     {
-      title: 'Phạt sớm',
+      title: 'Phạt về sớm',
       dataIndex: 'totalEarlyLeavePenalty',
       key: 'totalEarlyLeavePenalty',
       searchField: 'totalEarlyLeavePenalty',
       sortable: true,
-      filterType: 'number',
-      width: 120
+      filterType: 'text'
     },
     {
       title: 'Phạt vắng',
@@ -247,8 +214,7 @@ const AttendanceApprovalManagement: React.FC = () => {
       key: 'totalUnauthorizedAbsencePenalty',
       searchField: 'totalUnauthorizedAbsencePenalty',
       sortable: true,
-      filterType: 'number',
-      width: 120
+      filterType: 'text'
     },
     {
       title: 'Tổng phạt',
@@ -256,33 +222,26 @@ const AttendanceApprovalManagement: React.FC = () => {
       key: 'totalPenalty',
       searchField: 'totalPenalty',
       sortable: true,
-      filterType: 'number',
-      width: 120
+      filterType: 'text'
     },
     {
       title: 'Thao tác',
       key: 'actions',
       fixed: 'right' as const,
-      width: 100,
+      searchable: false,
       render: (_: any, record: any) => (
         <Space>
           {!record.isApproved ? (
             <Tooltip title="Duyệt bảng chấm công">
               <Button
                 type="text"
-                size="small"
                 icon={<CheckOutlined style={{ color: 'green' }} />}
                 onClick={() => handleApproveAttendance(record.id)}
               />
             </Tooltip>
           ) : (
             <Tooltip title="Đã duyệt">
-              <Button 
-                type="text" 
-                size="small"
-                icon={<CheckCircleOutlined style={{ color: 'gray' }} />} 
-                disabled 
-              />
+              <Button type="text" icon={<CheckCircleOutlined style={{ color: 'gray' }} />} disabled />
             </Tooltip>
           )}
         </Space>
@@ -302,17 +261,25 @@ const AttendanceApprovalManagement: React.FC = () => {
     }),
   };
 
+  // Wrapper to inject permissionKey
+  const fetchData = async (params: any) => {
+    return attendanceService.getMonthlySummariesByScope({
+      ...params,
+      permissionKey: 'users',
+    });
+  };
+
   return (
     <div style={{ padding: '24px' }}>
-      {selectedRowKeys.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: 16, display: 'flex', gap: 8, alignItems: 'center' }}>
+        {selectedRowKeys.length > 0 && (
           <Button type="primary" onClick={handleApproveSelected}>
             <CheckOutlined /> Duyệt bảng chấm công ({selectedRowKeys.length})
           </Button>
-        </div>
-      )}
+        )}
+      </div>
       
-      <ServerSideTable
+      <BaseTableRender
         columns={columns}
         fetchData={fetchData}
         rowKey="id"

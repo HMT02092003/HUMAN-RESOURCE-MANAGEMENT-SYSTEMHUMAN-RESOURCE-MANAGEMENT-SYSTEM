@@ -118,13 +118,16 @@ const ContractForm: React.FC<ContractFormProps> = ({
     }
   }, [initialValues, form]);
 
-  // Load contract types from API
+  // Load contract types from API (use the /all helper which returns a plain array)
   useEffect(() => {
     const loadTypes = async () => {
       try {
         setLoadingTypes(true);
-        const types = await contractTypeService.getAllContractTypes();
-        setContractTypes(types || []);
+        // Use the select helper which calls the /contractTypes/all endpoint
+        const types = await contractTypeService.getAllContractTypesForSelect();
+        // Defensive: ensure we always set an array
+        const list = Array.isArray(types) ? types : (types?.data || []);
+        setContractTypes(list);
       } catch (_) {
         setContractTypes([]);
       } finally {
@@ -175,7 +178,7 @@ const ContractForm: React.FC<ContractFormProps> = ({
               {contractTypes.map((item) => (
                 <Option value={item.id} key={item.id} label={item.name} title={item.description}>
                   <div>
-                    <strong>{item.name}</strong>
+                    <span>{item.name}</span>
                     <br />
                     <span>{item.description}</span>
                   </div>

@@ -21,7 +21,16 @@ export const getAllDepartments = async (req: Request, res: Response) => {
       .modify((queryBuilder) => {
         // Apply filters and pagination based on inputs
         if (inputs.search) {
-          queryBuilder.where('name', 'like', `%${inputs.search}%`);
+          // If a specific column is requested, search only that column
+          const sf = inputs.search_field as string | undefined;
+          if (sf && (sf === 'name' || sf === 'description')) {
+            queryBuilder.where(sf, 'like', `%${inputs.search}%`);
+          } else {
+            queryBuilder.where((builder) => {
+              builder.where('name', 'like', `%${inputs.search}%`)
+                .orWhere('description', 'like', `%${inputs.search}%`);
+            });
+          }
         }
 
         // Add pagination if provided
@@ -38,8 +47,21 @@ export const getAllDepartments = async (req: Request, res: Response) => {
         }
       });
 
-    // Get total count for pagination
-    const totalCount = await DepartmentModel.query().count('id as count').first();
+    // Get total count for pagination (with same search filter)
+    // Build count query with same search filter
+    let countQuery = DepartmentModel.query().count('id as count');
+    if (inputs.search) {
+      const sf = inputs.search_field as string | undefined;
+      if (sf && (sf === 'name' || sf === 'description')) {
+        countQuery = countQuery.where(sf, 'like', `%${inputs.search}%`);
+      } else {
+        countQuery = countQuery.where((builder) => {
+          builder.where('name', 'like', `%${inputs.search}%`)
+            .orWhere('description', 'like', `%${inputs.search}%`);
+        });
+      }
+    }
+    const totalCount = await countQuery.first();
 
     return res.status(200).json({
       data: result,
@@ -47,6 +69,22 @@ export const getAllDepartments = async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error("Error fetching departments:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+/**
+ * Get all departments for select dropdown (no pagination)
+ */
+export const getAllDepartmentsList = async (req: Request, res: Response) => {
+  try {
+    let result = await DepartmentModel.query()
+      .select(['id', 'name'])
+      .orderBy('name', 'asc');
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Error fetching departments for select:", error);
     return res.status(500).json({ error: "Internal Server Error" });
   }
 };

@@ -187,11 +187,16 @@ class AttendanceService {
     }
   }
 
-  // New: fetch monthly summaries filtered by scope (backend resolves userIds via auth-service)
-  // Accept optional sortField and sortOrder so the UI can request specific ordering (e.g., month desc)
-  async getMonthlySummariesByScope(params: { permissionKey?: string; page?: number; pageSize?: number; month?: string; sortField?: string; sortOrder?: 'ascend' | 'descend'; search?: string; filters?: Record<string, string> }) {
+  // Fetch monthly summaries filtered by scope with server-side filtering/sorting
+  async getMonthlySummariesByScope(params: { 
+    permissionKey?: string; 
+    page?: number; 
+    pageSize?: number;
+    sort?: string;
+    order?: 'asc' | 'desc';
+    [key: string]: any; // Allow dynamic filter fields
+  }) {
     try {
-      // forward params directly; backend can ignore unknown params if not supported
       const response = await apiService.get('/api/attendance/monthly-summaries-by-scope', { params });
       if (response.data.success) return response.data.data as { results: any[]; total: number; page: number; pageSize: number };
       throw new Error(response.data.message || 'Không thể lấy dữ liệu');

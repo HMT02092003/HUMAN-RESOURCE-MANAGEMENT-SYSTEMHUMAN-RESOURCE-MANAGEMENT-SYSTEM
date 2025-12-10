@@ -4,6 +4,13 @@ import React from 'react';
 import { Row, Col, Button, Typography, Space } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
+import styles from './SelectApplicationType.module.css';
+// Material icons (installed)
+import BeachAccessIcon from '@mui/icons-material/BeachAccess';
+import EditNoteIcon from '@mui/icons-material/EditNote';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import FlightIcon from '@mui/icons-material/Flight';
+import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 
 const { Title, Text } = Typography;
 
@@ -12,7 +19,7 @@ interface ApplicationType {
     type: string;
     name: string;
     description: string;
-    icon: string;
+    icon: React.ReactNode;
 }
 
 // Application types data
@@ -21,41 +28,35 @@ const applicationTypes: ApplicationType[] = [
         type: 'leave',
         name: 'Xin nghỉ phép',
         description: 'Đăng ký nghỉ phép có lý do',
-        icon: '🏖️'
+        icon: <BeachAccessIcon />
     },
-    // {
-    //     type: 'shift_registration',
-    //     name: 'Đăng ký ca làm việc',
-    //     description: 'Đăng ký ca sáng, chiều, đêm hoặc tăng ca',
-    //     icon: '⏰'
-    // },
     {
-        type: 'forgot_check',
+        type: 'forgot-check',
         name: 'Quên check in/out',
         description: 'Báo cáo quên chấm công vào/ra',
-        icon: '📝'
+        icon: <EditNoteIcon />
     },
     {
         type: 'overtime',
         name: 'Làm thêm giờ',
         description: 'Đăng ký làm ngoài giờ',
-        icon: '⏱️'
+        icon: <AccessTimeIcon />
     },
     {
-        type: 'business_trip',
+        type: 'business-trip',
         name: 'Công tác',
         description: 'Đăng ký đi công tác',
-        icon: '✈️'
+        icon: <FlightIcon />
     },
     {
         type: 'resignation',
         name: 'Thôi việc',
         description: 'Đơn xin thôi việc',
-        icon: '👋'
+        icon: <ExitToAppIcon />
     }
 ];
 
-const SelectApplicationType = () => {
+const SelectApplicationType: React.FC = () => {
     const router = useRouter();
 
     const handleSelectType = (type: string) => {
@@ -72,8 +73,15 @@ const SelectApplicationType = () => {
         router.push(`/applications/${routeType}`);
     };
 
+    const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, type: string) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleSelectType(type);
+        }
+    };
+
     return (
-        <div style={{ padding: '24px' }}>
+        <div className={styles.container}>
             <Row gutter={[0, 24]}>
                 {/* Header */}
                 <Col span={24}>
@@ -93,100 +101,63 @@ const SelectApplicationType = () => {
 
                 {/* Application Types Grid */}
                 <Col span={24}>
-                    <Row gutter={[24, 24]} justify="center">
+                    <div className={styles.grid} role="list">
                         {applicationTypes.map((appType: ApplicationType) => (
-                            <Col xs={24} sm={12} md={8} lg={8} xl={8} key={appType.type}>
+                            <div key={appType.type} role="listitem" className={styles.cardWrapper}>
                                 <div
+                                    className={styles.card}
+                                    role="button"
+                                    tabIndex={0}
                                     onClick={() => handleSelectType(appType.type)}
-                                    style={{
-                                        height: '100%',
-                                        minHeight: '200px',
-                                        borderRadius: '12px',
-                                        border: '2px solid #f0f0f0',
-                                        transition: 'all 0.3s ease',
-                                        cursor: 'pointer',
-                                        padding: '24px',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        justifyContent: 'center',
-                                        alignItems: 'center',
-                                        textAlign: 'center',
-                                        backgroundColor: 'white'
-                                    }}
-                                    className="application-type-card"
-                                    onMouseEnter={(e) => {
-                                        e.currentTarget.style.borderColor = '#1890ff';
-                                        e.currentTarget.style.boxShadow = '0 4px 16px rgba(24, 144, 255, 0.2)';
-                                        e.currentTarget.style.transform = 'translateY(-2px)';
-                                    }}
-                                    onMouseLeave={(e) => {
-                                        e.currentTarget.style.borderColor = '#f0f0f0';
-                                        e.currentTarget.style.boxShadow = 'none';
-                                        e.currentTarget.style.transform = 'translateY(0)';
-                                    }}
+                                    onKeyDown={(e) => onKeyDown(e as unknown as React.KeyboardEvent<HTMLButtonElement>, appType.type)}
+                                    aria-label={`Chọn ${appType.name}`}
                                 >
-                                    <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                                        <div style={{ fontSize: '40px' }}>{appType.icon}</div>
-                                        <Title level={4} style={{ margin: 0, color: '#262626' }}>
+                                    <div className={styles.icon} aria-hidden>
+                                        {appType.icon}
+                                    </div>
+                                    <div className={styles.cardBody}>
+                                        <Title level={4} className={styles.cardTitle}>
                                             {appType.name}
                                         </Title>
-                                        <Text type="secondary" style={{ fontSize: '13px', lineHeight: '1.4' }}>
+                                        <Text type="secondary" className={styles.cardDesc}>
                                             {appType.description}
                                         </Text>
-                                    </Space>
+                                    </div>
                                 </div>
-                            </Col>
+                            </div>
                         ))}
-                    </Row>
+                    </div>
                 </Col>
 
                 {/* Info Section */}
                 <Col span={24}>
                     <Row justify="center">
                         <Col xs={24} md={24} lg={24}>
-                            <div
-                                style={{
-                                    background: 'linear-gradient(135deg, #e6f7ff 0%, #bae7ff 100%)',
-                                    border: '1px solid #91d5ff',
-                                    borderRadius: '12px',
-                                    padding: '24px',
-                                }}
-                            >
+                            <div className={styles.infoBox}>
                                 <Row gutter={16} align="top">
                                     <Col flex="auto">
-                                        <Title level={5} style={{ margin: '0 0 16px 0', color: '#003a8c', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <div style={{
-                                                fontSize: '20px',
-                                                background: '#1890ff',
-                                                color: 'white',
-                                                width: '30px',
-                                                height: '30px',
-                                                borderRadius: '50%',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                justifyContent: 'center'
-                                            }}>
-                                                💡
-                                            </div>Hướng dẫn sử dụng
+                                        <Title level={5} className={styles.infoTitle}>
+                                            <div className={styles.infoBadge}>💡</div>
+                                            Hướng dẫn sử dụng
                                         </Title>
                                         <Row gutter={[16, 8]}>
                                             <Col span={24}>
-                                                <Text style={{ color: '#1890ff', fontSize: '14px' }}>
+                                                <Text className={styles.infoText}>
                                                     • Chọn loại đơn từ phù hợp với nhu cầu của bạn
                                                 </Text>
                                             </Col>
                                             <Col span={24}>
-                                                <Text style={{ color: '#1890ff', fontSize: '14px' }}>
+                                                <Text className={styles.infoText}>
                                                     • Điền đầy đủ thông tin theo biểu mẫu
                                                 </Text>
                                             </Col>
                                             <Col span={24}>
-                                                <Text style={{ color: '#1890ff', fontSize: '14px' }}>
+                                                <Text className={styles.infoText}>
                                                     • Kiểm tra kỹ thông tin trước khi gửi
                                                 </Text>
                                             </Col>
                                             <Col span={24}>
-                                                <Text style={{ color: '#1890ff', fontSize: '14px' }}>
+                                                <Text className={styles.infoText}>
                                                     • Theo dõi trạng thái đơn từ tại trang danh sách
                                                 </Text>
                                             </Col>

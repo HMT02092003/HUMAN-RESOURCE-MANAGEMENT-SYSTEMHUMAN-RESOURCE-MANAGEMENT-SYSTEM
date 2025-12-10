@@ -24,7 +24,10 @@ export const getAllContractTypes = async (req: Request, res: Response) => {
             .modify((queryBuilder) => {
                 // Apply filters and pagination based on inputs
                 if (inputs.search) {
-                    queryBuilder.where('name', 'like', `%${inputs.search}%`);
+                    queryBuilder.where((builder) => {
+                        builder.where('name', 'like', `%${inputs.search}%`)
+                            .orWhere('description', 'like', `%${inputs.search}%`);
+                    });
                 }
 
                 // Add pagination if provided
@@ -41,8 +44,15 @@ export const getAllContractTypes = async (req: Request, res: Response) => {
                 }
             });
 
-        // Get total count for pagination
-        const totalCount = await ContractType.query().count('id as count').first();
+        // Get total count for pagination (with same search filter)
+        let countQuery = ContractType.query().count('id as count');
+        if (inputs.search) {
+            countQuery = countQuery.where((builder) => {
+                builder.where('name', 'like', `%${inputs.search}%`)
+                    .orWhere('description', 'like', `%${inputs.search}%`);
+            });
+        }
+        const totalCount = await countQuery.first();
 
         return res.status(200).json({
             data: result,
@@ -50,6 +60,22 @@ export const getAllContractTypes = async (req: Request, res: Response) => {
         });
     } catch (error) {
         console.error("Error fetching contract types:", error);
+        return res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
+/**
+ * Get all contract types for select dropdown (no pagination)
+ */
+export const getAllContractTypesList = async (req: Request, res: Response) => {
+    try {
+        let result = await ContractType.query()
+            .select(['id', 'name', 'contractTerm', 'type'])
+            .orderBy('name', 'asc');
+
+        return res.status(200).json(result);
+    } catch (error) {
+        console.error("Error fetching contract types for select:", error);
         return res.status(500).json({ error: "Internal Server Error" });
     }
 };

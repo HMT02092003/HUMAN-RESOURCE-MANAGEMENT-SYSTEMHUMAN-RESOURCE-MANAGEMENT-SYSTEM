@@ -53,9 +53,26 @@ const ApplicationService = {
   getAllApplications: async (params?: {
     page?: number;
     pageSize?: number;
+    sortField?: string;
+    sortOrder?: 'ascend' | 'descend';
+    type?: string;
+    status?: number;
+    createdAtFrom?: string;
+    createdAtTo?: string;
+    approvedDateFrom?: string;
+    approvedDateTo?: string;
   }) => {
     try {
-      const response = await api.get("/api/applications", { params });
+      const response = await api.get("/api/applications", { 
+        params: {
+          ...params,
+          _t: Date.now() // Cache buster
+        },
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        }
+      });
       return response.data;
     } catch (error) {
       throw error;
@@ -65,7 +82,13 @@ const ApplicationService = {
   // Lấy chi tiết application theo ID
   getApplicationById: async (id: number) => {
     try {
-      const response = await api.get(`/api/applications/${id}`);
+      const response = await api.get(`/api/applications/${id}`, {
+        params: { _t: Date.now() },
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        }
+      });
       return response.data;
     } catch (error) {
       throw error;
@@ -132,13 +155,47 @@ const ApplicationService = {
     }
   },
 
-  // Lấy applications của user hiện tại
+  // Lấy applications của user hiện tại - có server-side search/sort/filter (cho bảng)
   getMyApplications: async (params?: { 
     page?: number; 
-    pageSize?: number; 
+    limit?: number;
+    sort?: string;
+    order?: string;
+    search?: string;
+    type?: string;
+    status?: string | number;
+    createdAtFrom?: string;
+    createdAtTo?: string;
   }) => {
     try {
-      const response = await api.get("/api/applications/my-applications", { params });
+      // Call the backend paginated endpoint for my-applications
+      // Note: the application-service registers the route at `/api/applications/my-applications`
+      const response = await api.get("/api/applications/my-applications", { 
+        params: {
+          ...params,
+          _t: Date.now() // Cache buster
+        },
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        }
+      });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Lấy tất cả applications của user hiện tại (không phân trang) - dùng cho select/dropdown
+  getAllMyApplicationsList: async () => {
+    try {
+      const response = await api.get("/api/all/my-applications", {
+        params: { _t: Date.now() },
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        }
+      });
       return response.data;
     } catch (error) {
       throw error;

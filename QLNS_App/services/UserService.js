@@ -165,7 +165,8 @@ class UserService {
   // Lấy danh sách departments
   static async getDepartments() {
     try {
-      const response = await api.get('/departments/all');
+      // Use canonical endpoint '/all/departments'
+      const response = await api.get('/all/departments');
       return response.data;
     } catch (error) {
       console.error('Error fetching departments:', error);
@@ -176,7 +177,8 @@ class UserService {
   // Lấy danh sách chevrons (positions)
   static async getChevrons() {
     try {
-      const response = await api.get('/chevrons/all');
+      // Use new canonical endpoint '/all/chevrons'
+      const response = await api.get('/all/chevrons');
       return response.data;
     } catch (error) {
       console.error('Error fetching chevrons:', error);

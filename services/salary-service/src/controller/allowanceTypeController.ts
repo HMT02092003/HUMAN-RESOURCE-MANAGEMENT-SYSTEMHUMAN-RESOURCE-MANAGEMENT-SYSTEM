@@ -25,7 +25,7 @@ export const list = async (req: Request, res: Response, next: NextFunction) => {
 };
 
 // Return all allowance types without pagination
-export const listAll = async (req: Request, res: Response, next: NextFunction) => {
+export const getAllAllowanceTypesList = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const items = await AllowanceType.query().orderBy('id');
     res.json(items);

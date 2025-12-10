@@ -38,6 +38,10 @@ const Roles: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   const [searchColumn, setSearchColumn] = useState('name');
 
+  // Server-side pagination and sorting state
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 12, total: 0 });
+  const [sorter, setSorter] = useState<{ field: string; order: 'ascend' | 'descend' | undefined }>({ field: '', order: undefined });
+
   // Giả lập quyền hạn
   const createPer: boolean = true;
   const updatePer: boolean = true;
@@ -88,7 +92,7 @@ const Roles: React.FC = () => {
       title: "Tên vai trò",
       dataIndex: 'name',
       key: 'roles.name',
-      sorter: (a: Role, b: Role) => a.name.localeCompare(b.name),
+      sorter: true,
       width: 200,
       ...getColumnSearchProps('name'),
     },
@@ -96,7 +100,7 @@ const Roles: React.FC = () => {
       title: "Mô tả vai trò",
       dataIndex: 'description',
       key: 'roles.description',
-      sorter: (a: Role, b: Role) => (a.description || '').localeCompare(b.description || ''),
+      sorter: true,
       width: 150,
       ...getColumnSearchProps('description'),
     },
@@ -104,7 +108,7 @@ const Roles: React.FC = () => {
       title: "Ngày tạo",
       dataIndex: 'createdAt',
       key: 'roles.createdAt',
-      sorter: (a: Role, b: Role) => dayjs(a.createdAt).unix() - dayjs(b.createdAt).unix(),
+      sorter: true,
       render: (text: Date | string) => formatDate(text),
       width: 150,
     },
@@ -166,8 +170,19 @@ const Roles: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const data = await roleService.getAllRoles();
-      setRoles(data);
+      const params: any = {
+        page: pagination.current,
+        limit: pagination.pageSize,
+      };
+
+      if (sorter.field && sorter.order) {
+        params.sort = sorter.field;
+        params.order = sorter.order === 'ascend' ? 'asc' : 'desc';
+      }
+
+      const response = await roleService.getAllRoles(params);
+      setRoles(response.data || []);
+      setPagination(prev => ({ ...prev, total: response.total || 0 }));
     } catch (error: any) {
       message.error(error.response?.data?.error || 'Có lỗi xảy ra khi tải dữ liệu');
     } finally {
@@ -177,14 +192,35 @@ const Roles: React.FC = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [pagination.current, pagination.pageSize, sorter.field, sorter.order]);
+
+  const handleTableChange = (
+    paginationConfig: any,
+    filters: any,
+    sorterConfig: any
+  ) => {
+    setPagination({
+      current: paginationConfig.current,
+      pageSize: paginationConfig.pageSize,
+      total: pagination.total,
+    });
+
+    if (sorterConfig.field) {
+      setSorter({
+        field: sorterConfig.field,
+        order: sorterConfig.order,
+      });
+    } else {
+      setSorter({ field: '', order: undefined });
+    }
+  };
 
   const handleDelete = async () => {
     try {
       setLoading(true);
       await roleService.deleteMultipleRoles(selectedRowKeys);
       message.success('Xóa vai trò thành công!');
-      fetchData();
+      await fetchData();
       setSelectedRowKeys([]);
     } catch (error: any) {
       message.error(error.response?.data?.error || 'Có lỗi xảy ra khi xóa vai trò');
@@ -251,12 +287,15 @@ const Roles: React.FC = () => {
               rowSelection={rowSelection}
               scroll={{ x: 'max-content' }}
               pagination={{
-                pageSize: 12,
+                current: pagination.current,
+                pageSize: pagination.pageSize,
+                total: pagination.total,
                 showSizeChanger: true,
                 pageSizeOptions: ['12', '24', '36', '48'],
                 showTotal: (total: number) => `Tổng số: ${total} bản ghi`,
                 size: screens.lg ? 'default' : 'small'
               }}
+              onChange={handleTableChange}
               rowClassName={(_, index) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
               size={screens.lg ? 'middle' : 'small'}
             />

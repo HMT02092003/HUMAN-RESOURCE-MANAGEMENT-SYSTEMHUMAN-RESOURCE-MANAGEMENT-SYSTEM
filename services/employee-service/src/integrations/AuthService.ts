@@ -64,6 +64,36 @@ class AuthService {
       return { allowedUserIds: [] };
     }
   }
+
+  /**
+   * Get users by department id or list of department ids
+   * Accepts either a single departmentId (number) or an array of ids
+   */
+  static async getUsersByDepartment(departmentId: number | number[], authToken?: string): Promise<any[]> {
+    try {
+      const headers: any = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = authToken;
+
+      const params: any = {};
+      if (Array.isArray(departmentId)) {
+        // send as departmentIds for bulk
+        params.departmentIds = departmentId;
+      } else {
+        params.departmentId = departmentId;
+      }
+
+      const response = await axios.get(`${API_GATEWAY_URL}/api/auth/users/by-department`, {
+        headers,
+        params
+      });
+
+      // auth-service returns data in response.data or response.data.data
+      return response.data?.data || response.data || [];
+    } catch (error: any) {
+      console.error(`❌ [AuthService] Failed to get users by department:`, error.message);
+      return [];
+    }
+  }
 }
 
 export default AuthService;

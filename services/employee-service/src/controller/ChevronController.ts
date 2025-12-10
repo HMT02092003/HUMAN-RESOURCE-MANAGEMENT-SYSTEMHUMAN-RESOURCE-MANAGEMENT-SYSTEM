@@ -3,14 +3,77 @@ import ChevronModel from "@/src/Models/ChevronModel";
 import { validate, ValidationException } from "@/src/utils/validation-utility";
 
 /**
- * Get all chevrons from the database
+ * Get all chevrons from the database with optional search, sort, and pagination
  */
 export const getAllChevrons = async (req: Request, res: Response) => {
   try {
-    const result = await ChevronModel.query().select("chevrons.*");
-    return res.status(200).json(result);
+    const inputs = req.query;
+    const project = [
+      "chevrons.id",
+      "chevrons.name",
+      "chevrons.description",
+      "chevrons.chevronCoefficient",
+      "chevrons.created_at",
+      "chevrons.updated_at",
+    ];
+
+    let result = await ChevronModel.query()
+      .select(project)
+      .modify((queryBuilder) => {
+        // Apply search filter
+        if (inputs.search) {
+          queryBuilder.where((builder) => {
+            builder.where('name', 'like', `%${inputs.search}%`)
+              .orWhere('description', 'like', `%${inputs.search}%`);
+          });
+        }
+
+        // Add pagination if provided
+        if (inputs.page && inputs.limit) {
+          const page = Number(inputs.page) || 1;
+          const limit = Number(inputs.limit) || 10;
+          queryBuilder.offset((page - 1) * limit).limit(limit);
+        }
+
+        // Add sorting if provided
+        if (inputs.sort && inputs.order) {
+          const order = inputs.order === 'asc' || inputs.order === 'desc' ? inputs.order : 'asc';
+          queryBuilder.orderBy(inputs.sort as string, order);
+        }
+      });
+
+    // Get total count for pagination
+    let countQuery = ChevronModel.query().count('id as count');
+    if (inputs.search) {
+      countQuery = countQuery.where((builder) => {
+        builder.where('name', 'like', `%${inputs.search}%`)
+          .orWhere('description', 'like', `%${inputs.search}%`);
+      });
+    }
+    const totalCount = await countQuery.first();
+
+    return res.status(200).json({
+      data: result,
+      total: totalCount ? (totalCount as any).count : 0
+    });
   } catch (error) {
     console.error("Error fetching chevrons:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+};
+
+/**
+ * Get all chevrons for select dropdown (no pagination)
+ */
+export const getAllChevronsList = async (req: Request, res: Response) => {
+  try {
+    let result = await ChevronModel.query()
+      .select(['id', 'name', 'chevronCoefficient'])
+      .orderBy('name', 'asc');
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error("Error fetching chevrons for select:", error);
     return res.status(500).json({ error: "Internal Server Error" });
   }
 };

@@ -1,5 +1,6 @@
 import { ShiftModel } from '../Models/ShiftModel';
 import { EmployeeScheduleModel } from '../Models/EmployeeScheduleModel';
+import { applySearch, applyFilters, applySorting, applyPagination } from '../utils/query-builder.js';
 
 export class ShiftService {
   // ========== SHIFT MANAGEMENT (Quản lý mẫu ca) ==========
@@ -98,6 +99,87 @@ export class ShiftService {
   }
 
   /**
+   * Lấy danh sách lịch của user có phân trang, tìm kiếm, sắp xếp
+   * Sử dụng query-builder để giảm code trùng lặp
+   */
+  static async getUserSchedulesPaginated(
+    userId: number,
+    filters: any = {},
+    page: number = 1,
+    limit: number = 10
+  ) {
+    // Field mapping cho sort - map từ frontend field sang database column
+    const sortFieldMapping: Record<string, string> = {
+      shift_name: 'shifts.name',
+      date: 'employee_schedules.date',
+      status: 'employee_schedules.status',
+      created_at: 'employee_schedules.created_at',
+      notes: 'employee_schedules.notes',
+      start_time: 'shifts.start_time',
+      end_time: 'shifts.end_time'
+    };
+
+    // Build base query
+    let query = EmployeeScheduleModel.query()
+      .leftJoin('shifts', 'employee_schedules.shift_id', 'shifts.id')
+      .select(
+        'employee_schedules.*',
+        'shifts.name as shift_name',
+        'shifts.start_time',
+        'shifts.end_time',
+        'shifts.working_unit'
+      )
+      .where('employee_schedules.user_id', userId);
+
+    // Build filter params cho query-builder
+    const filterParams: Record<string, any> = {};
+    if (filters.status) filterParams['employee_schedules.status'] = filters.status;
+    if (filters.startDate) filterParams['employee_schedules.dateFrom'] = filters.startDate;
+    if (filters.endDate) filterParams['employee_schedules.dateTo'] = filters.endDate;
+    if (filters.createdAtStart) filterParams['employee_schedules.created_atFrom'] = filters.createdAtStart;
+    if (filters.createdAtEnd) filterParams['employee_schedules.created_atTo'] = filters.createdAtEnd;
+
+    // Apply filters using query-builder
+    query = applyFilters(query, filterParams, {
+      'employee_schedules.date': 'employee_schedules.date',
+      'employee_schedules.created_at': 'employee_schedules.created_at'
+    });
+
+    // Column-specific search filters (không dùng query-builder vì là ILIKE)
+    if (filters.searchShiftName) {
+      query = query.where('shifts.name', 'ilike', `%${filters.searchShiftName}%`);
+    }
+    if (filters.searchNotes) {
+      query = query.where('employee_schedules.notes', 'ilike', `%${filters.searchNotes}%`);
+    }
+
+    // Apply sorting using query-builder
+    query = applySorting(
+      query,
+      filters.sortField,
+      filters.sortOrder === 'desc' ? 'desc' : 'asc',
+      sortFieldMapping,
+      { field: 'employee_schedules.date', order: 'desc' }
+    );
+
+    // Get total count before pagination
+    const total = await query.clone().clearOrder().resultSize();
+
+    // Apply pagination
+    const schedules = await applyPagination(query, page, limit);
+
+    return {
+      data: schedules,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
+  }
+
+  /**
    * Lấy danh sách lịch chờ duyệt
    */
   static async getPendingSchedules() {
@@ -129,7 +211,13 @@ export class ShiftService {
     // Kiểm tra ca có tồn tại không
     await this.getShiftById(shift_id);
 
-    // Kiểm tra trùng lặp
+    // Kiểm tra xem ngày này đã có ca được duyệt chưa
+    const hasApproved = await EmployeeScheduleModel.hasApprovedSchedule(user_id, date);
+    if (hasApproved) {
+      throw new Error('Ngày này đã có ca làm việc được duyệt, không thể đăng ký thêm');
+    }
+
+    // Kiểm tra trùng lặp (pending hoặc approved)
     const isDuplicate = await EmployeeScheduleModel.checkDuplicate(user_id, date);
     if (isDuplicate) {
       throw new Error('Bạn đã đăng ký lịch cho ngày này rồi');
@@ -166,6 +254,18 @@ export class ShiftService {
 
     for (const date of dates) {
       try {
+        // Kiểm tra xem ngày này đã có ca được duyệt chưa
+        const hasApproved = await EmployeeScheduleModel.hasApprovedSchedule(user_id, date);
+        if (hasApproved) {
+          results.failed++;
+          results.details.push({
+            date,
+            success: false,
+            reason: 'Ngày này đã có ca làm việc được duyệt'
+          });
+          continue;
+        }
+
         // Kiểm tra trùng
         const isDuplicate = await EmployeeScheduleModel.checkDuplicate(user_id, date);
         if (isDuplicate) {
@@ -221,6 +321,44 @@ export class ShiftService {
     }
 
     const updateData: any = {};
+    
+    // Nếu có thay đổi ngày hoặc ca, cần validate
+    if (data.date !== undefined || data.shift_id !== undefined) {
+      const newDate = data.date || schedule.date;
+      const newShiftId = data.shift_id || schedule.shift_id;
+
+      // Kiểm tra ca có tồn tại
+      if (data.shift_id !== undefined) {
+        await this.getShiftById(newShiftId);
+      }
+
+      // Nếu đổi ngày, kiểm tra ngày mới đã có ca được duyệt chưa
+      if (data.date !== undefined && data.date !== schedule.date) {
+        const hasApproved = await EmployeeScheduleModel.hasApprovedSchedule(userId, newDate);
+        if (hasApproved) {
+          throw new Error('Ngày này đã có ca làm việc được duyệt, không thể chuyển đến');
+        }
+
+        // Kiểm tra trùng lặp với các đăng ký khác (trừ chính nó)
+        const duplicate = await EmployeeScheduleModel.query()
+          .where('user_id', userId)
+          .where('date', newDate)
+          .whereIn('status', ['pending', 'approved'])
+          .whereNot('id', id)
+          .first();
+
+        if (duplicate) {
+          throw new Error('Ngày này đã có đăng ký khác');
+        }
+
+        updateData.date = newDate;
+      }
+
+      if (data.shift_id !== undefined) {
+        updateData.shift_id = newShiftId;
+      }
+    }
+
     if (data.notes !== undefined) updateData.notes = data.notes;
 
     return await EmployeeScheduleModel.query()
@@ -319,14 +457,30 @@ export class ShiftService {
 
   /**
    * Lấy danh sách đơn đăng ký ca với phân trang và scope
+   * Sử dụng query-builder để giảm code trùng lặp
    * Hỗ trợ filters: status, startDate, endDate, user_id
    */
   static async getSchedulesForApproval(
     filters: any = {},
     page: number = 1,
     limit: number = 20,
-    userIds: number[] = []
+    userIds: number[] = [],
+    currentUserId?: number | null
   ) {
+    // Field mapping cho sort - map từ frontend field sang database column
+    const sortFieldMapping: Record<string, string> = {
+      shift_name: 'shifts.name',
+      date: 'employee_schedules.date',
+      status: 'employee_schedules.status',
+      created_at: 'employee_schedules.created_at',
+      id: 'employee_schedules.id',
+      notes: 'employee_schedules.notes'
+    };
+
+    // Searchable fields
+    const searchFields = ['shifts.name', 'employee_schedules.notes'];
+
+    // Build base query
     let query = EmployeeScheduleModel.query()
       .leftJoin('shifts', 'employee_schedules.shift_id', 'shifts.id')
       .select(
@@ -335,25 +489,16 @@ export class ShiftService {
         'shifts.start_time',
         'shifts.end_time',
         'shifts.working_unit'
-      )
-      .orderBy('employee_schedules.created_at', 'desc');
+      );
 
-    // Scope filter
+    // Scope filter - đặc biệt, không dùng query-builder
     if (userIds && userIds.length > 0) {
       query = query.whereIn('employee_schedules.user_id', userIds);
     }
 
-    // Status filter
-    if (filters.status) {
-      query = query.where('employee_schedules.status', filters.status);
-    }
-
-    // Date range filter
-    if (filters.startDate) {
-      query = query.where('employee_schedules.date', '>=', filters.startDate);
-    }
-    if (filters.endDate) {
-      query = query.where('employee_schedules.date', '<=', filters.endDate);
+    // Exclude current user's own schedules from approval list
+    if (currentUserId) {
+      query = query.whereNot('employee_schedules.user_id', currentUserId);
     }
 
     // User filter
@@ -361,36 +506,59 @@ export class ShiftService {
       query = query.where('employee_schedules.user_id', filters.user_id);
     }
 
-    // Search (basic) across shift name and notes when provided
+    // Build filter params cho query-builder
+    const filterParams: Record<string, any> = {};
+    if (filters.status) filterParams['employee_schedules.status'] = filters.status;
+    if (filters.startDate) filterParams['employee_schedules.dateFrom'] = filters.startDate;
+    if (filters.endDate) filterParams['employee_schedules.dateTo'] = filters.endDate;
+    if (filters.dateStart) filterParams['employee_schedules.dateFrom'] = filters.dateStart;
+    if (filters.dateEnd) filterParams['employee_schedules.dateTo'] = filters.dateEnd;
+    if (filters.createdAtStart) filterParams['employee_schedules.created_atFrom'] = filters.createdAtStart;
+    if (filters.createdAtEnd) filterParams['employee_schedules.created_atTo'] = filters.createdAtEnd;
+
+    // Apply filters using query-builder
+    query = applyFilters(query, filterParams, {
+      'employee_schedules.date': 'employee_schedules.date',
+      'employee_schedules.created_at': 'employee_schedules.created_at'
+    });
+
+    // Column-specific search filters (ILIKE search - không dùng applySearch vì cần ILIKE)
+    if (filters.searchShiftName) {
+      query = query.where('shifts.name', 'ilike', `%${filters.searchShiftName}%`);
+    }
+    if (filters.searchNotes) {
+      query = query.where('employee_schedules.notes', 'ilike', `%${filters.searchNotes}%`);
+    }
+
+    // Generic search across shift name and notes
     if (filters.searchText) {
-      const text = `%${filters.searchText}%`;
-      if (filters.searchField === 'shift_name') {
-        query = query.where('shifts.name', 'ilike', text);
-      } else if (filters.searchField === 'notes') {
-        query = query.where('employee_schedules.notes', 'ilike', text);
-      } else {
-        // generic: search both
-        query = query.where(function () {
-          this.where('shifts.name', 'ilike', text).orWhere('employee_schedules.notes', 'ilike', text);
-        });
-      }
+      query = applySearch(query, filters.searchText, searchFields, filters.searchField);
     }
 
-    // Sorting
-    if (filters.sortField) {
-      const order = filters.sortOrder === 'desc' ? 'desc' : 'asc';
-      if (filters.sortField === 'shift_name') {
-        query = query.orderBy('shifts.name', order);
-      } else {
-        // allow sorting by schedule columns: id, date, created_at
-        query = query.orderBy(`employee_schedules.${filters.sortField}`, order);
-      }
+    // Apply sorting using query-builder
+    // IMPORTANT: Only sort by fields that exist in the database
+    // User-related fields (user_fullName, user_department_name, user_chevron_name) will be sorted in-memory by controller
+    const userRelatedSortFields = ['user_fullName', 'user_department_name', 'user_chevron_name', 'employeeName', 'fullName', 'department_name', 'chevron_name'];
+    const shouldSortInDB = filters.sortField && !userRelatedSortFields.includes(filters.sortField);
+    
+    if (shouldSortInDB) {
+      query = applySorting(
+        query,
+        filters.sortField,
+        filters.sortOrder === 'desc' ? 'desc' : 'asc',
+        sortFieldMapping,
+        { field: 'employee_schedules.created_at', order: 'desc' }
+      );
+    } else {
+      // No sorting in DB, or will be sorted in-memory - use default order
+      query = query.orderBy('employee_schedules.created_at', 'desc');
     }
 
-    // Pagination
-    const offset = (page - 1) * limit;
-    const total = await query.resultSize();
-    const schedules = await query.limit(limit).offset(offset);
+    // Get total count before pagination
+    const total = await query.clone().clearOrder().resultSize();
+
+    // Apply pagination
+    const schedules = await applyPagination(query, page, limit);
 
     return {
       data: schedules,

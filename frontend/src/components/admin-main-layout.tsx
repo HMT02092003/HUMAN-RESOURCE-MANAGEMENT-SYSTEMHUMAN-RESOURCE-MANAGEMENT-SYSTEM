@@ -424,6 +424,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
 
         if (pathname === '/applications/me') return ['myApplications'];
         if (pathname === '/applications') return ['manageApplications'];
+        if (pathname === '/shifts/configuration') return ['shiftConfiguration'];
+        if (pathname === '/shifts/registration') return ['shiftRegistration'];
+        if (pathname === '/shifts/approval') return ['shiftApproval'];
         if (pathname.startsWith('/applications')) return ['applications_parent'];
 
         if (pathname === '/attendance/approval') return ['attendanceApproval'];

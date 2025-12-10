@@ -11,11 +11,32 @@ interface ChevronData {
 class ChevronService {
   private baseURL = '';
 
-  // Get all chevrons
-  async getAllChevrons() {
+  // Get all chevrons with optional params
+  async getAllChevrons(params?: { page?: number; limit?: number; search?: string; sort?: string; order?: string }) {
     try {
-      const response = await api.get(`/api/employee/getAllChevrons`);
+      // Paginated list endpoint (server-side search/sort/pagination)
+      const response = await api.get(`/api/employee/chevrons`, { params });
       return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  }
+
+  // Get all chevrons for select dropdown (no pagination)
+  async getChevronsForSelect() {
+    try {
+      const response = await api.get(`/api/employee/all/chevrons`);
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  }
+
+  // Get all chevrons as plain array for dropdowns
+  async getAllChevronsForSelect() {
+    try {
+      const response = await api.get(`/api/employee/all/chevrons`);
+      return response.data?.data || response.data || [];
     } catch (error: any) {
       throw error;
     }

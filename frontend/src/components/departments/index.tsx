@@ -4,9 +4,6 @@ import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, Sear
 import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
 import { departmentService } from '@/service/departmentService';
-import type { InputRef } from 'antd';
-import type { FilterDropdownProps } from 'antd/es/table/interface';
-import Highlighter from 'react-highlight-words';
 
 // Định nghĩa interfaces
 interface DepartmentData {
@@ -26,31 +23,56 @@ const formatDate = (date: Date | string | null): string => {
   return dayjs(date).format('DD/MM/YYYY');
 };
 
-const MyHighlighter = Highlighter as unknown as React.FC<any>;
-
 const Index: React.FC = () => {
   const screens = Grid.useBreakpoint();
   const tableRef = useRef<TableRefType>(null);
-  const searchInput = useRef<InputRef>(null);
   const [hiddenDeleteBtn, setHiddenDeleteBtn] = useState<boolean>(true);
   const [selectedIds, setSelectedIds] = useState<React.Key[]>([]);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState<boolean>(false);
   const [DepartmentData, setDepartmentData] = useState<DepartmentData[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
-  const [searchText, setSearchText] = useState('');
-  const [searchedColumn, setSearchedColumn] = useState('');
   const router = useRouter();
+
+  // 🔥 Server-side: State cho pagination, sort và search
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 10,
+    total: 0
+  });
+  const [searchField, setSearchField] = useState<string | undefined>(undefined);
+  const [sorter, setSorter] = useState<{ field: string; order: 'asc' | 'desc' }>({
+    field: 'created_at',
+    order: 'desc'
+  });
+  const [searchKeyword, setSearchKeyword] = useState<string>('');
 
   // Giả lập quyền hạn
   const createPer: boolean = true;
   const updatePer: boolean = true;
   const deletePer: boolean = true;
 
+  // 🔥 Server-side: Gọi API với params
   const loadData = async () => {
     setLoading(true);
     try {
-      const data = await departmentService.getAllDepartments();
+      const params: any = {
+        page: pagination.current,
+        limit: pagination.pageSize,
+        sort: sorter.field,
+        order: sorter.order,
+      };
+
+      if (searchKeyword) {
+        params.search = searchKeyword;
+        if (searchField) params.search_field = searchField;
+      }
+
+      const response = await departmentService.getAllDepartments(params);
+      const data = response.data || response || [];
+      const total = response.total || data.length;
+      
       setDepartmentData(data);
+      setPagination(prev => ({ ...prev, total }));
     } catch (error) {
       console.error('Error loading data:', error);
       message.error('Đã xảy ra lỗi khi tải dữ liệu!');
@@ -61,118 +83,117 @@ const Index: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [pagination.current, pagination.pageSize, sorter.field, sorter.order, searchKeyword]);
 
-  const handleSearch = (
-    selectedKeys: string[],
-    confirm: FilterDropdownProps['confirm'],
-    dataIndex: keyof DepartmentData,
-  ) => {
-    confirm();
-    setSearchText(selectedKeys[0]);
-    setSearchedColumn(dataIndex);
+  // 🔥 Server-side search handler
+  const handleSearch = (value: string) => {
+    // Global search (no specific column)
+    setSearchField(undefined);
+    setSearchKeyword(value);
+    setPagination(prev => ({ ...prev, current: 1 })); // Reset về trang 1 khi search
   };
 
-  const handleReset = (clearFilters: () => void) => {
-    clearFilters();
-    setSearchText('');
+  const handleColumnSearch = (field: string, value: string) => {
+    setSearchField(field);
+    setSearchKeyword(value);
+    setPagination(prev => ({ ...prev, current: 1 }));
   };
-
-  const getColumnSearchProps = (dataIndex: keyof DepartmentData) => ({
-    filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters, close }: FilterDropdownProps) => (
-      <div style={{ padding: 8 }} onKeyDown={(e) => e.stopPropagation()}>
-        <Input
-          ref={searchInput}
-          placeholder={`Tìm kiếm ${dataIndex}`}
-          value={selectedKeys[0]}
-          onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-          onPressEnter={() => handleSearch(selectedKeys as string[], confirm, dataIndex)}
-          style={{ marginBottom: 8, display: 'block' }}
-        />
-        <Space>
-          <Button
-            type="primary"
-            onClick={() => handleSearch(selectedKeys as string[], confirm, dataIndex)}
-            icon={<SearchOutlined />}
-            size="small"
-            style={{ width: 90 }}
-          >
-            Tìm kiếm
-          </Button>
-          <Button
-            onClick={() => clearFilters && handleReset(clearFilters)}
-            size="small"
-            style={{ width: 90 }}
-          >
-            Reset
-          </Button>
-        </Space>
-      </div>
-    ),
-    filterIcon: (filtered: boolean) => (
-      <SearchOutlined style={{ color: filtered ? '#1677ff' : undefined }} />
-    ),
-    onFilter: (value: boolean | React.Key, record: DepartmentData) =>
-      record[dataIndex]
-        .toString()
-        .toLowerCase()
-        .includes((value as string).toLowerCase()),
-    filterDropdownProps: {
-      onOpenChange(open: boolean) {
-        if (open) {
-          setTimeout(() => searchInput.current?.select(), 100);
-        }
-      },
-    },
-    render: (text: string) =>
-      searchedColumn === text ? (
-        <MyHighlighter
-          highlightStyle={{ backgroundColor: '#ffc069', padding: 0 }}
-          searchWords={[searchText]}
-          autoEscape
-          textToHighlight={text}
-        />
-      ) : (
-        text
-      ),
-  });
 
   const columns = [
     {
-      title: "Tên phòng ban",
+      title: 'Tên phòng ban',
       dataIndex: 'name',
       key: 'name',
-      sorter: (a: DepartmentData, b: DepartmentData) => a.name.localeCompare(b.name),
+      sorter: true,
       width: 200,
-      ...getColumnSearchProps('name'),
+      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: any) => (
+        <div style={{ padding: 8 }}>
+          <Input
+            placeholder="Tìm theo tên"
+            value={selectedKeys && selectedKeys[0] ? selectedKeys[0] : ''}
+            onChange={e => setSelectedKeys(e.target.value ? [e.target.value] : [])}
+            onPressEnter={() => {
+              const val = (selectedKeys && selectedKeys[0]) || '';
+              handleColumnSearch('name', val);
+              confirm();
+            }}
+            style={{ width: 188, marginBottom: 8, display: 'block' }}
+            size="small"
+          />
+          <Space>
+            <Button
+              type="primary"
+              onClick={() => {
+                const val = (selectedKeys && selectedKeys[0]) || '';
+                handleColumnSearch('name', val);
+                confirm();
+              }}
+              size="small"
+            >Tìm</Button>
+            <Button
+              onClick={() => {
+                clearFilters && clearFilters();
+                setSearchField(undefined);
+                setSearchKeyword('');
+                confirm();
+              }}
+              size="small"
+            >Xóa</Button>
+          </Space>
+        </div>
+      ),
+      filterIcon: (filtered: boolean) => <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />,
     },
     {
-      title: "Mô tả phòng ban",
+      title: 'Mô tả phòng ban',
       dataIndex: 'description',
       key: 'description',
-      sorter: (a: DepartmentData, b: DepartmentData) => a.description.localeCompare(b.description),
+      sorter: true,
       width: 300,
-      ...getColumnSearchProps('description'),
+      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: any) => (
+        <div style={{ padding: 8 }}>
+          <Input
+            placeholder="Tìm theo mô tả"
+            value={selectedKeys && selectedKeys[0] ? selectedKeys[0] : ''}
+            onChange={e => setSelectedKeys(e.target.value ? [e.target.value] : [])}
+            onPressEnter={() => {
+              const val = (selectedKeys && selectedKeys[0]) || '';
+              handleColumnSearch('description', val);
+              confirm();
+            }}
+            style={{ width: 220, marginBottom: 8, display: 'block' }}
+            size="small"
+          />
+          <Space>
+            <Button
+              type="primary"
+              onClick={() => {
+                const val = (selectedKeys && selectedKeys[0]) || '';
+                handleColumnSearch('description', val);
+                confirm();
+              }}
+              size="small"
+            >Tìm</Button>
+            <Button
+              onClick={() => {
+                clearFilters && clearFilters();
+                setSearchField(undefined);
+                setSearchKeyword('');
+                confirm();
+              }}
+              size="small"
+            >Xóa</Button>
+          </Space>
+        </div>
+      ),
+      filterIcon: (filtered: boolean) => <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />,
     },
     {
       title: "Ngày tạo",
       dataIndex: "created_at",
       key: "created_at",
-      sorter: (a: DepartmentData, b: DepartmentData) => dayjs(a.created_at).unix() - dayjs(b.created_at).unix(),
-      ...getColumnSearchProps('created_at'),
-      render: (text: Date) => {
-        const formattedDate = formatDate(text);
-        return searchedColumn === 'created_at' ? (
-          <MyHighlighter
-            highlightStyle={{ backgroundColor: '#ffc069', padding: 0 }}
-            searchWords={[searchText]}
-            autoEscape
-            textToHighlight={formattedDate}
-          />
-        ) : (
-          formattedDate
-        );
-      },
+      sorter: true,
+      render: (text: Date) => formatDate(text),
     },
     {
       title: <>&nbsp;&nbsp;<SettingOutlined /></>,
@@ -231,12 +252,11 @@ const Index: React.FC = () => {
     try {
       await departmentService.deleteMultipleDepartments(selectedIds);
       
-      // Cập nhật lại dữ liệu sau khi xóa thành công
-      const newData = DepartmentData.filter(item => !selectedIds.includes(item.id));
-      setDepartmentData(newData);
+      // Reload data after delete
       setSelectedIds([]);
       setHiddenDeleteBtn(true);
       message.success('Xóa thành công!');
+      loadData();
     } catch (error) {
       console.error('Error deleting data:', error);
       message.error('Đã xảy ra lỗi khi xóa dữ liệu!');
@@ -246,33 +266,65 @@ const Index: React.FC = () => {
     }
   };
 
+  // 🔥 Server-side: handleTableChange cho pagination và sorting
+  const handleTableChange = (newPagination: any, filters: any, newSorter: any) => {
+    // Cập nhật pagination
+    setPagination(prev => ({
+      ...prev,
+      current: newPagination.current,
+      pageSize: newPagination.pageSize,
+    }));
+
+    // Cập nhật sorter
+    if (newSorter && newSorter.field) {
+      setSorter({
+        field: newSorter.field,
+        order: newSorter.order === 'ascend' ? 'asc' : 'desc',
+      });
+    } else if (!newSorter || !newSorter.order) {
+      // Reset to default sort when sort is cleared
+      setSorter({ field: 'created_at', order: 'desc' });
+    }
+  };
+
   return (
     <div style={{ padding: screens.lg ? 24 : 16 }}>
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24}>
-          <div style={{ display: 'flex', justifyContent: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
-            {selectedIds.length > 0 && (
-              <Button
-                danger
-                className='btn-top'
-                onClick={showDeleteConfirm}
-              >
-                <DeleteOutlined />
-                Xóa
-              </Button>
-            )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {selectedIds.length > 0 && (
+                <Button
+                  danger
+                  className='btn-top'
+                  onClick={showDeleteConfirm}
+                >
+                  <DeleteOutlined />
+                  Xóa
+                </Button>
+              )}
 
-            <Button
-              onClick={() => {
-                router.push('/departments/create');
-              }}
-              type="primary"
-              className='btn-top'
-              hidden={!createPer}
-            >
-              <PlusCircleOutlined />
-              Tạo mới phòng ban
-            </Button>
+              <Button
+                onClick={() => {
+                  router.push('/departments/create');
+                }}
+                type="primary"
+                className='btn-top'
+                hidden={!createPer}
+              >
+                <PlusCircleOutlined />
+                Tạo mới phòng ban
+              </Button>
+            </div>
+
+            {/* 🔥 Server-side search input */}
+            <Input.Search
+              placeholder="Tìm kiếm theo tên, mô tả..."
+              allowClear
+              onSearch={handleSearch}
+              style={{ width: screens.lg ? 300 : '100%' }}
+              enterButton={<SearchOutlined />}
+            />
           </div>
         </Col>
       </Row>
@@ -292,12 +344,13 @@ const Index: React.FC = () => {
               }}
               scroll={{ x: 'max-content' }}
               pagination={{
-                pageSize: 12,
+                ...pagination,
                 showSizeChanger: true,
-                pageSizeOptions: ['12', '24', '36', '48'],
+                pageSizeOptions: ['10', '50', '100', '500'],
                 showTotal: (total: number) => `Tổng số: ${total} bản ghi`,
                 size: screens.lg ? 'default' : 'small'
               }}
+              onChange={handleTableChange}
               rowClassName={(_, index) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
               size={screens.lg ? 'middle' : 'small'}
             />

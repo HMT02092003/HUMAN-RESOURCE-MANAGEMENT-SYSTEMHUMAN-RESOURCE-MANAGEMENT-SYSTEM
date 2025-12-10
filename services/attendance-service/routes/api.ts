@@ -118,6 +118,7 @@ router.post('/calculate-standard-working-days', (req: Request, res: Response, ne
 
 // GET/POST /api/attendance/monthly-summaries-by-scope - return monthly_attendances for users in scope
 const handleMonthlySummariesByScope = async (req: any, res: any) => {
+  console.log('🎯 Route hit: /monthly-summaries-by-scope', { method: req.method, query: req.query, body: req.body });
   const controller = await import('@/controller/AttendanceController');
   return controller.getMonthlySummariesByScopeController(req, res as any);
 };
@@ -203,6 +204,7 @@ router.post('/shifts/bulk-delete', authenticateToken, wrap(ShiftController.bulkD
 
 // Employee Schedules (Lịch đăng ký ca)
 router.get('/schedules/my', authenticateToken, wrap(ShiftController.getMySchedules));
+router.get('/schedules/my/paginated', authenticateToken, wrap(ShiftController.getMySchedulesPaginated));
 router.get('/schedules/pending', authenticateToken, wrap(ShiftController.getPendingSchedules));
 router.get('/schedules/stats/:year/:month', authenticateToken, wrap(ShiftController.getMonthlyStats));
 // Schedule Approval Management (static routes) should be defined before '/schedules/:id' to avoid

@@ -55,17 +55,25 @@ const UserForm: React.FC<UserFormProps> = ({
     const fetchData = async () => {
       setApiLoading(true);
       try {
-        // Fetch roles from auth-service
-        const rolesData = await roleService.getAllRoles();
-        setRoles(rolesData || []);
+  // Fetch roles from auth-service (use the select helper which returns a plain array)
+  const rolesData = await roleService.getAllRolesForSelect();
+  setRoles(rolesData || []);
 
-        // Fetch departments from employee-service
-        const departmentsData = await departmentService.getAllDepartments();
-        setDepartments(departmentsData || []);
+  // Fetch departments, chevrons and contract types using select helpers
+  // so we always get a plain array (not a paginated object)
+  const departmentsData = await departmentService.getAllDepartmentsForSelect();
+  setDepartments(departmentsData || []);
 
-        // Fetch chevrons from employee-service
-        const chevronsData = await chevronService.getAllChevrons();
-        setChevrons(chevronsData || []);
+  // Fetch chevrons from employee-service
+  const chevronsData = await chevronService.getAllChevronsForSelect();
+  setChevrons(chevronsData || []);
+
+  // Fetch contract types
+  const contractTypesData = await (await import('@/service/contractTypeService')).contractTypeService.getAllContractTypesForSelect();
+  // contractTypeService is not imported at top to avoid unused imports in some build paths
+  // but we still want to load contract types for the form
+  // set a local state only if the component uses it (currently not but safe to fetch)
+  // If you want to render contract types in the form, add state and options accordingly.
       } catch (error: any) {
         console.error('Error fetching form data:', error);
         message.error('Có lỗi xảy ra khi tải dữ liệu form');

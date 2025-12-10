@@ -14,7 +14,8 @@ const asyncHandler = (fn: any) => (req: express.Request, res: express.Response, 
 
 // allowance types CRUD
 router.get('/allowance-types', authenticateToken, allowanceCtrl.list as express.RequestHandler);
-router.get('/allowance-types/all', authenticateToken, allowanceCtrl.listAll as express.RequestHandler);
+// Full list for selects (canonical): '/all/allowance-types'
+router.get('/all/allowance-types', authenticateToken, allowanceCtrl.getAllAllowanceTypesList as express.RequestHandler);
 router.get('/allowance-types/:id', authenticateToken, allowanceCtrl.getOne as express.RequestHandler);
 router.post('/allowance-types', authenticateToken, allowanceCtrl.createOne as express.RequestHandler);
 router.put('/allowance-types/:id', authenticateToken, allowanceCtrl.updateOne as express.RequestHandler);

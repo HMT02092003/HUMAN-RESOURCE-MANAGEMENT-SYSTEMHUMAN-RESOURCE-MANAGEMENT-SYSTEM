@@ -2,6 +2,7 @@ import dayjs from 'dayjs';
 import { ApplicationModel } from '../Models/ApplicationModel.js';
 import { ApplicationStatus } from '../config/application-constants.js';
 import AuthService from '../service/AuthService.js';
+import CheckScopeService from '../service/CheckScopeService.js';
 import { deleteFiles } from '../middleware/upload.js';
 import axios from 'axios';
 
@@ -75,10 +76,34 @@ export class ApplicationController {
   /**
    * Lấy danh sách tất cả đơn từ (cho admin/manager)
    * GET /applications
+   * 
+   * Query params:
+   *   - page: page number (1-based, default 1)
+   *   - pageSize: items per page (default 10)
+   *   - sortField: field to sort by (e.g., 'id', 'type', 'status', 'created_at')
+   *   - sortOrder: 'ascend' | 'descend' (default 'descend')
+   *   - search: global search keyword
+   *   - type: filter by application type
+   *   - status: filter by status (0, 1, 2)
+   *   - createdAtFrom, createdAtTo: date range for created_at
    */
   static async getAll(req, res) {
     try {
-      const { page = 1, pageSize = 10 } = req.query;
+      const { 
+        page = 1, 
+        limit = 10,  // Changed from pageSize to limit
+        sort = 'created_at',  // Changed from sortField to sort
+        order = 'desc',  // Changed from sortOrder to order, expecting 'asc'/'desc'
+        search = '',
+        type: typeFilter,
+        status: statusFilter,
+        createdAtFrom,
+        createdAtTo,
+        approvedDateFrom,
+        approvedDateTo,
+        // Column-specific search
+        'userInfo.fullName': searchEmployeeName
+      } = req.query;
       const currentUserId = req.user?.id;
 
       if (!currentUserId) {
@@ -99,26 +124,96 @@ export class ApplicationController {
         });
       }
 
-      // Check scope quyền quản lý đơn từ từ Auth Service
-      const { allowedUserIds } = await AuthService.checkUserScope(token);
+      // Check scope quyền quản lý đơn từ từ Auth Service (use permission key)
+      let allowedUserIds = [];
+      try {
+        const scopeResult = await CheckScopeService.checkUserScope('manage_applications', token);
+        allowedUserIds = scopeResult.userIds || scopeResult.userIds || [];
+      } catch (err) {
+        console.error('Error checking user scope from Auth Service:', err?.message || err);
+        allowedUserIds = [];
+      }
+
+      // If searching by employee name, find matching users first
+      if (searchEmployeeName && searchEmployeeName.trim()) {
+        try {
+          // Search users by fullName in Auth Service
+          const searchResponse = await axios.get(
+            `${API_GATEWAY_URL}/api/auth/users/search`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              params: {
+                q: searchEmployeeName.trim()
+              }
+            }
+          );
+          
+          const matchingUsers = searchResponse.data?.data || searchResponse.data || [];
+          const matchingUserIds = matchingUsers.map(u => u.id);
+          
+          // Intersect with allowedUserIds
+          if (allowedUserIds && allowedUserIds.length > 0) {
+            allowedUserIds = allowedUserIds.filter(id => matchingUserIds.includes(id));
+          } else {
+            allowedUserIds = matchingUserIds;
+          }
+          
+          // If no matching users, return empty result
+          if (allowedUserIds.length === 0) {
+            return res.json({
+              success: true,
+              data: [],
+              pagination: {
+                page: parseInt(page),
+                pageSize: parseInt(limit),
+                total: 0,
+                totalPages: 0
+              },
+              total: 0,
+              timestamp: dayjs().format()
+            });
+          }
+        } catch (error) {
+          console.error('Error searching users by name:', error.message);
+          // On error, continue with original allowedUserIds
+        }
+      }
 
       const pageNum = parseInt(page);
-      const pageSizeNum = parseInt(pageSize);
-      const offset = (pageNum - 1) * pageSizeNum;
+      const limitNum = parseInt(limit);  // Use limit instead of pageSizeNum
+      const offset = (pageNum - 1) * limitNum;
 
       // Lấy danh sách applications với filters đúng format
+      // Normalize date range inputs to full-day ISO range for DB comparison
+      const normalizedCreatedAtFrom = createdAtFrom ? dayjs(createdAtFrom).startOf('day').toISOString() : null;
+      const normalizedCreatedAtTo = createdAtTo ? dayjs(createdAtTo).endOf('day').toISOString() : null;
+      const normalizedApprovedFrom = approvedDateFrom ? dayjs(approvedDateFrom).startOf('day').toISOString() : null;
+      const normalizedApprovedTo = approvedDateTo ? dayjs(approvedDateTo).endOf('day').toISOString() : null;
+
       const filters = {
         allowedUserIds,
-        userId: currentUserId // Để loại bỏ đơn của chính mình
+        userId: currentUserId, // Để loại bỏ đơn của chính mình
+        type: typeFilter || null,
+        status: statusFilter !== undefined && statusFilter !== '' ? parseInt(statusFilter) : null,
+        search: search.trim(),
+        createdAtFrom: normalizedCreatedAtFrom,
+        createdAtTo: normalizedCreatedAtTo,
+        approvedDateFrom: normalizedApprovedFrom,
+        approvedDateTo: normalizedApprovedTo,
+        sortField: sort || 'created_at',  // Map sort to sortField for model
+        sortOrder: order === 'asc' ? 'asc' : 'desc'  // Convert order to sortOrder
       };
 
-      const applications = await ApplicationModel.getAllApplicationsPaginated(
+      const applications = await ApplicationModel.getAllApplicationsPaginatedWithSort(
         filters,
         offset,
-        pageSizeNum
+        limitNum  // Use limitNum instead of pageSizeNum
       );
 
-      const totalCount = await ApplicationModel.getAllApplicationsCount(filters);
+      const totalCount = await ApplicationModel.getAllApplicationsCountWithFilters(filters);
 
       // Lấy danh sách unique user IDs từ applications (cả người tạo và người duyệt)
       const uniqueUserIds = [...new Set(applications.map(app => app.userId))];
@@ -182,9 +277,9 @@ export class ApplicationController {
         data: applicationsWithUserInfo,
         pagination: {
           page: pageNum,
-          pageSize: pageSizeNum,
+          pageSize: limitNum,  // Return as pageSize for consistency
           total: totalCount,
-          totalPages: Math.ceil(totalCount / pageSizeNum)
+          totalPages: Math.ceil(totalCount / limitNum)
         },
         total: totalCount,
         timestamp: dayjs().format()
@@ -316,6 +411,221 @@ export class ApplicationController {
         total: filteredApplications.length,
         timestamp: dayjs().format()
       });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Có lỗi xảy ra khi lấy danh sách đơn từ',
+        timestamp: dayjs().format()
+      });
+    }
+  }
+
+  /**
+   * Lấy danh sách đơn của user hiện tại - có server-side search/sort/filter
+   * GET /applications/my-applications/paginated
+   * 
+   * Query params:
+   *   - page: page number (1-based, default 1)
+   *   - limit: items per page (default 10)
+   *   - sort: field to sort by (e.g., 'type', 'status', 'created_at')
+   *   - order: 'asc' | 'desc' (default 'desc')
+   *   - search: global search keyword
+   *   - type: filter by application type
+   *   - status: filter by status (0, 1, 2)
+   *   - createdAtFrom, createdAtTo: date range for created_at
+   */
+  static async getMyApplicationsPaginated(req, res) {
+    try {
+      const {
+        page = 1,
+        limit = 10,
+        sort = 'created_at',
+        order = 'desc',
+        search = '',
+        type: typeFilter,
+        status: statusFilter,
+        createdAtFrom,
+        createdAtTo,
+        // Approver search (from frontend approvedByInfo.fullName)
+        'approvedByInfo.fullName': searchApproverName
+      } = req.query;
+
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: 'Người dùng không được xác thực' });
+      }
+
+      // Lấy token từ request để gọi sang Auth Service
+      const token = req.cookies?.token || (req.headers.authorization && req.headers.authorization.split(' ')[1]);
+
+      if (!token) {
+        // No token available — approver name search will likely fail; continue but log
+        console.warn('[getMyApplicationsPaginated] No auth token found in request headers/cookies');
+      }
+
+      const pageNum = parseInt(page);
+      const limitNum = parseInt(limit);
+      const offset = (pageNum - 1) * limitNum;
+
+      // Normalize date ranges to start/end of day ISO
+      const normalizedCreatedAtFrom = createdAtFrom ? dayjs(createdAtFrom).startOf('day').toISOString() : null;
+      const normalizedCreatedAtTo = createdAtTo ? dayjs(createdAtTo).endOf('day').toISOString() : null;
+
+      const filters = {
+        search: search ? String(search).trim() : '',
+        type: typeFilter || null,
+        status: statusFilter !== undefined && statusFilter !== '' ? parseInt(String(statusFilter)) : null,
+        createdAtFrom: normalizedCreatedAtFrom,
+        createdAtTo: normalizedCreatedAtTo,
+        sortField: sort || 'created_at',
+        sortOrder: order === 'asc' || order === 'desc' ? order : 'desc'
+      };
+
+      // If searching by approver name, resolve matching user IDs first
+      if (searchApproverName && String(searchApproverName).trim()) {
+        try {
+          const searchResponse = await axios.get(
+            `${API_GATEWAY_URL}/api/auth/users/search`,
+            {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              params: { q: String(searchApproverName).trim() }
+            }
+          );
+
+          const matchingUsers = searchResponse.data?.data || searchResponse.data || [];
+          const matchingApproverIds = matchingUsers.map(u => u.id);
+
+          if (matchingApproverIds.length === 0) {
+            // Return empty paginated response immediately
+            return res.json({
+              success: true,
+              data: [],
+              pagination: { page: pageNum, pageSize: limitNum, total: 0, totalPages: 0 },
+              total: 0,
+              timestamp: dayjs().format()
+            });
+          }
+
+          // Add approver filter to filters (ApplicationModel expects approvedDate/approvedBy via filters)
+          filters.approvedBy = matchingApproverIds;
+        } catch (err) {
+          console.error('Error searching approvers by name:', err?.message || err);
+          // On error, proceed without approver filter
+        }
+      }
+
+      // Detect nested user-field sorts (approvedByInfo.fullName, userInfo.fullName)
+      const requestedSort = String(filters.sortField || '').trim();
+      const isNestedUserSort = requestedSort.includes('.') && (
+        requestedSort.startsWith('approvedByInfo') || requestedSort.startsWith('userInfo')
+      );
+
+      let applications = [];
+      let totalCount = 0;
+
+      if (isNestedUserSort) {
+        // For nested user-field sorting: we must fetch all FILTERED records, resolve names, sort, then slice
+        // This is not ideal for performance but necessary since user names are not in applications table
+        
+        // First, get total count with filters applied
+        totalCount = await ApplicationModel.getMyApplicationsCountWithFilters(userId, filters);
+        
+        if (totalCount === 0) {
+          applications = [];
+        } else {
+          // Fetch ALL filtered records (but with filters applied to reduce dataset)
+          const allFilteredRows = await ApplicationModel.getMyApplicationsPaginatedWithSort(
+            userId,
+            { ...filters, sortField: 'created_at', sortOrder: 'desc' }, // Use DB sort as fallback
+            0,
+            Math.min(totalCount, 10000) // Cap at 10k to prevent memory issues
+          );
+
+          const rows = Array.isArray(allFilteredRows) ? allFilteredRows : (allFilteredRows || []);
+
+          // Collect user IDs to resolve
+          const userIdsToResolve = new Set();
+          if (requestedSort.startsWith('approvedByInfo')) {
+            rows.forEach(r => { if (r.approvedBy != null) userIdsToResolve.add(r.approvedBy); });
+          } else {
+            rows.forEach(r => { if (r.userId != null) userIdsToResolve.add(r.userId); });
+          }
+
+          const idsArray = Array.from(userIdsToResolve);
+          const usersInfo = idsArray.length > 0 ? await AuthService.getUsersByIds(idsArray) : [];
+          const usersMap = {};
+          usersInfo.forEach(u => { usersMap[u.id] = u; });
+
+          const getFullName = (user) => {
+            if (!user) return '';
+            if (user.fullName) return String(user.fullName).trim();
+            return `${user.lastName || ''} ${user.firstName || ''}`.trim();
+          };
+
+          // Perform in-memory sort
+          const direction = (filters.sortOrder === 'asc') ? 1 : -1;
+          rows.sort((a, b) => {
+            const ua = requestedSort.startsWith('approvedByInfo') ? usersMap[a.approvedBy] : usersMap[a.userId];
+            const ub = requestedSort.startsWith('approvedByInfo') ? usersMap[b.approvedBy] : usersMap[b.userId];
+            const na = (getFullName(ua) || '').toLowerCase();
+            const nb = (getFullName(ub) || '').toLowerCase();
+            if (na < nb) return -1 * direction;
+            if (na > nb) return 1 * direction;
+            return 0;
+          });
+
+          // Now slice for pagination AFTER sorting
+          applications = rows.slice(offset, offset + limitNum);
+        }
+      } else {
+        // Regular DB-side sorting/pagination - this path should work correctly
+        applications = await ApplicationModel.getMyApplicationsPaginatedWithSort(userId, filters, offset, limitNum);
+        totalCount = await ApplicationModel.getMyApplicationsCountWithFilters(userId, filters);
+      }
+
+      // Resolve current user info and approver info for the returned page
+      const usersInfo = await AuthService.getUsersByIds([userId]);
+      const uniqueApprovedIds = [...new Set(applications.filter(app => app.approvedBy != null).map(app => app.approvedBy))];
+      const approvedUsersInfo = uniqueApprovedIds.length > 0 ? await AuthService.getUsersByIds(uniqueApprovedIds) : [];
+
+      let userInfo = { id: userId, username: 'Unknown', fullName: 'Unknown User', email: '', identificationPhoto: null, department: null, chevron: null };
+      if (usersInfo && usersInfo.length > 0) {
+        const u = usersInfo[0];
+        userInfo = { id: u.id, username: u.username, fullName: `${u.lastName || ''} ${u.firstName || ''}`.trim() || u.username || 'N/A', email: u.email, identificationPhoto: u.identificationPhoto, department: u.department || null, chevron: u.chevron || null };
+      }
+
+      const approvedUsersMap = {};
+      approvedUsersInfo.forEach(ap => { approvedUsersMap[ap.id] = { id: ap.id, username: ap.username, fullName: `${ap.lastName || ''} ${ap.firstName || ''}`.trim() || ap.username || 'N/A', email: ap.email, identificationPhoto: ap.identificationPhoto, department: ap.department || null, chevron: ap.chevron || null }; });
+
+      const applicationsWithUserInfo = applications.map(application => ({ ...application, userInfo, approvedByInfo: approvedUsersMap[application.approvedBy] || null }));
+
+      res.json({ success: true, data: applicationsWithUserInfo, pagination: { page: pageNum, pageSize: limitNum, total: totalCount, totalPages: Math.ceil(totalCount / limitNum) }, total: totalCount, timestamp: dayjs().format() });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message || 'Có lỗi xảy ra khi lấy danh sách đơn từ', timestamp: dayjs().format() });
+    }
+  }
+
+  /**
+   * Lấy tất cả đơn của user hiện tại (không phân trang) - dùng cho select/dropdown
+   * GET /all/my-applications
+   */
+  static async getAllMyApplicationsList(req, res) {
+    try {
+      const userId = req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Người dùng không được xác thực'
+        });
+      }
+
+      const applications = await ApplicationModel.getAllMyApplicationsList(userId);
+
+      res.json(applications);
     } catch (error) {
       res.status(500).json({
         success: false,
@@ -488,8 +798,15 @@ export class ApplicationController {
         });
       }
 
-      // Check scope quyền quản lý đơn từ từ Auth Service
-      const { allowedUserIds } = await AuthService.checkUserScope(token);
+      // Check scope quyền quản lý đơn từ từ Auth Service (use permission key)
+      let allowedUserIds = [];
+      try {
+        const scopeResult = await CheckScopeService.checkUserScope('manage_applications', token);
+        allowedUserIds = scopeResult.userIds || [];
+      } catch (err) {
+        console.error('Error checking user scope from Auth Service:', err?.message || err);
+        allowedUserIds = [];
+      }
 
       const pageNum = parseInt(page);
       const pageSizeNum = parseInt(pageSize);

@@ -5,6 +5,7 @@ import { Router, Request, Response } from 'express';
 import { authenticateToken } from '../src/middleware/authenticateToken';
 import {
   getAllChevrons,
+  getAllChevronsList,
   createChevron,
   getChevronDetail,
   updateChevron,
@@ -13,6 +14,7 @@ import {
 } from '@/src/controller/ChevronController';
 import {
   getAllDepartments,
+  getAllDepartmentsList,
   createDepartment,
   deleteMultipleDepartments,
   getDepartmentDetail,
@@ -21,6 +23,7 @@ import {
 } from '@/src/controller/DepartmentController';
 import {
   getAllContractTypes,
+  getAllContractTypesList,
   createContractType,
   getContractTypeDetail,
   updateContractType,
@@ -39,7 +42,10 @@ const routeGroups = [
   {
     group: 'chevrons',
     routes: [
-      { method: 'get', path: '/getAllChevrons', handler: getAllChevrons, auth: true },
+      // Paginated list (server-side search/sort/pagination)
+      { method: 'get', path: '/chevrons', handler: getAllChevrons, auth: true },
+    // Full list for selects (returns plain array) - canonical leading prefix '/all/chevrons'
+  { method: 'get', path: '/all/chevrons', handler: getAllChevronsList, auth: true },
       { method: 'post', path: '/createChevrons', handler: createChevron, auth: true },
       { method: 'post', path: '/getChevronDetail', handler: getChevronDetail, auth: false }, // Internal call
       { method: 'put', path: '/updateChevron', handler: updateChevron, auth: true },
@@ -52,7 +58,9 @@ const routeGroups = [
   {
     group: 'departments',
     routes: [
-      { method: 'get', path: '/departments', handler: getAllDepartments, auth: true },
+    { method: 'get', path: '/departments', handler: getAllDepartments, auth: true },
+  // Full list for selects (returns plain array) - canonical leading prefix '/all/departments'
+  { method: 'get', path: '/all/departments', handler: getAllDepartmentsList, auth: true },
       { method: 'post', path: '/createDepartments', handler: createDepartment, auth: true },
       { method: 'get', path: '/departments/:id', handler: getDepartmentDetail, auth: false }, // Internal call
       { method: 'put', path: '/departments', handler: updateDepartment, auth: true },
@@ -64,7 +72,9 @@ const routeGroups = [
   {
     group: 'contract-types',
     routes: [
-      { method: 'get', path: '/contractTypes', handler: getAllContractTypes, auth: true },
+    { method: 'get', path: '/contractTypes', handler: getAllContractTypes, auth: true },
+  // Full list for selects (returns plain array) - canonical leading prefix '/all/contractTypes'
+  { method: 'get', path: '/all/contractTypes', handler: getAllContractTypesList, auth: true },
       { method: 'post', path: '/createContractType', handler: createContractType, auth: true },
       { method: 'get', path: '/contractTypes/:id', handler: getContractTypeDetail, auth: true },
       { method: 'put', path: '/contractTypes', handler: updateContractType, auth: true },

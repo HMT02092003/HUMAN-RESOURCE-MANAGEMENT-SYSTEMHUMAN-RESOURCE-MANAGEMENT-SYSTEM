@@ -51,6 +51,21 @@ const ApplicationTypes = {
   FORGOT_CHECK: 'forgot-check'
 } as const;
 
+// Application type filter options for FE -> use these values when calling BE (exact strings)
+// Icons are Material Icon names (string). The FE should render Material icons by name
+// (e.g., using @mui/icons-material or <span className="material-icons">{icon}</span>)
+export const APPLICATION_TYPE_FILTERS = [
+  { value: ApplicationTypes.LEAVE, label: 'Xin nghỉ phép', icon: 'BeachAccess' },
+  { value: ApplicationTypes.BUSINESS_TRIP, label: 'Công tác', icon: 'Flight' },
+  { value: ApplicationTypes.OVERTIME, label: 'Làm thêm giờ', icon: 'AccessTime' },
+  { value: ApplicationTypes.FORGOT_CHECK, label: 'Quên check in/out', icon: 'Fingerprint' },
+  // Additional common types (keep values aligned with APPLICATION_TYPE_LABELS if used)
+  { value: 'remote-work', label: 'Làm việc từ xa', icon: 'Laptop' },
+  { value: 'sick-leave', label: 'Nghỉ ốm', icon: 'LocalHospital' },
+  { value: 'shift-registration', label: 'Đăng ký ca', icon: 'Event' },
+  { value: 'resignation', label: 'Thôi việc', icon: 'ExitToApp' }
+];
+
 // Attendance status types
 const AttendanceStatus = {
   WORKING: 'working',
@@ -235,6 +250,7 @@ export default {
   chevrons,
   departments,
   ApplicationTypes,
+  APPLICATION_TYPE_FILTERS,
   AttendanceStatus,
   LeaveTypeConfig,
   APPLICATION_STATUS_LABELS,

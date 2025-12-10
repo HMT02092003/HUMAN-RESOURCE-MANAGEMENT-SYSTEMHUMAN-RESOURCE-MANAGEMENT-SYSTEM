@@ -91,4 +91,17 @@ export class EmployeeScheduleModel extends Model {
 
     return !!existing;
   }
+
+  /**
+   * Kiểm tra xem ngày đã có ca được duyệt chưa
+   */
+  static async hasApprovedSchedule(userId: number, date: string) {
+    const approved = await this.query()
+      .where('user_id', userId)
+      .where('date', date)
+      .where('status', 'approved')
+      .first();
+
+    return !!approved;
+  }
 }

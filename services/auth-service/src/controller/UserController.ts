@@ -1740,4 +1740,41 @@ export const getUsersByIds = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Search users by name
+ * Query params: q (search term)
+ */
+export const searchUsers = async (req: Request, res: Response) => {
+  try {
+    const searchTerm = req.query.q as string;
+
+    if (!searchTerm || searchTerm.trim().length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Search term is required"
+      });
+    }
+
+    const users = await UserModel.query()
+      .select('id', 'fullName', 'email', 'username')
+      .where('fullName', 'ilike', `%${searchTerm.trim()}%`)
+      .orWhere('email', 'ilike', `%${searchTerm.trim()}%`)
+      .orWhere('username', 'ilike', `%${searchTerm.trim()}%`)
+      .limit(50); // Limit results to prevent too many matches
+
+    return res.status(200).json({
+      success: true,
+      data: users,
+      total: users.length
+    });
+
+  } catch (error) {
+    console.error("Error searching users:", error);
+    return res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : "Internal Server Error",
+    });
+  }
+};
+
 

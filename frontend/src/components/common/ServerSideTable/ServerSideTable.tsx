@@ -317,13 +317,24 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
       const order = sorter.order === 'ascend' ? 'asc' : sorter.order === 'descend' ? 'desc' : undefined;
       const currentSorter = tableState.sorter || {};
 
-      if (normalizedField && order) {
-        // Only update sorter (and reset to page 1) when the sorter actually changed
-        if (currentSorter.field !== normalizedField || currentSorter.order !== order) {
-          handleSorterChange(normalizedField as string, order as 'asc' | 'desc');
+      // Map the normalized field (e.g. 'user.fullName') back to the column's searchField
+      let effectiveSortField: string | undefined = normalizedField;
+      if (normalizedField) {
+        const matched = columnConfigs.find((c) => {
+          const dataIndexStr = Array.isArray(c.dataIndex) ? c.dataIndex.join('.') : (c.dataIndex as string | undefined);
+          return dataIndexStr === normalizedField || String(c.key) === normalizedField;
+        });
+        if (matched) {
+          effectiveSortField = matched.searchField ?? (Array.isArray(matched.dataIndex) ? matched.dataIndex.join('.') : (matched.dataIndex as string | undefined));
+        }
+      }
+
+      if (effectiveSortField && order) {
+        // Only update sorter when the sorter actually changed
+        if (currentSorter.field !== effectiveSortField || currentSorter.order !== order) {
+          handleSorterChange(effectiveSortField as string, order as 'asc' | 'desc');
         }
       } else if (!order) {
-        // If there was an active sorter previously, clear it
         if (currentSorter.field !== undefined || currentSorter.order !== undefined) {
           handleSorterChange(undefined as any, undefined as any);
         }

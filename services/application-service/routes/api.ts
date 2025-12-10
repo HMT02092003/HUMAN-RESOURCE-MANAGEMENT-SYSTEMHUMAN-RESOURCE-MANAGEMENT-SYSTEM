@@ -45,8 +45,11 @@ router.put('/applications/:id',
   ApplicationController.update
 );
 
-// Lấy danh sách đơn từ của user hiện tại
-router.get('/applications/my-applications', authenticateToken, ApplicationController.getMyApplications);
+// Lấy danh sách đơn từ của user hiện tại - có server-side search/sort/filter (cho bảng)
+router.get('/applications/my-applications', authenticateToken, ApplicationController.getMyApplicationsPaginated);
+
+// Lấy tất cả đơn từ của user hiện tại (không phân trang) - dùng cho select/dropdown
+router.get('/all/my-applications', authenticateToken, ApplicationController.getAllMyApplicationsList);
 
 // Inter-service route: Lấy đơn của user theo userId (không cần auth token)
 router.get('/applications/user/:userId/approved', ApplicationController.getUserApprovedApplications);
