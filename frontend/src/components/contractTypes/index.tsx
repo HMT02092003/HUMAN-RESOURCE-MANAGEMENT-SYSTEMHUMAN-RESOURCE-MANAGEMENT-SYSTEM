@@ -1,10 +1,12 @@
 "use client";
 import React, { useState, useRef, useEffect } from 'react';
 import { Button, ConfigProvider, Space, Table, Tooltip, Modal, message, Input, Grid, Row, Col } from "antd";
-import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, SearchOutlined } from "@ant-design/icons";
+import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, SearchOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
 import dayjs from 'dayjs';
 import { contractTypeService } from '@/service/contractTypeService';
+import { ExcelExportButton } from '@/components/common/ExcelExport';
+import type { ExcelColumn } from '@/components/common/ExcelExport';
 
 interface ContractType {
   id: number;
@@ -25,6 +27,57 @@ const formatDate = (date: Date | string | null): string => {
   if (!date) return '';
   return dayjs(date).format('DD/MM/YYYY');
 };
+
+// Helper function cho loại hợp đồng
+const getContractTypeLabel = (value: number): string => {
+  const typeLabels: { [key: number]: string } = {
+    1: "Hợp đồng Thực tập",
+    2: "Hợp đồng Thử việc",
+    3: "Hợp đồng Lao động (Có thời hạn)",
+    4: "Hợp đồng Lao động (Không thời hạn)",
+    5: "Hợp đồng Đào tạo nghề",
+    6: "Hợp đồng Cộng tác viên (CTV)",
+    7: "Hợp đồng Khoán việc",
+  };
+  return typeLabels[value] || "Khác";
+};
+
+// Excel column configuration
+const excelColumns: ExcelColumn[] = [
+  {
+    title: 'Tên hợp đồng',
+    dataIndex: 'name',
+    width: 30
+  },
+  {
+    title: 'Mô tả hợp đồng',
+    dataIndex: 'description',
+    width: 40
+  },
+  {
+    title: 'Mức bảo hiểm',
+    dataIndex: 'insurance',
+    width: 15
+  },
+  {
+    title: 'Thời hạn hợp đồng',
+    dataIndex: 'contractTerm',
+    width: 20,
+    render: (value: any) => value ? `${value} tháng` : 'Vô thời hạn'
+  },
+  {
+    title: 'Loại hợp đồng',
+    dataIndex: 'type',
+    width: 35,
+    render: (value: any) => getContractTypeLabel(value)
+  },
+  {
+    title: 'Ngày tạo',
+    dataIndex: 'created_at',
+    width: 15,
+    render: (value: any) => formatDate(value)
+  }
+];
 
 const Index: React.FC = () => {
   const screens = Grid.useBreakpoint();
@@ -335,16 +388,22 @@ const Index: React.FC = () => {
                 <PlusCircleOutlined />
                 Tạo mới hợp đồng
               </Button>
-            </div>
 
-            {/* 🔥 Server-side search input */}
-            <Input.Search
-              placeholder="Tìm kiếm theo tên, mô tả..."
-              allowClear
-              onSearch={handleSearch}
-              style={{ width: screens.lg ? 300 : '100%' }}
-              enterButton={<SearchOutlined />}
-            />
+              {contractTypes && contractTypes.length > 0 && (
+                <ExcelExportButton
+                  data={contractTypes}
+                  columns={excelColumns}
+                  fileName="Danh_sach_loai_hop_dong"
+                  title="DANH SÁCH LOẠI HỢP ĐỒNG"
+                  description={`Tổng số: ${pagination.total} loại hợp đồng | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
+                  type="primary"
+                  className="btn-top"
+                >
+                  <DownloadOutlined />
+                  Xuất Excel
+                </ExcelExportButton>
+              )}
+            </div>
           </div>
         </Col>
       </Row>

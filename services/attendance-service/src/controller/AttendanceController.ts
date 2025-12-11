@@ -214,11 +214,16 @@ export const getMonthlyAttendanceByMonth = async (req: Request, res: Response) =
 /**
  * Get monthly summaries according to permission scope returned by auth-service
  * Supports server-side filtering, sorting, and searching
- * GET /api/attendance/monthly-summaries-by-scope?permissionKey=users&page=1&pageSize=20&sort=month&order=desc&fullName=John
+ * GET /api/attendance/monthly-summaries-by-scope?page=1&pageSize=20&sort=month&order=desc&fullName=John
+ * 
+ * Note: permissionKey is determined by the route/endpoint, not passed by frontend
+ * This endpoint is for attendance approval management, so uses 'users' permission
  */
 export const getMonthlySummariesByScopeController = async (req: Request, res: Response) => {
   try {
-    const permissionKey = String(req.query['permissionKey'] || req.body?.permissionKey || 'users');
+    // Permission key is determined by the route context, not from frontend
+    // For attendance approval screen, we check 'users' permission
+    const permissionKey = 'users';
     
     // Frontend sends 1-based page from ServerSideTable via 'page' param
     const pageFromFrontend = Number(req.query['page'] ?? req.body?.page ?? 1);
@@ -230,13 +235,12 @@ export const getMonthlySummariesByScopeController = async (req: Request, res: Re
     // Get all query params and pass to service
     const params: any = {
       page,
-      pageSize,
-      permissionKey
+      pageSize
     };
     
     // Pass through all filter/sort params
     Object.keys(req.query).forEach(key => {
-      if (key !== 'permissionKey' && key !== 'page' && key !== 'pageSize' && key !== 'limit') {
+      if (key !== 'page' && key !== 'pageSize' && key !== 'limit') {
         params[key] = req.query[key];
       }
     });
@@ -245,11 +249,11 @@ export const getMonthlySummariesByScopeController = async (req: Request, res: Re
 
     // Convert page back to 1-based for frontend
     return res.status(200).json({ 
-      success: true, 
-      data: {
-        ...result,
-        page: result.page + 1
-      }
+      success: true,
+      results: result.results || [],
+      total: result.total || 0,
+      page: result.page + 1,
+      pageSize: result.pageSize
     });
   } catch (error: any) {
     console.error('Error in getMonthlySummariesByScopeController:', error);

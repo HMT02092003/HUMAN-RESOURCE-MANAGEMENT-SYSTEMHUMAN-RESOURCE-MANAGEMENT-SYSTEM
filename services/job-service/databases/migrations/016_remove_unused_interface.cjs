@@ -1,12 +1,9 @@
 /**
- * ES module compatible migration file.
- * Up/Down are exported as ESM named exports so this file can be loaded when package.json has "type": "module".
- */
-/**
+ * CommonJS migration file for knex
  * @param { import("knex").Knex } knex
  * @returns { Promise<void> }
  */
-export async function up(knex) {
+exports.up = async function(knex) {
     // remove tags column from tasks if exists
     const hasTags = await knex.schema.hasColumn('tasks', 'tags');
     if (hasTags) {
@@ -18,13 +15,13 @@ export async function up(knex) {
     // drop unused tables if they exist
     await knex.schema.dropTableIfExists('project_required_skills');
     await knex.schema.dropTableIfExists('project_suggestions');
-}
+};
 
 /**
  * @param { import("knex").Knex } knex
  * @returns { Promise<void> }
  */
-export async function down(knex) {
+exports.down = async function(knex) {
     // re-add tags column to tasks (string). Adjust type if needed.
     const hasTags = await knex.schema.hasColumn('tasks', 'tags');
     if (!hasTags) {
@@ -65,4 +62,4 @@ export async function down(knex) {
             table.index('match_score');
         });
     }
-}
+};

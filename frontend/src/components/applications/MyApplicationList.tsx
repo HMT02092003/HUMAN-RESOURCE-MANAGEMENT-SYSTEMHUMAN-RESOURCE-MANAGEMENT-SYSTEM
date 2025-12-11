@@ -1,12 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Button, Space, Typography, Empty, message, Tooltip, Tag, Modal } from 'antd';
-import { PlusOutlined, EyeOutlined, DeleteOutlined, EditOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { PlusOutlined, EyeOutlined, DeleteOutlined, EditOutlined, ExclamationCircleOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import applicationService from '@/service/applicationService';
 import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS } from '@/config/constant';
 import { ServerSideTable } from '@/components/common/ServerSideTable';
 import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
 import ApplicationDetailModal from './ApplicationDetailModal';
+import { ExcelExportButton } from '@/components/common/ExcelExport';
+import type { ExcelColumn } from '@/components/common/ExcelExport';
 import dayjs from 'dayjs';
 
 // Material icons for filters
@@ -32,6 +34,53 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
     const [selectedRows, setSelectedRows] = useState<any[]>([]);
     const [detailModalVisible, setDetailModalVisible] = useState(false);
     const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(null);
+    const [allApplications, setAllApplications] = useState<any[]>([]);
+
+    // Fetch all data for Excel export
+    useEffect(() => {
+        const fetchAllData = async () => {
+            try {
+                const response = await applicationService.getMyApplications({ page: 1, pageSize: 10000 });
+                setAllApplications(response.data || []);
+            } catch (error) {
+                console.error('Error fetching my applications:', error);
+            }
+        };
+        fetchAllData();
+    }, []);
+
+    // Excel columns configuration
+    const excelColumns: ExcelColumn[] = [
+        {
+            title: 'STT',
+            dataIndex: 'id',
+            width: 10,
+            render: (_: any, __: any, index: number) => index + 1
+        },
+        {
+            title: 'Loại đơn',
+            dataIndex: 'type',
+            width: 25,
+            render: (type: any) => APPLICATION_TYPE_LABELS[type as keyof typeof APPLICATION_TYPE_LABELS] || type
+        },
+        {
+            title: 'Trạng thái',
+            dataIndex: 'status',
+            width: 15,
+            render: (status: any) => APPLICATION_STATUS_LABELS[status as keyof typeof APPLICATION_STATUS_LABELS] || status
+        },
+        {
+            title: 'Người duyệt',
+            dataIndex: ['approvedByInfo', 'fullName'],
+            width: 25
+        },
+        {
+            title: 'Ngày tạo',
+            dataIndex: 'created_at',
+            width: 20,
+            render: (date: any) => date ? dayjs(date).format('DD/MM/YYYY HH:mm') : ''
+        }
+    ];
 
     // Local filter options
     const TYPE_FILTER_OPTIONS = [
@@ -271,6 +320,27 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
                         >
                             Xóa đã chọn ({selectedRowKeys.length})
                         </Button>
+                    )}
+                    {allApplications.length > 0 && (
+                        <ExcelExportButton
+                            data={allApplications}
+                            columns={excelColumns}
+                            fileName="Don_tu_cua_toi"
+                            title="ĐƠN TỪ CỦA TÔI"
+                            description={`Tổng số: ${allApplications.length} đơn từ | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
+                            type="primary"
+                            style={{
+                                borderRadius: '8px',
+                                height: '48px',
+                                paddingLeft: '24px',
+                                paddingRight: '24px',
+                                fontSize: '16px',
+                                fontWeight: '500'
+                            }}
+                        >
+                            <DownloadOutlined />
+                            Xuất Excel
+                        </ExcelExportButton>
                     )}
                 </Space>
             </div>

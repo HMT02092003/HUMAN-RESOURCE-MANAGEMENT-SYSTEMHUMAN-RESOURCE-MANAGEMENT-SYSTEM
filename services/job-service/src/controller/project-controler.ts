@@ -9,6 +9,7 @@ import ProjectMemberModel from '../Models/ProjectMemberModel.ts';
 import ProjectTimelineModel from '../Models/ProjectTimelineModel.ts';
 import ProjectRequiredSkillModel from '../Models/ProjectRequiredSkillModel.ts';
 import ProjectSuggestionModel from '../Models/ProjectSuggestionModel.ts';
+import ProjectExpenseModel from '../Models/ProjectExpenseModel.ts';
 import AuthService from '../integrations/AuthService.ts';
 import { TaskModel } from '../Models/TaskModel.ts';
 import { analyzeJobWithAI, JobAnalysisResult } from '../services/geminiService.ts';
@@ -27,6 +28,7 @@ ProjectMemberModel.knex(knex);
 ProjectTimelineModel.knex(knex);
 ProjectRequiredSkillModel.knex(knex);
 ProjectSuggestionModel.knex(knex);
+ProjectExpenseModel.knex(knex);
 TaskModel.knex(knex);
 
 
@@ -2227,6 +2229,457 @@ export class ProjectController {
                 error: 'Failed to get project overview',
                 details: error.message
             });
+        }
+    };
+
+    // ==================== PROJECT EXPENSES ENDPOINTS ====================
+
+    /**
+     * Get all expenses for a project with pagination, filter, sort, search
+     */
+    static getProjectExpenses: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { project_id } = req.params;
+            const { 
+                status, 
+                category, 
+                page = '1',
+                pageSize = '10',
+                sortField = 'expense_date',
+                sortOrder = 'descend',
+                search
+            } = req.query;
+
+            // Verify project exists
+            const project = await ProjectModel.query().findById(Number(project_id));
+            if (!project) {
+                res.status(404).json({ error: 'Project not found' });
+                return;
+            }
+
+            // Pagination
+            const pageNum = Math.max(1, parseInt(page as string, 10));
+            const pageSizeNum = Math.min(100, Math.max(1, parseInt(pageSize as string, 10)));
+            const offset = (pageNum - 1) * pageSizeNum;
+
+            // Build query
+            let query = ProjectExpenseModel.query()
+                .where('project_id', Number(project_id));
+
+            // Apply filters
+            if (status && typeof status === 'string') {
+                query = query.where('status', status);
+            }
+            if (category && typeof category === 'string') {
+                query = query.where('category', category);
+            }
+
+            // Apply search (title or description)
+            if (search && typeof search === 'string' && search.trim()) {
+                query = query.where(function() {
+                    this.where('title', 'ilike', `%${search}%`)
+                        .orWhere('description', 'ilike', `%${search}%`);
+                });
+            }
+
+            // Count total before pagination
+            const countQuery = query.clone();
+            const totalCount = await countQuery.resultSize();
+
+            // Apply sorting
+            const validSortFields = ['expense_date', 'title', 'amount', 'category', 'status', 'created_at'];
+            const safeSortField = validSortFields.includes(sortField as string) ? (sortField as string) : 'expense_date';
+            const safeSortOrder = sortOrder === 'ascend' ? 'asc' : 'desc';
+            query = query.orderBy(safeSortField, safeSortOrder);
+
+            // Apply pagination
+            const expenses = await query.limit(pageSizeNum).offset(offset);
+
+            // Get user info for created_by and approved_by
+            const authHeader = req.headers.authorization;
+            const userIds = new Set<number>();
+            expenses.forEach(exp => {
+                if (exp.created_by) userIds.add(exp.created_by);
+                if (exp.approved_by) userIds.add(exp.approved_by);
+            });
+
+            let userMap = new Map<number, any>();
+            if (userIds.size > 0 && authHeader) {
+                try {
+                    const users = await AuthService.getUsersByIds(Array.from(userIds), authHeader);
+                    users.forEach(u => userMap.set(u.id, u));
+                } catch (err) {
+                    console.error('[Project Expenses] Failed to fetch users:', err);
+                }
+            }
+
+            // Enrich expenses with user info
+            const enrichedExpenses = expenses.map(exp => ({
+                ...exp,
+                created_by_user: exp.created_by ? userMap.get(exp.created_by) : null,
+                approved_by_user: exp.approved_by ? userMap.get(exp.approved_by) : null
+            }));
+
+            // Calculate total (all expenses matching filters)
+            const allExpenses = await countQuery;
+            const total = allExpenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
+            const approvedTotal = allExpenses
+                .filter(exp => exp.status === 'approved')
+                .reduce((sum, exp) => sum + Number(exp.amount), 0);
+
+            res.json({
+                success: true,
+                data: enrichedExpenses,
+                pagination: {
+                    page: pageNum,
+                    pageSize: pageSizeNum,
+                    total: totalCount,
+                    totalPages: Math.ceil(totalCount / pageSizeNum)
+                },
+                summary: {
+                    total_expenses: totalCount,
+                    total_amount: total,
+                    approved_amount: approvedTotal,
+                    pending_amount: total - approvedTotal,
+                    budget: project.budget || 0,
+                    spent: project.spent || 0
+                }
+            });
+        } catch (error: any) {
+            console.error('[Project Expenses] Error:', error);
+            res.status(500).json({ error: 'Failed to get expenses', details: error.message });
+        }
+    };
+
+    /**
+     * Create a new expense
+     */
+    static createExpense: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { project_id } = req.params;
+            const userId = (req as any).user?.userId;
+
+            // Verify project exists
+            const project = await ProjectModel.query().findById(Number(project_id));
+            if (!project) {
+                res.status(404).json({ error: 'Project not found' });
+                return;
+            }
+
+            // Validate input
+            const { title, description, amount, category, expense_date, status, metadata } = req.body;
+
+            if (!title || !amount || !category || !expense_date) {
+                res.status(400).json({ 
+                    error: 'Missing required fields', 
+                    required: ['title', 'amount', 'category', 'expense_date'] 
+                });
+                return;
+            }
+
+            // Create expense
+            const expense = await ProjectExpenseModel.query().insert({
+                project_id: Number(project_id),
+                title,
+                description: description || null,
+                amount: Number(amount),
+                category,
+                expense_date,
+                created_by: userId || null,
+                status: status || 'pending',
+                metadata: metadata || null
+            });
+
+            // If auto-approved, update project spent
+            if (expense.status === 'approved') {
+                await ProjectModel.query()
+                    .findById(Number(project_id))
+                    .patch({
+                        spent: knex.raw('COALESCE(spent, 0) + ?', [Number(amount)])
+                    });
+            }
+
+            // Add timeline event
+            await ProjectTimelineModel.query().insert({
+                project_id: Number(project_id),
+                event_type: 'budget_updated',
+                title: 'Thêm khoản chi tiêu',
+                description: `Khoản chi tiêu "${title}" - ${amount.toLocaleString('vi-VN')} đ`,
+                user_id: userId || null,
+                event_time: dayjs().toISOString(),
+                metadata: { expense_id: expense.expense_id, amount, category }
+            } as any);
+
+            res.status(201).json({
+                success: true,
+                data: expense,
+                message: 'Expense created successfully'
+            });
+        } catch (error: any) {
+            console.error('[Project Expenses] Create error:', error);
+            res.status(500).json({ error: 'Failed to create expense', details: error.message });
+        }
+    };
+
+    /**
+     * Update an expense
+     */
+    static updateExpense: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { project_id, expense_id } = req.params;
+            const userId = (req as any).user?.userId;
+
+            // Find expense
+            const expense = await ProjectExpenseModel.query()
+                .findOne({ expense_id, project_id: Number(project_id) });
+
+            if (!expense) {
+                res.status(404).json({ error: 'Expense not found' });
+                return;
+            }
+
+            // Don't allow updating approved expenses
+            if (expense.status === 'approved') {
+                res.status(400).json({ error: 'Cannot update approved expense' });
+                return;
+            }
+
+            const { title, description, amount, category, expense_date, metadata } = req.body;
+
+            // Update expense
+            const updated = await ProjectExpenseModel.query()
+                .findById(expense_id)
+                .patch({
+                    ...(title && { title }),
+                    ...(description !== undefined && { description }),
+                    ...(amount && { amount: Number(amount) }),
+                    ...(category && { category }),
+                    ...(expense_date && { expense_date }),
+                    ...(metadata !== undefined && { metadata })
+                });
+
+            const updatedExpense = await ProjectExpenseModel.query().findById(expense_id);
+
+            // Add timeline event
+            await ProjectTimelineModel.query().insert({
+                project_id: Number(project_id),
+                event_type: 'budget_updated',
+                title: 'Cập nhật chi tiêu',
+                description: `Cập nhật khoản chi tiêu "${updatedExpense?.title}"`,
+                user_id: userId || null,
+                event_time: dayjs().toISOString(),
+                metadata: { expense_id, action: 'updated' }
+            } as any);
+
+            res.json({
+                success: true,
+                data: updatedExpense,
+                message: 'Expense updated successfully'
+            });
+        } catch (error: any) {
+            console.error('[Project Expenses] Update error:', error);
+            res.status(500).json({ error: 'Failed to update expense', details: error.message });
+        }
+    };
+
+    /**
+     * Delete an expense
+     */
+    static deleteExpense: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { project_id, expense_id } = req.params;
+            const userId = (req as any).user?.userId;
+
+            // Find expense
+            const expense = await ProjectExpenseModel.query()
+                .findOne({ expense_id, project_id: Number(project_id) });
+
+            if (!expense) {
+                res.status(404).json({ error: 'Expense not found' });
+                return;
+            }
+
+            // If expense was approved, subtract from project spent
+            if (expense.status === 'approved') {
+                await ProjectModel.query()
+                    .findById(Number(project_id))
+                    .patch({
+                        spent: knex.raw('GREATEST(0, COALESCE(spent, 0) - ?)', [Number(expense.amount)])
+                    });
+            }
+
+            // Delete expense
+            await ProjectExpenseModel.query().deleteById(expense_id);
+
+            // Add timeline event
+            await ProjectTimelineModel.query().insert({
+                project_id: Number(project_id),
+                event_type: 'budget_updated',
+                title: 'Xóa khoản chi tiêu',
+                description: `Đã xóa khoản chi tiêu "${expense.title}"`,
+                user_id: userId || null,
+                event_time: dayjs().toISOString(),
+                metadata: { expense_id, amount: expense.amount }
+            } as any);
+
+            res.json({
+                success: true,
+                message: 'Expense deleted successfully'
+            });
+        } catch (error: any) {
+            console.error('[Project Expenses] Delete error:', error);
+            res.status(500).json({ error: 'Failed to delete expense', details: error.message });
+        }
+    };
+
+    /**
+     * Approve an expense (only project manager can approve)
+     */
+    static approveExpense: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { project_id, expense_id } = req.params;
+            const userId = (req as any).user?.userId;
+
+            // Verify project exists and check if user is manager
+            const project = await ProjectModel.query().findById(Number(project_id));
+            if (!project) {
+                res.status(404).json({ error: 'Project not found' });
+                return;
+            }
+
+            // Check if user is project manager
+            if (project.manager_id !== userId) {
+                res.status(403).json({ 
+                    error: 'Forbidden', 
+                    message: 'Chỉ quản lý dự án mới có quyền duyệt chi tiêu!' 
+                });
+                return;
+            }
+
+            // Find expense
+            const expense = await ProjectExpenseModel.query()
+                .findOne({ expense_id, project_id: Number(project_id) });
+
+            if (!expense) {
+                res.status(404).json({ error: 'Expense not found' });
+                return;
+            }
+
+            if (expense.status === 'approved') {
+                res.status(400).json({ error: 'Expense already approved' });
+                return;
+            }
+
+            // Update expense status
+            await ProjectExpenseModel.query()
+                .findById(expense_id)
+                .patch({
+                    status: 'approved',
+                    approved_by: userId || null,
+                    approved_at: new Date().toISOString()
+                });
+
+            // Update project spent
+            await ProjectModel.query()
+                .findById(Number(project_id))
+                .patch({
+                    spent: knex.raw('COALESCE(spent, 0) + ?', [Number(expense.amount)])
+                });
+
+            // Add timeline event
+            await ProjectTimelineModel.query().insert({
+                project_id: Number(project_id),
+                event_type: 'budget_updated',
+                title: 'Duyệt chi tiêu',
+                description: `Đã duyệt khoản chi tiêu "${expense.title}" - ${Number(expense.amount).toLocaleString('vi-VN')} đ`,
+                user_id: userId || null,
+                event_time: dayjs().toISOString(),
+                metadata: { expense_id, amount: expense.amount, action: 'approved' }
+            } as any);
+
+            const updatedExpense = await ProjectExpenseModel.query().findById(expense_id);
+
+            res.json({
+                success: true,
+                data: updatedExpense,
+                message: 'Expense approved successfully'
+            });
+        } catch (error: any) {
+            console.error('[Project Expenses] Approve error:', error);
+            res.status(500).json({ error: 'Failed to approve expense', details: error.message });
+        }
+    };
+
+    /**
+     * Reject an expense (only project manager can reject)
+     */
+    static rejectExpense: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { project_id, expense_id } = req.params;
+            const userId = (req as any).user?.userId;
+            const { reason } = req.body;
+
+            // Verify project exists and check if user is manager
+            const project = await ProjectModel.query().findById(Number(project_id));
+            if (!project) {
+                res.status(404).json({ error: 'Project not found' });
+                return;
+            }
+
+            // Check if user is project manager
+            if (project.manager_id !== userId) {
+                res.status(403).json({ 
+                    error: 'Forbidden', 
+                    message: 'Chỉ quản lý dự án mới có quyền từ chối chi tiêu!' 
+                });
+                return;
+            }
+
+            // Find expense
+            const expense = await ProjectExpenseModel.query()
+                .findOne({ expense_id, project_id: Number(project_id) });
+
+            if (!expense) {
+                res.status(404).json({ error: 'Expense not found' });
+                return;
+            }
+
+            if (expense.status === 'approved') {
+                res.status(400).json({ error: 'Cannot reject approved expense' });
+                return;
+            }
+
+            // Update expense status
+            await ProjectExpenseModel.query()
+                .findById(expense_id)
+                .patch({
+                    status: 'rejected',
+                    approved_by: userId || null,
+                    approved_at: new Date().toISOString(),
+                    metadata: { ...expense.metadata, rejection_reason: reason }
+                });
+
+            // Add timeline event
+            await ProjectTimelineModel.query().insert({
+                project_id: Number(project_id),
+                event_type: 'budget_updated',
+                title: 'Từ chối chi tiêu',
+                description: `Đã từ chối khoản chi tiêu "${expense.title}"${reason ? `: ${reason}` : ''}`,
+                user_id: userId || null,
+                event_time: dayjs().toISOString(),
+                metadata: { expense_id, action: 'rejected', reason }
+            } as any);
+
+            const updatedExpense = await ProjectExpenseModel.query().findById(expense_id);
+
+            res.json({
+                success: true,
+                data: updatedExpense,
+                message: 'Expense rejected'
+            });
+        } catch (error: any) {
+            console.error('[Project Expenses] Reject error:', error);
+            res.status(500).json({ error: 'Failed to reject expense', details: error.message });
         }
     };
 

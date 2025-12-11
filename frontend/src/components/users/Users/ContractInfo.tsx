@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { Space, Table, Tag, Spin } from "antd";
+import { Space, Table, Tag, Spin, Button } from "antd";
+import { DownloadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import dayjs from "dayjs";
 import isSameOrAfter from "dayjs/plugin/isSameOrAfter";
 import isBetween from "dayjs/plugin/isBetween";
 import SalaryService from "@/service/salaryService";
+import { ExcelExportButton } from '@/components/common/ExcelExport';
+import type { ExcelColumn } from '@/components/common/ExcelExport';
 
 dayjs.extend(isSameOrAfter);
 dayjs.extend(isBetween);
@@ -90,6 +93,83 @@ const ContractInfo: React.FC<ContractInfoProps> = ({ data }) => {
     }
   };
 
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'current':
+        return 'Đang hiệu lực';
+      case 'upcoming':
+        return 'Sắp tới';
+      case 'past':
+        return 'Hết hạn';
+      default:
+        return status;
+    }
+  };
+
+  // Excel column configuration for contracts
+  const excelColumns: ExcelColumn[] = [
+    {
+      title: 'Loại hợp đồng',
+      dataIndex: ['contractType', 'name'],
+      width: 25
+    },
+    {
+      title: 'Ngày ký',
+      dataIndex: 'startDate',
+      width: 15,
+      render: (value: any) => value ? dayjs(value).format('DD/MM/YYYY') : ''
+    },
+    {
+      title: 'Ngày bắt đầu',
+      dataIndex: 'activeDay',
+      width: 15,
+      render: (value: any) => value ? dayjs(value).format('DD/MM/YYYY') : ''
+    },
+    {
+      title: 'Ngày kết thúc',
+      dataIndex: 'endDate',
+      width: 15,
+      render: (value: any) => value ? dayjs(value).format('DD/MM/YYYY') : ''
+    },
+    {
+      title: 'Lương cơ bản (VND)',
+      dataIndex: 'id',
+      width: 20,
+      render: (contractId: any) => {
+        if (!contractId) return '';
+        const salary = salaryData[contractId];
+        return salary ? salary.salary.toLocaleString('vi-VN') : 'Chưa có thông tin';
+      }
+    },
+    {
+      title: 'Phụ cấp',
+      dataIndex: 'id',
+      width: 40,
+      render: (contractId: any) => {
+        if (!contractId) return '';
+        const salary = salaryData[contractId];
+        if (!salary || !salary.allowances || salary.allowances.length === 0) {
+          return 'Không có';
+        }
+        return salary.allowances
+          .map((a: any) => `${a.name}: ${a.amount.toLocaleString('vi-VN')} VND`)
+          .join(', ');
+      }
+    },
+    {
+      title: 'Thời hạn (tháng)',
+      dataIndex: ['contractType', 'contractTerm'],
+      width: 15,
+      render: (value: any) => value || 'Không giới hạn'
+    },
+    {
+      title: 'Trạng thái',
+      dataIndex: 'status',
+      width: 15,
+      render: (value: any) => getStatusText(value)
+    }
+  ];
+
   const columns: ColumnsType<ContractData> = [
     {
       title: "Loại hợp đồng",
@@ -172,7 +252,26 @@ const ContractInfo: React.FC<ContractInfoProps> = ({ data }) => {
 
   return (
     <div className="contract-info-container">
-      <h2 className="mb-4 text-lg font-semibold">Thông tin hợp đồng</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h2 className="mb-4 text-lg font-semibold">Thông tin hợp đồng</h2>
+        {contracts && contracts.length > 0 && (
+          <ExcelExportButton
+            data={contracts}
+            columns={excelColumns}
+            fileName="Thong_tin_hop_dong"
+            title="THÔNG TIN HỢP ĐỒNG"
+            description={`Tổng số: ${contracts.length} hợp đồng | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
+            type="primary"
+            style={{
+              backgroundColor: '#52c41a',
+              border: 'none'
+            }}
+          >
+            <DownloadOutlined />
+            Xuất Excel
+          </ExcelExportButton>
+        )}
+      </div>
       <Spin spinning={loading}>
         <Table
           columns={columns}

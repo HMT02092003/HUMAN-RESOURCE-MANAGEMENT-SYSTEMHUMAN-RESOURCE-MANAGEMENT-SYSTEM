@@ -198,7 +198,8 @@ class AttendanceService {
   }) {
     try {
       const response = await apiService.get('/api/attendance/monthly-summaries-by-scope', { params });
-      if (response.data.success) return response.data.data as { results: any[]; total: number; page: number; pageSize: number };
+      // Backend returns {success, results, total, page, pageSize} directly, not nested in .data
+      if (response.data.success) return response.data as { results: any[]; total: number; page: number; pageSize: number };
       throw new Error(response.data.message || 'Không thể lấy dữ liệu');
     } catch (error: any) {
       console.error('Error fetching monthly summaries by scope:', error);

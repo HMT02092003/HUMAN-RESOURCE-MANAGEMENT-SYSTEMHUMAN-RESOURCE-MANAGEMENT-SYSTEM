@@ -310,7 +310,37 @@ export const CvController = {
     }
   }) as RequestHandler,
 
+  // Serve CV file by cv_id (looks up DB and streams file from uploads folder)
+  serveCvFile: (async (req: Request, res: Response): Promise<any> => {
+    try {
+      const { id } = req.params;
+      const cv = await CvModel.query().findById(id);
+      if (!cv || !cv.file_path) {
+        return res.status(404).json({ success: false, message: 'CV not found' });
+      }
 
+      // Normalize and extract filename
+      const normalized = cv.file_path.replace(/\\/g, '/').replace(/^\/+/, '');
+      const parts = normalized.split('/');
+      const filename = parts.pop();
+      if (!filename) return res.status(404).json({ success: false, message: 'File not found' });
+
+      // Resolve uploads folder relative to this file (safe regardless of cwd)
+      const __filename = fileURLToPath(import.meta.url);
+      const controllerDir = path.dirname(__filename); // src/controller
+      const uploadsDir = path.resolve(controllerDir, '..', '..', 'uploads');
+      const filePath = path.join(uploadsDir, filename);
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ success: false, message: 'File not found on disk' });
+      }
+
+      return res.sendFile(filePath);
+    } catch (err: any) {
+      console.error('serveCvFile error', err);
+      return res.status(500).json({ success: false, message: err?.message || 'Internal error' });
+    }
+  }) as RequestHandler,
 
   deleteCv: (async (req: Request, res: Response): Promise<any> => {
     try {

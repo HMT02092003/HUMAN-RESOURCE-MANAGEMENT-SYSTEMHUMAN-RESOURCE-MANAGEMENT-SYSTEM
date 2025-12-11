@@ -123,6 +123,46 @@ export const getProjectTimeline = (projectId: string, params?: { limit?: number 
   return api.get(`${JOB_SERVICE_PREFIX}/projects/${projectId}/timeline`, { params });
 };
 
+// Project Expenses APIs
+export const getProjectExpenses = (projectId: string, params?: { status?: string; category?: string; sort?: 'asc' | 'desc' }) => {
+  return api.get(`${JOB_SERVICE_PREFIX}/projects/${projectId}/expenses`, { params });
+};
+
+export const createExpense = (projectId: string, payload: {
+  title: string;
+  description?: string;
+  amount: number;
+  category: string;
+  expense_date: string;
+  status?: string;
+  metadata?: any;
+}) => {
+  return api.post(`${JOB_SERVICE_PREFIX}/projects/${projectId}/expenses`, payload);
+};
+
+export const updateExpense = (projectId: string, expenseId: string, payload: Partial<{
+  title: string;
+  description: string;
+  amount: number;
+  category: string;
+  expense_date: string;
+  metadata: any;
+}>) => {
+  return api.put(`${JOB_SERVICE_PREFIX}/projects/${projectId}/expenses/${expenseId}`, payload);
+};
+
+export const deleteExpense = (projectId: string, expenseId: string) => {
+  return api.delete(`${JOB_SERVICE_PREFIX}/projects/${projectId}/expenses/${expenseId}`);
+};
+
+export const approveExpense = (projectId: string, expenseId: string) => {
+  return api.post(`${JOB_SERVICE_PREFIX}/projects/${projectId}/expenses/${expenseId}/approve`);
+};
+
+export const rejectExpense = (projectId: string, expenseId: string, reason?: string) => {
+  return api.post(`${JOB_SERVICE_PREFIX}/projects/${projectId}/expenses/${expenseId}/reject`, { reason });
+};
+
 export default {
   analyzeJob,
   findCandidates,
@@ -146,4 +186,10 @@ export default {
   getProjectOverview,
   getProjectMembers,
   getProjectTimeline,
+  getProjectExpenses,
+  createExpense,
+  updateExpense,
+  deleteExpense,
+  approveExpense,
+  rejectExpense,
 };

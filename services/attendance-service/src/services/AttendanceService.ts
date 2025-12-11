@@ -45,7 +45,6 @@ export class AttendanceService {
   ) {
     const page = Math.max(0, (pager?.page || 0));
     const pageSize = Math.min(200, pager?.pageSize || 20);
-    const offset = page * pageSize;
     const sortField = pager?.sort;
     const sortOrder = (pager?.order || 'desc') as 'asc' | 'desc';
 
@@ -58,42 +57,123 @@ export class AttendanceService {
         throw err;
       }
 
-      // Call auth-service check-scope directly (like application-service does)
       const AUTH_SERVICE_URL = `http://${getLocalIpAddress()}:${process.env['AUTH_SERVICE_PORT'] || 4001}`;
+
+      // Step 1: Get scope userIds from check-scope
       const scopeResult = await axios.post(`${AUTH_SERVICE_URL}/api/users/check-scope`, 
         { permissionKey },
         { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, timeout: 5000 }
       );
-      const scopeLog = (scopeResult && scopeResult.data) ? JSON.stringify(scopeResult.data) : String(scopeResult);
-      console.log('[AttendanceService] check-scope response:', scopeLog.slice(0,2000));
-      try {
-        const logDir = path.resolve(process.cwd(), 'logs');
-        try { fs.mkdirSync(logDir, { recursive: true }); } catch (e) {}
-        fs.appendFileSync(path.join(logDir, 'attendance-debug.log'), `\n=== CHECK-SCOPE RESPONSE (${new Date().toISOString()}) ===\n${scopeLog}\n`);
-      } catch (e) { /* swallow */ }
 
-      const userIds: number[] = scopeResult?.data?.userIds || [];
-      if (!userIds || userIds.length === 0) return { results: [], total: 0, page, pageSize };
+      let allowedUserIds: number[] = scopeResult?.data?.userIds || [];
+      console.log('[AttendanceService] Scope userIds count:', allowedUserIds.length);
 
-      // Resolve current user id locally by decoding the token and exclude it from results
-      let currentUserId: number | null = null;
-      try {
-        const decoded:any = getDecodedToken(token);
-        if (decoded && decoded.sub) currentUserId = Number(decoded.user.id);
-      } catch (dErr) {
-        logger.error('Failed to decode token for current user exclusion', String((dErr as any)?.message || dErr));
+      if (allowedUserIds.length === 0) {
+        return { results: [], total: 0, page, pageSize };
       }
 
-      // Query monthly_attendances for those userIds
-      const baseQuery = MonthlySummaryModel.query()
-        .whereIn('userId', userIds);
-      if (currentUserId) baseQuery.whereNot('userId', currentUserId);
+      // Step 2: Filter by user fields if provided
+      const fullNameFilter = pager?.['fullName'];
+      const usernameFilter = pager?.['username'];
+      const departmentNameFilter = pager?.['departmentName'];
 
-      // Apply filters for DB fields (with trim())
+      let usersById: Record<number, any> = {};
+
+      if (fullNameFilter || usernameFilter || departmentNameFilter) {
+        try {
+          let keyword = '';
+          if (fullNameFilter && String(fullNameFilter).trim()) {
+            keyword = String(fullNameFilter).trim();
+          } else if (usernameFilter && String(usernameFilter).trim()) {
+            keyword = String(usernameFilter).trim();
+          }
+
+          const searchParams: any = { page: 1, pageSize: 999999 };
+          if (keyword) searchParams.keyword = keyword;
+
+          const usersResp = await axios.get(`${AUTH_SERVICE_URL}/api/users/search`, {
+            params: searchParams,
+            headers: { 'Authorization': `Bearer ${token}` },
+            timeout: 10000
+          });
+
+          let matchingUsers = usersResp?.data?.results || usersResp?.data?.data || [];
+
+          // Filter by departmentName if needed
+          if (departmentNameFilter && String(departmentNameFilter).trim()) {
+            const deptKeyword = String(departmentNameFilter).trim().toLowerCase();
+            matchingUsers = matchingUsers.filter((u: any) => {
+              const deptName = u.department?.name || '';
+              return String(deptName).toLowerCase().includes(deptKeyword);
+            });
+          }
+
+          const matchingUserIds = matchingUsers.map((u: any) => Number(u.id));
+
+          // Intersect with scope allowedUserIds
+          allowedUserIds = allowedUserIds.filter(id => matchingUserIds.includes(id));
+
+          console.log('[AttendanceService] After user filters:', {
+            matching: matchingUserIds.length,
+            final: allowedUserIds.length
+          });
+
+          if (allowedUserIds.length === 0) {
+            return { results: [], total: 0, page, pageSize };
+          }
+
+          // Build usersById map
+          for (const u of matchingUsers) {
+            if (allowedUserIds.includes(u.id)) {
+              usersById[u.id] = u;
+            }
+          }
+        } catch (searchErr: any) {
+          console.error('[AttendanceService] Error filtering users:', searchErr.message);
+        }
+      }
+
+      // Step 3: Fetch user details if not already fetched (for enrichment)
+      if (Object.keys(usersById).length === 0 && allowedUserIds.length > 0) {
+        try {
+          const usersResp = await axios.post(`${AUTH_SERVICE_URL}/api/users/bulk`, 
+            { userIds: allowedUserIds },
+            { headers: { 'Content-Type': 'application/json' }, timeout: 5000 }
+          );
+          const users = usersResp?.data?.data || usersResp?.data || [];
+          for (const u of users) usersById[u.id] = u;
+        } catch (e: any) {
+          console.error('[AttendanceService] Error fetching users:', e.message);
+        }
+      }
+
+      // Step 4: Exclude current user
+      let currentUserId: number | null = null;
+      try {
+        const decoded: any = getDecodedToken(token);
+        if (decoded?.user?.id) currentUserId = Number(decoded.user.id);
+      } catch (dErr) {
+        logger.error('Failed to decode token', String((dErr as any)?.message || dErr));
+      }
+
+      if (currentUserId) {
+        allowedUserIds = allowedUserIds.filter(id => id !== currentUserId);
+      }
+
+      if (allowedUserIds.length === 0) {
+        return { results: [], total: 0, page, pageSize };
+      }
+
+      // Step 5: Query monthly_attendances
+      const baseQuery = MonthlySummaryModel.query().whereIn('userId', allowedUserIds);
+
+      // Apply filters for DB fields only (month, isApproved, numeric fields)
       const dbFields = ['month', 'isApproved', 'totalScheduledDays', 'presentDays', 'absentDays',
-        'approvedLeaveDays', 'unauthorizedAbsenceDays', 'businessTripDays', 'totalWorkHours',
-        'averageWorkHours', 'totalWorkingUnits', 'totalOvertimeHours', 'totalOvertimeSalary',
-        'totalLatePenalty', 'totalEarlyLeavePenalty', 'totalUnauthorizedAbsencePenalty', 'totalPenalty'];
+        'approvedLeaveDays', 'unauthorizedAbsenceDays', 'businessTripDays', 'lateDays', 'earlyLeaveDays',
+        'totalLateMinutes', 'totalEarlyLeaveMinutes', 'totalWorkHours', 'averageWorkHours', 
+        'totalWorkingUnits', 'totalOvertimeHours', 'totalOtWorkingUnits', 'totalOvertimeSalary',
+        'totalLatePenalty', 'totalEarlyLeavePenalty', 'totalUnauthorizedAbsencePenalty', 'totalPenalty',
+        'created_at', 'updated_at'];
       
       for (const field of dbFields) {
         const value = pager?.[field];
@@ -105,24 +185,22 @@ export class AttendanceService {
           } else if (field === 'month') {
             baseQuery.where(field, 'ilike', `%${trimmedValue}%`);
           } else {
-            // Numeric fields
             baseQuery.where(field, 'like', `%${trimmedValue}%`);
           }
         }
       }
 
-      // Determine sorting strategy
+      // Apply sorting
       const userEnrichedFields = ['fullName', 'username', 'departmentName'];
       const needsInMemorySort = sortField && userEnrichedFields.includes(sortField);
       
-      // Apply SQL sorting for DB fields
       if (sortField && !needsInMemorySort && dbFields.includes(sortField)) {
         baseQuery.orderBy(sortField, sortOrder);
       } else {
-        baseQuery.orderBy('month', 'desc'); // Default sort
+        baseQuery.orderBy('month', 'desc');
       }
 
-      // Ensure we don't order the count query by a non-selected column (Postgres rejects ORDER BY on aggregated query)
+      // Count total matching records
       const countQuery: any = baseQuery.clone();
       if (typeof countQuery.clearOrder === 'function') {
         countQuery.clearOrder();
@@ -130,94 +208,34 @@ export class AttendanceService {
         countQuery.clearOrders();
       }
       const [countResult] = await countQuery.count('* as count') as any;
-      console.log('[AttendanceService] DB count query result:', countResult);
-      try { fs.appendFileSync(path.resolve(process.cwd(), 'logs', 'attendance-debug.log'), `DB_COUNT:${JSON.stringify(countResult)}\n`); } catch (e) {}
       const total = Number(countResult.count || 0);
+
+      // Fetch paginated results
+      const offset = page * pageSize;
       let results = await baseQuery.clone().limit(pageSize).offset(offset);
-      console.log('[AttendanceService] Retrieved results length after DB query:', Array.isArray(results) ? results.length : 0);
-      try { fs.appendFileSync(path.resolve(process.cwd(), 'logs', 'attendance-debug.log'), `DB_RESULTS_LENGTH:${Array.isArray(results) ? results.length : 0}\n`); } catch (e) {}
 
-      // Enrich with user profiles (auth-service) and department info (employee-service)
-      try {
-        const usersResp = await axios.post(`${AUTH_SERVICE_URL}/api/users/bulk`, { userIds }, 
-          { headers: { 'Content-Type': 'application/json' }, timeout: 5000 }
-        );
-        const users = usersResp?.data?.data || usersResp?.data || [];
+      console.log('[AttendanceService] DB query results:', {
+        total,
+        returned: results.length,
+        page,
+        pageSize
+      });
 
-        // Build a map of users by id
-        const usersById: Record<number, any> = {};
-        for (const u of users) usersById[u.id] = u;
+      // Enrich results with user data (already have department from auth-service)
+      results = results.map((r: any) => {
+        const user = usersById[r.userId] || null;
+        return {
+          ...r,
+          user: user,
+          username: user?.username || null,
+          fullName: user?.fullName || null,
+          departmentId: user?.departmentId || null,
+          departmentName: user?.department?.name || null,
+          chevronId: user?.chevronId || null
+        };
+      });
 
-        // Collect unique departmentIds from users
-        const rawDeptIds: number[] = users.filter((u: any) => u.departmentId).map((u: any) => Number(u.departmentId));
-        const deptIds: number[] = Array.from(new Set<number>(rawDeptIds));
-
-        const EMPLOYEE_SERVICE_URL = `http://${getLocalIpAddress()}:${process.env['EMPLOYEE_SERVICE_PORT'] || 4002}`;
-
-        // Fetch department details in parallel (no bulk endpoint available). Small number expected.
-        const deptById: Record<number, any> = {};
-        if (deptIds.length > 0) {
-          await Promise.all(deptIds.map(async (did) => {
-            try {
-              const resp = await axios.get(`${EMPLOYEE_SERVICE_URL}/api/departments/${did}`, { timeout: 4000 });
-              // Department API returns data directly, not wrapped in { data: ... }
-              if (resp?.data) deptById[did] = resp.data;
-            } catch (depErr) {
-              // Non-fatal: log and continue
-              logger.error(`Failed to fetch department ${did}`, (depErr as any)?.message || depErr);
-            }
-          }));
-        }
-
-        // Attach department object onto each user object if available
-        for (const uid of Object.keys(usersById)) {
-          const u = usersById[Number(uid)];
-          if (u && u.departmentId) u.department = deptById[u.departmentId] || null;
-        }
-
-        // Merge into results - include both nested user object and flat fields for backward compatibility
-        results = results.map((r: any) => {
-          const user = usersById[r.userId] || null;
-          return {
-            ...r,
-            user: user,
-            username: user?.username || null,
-            fullName: user?.fullName || null,
-            departmentId: user?.departmentId || null,
-            departmentName: user?.department?.name || null,
-            chevronId: user?.chevronId || null
-          };
-        });
-      } catch (e: any) {
-        logger.error('Failed to enrich users or departments', e?.message || e);
-      }
-
-      // Apply user-enriched field filters (after enrichment)
-      const fullNameFilter = pager?.['fullName'];
-      if (fullNameFilter && String(fullNameFilter).trim()) {
-        const trimmed = String(fullNameFilter).trim().toLowerCase();
-        results = results.filter((r: any) => 
-          r.fullName && String(r.fullName).toLowerCase().includes(trimmed)
-        );
-      }
-
-      const usernameFilter = pager?.['username'];
-      if (usernameFilter && String(usernameFilter).trim()) {
-        const trimmed = String(usernameFilter).trim().toLowerCase();
-        results = results.filter((r: any) => 
-          r.username && String(r.username).toLowerCase().includes(trimmed)
-        );
-      }
-
-      const deptFilter = pager?.['departmentName'];
-      if (deptFilter && String(deptFilter).trim()) {
-        const trimmed = String(deptFilter).trim().toLowerCase();
-        results = results.filter((r: any) => 
-          r.departmentName && String(r.departmentName).toLowerCase().includes(trimmed)
-        );
-      }
-
-      // Apply in-memory sorting for user-enriched fields
+      // Apply in-memory sorting for user-enriched fields if needed
       if (needsInMemorySort && sortField) {
         results.sort((a: any, b: any) => {
           const aVal = a[sortField] || '';

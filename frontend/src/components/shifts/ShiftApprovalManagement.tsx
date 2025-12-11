@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Button, Space, Typography, Empty, message, Tooltip, Tag, Popconfirm } from 'antd';
-import { CheckOutlined, CloseOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { CheckOutlined, CloseOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, DownloadOutlined } from '@ant-design/icons';
 import shiftService from '@/service/shiftService';
 import { ServerSideTable } from '@/components/common/ServerSideTable';
 import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
+import { ExcelExportButton } from '@/components/common/ExcelExport';
+import type { ExcelColumn } from '@/components/common/ExcelExport';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
@@ -14,11 +16,119 @@ const ShiftApprovalManagement: React.FC = () => {
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [selectedRows, setSelectedRows] = useState<any[]>([]);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [allApprovals, setAllApprovals] = useState<any[]>([]);
 
     const STATUS_OPTIONS = [
         { value: 'pending', label: 'Chờ duyệt' },
         { value: 'approved', label: 'Đã duyệt' },
         { value: 'rejected', label: 'Từ chối' }
+    ];
+
+    // Fetch all data for Excel export
+    useEffect(() => {
+        const fetchAllData = async () => {
+            try {
+                const response: any = await shiftService.getSchedulesForApproval({ page: 1, pageSize: 10000 });
+                // Normalize response similar to useServerSideTable
+                let payload: any;
+                if (Array.isArray(response)) {
+                    payload = response;
+                } else if (response && typeof response === 'object') {
+                    if ('status' in response && 'data' in response) {
+                        payload = response.data;
+                    } else if ('data' in response && ('pagination' in response || 'total' in response || 'success' in response)) {
+                        payload = response;
+                    } else if ('data' in response) {
+                        payload = response.data;
+                    } else {
+                        payload = response;
+                    }
+                } else {
+                    payload = response;
+                }
+
+                const rows = Array.isArray(payload) ? payload : (payload?.results ?? payload?.data ?? payload?.items ?? []);
+                setAllApprovals(Array.isArray(rows) ? rows : []);
+            } catch (error) {
+                console.error('Error fetching approvals:', error);
+            }
+        };
+        fetchAllData();
+    }, [refreshTrigger]);
+
+    const getStatusText = (status: string) => {
+        const statusMap: Record<string, string> = {
+            pending: 'Chờ duyệt',
+            approved: 'Đã duyệt',
+            rejected: 'Từ chối'
+        };
+        return statusMap[status] || status;
+    };
+
+    // Excel columns configuration
+    const excelColumns: ExcelColumn[] = [
+        {
+            title: 'STT',
+            dataIndex: 'id',
+            width: 10,
+            render: (_: any, __: any, index: number) => index + 1
+        },
+        {
+            title: 'Nhân viên',
+            dataIndex: ['user', 'fullName'],
+            width: 25,
+            render: (_: any, record: any) => {
+                const user = record.user || {};
+                return user.fullName || record.user_fullName || '';
+            }
+        },
+        {
+            title: 'Phòng ban',
+            dataIndex: ['user', 'department', 'name'],
+            width: 25,
+            render: (_: any, record: any) => {
+                return (
+                    record.user?.department?.name ||
+                    record.user?.Department?.name ||
+                    record.department_name ||
+                    ''
+                );
+            }
+        },
+        {
+            title: 'Ngày làm việc',
+            dataIndex: 'date',
+            width: 15,
+            render: (date: any) => date ? dayjs(date).format('DD/MM/YYYY') : ''
+        },
+        {
+            title: 'Ca làm việc',
+            dataIndex: 'shift_name',
+            width: 25,
+            render: (name: any, record: any) => {
+                if (!name) return '';
+                const startTime = record.start_time ? record.start_time.substring(0, 5) : '';
+                const endTime = record.end_time ? record.end_time.substring(0, 5) : '';
+                return `${name}${startTime && endTime ? ` (${startTime} - ${endTime})` : ''}`;
+            }
+        },
+        {
+            title: 'Trạng thái',
+            dataIndex: 'status',
+            width: 15,
+            render: (status: any) => getStatusText(status)
+        },
+        {
+            title: 'Ghi chú',
+            dataIndex: 'notes',
+            width: 35
+        },
+        {
+            title: 'Ngày tạo',
+            dataIndex: 'created_at',
+            width: 20,
+            render: (date: any) => date ? dayjs(date).format('DD/MM/YYYY HH:mm') : ''
+        }
     ];
 
     const handleApprove = async (id: number) => {
@@ -287,6 +397,27 @@ const ShiftApprovalManagement: React.FC = () => {
                                 Từ chối đã chọn ({selectedRowKeys.length})
                             </Button>
                         </>
+                    )}
+                    {allApprovals.length > 0 && (
+                        <ExcelExportButton
+                            data={allApprovals}
+                            columns={excelColumns}
+                            fileName="Duyet_dang_ky_ca"
+                            title="DUYỆT ĐĂNG KÝ CA"
+                            description={`Tổng số: ${allApprovals.length} đăng ký | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
+                            type="primary"
+                            style={{
+                                borderRadius: '8px',
+                                height: '48px',
+                                paddingLeft: '24px',
+                                paddingRight: '24px',
+                                fontSize: '16px',
+                                fontWeight: '500'
+                            }}
+                        >
+                            <DownloadOutlined />
+                            Xuất Excel
+                        </ExcelExportButton>
                     )}
                 </Space>
             </div>

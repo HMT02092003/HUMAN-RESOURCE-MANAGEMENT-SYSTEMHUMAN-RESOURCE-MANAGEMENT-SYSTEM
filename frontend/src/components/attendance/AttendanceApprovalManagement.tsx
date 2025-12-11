@@ -47,18 +47,16 @@ const AttendanceApprovalManagement: React.FC = () => {
     }
   };
 
-  // Wrapper to inject permissionKey into API call and normalize paging keys
+  // Wrapper to normalize paging keys for backend
   const fetchData = useCallback(async (params: any) => {
     const normalized = { ...params };
-    // our hook sends `limit`; backend expects `pageSize` in many routes — include both to be safe
+    // Hook sends `limit`; backend accepts both `pageSize` and `limit`
     if (normalized.limit && !normalized.pageSize) normalized.pageSize = normalized.limit;
-    // ensure page is present (frontend uses 1-based page)
+    // Ensure page is present (frontend uses 1-based page)
     if (normalized.page === undefined && normalized.current !== undefined) normalized.page = normalized.current;
 
-    return attendanceService.getMonthlySummariesByScope({
-      ...normalized,
-      permissionKey: 'users',
-    });
+    // Backend determines permissionKey based on route context, not from frontend
+    return attendanceService.getMonthlySummariesByScope(normalized);
   }, []);
 
   const columns: ServerSideColumnType<any>[] = useMemo(() => [

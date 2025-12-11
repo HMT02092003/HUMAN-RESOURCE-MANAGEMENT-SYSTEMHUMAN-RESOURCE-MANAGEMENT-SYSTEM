@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Button, Space, Typography, Empty, message, Tooltip, Tag, Modal, Form, Select, DatePicker, Input } from 'antd';
-import { PlusOutlined, EyeOutlined, DeleteOutlined, EditOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
+import { PlusOutlined, EyeOutlined, DeleteOutlined, EditOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, DownloadOutlined } from '@ant-design/icons';
 import shiftService from '@/service/shiftService';
 import { ServerSideTable } from '@/components/common/ServerSideTable';
 import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
+import { ExcelExportButton } from '@/components/common/ExcelExport';
+import type { ExcelColumn } from '@/components/common/ExcelExport';
 import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
@@ -20,11 +22,97 @@ const ShiftRegistrationManagement = () => {
     const [configurations, setConfigurations] = useState<any[]>([]);
     const [editForm] = Form.useForm();
     const [bulkForm] = Form.useForm();
+    const [allRegistrations, setAllRegistrations] = useState<any[]>([]);
 
     // Load shift configurations
     React.useEffect(() => {
         loadConfigurations();
     }, []);
+
+    // Fetch all data for Excel export
+    useEffect(() => {
+        const fetchAllData = async () => {
+            try {
+                const response: any = await shiftService.getMyShiftRegistrationsPaginated({ page: 1, pageSize: 10000 });
+                // Normalize response similar to useServerSideTable
+                let payload: any;
+                if (Array.isArray(response)) {
+                    payload = response;
+                } else if (response && typeof response === 'object') {
+                    if ('status' in response && 'data' in response) {
+                        payload = response.data;
+                    } else if ('data' in response && ('pagination' in response || 'total' in response || 'success' in response)) {
+                        payload = response;
+                    } else if ('data' in response) {
+                        payload = response.data;
+                    } else {
+                        payload = response;
+                    }
+                } else {
+                    payload = response;
+                }
+
+                const rows = Array.isArray(payload) ? payload : (payload?.results ?? payload?.data ?? payload?.items ?? []);
+                setAllRegistrations(Array.isArray(rows) ? rows : []);
+            } catch (error) {
+                console.error('Error fetching shift registrations:', error);
+            }
+        };
+        fetchAllData();
+    }, [refreshTrigger]);
+
+    const getStatusText = (status: string) => {
+        const statusMap: Record<string, string> = {
+            pending: 'Chờ duyệt',
+            approved: 'Đã duyệt',
+            rejected: 'Từ chối'
+        };
+        return statusMap[status] || status;
+    };
+
+    // Excel columns configuration
+    const excelColumns: ExcelColumn[] = [
+        {
+            title: 'STT',
+            dataIndex: 'id',
+            width: 10,
+            render: (_: any, __: any, index: number) => index + 1
+        },
+        {
+            title: 'Ngày làm việc',
+            dataIndex: 'date',
+            width: 15,
+            render: (date: any) => date ? dayjs(date).format('DD/MM/YYYY') : ''
+        },
+        {
+            title: 'Ca làm việc',
+            dataIndex: 'shift_name',
+            width: 25,
+            render: (name: any, record: any) => {
+                if (!name) return '';
+                const startTime = record.start_time ? record.start_time.substring(0, 5) : '';
+                const endTime = record.end_time ? record.end_time.substring(0, 5) : '';
+                return `${name}${startTime && endTime ? ` (${startTime} - ${endTime})` : ''}`;
+            }
+        },
+        {
+            title: 'Trạng thái',
+            dataIndex: 'status',
+            width: 15,
+            render: (status: any) => getStatusText(status)
+        },
+        {
+            title: 'Ghi chú',
+            dataIndex: 'notes',
+            width: 35
+        },
+        {
+            title: 'Ngày tạo',
+            dataIndex: 'created_at',
+            width: 20,
+            render: (date: any) => date ? dayjs(date).format('DD/MM/YYYY HH:mm') : ''
+        }
+    ];
 
     const loadConfigurations = async () => {
         try {
@@ -290,6 +378,27 @@ const ShiftRegistrationManagement = () => {
                     >
                         Đăng ký ca mới
                     </Button>
+                    {allRegistrations.length > 0 && (
+                        <ExcelExportButton
+                            data={allRegistrations}
+                            columns={excelColumns}
+                            fileName="Dang_ky_ca_cua_toi"
+                            title="ĐĂNG KÝ CA CỦA TÔI"
+                            description={`Tổng số: ${allRegistrations.length} đăng ký | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
+                            type="primary"
+                            style={{
+                                borderRadius: '8px',
+                                height: '48px',
+                                paddingLeft: '24px',
+                                paddingRight: '24px',
+                                fontSize: '16px',
+                                fontWeight: '500'
+                            }}
+                        >
+                            <DownloadOutlined />
+                            Xuất Excel
+                        </ExcelExportButton>
+                    )}
                 </Space>
             </div>
 

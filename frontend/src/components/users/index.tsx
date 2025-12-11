@@ -14,6 +14,8 @@ import dayjs from 'dayjs';
 import UserService from '@/service/userService'; // Ensure this path is correct
 import { useRouter } from "next/navigation";
 import constantConfig from "@/config/constant";
+import { ExcelExportButton } from '@/components/common/ExcelExport';
+import type { ExcelColumn } from '@/components/common/ExcelExport';
 
 const { statusOptions, Gender } = constantConfig;
 
@@ -22,6 +24,91 @@ const formatDate = (date: string | Date | null): string => {
   if (!date) return '';
   return dayjs(date).format('DD/MM/YYYY');
 };
+
+// Helper functions for Excel export
+const getGenderText = (genderCode: number | string): string => {
+  const gender = Gender.find((g: any) => g.value === Number(genderCode));
+  return gender ? gender.label : '';
+};
+
+const getStatusText = (statusCode: number | string): string => {
+  const status = statusOptions.find((s: any) => s.value === Number(statusCode));
+  return status ? status.label : '';
+};
+
+// Excel column configuration for user table
+const excelColumns: ExcelColumn[] = [
+  {
+    title: 'ID',
+    dataIndex: 'id',
+    width: 10
+  },
+  {
+    title: 'Tên đăng nhập',
+    dataIndex: 'username',
+    width: 20
+  },
+  {
+    title: 'Họ và tên',
+    dataIndex: 'fullName',
+    width: 30
+  },
+  {
+    title: 'Ngày sinh',
+    dataIndex: 'birthday',
+    width: 15,
+    render: (value: any) => formatDate(value)
+  },
+  {
+    title: 'Email',
+    dataIndex: 'email',
+    width: 35
+  },
+  {
+    title: 'Số điện thoại',
+    dataIndex: 'phone',
+    width: 18
+  },
+  {
+    title: 'Giới tính',
+    dataIndex: 'gender',
+    width: 12,
+    render: (value: any) => getGenderText(value)
+  },
+  {
+    title: 'Trạng thái',
+    dataIndex: 'status',
+    width: 15,
+    render: (value: any) => getStatusText(value)
+  },
+  {
+    title: 'Vai trò',
+    dataIndex: ['role', 'name'],
+    width: 20
+  },
+  {
+    title: 'Phòng ban',
+    dataIndex: ['department', 'name'],
+    width: 30
+  },
+  {
+    title: 'Chức vụ',
+    dataIndex: ['chevron', 'name'],
+    width: 25
+  },
+  {
+    title: 'Ngày bắt đầu',
+    dataIndex: 'startDate',
+    width: 15,
+    render: (value: any) => formatDate(value)
+  },
+  {
+    title: 'Ngày tạo',
+    dataIndex: 'createdAt',
+    width: 20,
+    render: (value: any) => formatDate(value)
+  }
+];
 
 // Kiểu dữ liệu cho trạng thái sắp xếp
 interface SorterState {
@@ -542,18 +629,22 @@ const UserTable = () => {
               Tải lên Excel
             </Button>
 
-            <Button
-              onClick={() => alert("Đang xuất file Excel")}
-              type="primary"
+            <ExcelExportButton
+              data={userData}
+              columns={excelColumns}
+              fileName="Danh_sach_nhan_vien"
+              title="DANH SÁCH NHÂN VIÊN"
+              description={`Tổng số: ${pagination.total} nhân viên | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
               className="btn-top"
               style={{
                 backgroundColor: '#52c41a',
-                border: 'none'
+                border: 'none',
+                color: 'white'
               }}
             >
               <DownloadOutlined />
               Xuất Excel
-            </Button>
+            </ExcelExportButton>
             {/* per-column search available on each column header */}
           </div>
         </Col>

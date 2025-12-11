@@ -8,7 +8,7 @@ const router = Router();
 // CV endpoints (register before generic job endpoints to avoid route conflicts)
 router.post('/cvs/upload', authenticateToken, upload.single('file') as any, CvController.uploadCv);
 router.get('/cvs', authenticateToken, CvController.listCvs);
-
+router.get('/cvs/:id/file', authenticateToken, CvController.serveCvFile);
 router.delete('/cvs/:id', authenticateToken, CvController.deleteCv);
 router.post('/cvs/bulk-delete', authenticateToken, CvController.bulkDeleteCvs);
 
@@ -35,6 +35,14 @@ router.get('/projects/:project_id/overview', authenticateToken, ProjectControlle
 router.get('/projects/:project_id/members', authenticateToken, ProjectController.getProjectMembers);
 router.get('/projects/:project_id/timeline', authenticateToken, ProjectController.getProjectTimeline);
 
+// Project Expenses endpoints
+router.get('/projects/:project_id/expenses', authenticateToken, ProjectController.getProjectExpenses);
+router.post('/projects/:project_id/expenses', authenticateToken, ProjectController.createExpense);
+router.put('/projects/:project_id/expenses/:expense_id', authenticateToken, ProjectController.updateExpense);
+router.delete('/projects/:project_id/expenses/:expense_id', authenticateToken, ProjectController.deleteExpense);
+router.post('/projects/:project_id/expenses/:expense_id/approve', authenticateToken, ProjectController.approveExpense);
+router.post('/projects/:project_id/expenses/:expense_id/reject', authenticateToken, ProjectController.rejectExpense);
+
 // Project CRUD endpoints
 router.post('/projects', authenticateToken, ProjectController.createProject);
 router.get('/projects', authenticateToken, ProjectController.getAllProjectsByScope);
@@ -42,6 +50,8 @@ router.get('/projects/:id', authenticateToken, ProjectController.getProjectById)
 router.put('/projects/:id', authenticateToken, ProjectController.updateProject);
 // Support bulk delete via DELETE /projects with body { ids: [...] }
 router.delete('/projects', authenticateToken, ProjectController.deleteProject);
+// Keep single-delete route (by id) for compatibility
+router.delete('/projects/:id', authenticateToken, ProjectController.deleteProject);
 
 
 export default router;

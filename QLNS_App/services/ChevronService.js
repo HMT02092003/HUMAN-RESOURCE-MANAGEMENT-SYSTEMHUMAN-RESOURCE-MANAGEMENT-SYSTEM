@@ -4,7 +4,8 @@ export const ChevronService = {
     getAllChevrons: async () => {
         try {
             console.log('👔 [ChevronService] Fetching all chevrons...');
-            const response = await apiService.get('/employee/getAllChevrons');
+            // For mobile app the API base includes '/api', so call without leading '/api'
+            const response = await apiService.get('/employee/all/chevrons');
             console.log('✅ [ChevronService] Got chevrons:', response.data?.length || 0);
             return response.data;
         } catch (error) {

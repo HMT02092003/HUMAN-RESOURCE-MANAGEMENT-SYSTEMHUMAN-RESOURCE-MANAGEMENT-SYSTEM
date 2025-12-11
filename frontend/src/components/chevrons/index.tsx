@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button, ConfigProvider, Tooltip, Space, Table, Modal, message, Input, Grid, Row, Col } from "antd";
-import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, SearchOutlined } from "@ant-design/icons";
+import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, SearchOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
 import { chevronService } from '@/service/chevronService';
+import { ExcelExportButton } from '@/components/common/ExcelExport';
+import type { ExcelColumn } from '@/components/common/ExcelExport';
 
 // Định nghĩa interfaces
 interface ChevronData {
@@ -23,6 +25,31 @@ const formatDate = (date: Date | string | null): string => {
   if (!date) return '';
   return dayjs(date).format('DD/MM/YYYY');
 };
+
+// Excel column configuration
+const excelColumns: ExcelColumn[] = [
+  {
+    title: 'Tên chức vụ',
+    dataIndex: 'name',
+    width: 25
+  },
+  {
+    title: 'Mô tả chức vụ',
+    dataIndex: 'description',
+    width: 40
+  },
+  {
+    title: 'Hệ số chức vụ',
+    dataIndex: 'chevronCoefficient',
+    width: 15
+  },
+  {
+    title: 'Ngày tạo',
+    dataIndex: 'created_at',
+    width: 15,
+    render: (value: any) => formatDate(value)
+  }
+];
 
 const Index: React.FC = () => {
   const screens = Grid.useBreakpoint();
@@ -313,16 +340,22 @@ const Index: React.FC = () => {
                 <PlusCircleOutlined />
                 Tạo mới chức vụ
               </Button>
-            </div>
 
-            {/* 🔥 Server-side search input */}
-            <Input.Search
-              placeholder="Tìm kiếm theo tên, mô tả..."
-              allowClear
-              onSearch={handleSearch}
-              style={{ width: screens.lg ? 300 : '100%' }}
-              enterButton={<SearchOutlined />}
-            />
+              {chevronData && chevronData.length > 0 && (
+                <ExcelExportButton
+                  data={chevronData}
+                  columns={excelColumns}
+                  fileName="Danh_sach_chuc_vu"
+                  title="DANH SÁCH CHỨC VỤ"
+                  description={`Tổng số: ${pagination.total} chức vụ | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
+                  type="primary"
+                  className="btn-top"
+                >
+                  <DownloadOutlined />
+                  Xuất Excel
+                </ExcelExportButton>
+              )}
+            </div>
           </div>
         </Col>
       </Row>

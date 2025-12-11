@@ -2,10 +2,12 @@
 
 import React, { useEffect, useState } from 'react';
 import { Table, Button, Modal, Tag, message, Space } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import { PlusOutlined, DownloadOutlined } from '@ant-design/icons';
 import SalaryService from '@/service/salaryService';
 import SalaryForm from './Users/SalaryForm';
 import dayjs from 'dayjs';
+import { ExcelExportButton } from '@/components/common/ExcelExport';
+import type { ExcelColumn } from '@/components/common/ExcelExport';
 
 interface Props { userId: number | string }
 
@@ -74,6 +76,69 @@ const SalaryDealsList: React.FC<Props> = ({ userId }) => {
     // Otherwise it's past
     return 'past';
   };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'current': return 'Hiện tại';
+      case 'future': return 'Tương lai';
+      case 'past': return 'Đã qua';
+      default: return 'Không rõ';
+    }
+  };
+
+  // Excel column configuration
+  const excelColumns: ExcelColumn[] = [
+    {
+      title: 'Hiệu lực từ',
+      dataIndex: 'effective_from',
+      width: 15,
+      render: (value: any) => value ? dayjs(value).format('DD/MM/YYYY') : '-'
+    },
+    {
+      title: 'Lương cơ bản (VND)',
+      dataIndex: 'salary',
+      width: 20,
+      render: (value: any) => Number(value).toLocaleString('vi-VN')
+    },
+    {
+      title: 'Mã số thuế',
+      dataIndex: 'tax_code',
+      width: 20,
+      render: (value: any) => value || '-'
+    },
+    {
+      title: 'Ngân hàng',
+      dataIndex: ['bank_info', 'bank_name'],
+      width: 25,
+      render: (value: any) => value || '-'
+    },
+    {
+      title: 'Số tài khoản',
+      dataIndex: ['bank_info', 'bank_account'],
+      width: 25,
+      render: (value: any) => value || '-'
+    },
+    {
+      title: 'Phụ cấp',
+      dataIndex: 'allowances',
+      width: 50,
+      render: (list: any) => {
+        if (!list || list.length === 0) return '-';
+        return list
+          .map((a: any) => `${a.allowance_type_name}: ${Number(a.amount || 0).toLocaleString('vi-VN')} đ`)
+          .join(', ');
+      }
+    },
+    {
+      title: 'Trạng thái',
+      dataIndex: 'effective_from',
+      width: 15,
+      render: (value: any, record: any) => {
+        const status = getStatus(value, profiles);
+        return getStatusText(status);
+      }
+    }
+  ];
 
   const columns: any[] = [
     { 
@@ -167,9 +232,28 @@ const SalaryDealsList: React.FC<Props> = ({ userId }) => {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h2>Cấu hình lương nhân viên</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setShowModal(true)}>
-          Thêm mới
-        </Button>
+        <Space>
+          {profiles && profiles.length > 0 && (
+            <ExcelExportButton
+              data={profiles}
+              columns={excelColumns}
+              fileName="Cau_hinh_luong_nhan_vien"
+              title="CẤU HÌNH LƯƠNG NHÂN VIÊN"
+              description={`Tổng số: ${profiles.length} cấu hình | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
+              type="primary"
+              style={{
+                backgroundColor: '#52c41a',
+                border: 'none'
+              }}
+            >
+              <DownloadOutlined />
+              Xuất Excel
+            </ExcelExportButton>
+          )}
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setShowModal(true)}>
+            Thêm mới
+          </Button>
+        </Space>
       </div>
 
       <Table 

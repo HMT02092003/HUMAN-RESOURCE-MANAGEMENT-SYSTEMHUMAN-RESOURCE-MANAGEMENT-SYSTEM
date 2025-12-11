@@ -29,6 +29,7 @@ import { projectService } from '@/service/projectService';
 import jobService from '@/service/jobService';
 import ProjectStatisticsComponent from './projectTab/ProjectStatistics';
 import TaskBoard from './projectTab/TaskBoard';
+import ProjectExpenses from './ProjectExpenses';
 import dayjs from 'dayjs';
 
 interface ProjectDetailProps {
@@ -224,20 +225,6 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
           <Descriptions.Item label="Khách hàng">
             {realProject.customer}
           </Descriptions.Item>
-          <Descriptions.Item label="Ngân sách">
-            <DollarOutlined style={{ marginRight: 8 }} />
-            {formatCurrency(Number(realProject.budget) || 0)}
-          </Descriptions.Item>
-          <Descriptions.Item label="Đã chi tiêu">
-            <DollarOutlined style={{ marginRight: 8 }} />
-            {formatCurrency(Number(realProject.spent) || 0)}
-          </Descriptions.Item>
-          <Descriptions.Item label="Tiến độ ngân sách">
-            <Progress
-              percent={Math.round(((Number(realProject.spent) || 0) / (Number(realProject.budget) || 1)) * 100)}
-              status={(Number(realProject.spent) || 0) > (Number(realProject.budget) || 0) ? 'exception' : 'active'}
-            />
-          </Descriptions.Item>
         </Descriptions>
       </Card>
     </div>
@@ -363,6 +350,12 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
           <Spin tip="Đang tải timeline..." />
         </div>
       )
+    },
+    {
+      key: 'expenses',
+      label: 'Chi tiêu',
+      icon: <DollarOutlined />,
+      children: <ProjectExpenses projectId={projectId} project={realProject} />
     }
   ];
 
