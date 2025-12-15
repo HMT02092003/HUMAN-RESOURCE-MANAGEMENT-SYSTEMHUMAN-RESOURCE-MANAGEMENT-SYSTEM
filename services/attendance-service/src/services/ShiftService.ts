@@ -1,6 +1,6 @@
 import { ShiftModel } from '../Models/ShiftModel';
 import { EmployeeScheduleModel } from '../Models/EmployeeScheduleModel';
-import { applySearch, applyFilters, applySorting, applyPagination } from '../utils/query-builder.js';
+import { applySearch, applyFilters, applySorting, applyPagination, executeQuery } from '../utils/query-builder';
 
 export class ShiftService {
   // ========== SHIFT MANAGEMENT (Quản lý mẫu ca) ==========
@@ -10,6 +10,89 @@ export class ShiftService {
    */
   static async getAllShifts() {
     return await ShiftModel.query().orderBy('start_time');
+  }
+
+  /**
+   * Lấy danh sách mẫu ca có phân trang, tìm kiếm, sắp xếp
+   */
+  static async getAllShiftsPaginated(params: any = {}) {
+    // Use shared query-builder to support search, filters, sort and pagination.
+    const baseQuery = ShiftModel.query();
+
+    const config = {
+      // fields that can be searched with the generic `search` param
+      searchFields: ['name', 'start_time', 'end_time', 'description'],
+      // allowed filter fields (will be picked from query params)
+      filterFields: ['working_unit', 'created_at', 'created_atFrom', 'created_atTo'],
+      // map frontend field names to DB columns when necessary
+      fieldMapping: {
+        working_unit: 'working_unit',
+        created_at: 'created_at'
+      },
+      defaultSort: { field: 'created_at', order: 'desc' }
+    };
+
+    // Build query manually so we can support per-column partial (ILIKE) searches
+    let query = baseQuery;
+
+    // Per-column partial searches (ILIKE)
+    if (params.name) {
+      query = applySearch(query, String(params.name), ['name'], 'name');
+    }
+    if (params.description) {
+      query = applySearch(query, String(params.description), ['description'], 'description');
+    }
+    if (params.start_time) {
+      query = query.where('start_time', 'ilike', `%${String(params.start_time)}%`);
+    }
+    if (params.end_time) {
+      query = query.where('end_time', 'ilike', `%${String(params.end_time)}%`);
+    }
+
+    // Numeric filter
+    if (params.working_unit !== undefined && params.working_unit !== null && params.working_unit !== '') {
+      const val = Number(params.working_unit);
+      if (!Number.isNaN(val)) query = query.where('working_unit', val);
+    }
+
+    // Date filters (created_atFrom / created_atTo) or exact created_at
+    if (params.created_at) {
+      const dateStr = String(params.created_at).split('T')[0];
+      query = query.whereRaw(`DATE(created_at) = ?`, [dateStr]);
+    }
+    if (params.created_atFrom) {
+      query = query.where('created_at', '>=', params.created_atFrom);
+    }
+    if (params.created_atTo) {
+      const endValue = String(params.created_atTo).includes(' ') ? params.created_atTo : `${params.created_atTo} 23:59:59`;
+      query = query.where('created_at', '<=', endValue);
+    }
+
+    // Global search param (search) - if present, search across configured searchFields
+    if (params.search) {
+      query = applySearch(query, String(params.search), config.searchFields, params.search_field);
+    }
+
+    // Apply sorting
+    query = applySorting(query, String(params.sort || config.defaultSort.field), String(params.order || config.defaultSort.order), config.fieldMapping, config.defaultSort);
+
+    // Count total
+    const countQuery = query.clone().clearOrder();
+    const total = await countQuery.resultSize();
+
+    // Pagination
+    const page = parseInt(String(params.page || 1)) || 1;
+    const limit = parseInt(String(params.limit || params.pageSize || 10)) || 10;
+    query = applyPagination(query, page, limit);
+
+    const data = await query;
+
+    return {
+      data,
+      total,
+      page,
+      pageSize: limit,
+    };
   }
 
   /**

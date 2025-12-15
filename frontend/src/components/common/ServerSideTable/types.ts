@@ -89,4 +89,6 @@ export interface ServerSideTableProps<T = any> extends Omit<TableProps<T>, 'colu
   tableTitle?: string;
   // Show total
   showTotal?: boolean;
+  // Optional callback to receive the current page's data and pagination when loaded
+  onDataChange?: (data: T[], pagination: { current: number; pageSize: number; total: number }) => void;
 }

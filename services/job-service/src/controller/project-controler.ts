@@ -207,7 +207,35 @@ export class ProjectController {
 
             // 6. Sửa lỗi Logic dùng đúng 'project_id'
 
-            // 6a. Xây dựng truy vấn CƠ SỞ (Base Query)
+            // Parse incoming filter/sort params from query
+            const qName = typeof req.query.name === 'string' ? req.query.name.trim() : undefined;
+            const qStatus = typeof req.query.status === 'string' ? req.query.status.trim() : undefined;
+            const qManager = typeof req.query.manager === 'string' ? req.query.manager.trim() : undefined;
+            const qBudgetFrom = req.query.budgetFrom ? Number(req.query.budgetFrom) : undefined;
+            const qBudgetTo = req.query.budgetTo ? Number(req.query.budgetTo) : undefined;
+            const qSpentFrom = req.query.spentFrom ? Number(req.query.spentFrom) : undefined;
+            const qSpentTo = req.query.spentTo ? Number(req.query.spentTo) : undefined;
+            const qStartFrom = typeof req.query.startDateFrom === 'string' ? req.query.startDateFrom : undefined;
+            const qStartTo = typeof req.query.startDateTo === 'string' ? req.query.startDateTo : undefined;
+            const qEndFrom = typeof req.query.endDateFrom === 'string' ? req.query.endDateFrom : undefined;
+            const qEndTo = typeof req.query.endDateTo === 'string' ? req.query.endDateTo : undefined;
+
+            // Sorting params
+            const rawSortField = typeof req.query.sortField === 'string' ? req.query.sortField : (typeof req.query.sort === 'string' ? req.query.sort : undefined);
+            const rawSortOrder = typeof req.query.sortOrder === 'string' ? req.query.sortOrder : (typeof req.query.order === 'string' ? req.query.order : 'desc');
+
+            // Fetch user objects for allowedUserIds early if we need to filter by manager name
+            let allowedUsersData: any[] = [];
+            if (qManager) {
+                try {
+                    allowedUsersData = await AuthService.getUsersByIds(allowedUserIds, authHeader);
+                } catch (err) {
+                    console.warn('Failed to fetch users for manager filter', err);
+                    allowedUsersData = [];
+                }
+            }
+
+            // Build base query and apply filters
             const baseQuery = ProjectModel.query()
                 .where(builder => {
                     builder.whereIn('manager_id', allowedUserIds)
@@ -218,12 +246,93 @@ export class ProjectController {
                         );
                 });
 
+            // Apply text/name filter
+            if (qName) {
+                baseQuery.whereILike('projects.name', `%${qName}%`);
+            }
+
+            // Status filter (allow comma-separated)
+            if (qStatus) {
+                const parts = qStatus.split(',').map(s => s.trim()).filter(Boolean);
+                if (parts.length === 1) baseQuery.where('projects.status', parts[0]);
+                else if (parts.length > 1) baseQuery.whereIn('projects.status', parts);
+            }
+
+            // Budget / spent numeric ranges
+            if (!Number.isNaN(qBudgetFrom) && qBudgetFrom !== undefined) baseQuery.where('projects.budget', '>=', qBudgetFrom);
+            if (!Number.isNaN(qBudgetTo) && qBudgetTo !== undefined) baseQuery.where('projects.budget', '<=', qBudgetTo);
+            if (!Number.isNaN(qSpentFrom) && qSpentFrom !== undefined) baseQuery.where('projects.spent', '>=', qSpentFrom);
+            if (!Number.isNaN(qSpentTo) && qSpentTo !== undefined) baseQuery.where('projects.spent', '<=', qSpentTo);
+
+            // Start / End date ranges
+            if (qStartFrom) baseQuery.where('projects.start_date', '>=', dayjs(qStartFrom).format('YYYY-MM-DD'));
+            if (qStartTo) baseQuery.where('projects.start_date', '<=', dayjs(qStartTo).format('YYYY-MM-DD'));
+            if (qEndFrom) baseQuery.where('projects.end_date', '>=', dayjs(qEndFrom).format('YYYY-MM-DD'));
+            if (qEndTo) baseQuery.where('projects.end_date', '<=', dayjs(qEndTo).format('YYYY-MM-DD'));
+
+            // Manager name filter: find user IDs among allowedUsersData that match the qManager string
+            if (qManager) {
+                const matched = (allowedUsersData || []).filter(u => {
+                    const name = (u.fullName || u.full_name || u.name || u.username || u.email || '').toString().toLowerCase();
+                    return name.includes(qManager.toLowerCase());
+                }).map(u => Number(u.id ?? u.user_id ?? u.userId)).filter(n => !Number.isNaN(n));
+
+                if (matched.length === 0) {
+                    // No manager matches -> return empty page quickly
+                    res.status(200).json({ success: true, data: { results: [], total: 0 }, scope: scopeResult.scope });
+                    return;
+                }
+
+                // Narrow baseQuery to only projects with manager in matched OR members containing matched user
+                baseQuery.andWhere(builder => {
+                    builder.whereIn('manager_id', matched)
+                        .orWhereExists(
+                            ProjectMemberModel.query().whereIn('user_id', matched).whereRaw('project_members.project_id = projects.project_id')
+                        );
+                });
+            }
+
+            // Determine sorting column and direction (safe whitelist)
+            const sortFieldMap: Record<string, string> = {
+                name: 'projects.name',
+                created_at: 'projects.created_at',
+                createdAt: 'projects.created_at',
+                startDate: 'projects.start_date',
+                start_date: 'projects.start_date',
+                endDate: 'projects.end_date',
+                end_date: 'projects.end_date',
+                budget: 'projects.budget',
+                spent: 'projects.spent',
+                progress: 'projects.progress',
+                id: 'projects.project_id',
+                project_id: 'projects.project_id'
+            };
+
+            const mappedSortCol = rawSortField && sortFieldMap[rawSortField] ? sortFieldMap[rawSortField] : 'projects.created_at';
+            const mappedSortOrder = (rawSortOrder === 'asc' || rawSortOrder === 'desc') ? rawSortOrder : 'desc';
+
+            // Development debug: log incoming sort params and mapping
+            if (process.env.NODE_ENV !== 'production') {
+                console.debug('[projects] Received sort params:', { rawSortField, rawSortOrder });
+                console.debug('[projects] Mapped to DB column:', { mappedSortCol, mappedSortOrder });
+            }
+
             // 6b. Truy vấn 1: Lấy tổng số lượng (total) VÀ ID của trang hiện tại
+            // When ordering by a column that is not part of the DISTINCT select list,
+            // Postgres requires the ORDER BY expression to appear in the select list.
+            // Add the mappedSortCol to the select/distinct columns when necessary.
+            const selectCols: any[] = ['projects.project_id', 'projects.created_at'];
+            const distinctCols: any[] = ['projects.project_id', 'projects.created_at'];
+            if (mappedSortCol && !distinctCols.includes(mappedSortCol)) {
+                // include the ordering column in both select and distinct to satisfy Postgres
+                selectCols.push(mappedSortCol);
+                distinctCols.push(mappedSortCol);
+            }
+
             const pagedData = await baseQuery.clone()
-                // SỬA LỖI 5: Thêm 'created_at' vào select và distinct
-                .select('projects.project_id', 'projects.created_at')
-                .distinct('projects.project_id', 'projects.created_at')
-                .orderBy('projects.created_at', 'desc') // Giờ đã hợp lệ
+                .select(...selectCols)
+                .distinct(...distinctCols)
+                .orderBy(mappedSortCol, mappedSortOrder)
                 .page(page, pageSize);
 
             if (pagedData.results.length === 0) {
@@ -245,8 +354,8 @@ export class ProjectController {
             const projects = await ProjectModel.query()
                 .whereIn('project_id', projectIds)
                 .withGraphFetched('[members, timeline]')
-                // Sắp xếp lại ở đây để đảm bảo thứ tự
-                .orderBy('created_at', 'desc');
+                // Sắp xếp lại ở đây để đảm bảo thứ tự (use column without table prefix)
+                .orderBy(mappedSortCol.replace(/^projects\./, ''), mappedSortOrder);
 
             let users: any[] = [];
             try {

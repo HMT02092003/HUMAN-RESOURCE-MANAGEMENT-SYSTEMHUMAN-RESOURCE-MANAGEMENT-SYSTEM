@@ -31,26 +31,44 @@ export async function recordAttendance(userId: number, time: string, token?: str
 
     // Lấy thông tin OT đã duyệt
     const overtimeApp = await AttendanceCalculationService.getApprovedOvertimeApplication(userId, date);
-    let otEndTime: dayjs.Dayjs | null = null;
+    let otStartTime: string | undefined = undefined;
+    let otEndTime: string | undefined = undefined;
     if (overtimeApp) {
       const appData = typeof overtimeApp.data === 'string' ? JSON.parse(overtimeApp.data) : overtimeApp.data;
-      if (appData.endTime) { otEndTime = dayjs(`${date} ${appData.endTime}`); }
+      console.log(`✅ [recordAttendance] Found approved OT:`, appData);
+      
+      // Tính startTime và endTime từ OT application
+      if (appData.startTime && appData.overtimeHours) {
+        // ✨ QUAN TRỌNG: startTime từ DB là UTC, phải convert sang timezone VN
+        const startTime = dayjs(appData.startTime).tz('Asia/Ho_Chi_Minh');
+        const endTime = startTime.add(appData.overtimeHours, 'hour');
+        otStartTime = startTime.toISOString();
+        otEndTime = endTime.toISOString();
+        console.log(`⏰ [recordAttendance] OT time range: ${startTime.format('HH:mm')} - ${endTime.format('HH:mm')} (${appData.overtimeHours}h)`);
+      } else if (appData.endTime) {
+        // Fallback: nếu có endTime trực tiếp (HH:mm format)
+        otEndTime = dayjs(`${date} ${appData.endTime}`).tz('Asia/Ho_Chi_Minh').toISOString();
+        console.log(`⏰ [recordAttendance] Using direct endTime: ${otEndTime}`);
+      } else {
+        console.warn(`⚠️ [recordAttendance] OT app missing startTime/overtimeHours or endTime`);
+      }
     }
 
-    // ✨ Truyền shift vào calculateAttendance
+    // ✨ Truyền shift và OT times vào calculateAttendance
     const calculation = await AttendanceCalculationService.calculateAttendance(
       record.checkInTime, 
       record.checkOutTime, 
       date, 
       userId, 
       token,
-      otEndTime ? otEndTime.toISOString() : undefined,
+      otEndTime, // OT end time (ISO string hoặc undefined)
       undefined, // isHoliday - sẽ được tính trong calculateAttendance
-      shift // ✨ Truyền shift info
+      shift, // ✨ Truyền shift info
+      otStartTime // ✨ OT start time để tính OT chính xác
     );
 
     // ✨ Cập nhật record với thông tin công mới
-    const updatedRecord = await TimeAttendanceModel.query().patchAndFetchById(record.id, {
+    const updateData = {
       dailyTotalWorkHours: calculation.workHours,
       dailyWorkingUnit: calculation.dailyWorkingUnit || 0, // Công cơ bản (không bao gồm OT)
       totalWorkingUnit: calculation.totalWorkingUnit || 0, // Tổng công (bao gồm cả OT)
@@ -60,6 +78,21 @@ export async function recordAttendance(userId: number, time: string, token?: str
       lateArrivalPenalty: calculation.latePenaltyAmount,
       earlyLeavePenalty: calculation.earlyLeavePenaltyAmount
       // ✅ REMOVED: otMinutes and otSalary (deprecated columns)
+    };
+    
+    console.log(`💾 [recordAttendance] Updating record ${record.id} with data:`, {
+      ...updateData,
+      hasOT: !!overtimeApp,
+      otEndTime: otEndTime ? dayjs(otEndTime).tz('Asia/Ho_Chi_Minh').format('HH:mm:ss') : undefined
+    });
+    
+    const updatedRecord = await TimeAttendanceModel.query().patchAndFetchById(record.id, updateData);
+    
+    console.log(`✅ [recordAttendance] Record updated:`, {
+      id: updatedRecord.id,
+      otWorkingUnit: updatedRecord.otWorkingUnit,
+      totalWorkingUnit: updatedRecord.totalWorkingUnit,
+      dailyWorkingUnit: updatedRecord.dailyWorkingUnit
     });
 
     // Recalculate and upsert monthly summary for this user/month

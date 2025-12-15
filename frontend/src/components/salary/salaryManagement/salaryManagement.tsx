@@ -1,46 +1,23 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import { DatePicker, Button, Table, message, Space, Input, Tag, notification, Badge } from 'antd';
-import type { InputRef } from 'antd';
-import type { ColumnType } from 'antd/es/table';
-import type { FilterConfirmProps } from 'antd/es/table/interface';
+import React, { useState, useCallback } from 'react';
+import { DatePicker, Button, message, Space, Tag, notification, Badge } from 'antd';
 import dayjs from 'dayjs';
 import salaryService from '@/service/salaryService';
-import { CalculatorOutlined, SearchOutlined, WarningOutlined } from '@ant-design/icons';
+import { CalculatorOutlined, WarningOutlined } from '@ant-design/icons';
 import constant from '@/config/constant';
 import InvalidUsersModal from '../InvalidUsersModal';
+import { ServerSideTable } from '@/components/common/ServerSideTable';
+import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
 
 const {TypeOfStatusSalary} = constant;
 
 const { MonthPicker } = DatePicker;
 
-// Định nghĩa kiểu dữ liệu cho một hàng (tùy chọn nhưng nên có)
-interface PayslipDataType {
-  id: string;
-  user_id: string;
-  year: number;
-  month: number;
-  base_salary: string;
-  allowances: string;
-  overtime_pay: string;
-  gross_salary: string;
-  social_insurance: string;
-  health_insurance: string;
-  personal_income_tax: string;
-  total_deductions: string;
-  penalty_total: string;
-  net_salary: string;
-  status: string;
-  notes: string;
-  created_at: string;
-  updated_at: string;
-}
-
 const SalaryManagement: React.FC = () => {
   const [month, setMonth] = useState(dayjs());
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState<PayslipDataType[]>([]);
+  const [calculating, setCalculating] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // State cho modal hiển thị người dùng không hợp lệ
   const [invalidUsersModalOpen, setInvalidUsersModalOpen] = useState(false);
@@ -54,33 +31,24 @@ const SalaryManagement: React.FC = () => {
     usersWithoutSalaryProfile: []
   });
 
-  // State cho việc tìm kiếm
-  const [searchText, setSearchText] = useState('');
-  const [searchedColumn, setSearchedColumn] = useState('');
-  const searchInput = useRef<InputRef>(null);
-
-  useEffect(() => {
-    fetchPayslipsForMonth(month);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Fetch data function for ServerSideTable - always fetch all months
+  const fetchData = useCallback(async (params: any) => {
+    console.log('[salaryManagement] Fetching payslips with params:', params);
+    // Remove `allMonths` from payload so backend decides default behavior (backend defaults to all months)
+    const normalized = { ...params };
+    if (normalized.allMonths !== undefined) delete normalized.allMonths;
+    const result = await salaryService.listPayslipsPaginated(normalized);
+    console.log('[salaryManagement] Payslips result:', { 
+      success: result.success, 
+      dataCount: result.data?.length || 0, 
+      total: result.total,
+      message: result.message 
+    });
+    return result;
   }, []);
 
-  const fetchPayslipsForMonth = async (m: any) => {
-    setLoading(true);
-    try {
-      const str = m.format('YYYY-MM');
-      const res = await salaryService.listPayslips(str);
-      if (res.success) setData(res.data || []);
-      else setData([]);
-    } catch (err: any) {
-      console.error(err);
-      message.error(err?.message || 'Lỗi khi tải danh sách bảng lương');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleCalculate = async () => {
-    setLoading(true);
+    setCalculating(true);
     try {
       const str = month.format('YYYY-MM');
       const res = await salaryService.calculateFromAttendance(str);
@@ -114,8 +82,8 @@ const SalaryManagement: React.FC = () => {
       }
 
       if (res.success) {
-        message.success('Đã tính bảng lương cho tháng');
-        fetchPayslipsForMonth(month);
+        message.success(`Đã tính bảng lương cho tháng ${month.format('MM/YYYY')}`);
+        setRefreshTrigger(prev => prev + 1);  // Trigger table refresh
         // Don't clear invalid-users here: we handled them above. Only clear when response has no invalid lists.
         if (!hasInvalidUsers) {
           setInvalidUsersData({
@@ -131,71 +99,9 @@ const SalaryManagement: React.FC = () => {
       console.error(err);
       message.error(err?.message || 'Lỗi khi tính bảng lương');
     } finally {
-      setLoading(false);
+      setCalculating(false);
     }
   };
-
-  // --- Chức năng tìm kiếm ---
-  const handleSearch = (
-    selectedKeys: string[],
-    confirm: (param?: FilterConfirmProps) => void,
-    dataIndex: keyof PayslipDataType,
-  ) => {
-    confirm();
-    setSearchText(selectedKeys[0]);
-    setSearchedColumn(dataIndex);
-  };
-
-  const handleReset = (clearFilters: () => void) => {
-    clearFilters();
-    setSearchText('');
-  };
-
-  const getColumnSearchProps = (dataIndex: keyof PayslipDataType, title: string): ColumnType<PayslipDataType> => ({
-    filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }) => (
-      <div style={{ padding: 8 }} onKeyDown={(e) => e.stopPropagation()}>
-        <Input
-          ref={searchInput}
-          placeholder={`Tìm ${title}`}
-          value={selectedKeys[0]}
-          onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-          onPressEnter={() => handleSearch(selectedKeys as string[], confirm, dataIndex)}
-          style={{ marginBottom: 8, display: 'block' }}
-        />
-        <Space>
-          <Button
-            type="primary"
-            onClick={() => handleSearch(selectedKeys as string[], confirm, dataIndex)}
-            icon={<SearchOutlined />}
-            size="small"
-            style={{ width: 90 }}
-          >
-            Tìm
-          </Button>
-          <Button
-            onClick={() => clearFilters && handleReset(clearFilters)}
-            size="small"
-            style={{ width: 90 }}
-          >
-            Reset
-          </Button>
-        </Space>
-      </div>
-    ),
-    filterIcon: (filtered: boolean) => (
-      <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />
-    ),
-    onFilter: (value, record) =>
-      record[dataIndex]
-        ? record[dataIndex].toString().toLowerCase().includes((value as string).toLowerCase())
-        : false,
-    onFilterDropdownOpenChange: (visible) => {
-      if (visible) {
-        setTimeout(() => searchInput.current?.select(), 100);
-      }
-    },
-  });
-  // --- Hết chức năng tìm kiếm ---
 
   // --- Hàm hỗ trợ format ---
   /**
@@ -218,146 +124,179 @@ const SalaryManagement: React.FC = () => {
   };
   // --- Hết hàm hỗ trợ format ---
 
-  // --- Định nghĩa cột ---
-  const columns: ColumnType<PayslipDataType>[] = [
+  // --- Định nghĩa cột cho ServerSideTable ---
+  const columns: ServerSideColumnType<any>[] = [
     {
       title: 'Tên nhân viên',
-      dataIndex: 'user',
-      key: 'user',
-      render: (text, record:any) => record.fullName || record.username || 'N/A',
+      dataIndex: 'fullName',
+      key: 'fullName',
+      searchField: 'fullName',
+      sortable: true,
+      filterType: 'text',
+      width: 180,
+      render: (_: any, record: any) => record.fullName || record.username || 'N/A',
     },
     {
       title: 'Phòng ban',
-      dataIndex: ["department", "name"],
-      key: 'department',
-      render: (_: any, record: any) => record.department?.name || 'N/A',
-      // Nếu muốn thêm chức năng tìm kiếm, cần custom lại filter cho trường này
+      dataIndex: ['department', 'name'],
+      key: 'departmentName',
+      searchField: 'departmentName',
+      sortable: true,
+      filterType: 'text',
+      width: 150,
+      render: (_: any, record: any) => record.departmentName || record.department?.name || 'N/A',
     },
     {
-      title: 'Năm',
-      dataIndex: 'year',
-      key: 'year',
-      sorter: (a, b) => a.year - b.year,
-      ...getColumnSearchProps('year', 'Năm'),
-    },
-    {
-      title: 'Tháng',
+      title: 'Kỳ',
       dataIndex: 'month',
-      key: 'month',
-      sorter: (a, b) => a.month - b.month,
-      ...getColumnSearchProps('month', 'Tháng'),
+      key: 'period',
+      // Use a date range picker for period (month range). Server expects monthFrom/monthTo.
+      searchField: 'month',
+      sortable: true,
+      filterType: 'dateRange',
+      width: 180,
+      render: (val: any, record: any) => {
+        // show as MM/YYYY or month number and year
+        const y = record.year;
+        const m = record.month;
+        if (y && m) return `${m}/${y}`;
+        if (typeof val === 'string') return val;
+        return '-';
+      }
     },
     {
       title: 'Lương cơ bản',
       dataIndex: 'base_salary',
       key: 'base_salary',
-      sorter: (a, b) => parseFloat(a.base_salary) - parseFloat(b.base_salary),
-      ...getColumnSearchProps('base_salary', 'Lương cơ bản'),
-      render: (text) => formatCurrency(text) + ' VNĐ',
+      searchField: 'base_salary',
+      sortable: true,
+      filterType: 'number',
+      width: 140,
+      render: (text: any) => formatCurrency(text) + ' VNĐ',
     },
     {
       title: 'Phụ cấp',
       dataIndex: 'allowances',
       key: 'allowances',
-      sorter: (a, b) => parseFloat(a.allowances) - parseFloat(b.allowances),
-      ...getColumnSearchProps('allowances', 'Phụ cấp'),
-      render: (text) => formatCurrency(text) + ' VNĐ',
+      searchField: 'allowances',
+      sortable: true,
+      filterType: 'number',
+      width: 120,
+      render: (text: any) => formatCurrency(text) + ' VNĐ',
     },
     {
       title: 'Lương tăng ca',
       dataIndex: 'overtime_pay',
       key: 'overtime_pay',
-      sorter: (a, b) => parseFloat(a.overtime_pay) - parseFloat(b.overtime_pay),
-      ...getColumnSearchProps('overtime_pay', 'Lương tăng ca'),
-      render: (text) => formatCurrency(text) + ' VNĐ',
+      searchField: 'overtime_pay',
+      sortable: true,
+      filterType: 'number',
+      width: 140,
+      render: (text: any) => formatCurrency(text) + ' VNĐ',
     },
     {
-      title: 'Tổng lương (Chưa khấu trừ)',
+      title: 'Tổng lương',
       dataIndex: 'gross_salary',
       key: 'gross_salary',
-      sorter: (a, b) => parseFloat(a.gross_salary) - parseFloat(b.gross_salary),
-      ...getColumnSearchProps('gross_salary', 'Tổng lương (Chưa khấu trừ)'),
-      render: (text) => formatCurrency(text) + ' VNĐ',
+      searchField: 'gross_salary',
+      sortable: true,
+      filterType: 'number',
+      width: 140,
+      render: (text: any) => formatCurrency(text) + ' VNĐ',
     },
     {
       title: 'BHXH',
       dataIndex: 'social_insurance',
       key: 'social_insurance',
-      sorter: (a, b) => parseFloat(a.social_insurance) - parseFloat(b.social_insurance),
-      ...getColumnSearchProps('social_insurance', 'BHXH'),
-      render: (text) => formatCurrency(text) + ' VNĐ',
+      searchField: 'social_insurance',
+      sortable: true,
+      filterType: 'number',
+      width: 120,
+      render: (text: any) => formatCurrency(text) + ' VNĐ',
     },
     {
       title: 'BHYT',
       dataIndex: 'health_insurance',
       key: 'health_insurance',
-      sorter: (a, b) => parseFloat(a.health_insurance) - parseFloat(b.health_insurance),
-      ...getColumnSearchProps('health_insurance', 'BHYT'),
-      render: (text) => formatCurrency(text) + ' VNĐ',
+      searchField: 'health_insurance',
+      sortable: true,
+      filterType: 'number',
+      width: 120,
+      render: (text: any) => formatCurrency(text) + ' VNĐ',
     },
     {
       title: 'Thuế TNCN',
       dataIndex: 'personal_income_tax',
       key: 'personal_income_tax',
-      sorter: (a, b) => parseFloat(a.personal_income_tax) - parseFloat(b.personal_income_tax),
-      ...getColumnSearchProps('personal_income_tax', 'Thuế TNCN'),
-      render: (text) => formatCurrency(text) + ' VNĐ',
+      searchField: 'personal_income_tax',
+      sortable: true,
+      filterType: 'number',
+      width: 130,
+      render: (text: any) => formatCurrency(text) + ' VNĐ',
     },
     {
       title: 'Tổng khấu trừ',
       dataIndex: 'total_deductions',
       key: 'total_deductions',
-      sorter: (a, b) => parseFloat(a.total_deductions) - parseFloat(b.total_deductions),
-      ...getColumnSearchProps('total_deductions', 'Tổng khấu trừ'),
-      render: (text) => formatCurrency(text) + ' VNĐ',
+      searchField: 'total_deductions',
+      sortable: true,
+      filterType: 'number',
+      width: 140,
+      render: (text: any) => formatCurrency(text) + ' VNĐ',
     },
     {
       title: 'Tổng tiền phạt',
       dataIndex: 'penalty_total',
       key: 'penalty_total',
-      sorter: (a, b) => parseFloat(a.penalty_total) - parseFloat(b.penalty_total),
-      ...getColumnSearchProps('penalty_total', 'Tổng tiền phạt'),
-      render: (text) => formatCurrency(text) + ' VNĐ',
+      searchField: 'penalty_total',
+      sortable: true,
+      filterType: 'number',
+      width: 130,
+      render: (text: any) => formatCurrency(text) + ' VNĐ',
     },
     {
-      title: 'Lương thực nhận',
+      title: 'Lương thực nhận',
       dataIndex: 'net_salary',
       key: 'net_salary',
-      sorter: (a, b) => parseFloat(a.net_salary) - parseFloat(b.net_salary),
-      ...getColumnSearchProps('net_salary', 'Lương thực nhận'),
-      render: (text) => <b style={{ color: 'green' }}>{formatCurrency(text) + ' VNĐ'}</b>, // In đậm lương Net
+      searchField: 'net_salary',
+      sortable: true,
+      filterType: 'number',
+      width: 150,
+      render: (text: any) => <b style={{ color: 'green' }}>{formatCurrency(text) + ' VNĐ'}</b>,
     },
     {
       title: 'Ghi chú',
       dataIndex: 'notes',
       key: 'notes',
-      sorter: (a, b) => a.notes.localeCompare(b.notes),
-      ...getColumnSearchProps('notes', 'Ghi chú'),
+      searchField: 'notes',
+      sortable: true,
+      filterType: 'text',
+      width: 200,
     },
     {
       title: 'Ngày tạo',
       dataIndex: 'created_at',
       key: 'created_at',
-      sorter: (a, b) => dayjs(a.created_at).unix() - dayjs(b.created_at).unix(),
-      ...getColumnSearchProps('created_at', 'Ngày tạo'),
-      render: (text) => formatDate(text),
-    },
-    {
-      title: 'Ngày cập nhật',
-      dataIndex: 'updated_at',
-      key: 'updated_at',
-      sorter: (a, b) => dayjs(a.updated_at).unix() - dayjs(b.updated_at).unix(),
-      ...getColumnSearchProps('updated_at', 'Ngày cập nhật'),
-      render: (text) => formatDate(text),
+      searchField: 'created_at',
+      sortable: true,
+      filterType: 'date',
+      width: 160,
+      render: (text: any) => formatDate(text),
     },
     {
       title: 'Trạng thái',
       dataIndex: 'status',
       key: 'status',
-      sorter: (a, b) => a.status.localeCompare(b.status),
-      ...getColumnSearchProps('status', 'Trạng thái'),
-      fixed: 'right', // Yêu cầu: Cố định cột này bên phải
-      render: (status: string | number) => {
+      searchField: 'status',
+      sortable: true,
+      filterType: 'select',
+      filterOptions: [
+        { value: '1', label: 'Nháp' },
+        { value: '2', label: 'Hoàn thành' }
+      ],
+      fixed: 'right',
+      width: 130,
+      render: (status: any) => {
         const key = typeof status === 'number' ? status : Number(status);
         const label = TypeOfStatusSalary[key as keyof typeof TypeOfStatusSalary] || 'Không xác định';
         return (
@@ -377,10 +316,10 @@ const SalaryManagement: React.FC = () => {
 
   return (
     <div style={{ padding: 24 }}>
-      <Space style={{ marginBottom: 16 }}>
-        <MonthPicker value={month} onChange={(d) => d && setMonth(d)} format="MM/YYYY" />
-        <Button onClick={handleCalculate} type="primary" disabled={loading}>
-          <CalculatorOutlined />Tính dữ liệu chấm công
+      <Space style={{ marginBottom: 16 }} wrap>
+        <MonthPicker value={month} onChange={(d) => d && setMonth(d)} format="MM/YYYY" placeholder="Chọn tháng tính lương" />
+        <Button onClick={handleCalculate} type="primary" loading={calculating}>
+          <CalculatorOutlined /> Tính lương tháng {month.format('MM/YYYY')}
         </Button>
         {hasInvalidUsers && (
           <Badge count={(invalidUsersData.usersWithoutContracts?.length || 0) + (invalidUsersData.usersWithoutApprovedAttendance?.length || 0) + (invalidUsersData.usersWithoutSalaryProfile?.length || 0)} offset={[6, 0]}>
@@ -395,12 +334,17 @@ const SalaryManagement: React.FC = () => {
           </Badge>
         )}
       </Space>
-      <Table
+      
+      <ServerSideTable
         columns={columns}
-        dataSource={data}
-        loading={loading}
-        rowKey={(r) => r.id || `${r.user_id}-${r.year}-${r.month}`}
-        scroll={{ x: 'max-content' }} // Yêu cầu: Thêm thanh cuộn ngang
+        fetchData={fetchData}
+        rowKey="id"
+        defaultSortField="created_at"
+        defaultSortOrder="desc"
+        defaultPageSize={25}
+        refreshTrigger={refreshTrigger}
+        scroll={{ x: 'max-content' }}
+        bordered
       />
 
       {/* Modal hiển thị người dùng không hợp lệ */}

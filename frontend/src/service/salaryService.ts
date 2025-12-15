@@ -3,7 +3,7 @@ import Cookies from 'js-cookie';
 
 export default {
 
-  listAllowanceTypes(params?: { page?: number; pageSize?: number }) {
+  listAllowanceTypes(params?: any) {
     return api.get('/api/salary/allowance-types', { params }).then(r => r.data);
   },
 
@@ -54,13 +54,32 @@ export default {
   // List payslips for a given month (normalize response)
   listPayslips(month: string) {
     return api.get('/api/salary/payslips', { params: { month } })
-      .then(r => ({ success: r.data?.success ?? true, data: r.data?.data ?? r.data ?? [], message: r.data?.message }))
-      .catch(err => ({ success: false, data: [], message: err?.response?.data?.message || err.message }));
+      .then(r => ({ 
+        success: r.data?.success ?? true, 
+        data: r.data?.data ?? r.data ?? [], 
+        total: r.data?.total ?? 0,
+        message: r.data?.message 
+      }))
+      .catch(err => ({ 
+        success: false, 
+        data: [], 
+        total: 0,
+        message: err?.response?.data?.message || err.message 
+      }));
   },
 
   // List payslips paginated
-  listPayslipsPaginated(params: { month?: string; page?: number; pageSize?: number }) {
-    return api.get('/api/salary/payslips', { params: { month: params.month, page: params.page, pageSize: params.pageSize } })
+  listPayslipsPaginated(params: { month?: string; page?: number; pageSize?: number; allMonths?: boolean; limit?: number; sort?: string; order?: string; [key: string]: any }) {
+    const query: any = {
+      page: params.page,
+      pageSize: params.pageSize || params.limit,
+      ...params
+    };
+    // If caller requested month='all', remove month param so backend returns all months (backend defaults to all months)
+    if (params.month === 'all') {
+      delete query.month;
+    }
+    return api.get('/api/salary/payslips', { params: query })
       .then(r => ({ success: r.data?.success ?? true, data: r.data?.data ?? r.data ?? [], total: r.data?.total ?? 0, message: r.data?.message }))
       .catch(err => ({ success: false, data: [], total: 0, message: err?.response?.data?.message || err.message }));
   },
@@ -85,6 +104,18 @@ export default {
     return api.get('/api/salary/payslips/me', { params: qs })
       .then(r => ({ success: r.data?.success ?? true, data: r.data?.data ?? [], message: r.data?.message }))
       .catch(err => ({ success: false, data: [], message: err?.response?.data?.message || err.message }));
+  },
+
+  // Paginated list for authenticated user's own payslips (server-side)
+  listMyPayslipsPaginated(params: { page?: number; pageSize?: number; limit?: number; sort?: string; order?: string; [key: string]: any }) {
+    const query: any = {
+      page: params.page,
+      pageSize: params.pageSize || params.limit,
+      ...params
+    };
+    return api.get('/api/salary/payslips/me', { params: query })
+      .then(r => ({ success: r.data?.success ?? true, data: r.data?.data ?? r.data ?? [], total: r.data?.total ?? 0, page: r.data?.page ?? query.page, pageSize: r.data?.pageSize ?? query.pageSize, message: r.data?.message }))
+      .catch(err => ({ success: false, data: [], total: 0, page: params.page || 1, pageSize: params.pageSize || params.limit || 10, message: err?.response?.data?.message || err.message }));
   },
 
   // Trigger bulk calculation on the server for a month

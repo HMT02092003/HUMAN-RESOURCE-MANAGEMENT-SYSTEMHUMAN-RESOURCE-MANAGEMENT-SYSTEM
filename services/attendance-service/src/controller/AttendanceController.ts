@@ -289,6 +289,50 @@ export const approveMonthlyAttendance = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Approve all monthly attendances for a specific month (with scope check)
+ * POST /api/attendance/approve-month
+ * Body: { month: 'YYYY-MM' }
+ */
+export const approveAllByMonth = async (req: Request, res: Response) => {
+  try {
+    const { month } = req.body;
+    
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Tháng không hợp lệ. Định dạng: YYYY-MM' 
+      });
+    }
+
+    const token = req.cookies?.['token'] || req.headers.authorization?.replace('Bearer ', '') || req.headers.authorization?.split(' ')[1];
+    
+    let approverId: number | undefined;
+    try {
+      const decoded = getDecodedToken(token || '');
+      approverId = decoded ? Number((decoded as any).sub) : undefined;
+    } catch (e) {
+      approverId = undefined;
+    }
+
+    console.log('[AttendanceController] approveAllByMonth called for month:', month);
+
+    const result = await AttendanceService.approveAllByMonth(month, token || '', approverId);
+    
+    return res.status(200).json({ 
+      success: true, 
+      data: result,
+      message: `Đã duyệt ${result.approved} bảng chấm công cho tháng ${month}` 
+    });
+  } catch (error: any) {
+    console.error('❌ Error in approveAllByMonth:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Lỗi khi duyệt tất cả bảng chấm công theo tháng' 
+    });
+  }
+};
+
 // POST /api/admin/calculate-monthly/:userId?year=YYYY&month=MM
 export const calculateAndSaveMonthly = async (req: Request, res: Response) => {
   try {

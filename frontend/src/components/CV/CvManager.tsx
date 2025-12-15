@@ -1,11 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Table, Button, Space, Modal, message, Row, Col, Tag, Input } from 'antd';
+import { Button, Space, Modal, message, Row, Col, Tag, Input } from 'antd';
 import { DeleteOutlined, PlusOutlined, FileTextOutlined, SearchOutlined } from '@ant-design/icons';
-import type { InputRef, TableColumnsType, TableColumnType } from 'antd';
+import type { InputRef } from 'antd';
+import { ServerSideTable } from '@/components/common/ServerSideTable';
+import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
 import type { FilterDropdownProps } from 'antd/es/table/interface';
 import jobService from '@/service/jobService';
 import UserService from '@/service/userService';
 import { useRouter } from 'next/navigation';
+import { ExcelExportButton } from '@/components/common/ExcelExport';
+import type { ExcelColumn } from '@/components/common/ExcelExport';
+import dayjs from 'dayjs';
 
 interface CvRecord {
 	cv_id: string;
@@ -31,77 +36,12 @@ interface CvWithUser extends CvRecord {
 }
 
 const CvManager: React.FC = () => {
-	const [data, setData] = useState<CvWithUser[]>([]);
+	const [excelData, setExcelData] = useState<CvWithUser[]>([]);
 	const [loading, setLoading] = useState(false);
 	const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
-	const [pagination, setPagination] = useState({
-		current: 1,
-		pageSize: 10,
-		total: 0
-	});
+	const [refreshTrigger, setRefreshTrigger] = useState(0);
 	const searchInput = useRef<InputRef>(null);
 	const router = useRouter();
-
-	const load = async (page = 1, pageSize = 10) => {
-		setLoading(true);
-		try {
-			const res = await jobService.fetchCvs({
-				page,
-				pageSize
-			});
-
-			// Handle response structure and prefer server-enriched user info
-			let rawData: CvRecord[] = [];
-			let paginationData = { current: page, pageSize, total: 0 };
-
-			if (res?.data?.data && Array.isArray(res.data.data)) {
-				rawData = res.data.data;
-				paginationData = res.data.pagination || paginationData;
-			} else if (Array.isArray(res?.data)) {
-				rawData = res.data;
-			}
-
-			let cvWithUsers: CvWithUser[] = [];
-
-			// If backend already attached `user` objects, use them directly to avoid extra calls
-			if (rawData.length > 0 && (rawData[0] as any).user !== undefined) {
-				cvWithUsers = rawData.map((cv: any) => {
-					const user = cv.user || null;
-					const fullName = user
-						? (user.fullName || [user.firstName, user.lastName].filter(Boolean).join(' ') || user.username || user.email)
-						: `User ${cv.user_id}`;
-					return {
-						...cv,
-						user,
-						fullName,
-						userEmail: user?.email
-					};
-				});
-			} else {
-				// Fallback: fetch user info individually (back-compat)
-				cvWithUsers = await Promise.all(
-					rawData.map(async (cv: CvRecord) => {
-						try {
-							const userRes = await UserService.getUserById(cv.user_id as any);
-							const fullName = userRes?.fullName || [userRes?.firstName, userRes?.lastName].filter(Boolean).join(' ') || userRes?.username || userRes?.email || `User ${cv.user_id}`;
-							return { ...cv, user: userRes, fullName, userEmail: userRes?.email };
-						} catch (err) {
-							console.error(`Failed to fetch user ${cv.user_id}:`, err);
-							return { ...cv, user: undefined, fullName: `User ${cv.user_id}`, userEmail: undefined };
-						}
-					})
-				);
-			}
-
-			setData(cvWithUsers);
-			setPagination(paginationData);
-		} catch (err: any) {
-			console.error('Load CVs error:', err);
-			message.error(err?.message || 'Failed to load CVs');
-		} finally {
-			setLoading(false);
-		}
-	};
 
 	// Helper: gateway base URL (use env if provided)
 	const getGatewayBase = () => {
@@ -125,9 +65,7 @@ const CvManager: React.FC = () => {
 		return 'http://localhost:4008';
 	};
 
-	useEffect(() => {
-		load();
-	}, []);
+	// do not auto-load here; ServerSideTable will call `fetchData`
 
 	const goCreate = () => {
 		router.push('/CV/create');
@@ -141,7 +79,7 @@ const CvManager: React.FC = () => {
 				try {
 					await jobService.deleteCv(cvId);
 					message.success('Đã xóa');
-					load(pagination.current, pagination.pageSize);
+					setRefreshTrigger((v) => v + 1);
 				} catch (err: any) {
 					message.error(err?.message || 'Xóa thất bại');
 				}
@@ -163,7 +101,7 @@ const CvManager: React.FC = () => {
 					await jobService.bulkDeleteCvs(selectedRowKeys as string[]);
 					message.success(`Đã xóa ${selectedRowKeys.length} CV`);
 					setSelectedRowKeys([]);
-					load(pagination.current, pagination.pageSize);
+					setRefreshTrigger((v) => v + 1);
 				} catch (err: any) {
 					message.error(err?.message || 'Xóa thất bại');
 				}
@@ -183,58 +121,19 @@ const CvManager: React.FC = () => {
 		clearFilters();
 	};
 
-	const getColumnSearchProps = (dataIndex: keyof CvWithUser, title: string): TableColumnType<CvWithUser> => ({
-		filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters, close }) => (
-			<div style={{ padding: 8 }} onKeyDown={(e) => e.stopPropagation()}>
-				<Input
-					ref={searchInput}
-					placeholder={`Tìm ${title}`}
-					value={selectedKeys[0]}
-					onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-					onPressEnter={() => handleSearch(selectedKeys as string[], confirm, dataIndex)}
-					style={{ marginBottom: 8, display: 'block' }}
-				/>
-				<Space>
-					<Button
-						type="primary"
-						onClick={() => handleSearch(selectedKeys as string[], confirm, dataIndex)}
-						icon={<SearchOutlined />}
-						size="small"
-						style={{ width: 90 }}
-					>
-						Tìm
-					</Button>
-					<Button
-						onClick={() => clearFilters && handleReset(clearFilters)}
-						size="small"
-						style={{ width: 90 }}
-					>
-						Xóa
-					</Button>
-				</Space>
-			</div>
-		),
-		filterIcon: (filtered: boolean) => (
-			<SearchOutlined style={{ color: filtered ? '#1677ff' : undefined }} />
-		),
-		onFilter: (value, record) => {
-			const val = record[dataIndex];
-			return val ? String(val).toLowerCase().includes(String(value).toLowerCase()) : false;
-		},
-		onFilterDropdownOpenChange: (visible) => {
-			if (visible) {
-				setTimeout(() => searchInput.current?.select(), 100);
-			}
-		},
+	// We will use ServerSideTable filters; keep this helper for backward compatibility if needed
+	const getColumnSearchProps = (dataIndex: keyof CvWithUser, title: string) => ({
+		// placeholder - ServerSideTable will render its own filter dropdowns
 	});
 
-	const columns: TableColumnsType<CvWithUser> = [
+	const columns: ServerSideColumnType<CvWithUser>[] = [
 		{
 			title: 'Người dùng',
 			dataIndex: 'fullName',
 			key: 'fullName',
-			...getColumnSearchProps('fullName', 'người dùng'),
-			sorter: (a, b) => (a.fullName || '').localeCompare(b.fullName || ''),
+			searchField: 'fullName',
+			filterType: 'text',
+			sortable: true,
 			render: (fullName: string, record) => (
 				<Space direction="vertical" size={0}>
 					<strong>{fullName}</strong>
@@ -246,12 +145,11 @@ const CvManager: React.FC = () => {
 			title: 'File CV',
 			dataIndex: 'file_path',
 			key: 'file_path',
-			...getColumnSearchProps('file_path', 'file'),
+			searchField: 'file_path',
+			filterType: 'text',
 			render: (v: string) => {
 				if (!v) return 'N/A';
-				// Normalize Windows backslashes to forward slashes
 				const normalized = v.replace(/\\/g, '/').replace(/^\/+/, '');
-				// Use direct Job Service URL for static files so we hit the /uploads static handler
 				const url = `${getJobServiceBase()}/${normalized}`;
 				const fileName = normalized.split('/').pop() || 'CV';
 				return (
@@ -265,12 +163,10 @@ const CvManager: React.FC = () => {
 			title: 'Ngày tải lên',
 			dataIndex: 'uploaded_at',
 			key: 'uploaded_at',
-			sorter: (a, b) => {
-				const dateA = a.uploaded_at ? new Date(a.uploaded_at).getTime() : 0;
-				const dateB = b.uploaded_at ? new Date(b.uploaded_at).getTime() : 0;
-				return dateA - dateB;
-			},
-			defaultSortOrder: 'descend',
+			searchField: 'uploaded_at',
+			filterType: 'date',
+			sortable: true,
+			defaultSortOrder: 'desc',
 			render: (date: string) => date ? new Date(date).toLocaleString('vi-VN') : 'N/A',
 		},
 		{
@@ -291,11 +187,50 @@ const CvManager: React.FC = () => {
 		}
 	];
 
-	const rowSelection = {
-		selectedRowKeys,
-		onChange: (selectedKeys: React.Key[]) => {
-			setSelectedRowKeys(selectedKeys);
-		},
+	// Row selection will be handled by ServerSideTable onSelectionChange
+
+  const excelColumns: ExcelColumn[] = [
+    { title: 'Người dùng', dataIndex: 'fullName', width: 25 },
+    { title: 'Email', dataIndex: 'userEmail', width: 25 },
+    { title: 'File CV', dataIndex: 'file_path', width: 35 },
+    { title: 'Ngày tải lên', dataIndex: 'uploaded_at', width: 15, render: (val: any) => val ? dayjs(val).format('DD/MM/YYYY HH:mm') : '' }
+  ];
+
+
+	const handleSelectionChange = (keys: React.Key[], rows: CvWithUser[]) => {
+		setSelectedRowKeys(keys);
+	};
+
+	const fetchData = async (params: any) => {
+		const res = await jobService.fetchCvs(params);
+		// Normalize response and map userInfo -> user/fullName/userEmail for rendering
+		const body = res?.data ?? res;
+		// body may be { success, data: [...], pagination, total }
+		const rowsRaw = Array.isArray(body?.data) ? body.data : Array.isArray(body) ? body : [];
+		const mapped = (rowsRaw as any[]).map((r) => {
+			const userInfo = r.userInfo || r.user || null;
+			const fullName = userInfo
+				? (userInfo.fullName || [userInfo.firstName, userInfo.lastName].filter(Boolean).join(' ') || userInfo.username || userInfo.email)
+				: `User ${r.user_id}`;
+			return {
+				...r,
+				user: userInfo,
+				fullName,
+				userEmail: userInfo?.email,
+			};
+		});
+
+		const pagination = body?.pagination ?? { page: params.page ?? 1, pageSize: params.limit ?? params.pageSize ?? 10, total: body?.total ?? mapped.length };
+
+		return {
+			data: mapped,
+			total: body?.total ?? pagination.total,
+			pagination: {
+				page: pagination.page,
+				pageSize: pagination.pageSize,
+				total: pagination.total,
+			},
+		};
 	};
 
 	return (
@@ -317,19 +252,27 @@ const CvManager: React.FC = () => {
 						</Button>
 					</Col>
 				)}
+				<Col>
+					<ExcelExportButton
+						data={excelData}
+						columns={excelColumns}
+						fileName={`danh-sach-cv-${dayjs().format('YYYY-MM-DD')}`}
+						title="DANH SÁCH HỒ SƠ CV"
+						description={`Xuất ngày ${dayjs().format('DD/MM/YYYY')}`}
+					/>
+				</Col>
 			</Row>
 
-			<Table
+			<ServerSideTable
 				rowKey="cv_id"
-				dataSource={data}
 				columns={columns}
-				loading={loading}
-				rowSelection={rowSelection}
-				pagination={{
-					...pagination,
-					showSizeChanger: true,
-					showTotal: (total) => `Tổng ${total} bản ghi`,
-					onChange: (page, pageSize) => load(page, pageSize),
+				fetchData={fetchData}
+				showSelection
+				onSelectionChange={handleSelectionChange}
+				refreshTrigger={refreshTrigger}
+				onDataChange={(rows, pagination) => {
+					// keep current page rows for export
+					setExcelData(rows as CvWithUser[]);
 				}}
 				scroll={{ x: 800 }}
 			/>

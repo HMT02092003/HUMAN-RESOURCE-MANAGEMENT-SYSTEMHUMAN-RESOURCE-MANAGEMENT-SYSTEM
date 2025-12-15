@@ -1741,12 +1741,17 @@ export const getUsersByIds = async (req: Request, res: Response) => {
 };
 
 /**
- * Search users by name
- * Query params: q (search term)
+ * Search users by name with department and chevron enrichment
+ * Query params: 
+ *   - q or keyword: search term
+ *   - page: page number (default 1)
+ *   - pageSize: items per page (default 50)
  */
 export const searchUsers = async (req: Request, res: Response) => {
   try {
-    const searchTerm = req.query.q as string;
+    const searchTerm = (req.query.q || req.query.keyword) as string;
+    const page = parseInt((req.query.page as string) || '1');
+    const pageSize = Math.min(parseInt((req.query.pageSize as string) || '50'), 1000);
 
     if (!searchTerm || searchTerm.trim().length === 0) {
       return res.status(400).json({
@@ -1755,17 +1760,71 @@ export const searchUsers = async (req: Request, res: Response) => {
       });
     }
 
-    const users = await UserModel.query()
-      .select('id', 'fullName', 'email', 'username')
-      .where('fullName', 'ilike', `%${searchTerm.trim()}%`)
-      .orWhere('email', 'ilike', `%${searchTerm.trim()}%`)
-      .orWhere('username', 'ilike', `%${searchTerm.trim()}%`)
-      .limit(50); // Limit results to prevent too many matches
+    const trimmedTerm = searchTerm.trim();
+    const offset = (page - 1) * pageSize;
+
+    // Build query with pagination
+    const query = UserModel.query()
+      .select(['id', 'fullName', 'email', 'username', 'departmentId', 'chevronId', 'identificationPhoto'])
+      .where('fullName', 'ilike', `%${trimmedTerm}%`)
+      .orWhere('email', 'ilike', `%${trimmedTerm}%`)
+      .orWhere('username', 'ilike', `%${trimmedTerm}%`)
+      .where('status', 1); // Only active users
+
+    // Get total count
+    const countQuery = query.clone().clearSelect().clearOrder();
+    const [countResult] = await (countQuery as any).count('* as count');
+    const total = Number(countResult.count || 0);
+
+    // Get paginated results
+    const users = await query.limit(pageSize).offset(offset);
+
+    // Enrich with department and chevron details
+    const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
+    const headers: any = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const usersWithDetails = await Promise.all(users.map(async (user: any) => {
+      let department = null;
+      let chevron = null;
+
+      try {
+        if (user.departmentId) {
+          department = await EmployeeService.getDepartmentById(user.departmentId, headers['Authorization']);
+        }
+      } catch (e: any) {
+        console.error(`Error fetching department ${user.departmentId}:`, e?.message || e);
+      }
+
+      try {
+        if (user.chevronId) {
+          chevron = await EmployeeService.getChevronDetail(user.chevronId, headers['Authorization']);
+        }
+      } catch (e: any) {
+        console.error(`Error fetching chevron ${user.chevronId}:`, e?.message || e);
+      }
+
+      return {
+        ...user,
+        department,
+        chevron,
+        full_name: user.fullName, // Add alias for compatibility
+        department_id: user.departmentId,
+        chevron_id: user.chevronId
+      };
+    }));
 
     return res.status(200).json({
       success: true,
-      data: users,
-      total: users.length
+      data: usersWithDetails,
+      results: usersWithDetails, // Add alias for compatibility
+      total,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize)
+      }
     });
 
   } catch (error) {

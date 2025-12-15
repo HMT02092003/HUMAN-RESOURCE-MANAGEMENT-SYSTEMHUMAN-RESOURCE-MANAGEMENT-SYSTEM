@@ -173,6 +173,20 @@ class AttendanceService {
     }
   }
 
+  async approveAllByMonth(month: string): Promise<{ approved: number; total: number }> {
+    try {
+      const response = await apiService.post('/api/attendance/approve-month', { month });
+      if (response.data.success) {
+        return response.data.data;
+      } else {
+        throw new Error(response.data.message || 'Không thể duyệt tất cả bảng chấm công theo tháng');
+      }
+    } catch (error: any) {
+      console.error('Error approving all attendances by month:', error);
+      throw new Error(error.response?.data?.message || 'Lỗi khi duyệt tất cả bảng chấm công theo tháng');
+    }
+  }
+
   async getAllMonthlyAttendance(params: any): Promise<{ results: any[]; total: number }> {
     try {
       const response = await apiService.get('/api/attendance/approve-monthly', { params });  

@@ -8,7 +8,8 @@ import {
   getAllMonthlyAttendance, 
   getUserMonthlyFull, 
   recordAttendance, 
-  approveMonthlyAttendance, 
+  approveMonthlyAttendance,
+  approveAllByMonth, 
   calculateAndSaveMonthly,
   bulkCalculateMonthly,
   updateForgotCheck
@@ -77,6 +78,11 @@ router.get('/monthly-attendance/by-month', authenticateToken, (req: Request, res
 
 router.post('/approve-monthly', authenticateToken, async (req: Request, res: Response) => {
   await approveMonthlyAttendance(req, res);
+});
+
+// POST /api/attendance/approve-month - approve all attendances for a specific month (with scope)
+router.post('/approve-month', authenticateToken, async (req: Request, res: Response) => {
+  await approveAllByMonth(req, res);
 });
 
 // ===================================
@@ -195,6 +201,7 @@ router.post('/settings/working-days', async (req: Request, res: Response) => {
 // ===================================
 
 // Shift Templates (Mẫu ca)
+router.get('/shifts/paginated', authenticateToken, wrap(ShiftController.getAllShiftsPaginated)); // Must be before /shifts/:id
 router.get('/shifts', authenticateToken, wrap(ShiftController.getAllShifts));
 router.get('/shifts/:id', authenticateToken, wrap(ShiftController.getShiftById));
 router.post('/shifts', authenticateToken, wrap(ShiftController.createShift));

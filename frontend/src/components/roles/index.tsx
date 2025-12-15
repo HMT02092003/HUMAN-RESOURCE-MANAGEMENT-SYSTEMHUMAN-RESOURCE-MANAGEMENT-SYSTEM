@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { roleService } from '@/service/roleService';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
+import { ExcelExportButton } from '@/components/common/ExcelExport';
+import type { ExcelColumn } from '@/components/common/ExcelExport';
 
 // Định nghĩa interface cho dữ liệu vai trò
 interface Role {
@@ -270,6 +272,22 @@ const Roles: React.FC = () => {
                 <PlusCircleOutlined />
                 Tạo mới vai trò
               </Button>
+
+              <ExcelExportButton
+                data={roles.map(role => ({
+                  ...role,
+                  createdAt: role.createdAt ? formatDate(role.createdAt) : ''
+                }))}
+                columns={[
+                  { title: 'Tên vai trò', dataIndex: 'name', width: 25 },
+                  { title: 'Mô tả', dataIndex: 'description', width: 35 },
+                  { title: 'Vai trò cha', dataIndex: 'parentName', width: 20 },
+                  { title: 'Ngày tạo', dataIndex: 'createdAt', width: 15 }
+                ]}
+                fileName={`danh-sach-vai-tro-${dayjs().format('YYYY-MM-DD')}`}
+                title="DANH SÁCH VAI TRÒ"
+                description={`Xuất ngày ${dayjs().format('DD/MM/YYYY')}`}
+              />
             </div>
           </div>
         </Col>

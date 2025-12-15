@@ -1,18 +1,23 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Button, Space, Typography, Empty, message, Tooltip, Tag, Modal, Form, Select, DatePicker, Input } from 'antd';
-import { PlusOutlined, EyeOutlined, DeleteOutlined, EditOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, DownloadOutlined } from '@ant-design/icons';
+import { Button, Space, Typography, Empty, message, Tooltip, Tag, Modal, Form, Select, DatePicker, Input, Tabs, Grid } from 'antd';
+import { PlusOutlined, EyeOutlined, DeleteOutlined, EditOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, DownloadOutlined, CalendarOutlined, UnorderedListOutlined } from '@ant-design/icons';
+import Calendar from 'react-calendar';
+import 'react-calendar/dist/Calendar.css';
+import './shift-calendar-custom.css';
 import shiftService from '@/service/shiftService';
 import { ServerSideTable } from '@/components/common/ServerSideTable';
 import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
 import { ExcelExportButton } from '@/components/common/ExcelExport';
 import type { ExcelColumn } from '@/components/common/ExcelExport';
-import dayjs from 'dayjs';
+import dayjs, { Dayjs } from 'dayjs';
 
 const { Title, Text } = Typography;
 
 const ShiftRegistrationManagement = () => {
+    const screens = Grid.useBreakpoint();
+    const isMobile = !screens.lg;
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
     const [selectedRows, setSelectedRows] = useState<any[]>([]);
     const [editModalVisible, setEditModalVisible] = useState(false);
@@ -23,6 +28,11 @@ const ShiftRegistrationManagement = () => {
     const [editForm] = Form.useForm();
     const [bulkForm] = Form.useForm();
     const [allRegistrations, setAllRegistrations] = useState<any[]>([]);
+    const [activeTab, setActiveTab] = useState('list');
+    const [calendarRegistrations, setCalendarRegistrations] = useState<any[]>([]);
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+    const [detailModalVisible, setDetailModalVisible] = useState(false);
 
     // Load shift configurations
     React.useEffect(() => {
@@ -60,6 +70,44 @@ const ShiftRegistrationManagement = () => {
         };
         fetchAllData();
     }, [refreshTrigger]);
+
+    // Load calendar data when switching to calendar tab
+    useEffect(() => {
+        const loadCalendarData = async () => {
+            if (activeTab === 'calendar') {
+                try {
+                    // Load all registrations (all statuses) for calendar view
+                    const response: any = await shiftService.getMyShiftRegistrationsPaginated({ 
+                        page: 1, 
+                        pageSize: 10000
+                    });
+                    
+                    let payload: any;
+                    if (Array.isArray(response)) {
+                        payload = response;
+                    } else if (response && typeof response === 'object') {
+                        if ('status' in response && 'data' in response) {
+                            payload = response.data;
+                        } else if ('data' in response && ('pagination' in response || 'total' in response || 'success' in response)) {
+                            payload = response;
+                        } else if ('data' in response) {
+                            payload = response.data;
+                        } else {
+                            payload = response;
+                        }
+                    } else {
+                        payload = response;
+                    }
+
+                    const rows = Array.isArray(payload) ? payload : (payload?.results ?? payload?.data ?? payload?.items ?? []);
+                    setCalendarRegistrations(Array.isArray(rows) ? rows : []);
+                } catch (error) {
+                    console.error('Error loading calendar data:', error);
+                }
+            }
+        };
+        loadCalendarData();
+    }, [activeTab, refreshTrigger]);
 
     const getStatusText = (status: string) => {
         const statusMap: Record<string, string> = {
@@ -358,6 +406,25 @@ const ShiftRegistrationManagement = () => {
         }),
     };
 
+    // Handle date click to show details
+    const handleDateClick = (date: Date) => {
+        setSelectedDate(date);
+        setDetailModalVisible(true);
+    };
+
+    // Create a map for quick lookup
+    const registrationMap = useMemo(() => {
+        const map = new Map<string, any[]>();
+        calendarRegistrations.forEach(reg => {
+            const dateStr = dayjs(reg.date).format('YYYY-MM-DD');
+            if (!map.has(dateStr)) {
+                map.set(dateStr, []);
+            }
+            map.get(dateStr)!.push(reg);
+        });
+        return map;
+    }, [calendarRegistrations]);
+
     return (
         <div style={{ padding: '0px' }}>
             {/* Header */}
@@ -402,31 +469,160 @@ const ShiftRegistrationManagement = () => {
                 </Space>
             </div>
 
-            {/* Table */}
-            <ServerSideTable
-                columns={columns}
-                fetchData={shiftService.getMyShiftRegistrationsPaginated}
-                rowKey="id"
-                rowSelection={rowSelection}
-                defaultPageSize={10}
-                scroll={{ x: 'auto' }}
-                bordered
-                refreshTrigger={refreshTrigger}
-                emptyText={
-                    <Empty
-                        image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        description={
-                            <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                                <div style={{ fontSize: '60px', marginBottom: '16px' }}>📅</div>
-                                <Title level={4} type="secondary" style={{ marginBottom: '8px' }}>
-                                    Bạn chưa đăng ký ca nào
-                                </Title>
-                                <Text type="secondary">Đăng ký ca làm việc để quản lý thời gian</Text>
-                            </div>
+            {/* Tabs with Table and Calendar */}
+            <Tabs activeKey={activeTab} onChange={setActiveTab}>
+                <Tabs.TabPane
+                    tab={
+                        <span>
+                            <UnorderedListOutlined />
+                            Danh sách đăng ký
+                        </span>
+                    }
+                    key="list"
+                >
+                    <ServerSideTable
+                        columns={columns}
+                        fetchData={shiftService.getMyShiftRegistrationsPaginated}
+                        rowKey="id"
+                        rowSelection={rowSelection}
+                        defaultPageSize={10}
+                        scroll={{ x: 'auto' }}
+                        bordered
+                        refreshTrigger={refreshTrigger}
+                        emptyText={
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description={
+                                    <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                                        <div style={{ fontSize: '60px', marginBottom: '16px' }}>📅</div>
+                                        <Title level={4} type="secondary" style={{ marginBottom: '8px' }}>
+                                            Bạn chưa đăng ký ca nào
+                                        </Title>
+                                        <Text type="secondary">Đăng ký ca làm việc để quản lý thời gian</Text>
+                                    </div>
+                                }
+                            />
                         }
                     />
-                }
-            />
+                </Tabs.TabPane>
+
+                <Tabs.TabPane
+                    tab={
+                        <span>
+                            <CalendarOutlined />
+                            Lịch ca làm việc
+                        </span>
+                    }
+                    key="calendar"
+                >
+                    <div style={{ background: '#fff', padding: isMobile ? '12px' : '24px', borderRadius: '8px' }}>
+                        <Calendar
+                            value={currentDate}
+                            onChange={(date: any) => setCurrentDate(date)}
+                            locale="vi-VN"
+                            tileClassName={({ date, view }) => {
+                                if (view !== 'month') return '';
+                                
+                                const dateStr = dayjs(date).format('YYYY-MM-DD');
+                                const registrations = registrationMap.get(dateStr) || [];
+                                
+                                if (registrations.length === 0) return '';
+                                
+                                // Ưu tiên trạng thái: approved > pending > rejected
+                                const hasApproved = registrations.some(r => r.status === 'approved');
+                                const hasPending = registrations.some(r => r.status === 'pending');
+                                const hasRejected = registrations.some(r => r.status === 'rejected');
+                                
+                                if (hasApproved) return 'shift-status-approved';
+                                if (hasPending) return 'shift-status-pending';
+                                if (hasRejected) return 'shift-status-rejected';
+                                
+                                return '';
+                            }}
+                            tileContent={({ date, view }) => {
+                                if (view !== 'month') return null;
+                                
+                                const dateStr = dayjs(date).format('YYYY-MM-DD');
+                                const registrations = registrationMap.get(dateStr) || [];
+                                
+                                if (registrations.length === 0) return null;
+                                
+                                return (
+                                    <div className="shift-calendar-cell-content" onClick={() => handleDateClick(date)}>
+                                        {registrations.map((reg, index) => (
+                                            <div key={reg.id} className="shift-calendar-cell-info">
+                                                <div style={{
+                                                    fontSize: isMobile ? 9 : 11,
+                                                    color: reg.status === 'approved' ? '#52c41a' : 
+                                                           reg.status === 'pending' ? '#faad14' : '#ff4d4f',
+                                                    fontWeight: 600,
+                                                    marginBottom: 2
+                                                }}>
+                                                    {reg.shift_name}
+                                                </div>
+                                                <div style={{
+                                                    fontSize: isMobile ? 8 : 10,
+                                                    color: '#666'
+                                                }}>
+                                                    {reg.start_time?.substring(0, 5)} - {reg.end_time?.substring(0, 5)}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                );
+                            }}
+                        />
+                        
+                        {/* Legend */}
+                        <div style={{
+                            marginTop: 16,
+                            padding: isMobile ? 12 : 16,
+                            background: '#fafafa',
+                            borderRadius: 8,
+                            border: '1px solid #d9d9d9'
+                        }}>
+                            <div style={{ marginBottom: 8 }}>
+                                <Text strong style={{ fontSize: isMobile ? 12 : 14 }}>Chú thích:</Text>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                    <div style={{
+                                        width: 16,
+                                        height: 16,
+                                        background: '#f6ffed',
+                                        border: '1px solid #b7eb8f',
+                                        borderRadius: 4,
+                                        marginRight: 8
+                                    }} />
+                                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Đã duyệt</Text>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                    <div style={{
+                                        width: 16,
+                                        height: 16,
+                                        background: '#fffbe6',
+                                        border: '1px solid #ffe58f',
+                                        borderRadius: 4,
+                                        marginRight: 8
+                                    }} />
+                                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Chờ duyệt</Text>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                    <div style={{
+                                        width: 16,
+                                        height: 16,
+                                        background: '#fff1f0',
+                                        border: '1px solid #ffccc7',
+                                        borderRadius: 4,
+                                        marginRight: 8
+                                    }} />
+                                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Từ chối</Text>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </Tabs.TabPane>
+            </Tabs>
 
             {/* Edit Modal */}
             <Modal
@@ -563,6 +759,106 @@ const ShiftRegistrationManagement = () => {
                         )}
                     </Form.List>
                 </Form>
+            </Modal>
+
+            {/* Detail Modal - Chi tiết ca trong ngày */}
+            <Modal
+                title={`Chi tiết ngày ${selectedDate ? dayjs(selectedDate).format('DD/MM/YYYY') : ''}`}
+                open={detailModalVisible}
+                onCancel={() => {
+                    setDetailModalVisible(false);
+                    setSelectedDate(null);
+                }}
+                footer={[
+                    <Button key="close" onClick={() => {
+                        setDetailModalVisible(false);
+                        setSelectedDate(null);
+                    }}>
+                        Đóng
+                    </Button>
+                ]}
+                width={600}
+            >
+                {selectedDate && (() => {
+                    const dateStr = dayjs(selectedDate).format('YYYY-MM-DD');
+                    const dayRegistrations = registrationMap.get(dateStr) || [];
+                    
+                    if (dayRegistrations.length === 0) {
+                        return (
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description="Không có ca đăng ký trong ngày này"
+                            />
+                        );
+                    }
+                    
+                    return (
+                        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+                            {dayRegistrations.map(reg => (
+                                <div key={reg.id} style={{
+                                    padding: '16px',
+                                    border: '1px solid #d9d9d9',
+                                    borderRadius: '8px',
+                                    background: '#fafafa'
+                                }}>
+                                    <div style={{ marginBottom: 12 }}>
+                                        <Space>
+                                            <Text strong style={{ fontSize: 16 }}>{reg.shift_name}</Text>
+                                            <Tag color={
+                                                reg.status === 'approved' ? 'green' : 
+                                                reg.status === 'pending' ? 'orange' : 'red'
+                                            }>
+                                                {reg.status === 'approved' ? 'Đã duyệt' : 
+                                                 reg.status === 'pending' ? 'Chờ duyệt' : 'Từ chối'}
+                                            </Tag>
+                                        </Space>
+                                    </div>
+                                    <div style={{ marginBottom: 8 }}>
+                                        <ClockCircleOutlined style={{ marginRight: 8, color: '#1890ff' }} />
+                                        <Text>Giờ làm: {reg.start_time?.substring(0, 5)} - {reg.end_time?.substring(0, 5)}</Text>
+                                    </div>
+                                    {reg.notes && (
+                                        <div style={{ marginBottom: 8 }}>
+                                            <Text type="secondary">Ghi chú: {reg.notes}</Text>
+                                        </div>
+                                    )}
+                                    <div>
+                                        <Text type="secondary" style={{ fontSize: 12 }}>
+                                            Đăng ký lúc: {dayjs(reg.created_at).format('DD/MM/YYYY HH:mm')}
+                                        </Text>
+                                    </div>
+                                    {reg.status === 'pending' && (
+                                        <div style={{ marginTop: 12 }}>
+                                            <Space>
+                                                <Button
+                                                    size="small"
+                                                    icon={<EditOutlined />}
+                                                    onClick={() => {
+                                                        setDetailModalVisible(false);
+                                                        handleEdit(reg);
+                                                    }}
+                                                >
+                                                    Sửa
+                                                </Button>
+                                                <Button
+                                                    size="small"
+                                                    danger
+                                                    icon={<DeleteOutlined />}
+                                                    onClick={() => {
+                                                        setDetailModalVisible(false);
+                                                        handleDelete(reg);
+                                                    }}
+                                                >
+                                                    Xóa
+                                                </Button>
+                                            </Space>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </Space>
+                    );
+                })()}
             </Modal>
         </div>
     );

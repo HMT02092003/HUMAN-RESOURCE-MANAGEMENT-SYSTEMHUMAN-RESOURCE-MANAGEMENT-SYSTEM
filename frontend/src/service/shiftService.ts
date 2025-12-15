@@ -8,10 +8,32 @@ import apiService from './apiService';
 // ==================== SHIFT TEMPLATE APIs ====================
 
 /**
- * Lấy danh sách ca (shift templates)
+ * Lấy danh sách ca (shift templates) - không phân trang
  */
 export const getAllShiftConfigurations = async () => {
   return apiService.get('/api/shifts');
+};
+
+/**
+ * Lấy danh sách ca có phân trang, tìm kiếm, sắp xếp
+ */
+export const getAllShiftConfigurationsPaginated = async (params: any = {}) => {
+  try {
+    const response = await apiService.get('/api/shifts/paginated', { params });
+    // Normalize response to match ServerSideTable expectations
+    if (response.data) {
+      return {
+        data: {
+          data: response.data.data || [],
+          total: response.data.total || 0
+        }
+      };
+    }
+    return { data: { data: [], total: 0 } };
+  } catch (error) {
+    console.error('Error in getAllShiftConfigurationsPaginated:', error);
+    return { data: { data: [], total: 0 } };
+  }
 };
 
 /**
@@ -267,6 +289,7 @@ export const getHolidays = async (year?: number, month?: number) => {
 export default {
   // Configuration
   getAllShiftConfigurations,
+  getAllShiftConfigurationsPaginated,
   getShiftConfigurationById,
   createShiftConfiguration,
   updateShiftConfiguration,

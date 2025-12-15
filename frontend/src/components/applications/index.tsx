@@ -67,6 +67,11 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
             width: 25
         },
         {
+            title: 'Phòng ban',
+            dataIndex: ['userInfo', 'department', 'name'],
+            width: 20
+        },
+        {
             title: 'Loại đơn',
             dataIndex: 'type',
             width: 25,
@@ -170,6 +175,17 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
             render: (_: any, record: any) => {
                 const user = record.userInfo || {};
                 return user.fullName || '-';
+            }
+        },
+        {
+            title: 'Phòng ban',
+            dataIndex: ['userInfo', 'department', 'name'],
+            key: 'userInfo.department.name',
+            sortable: true,
+            filterType: 'text',
+            render: (_: any, record: any) => {
+                const department = record.userInfo?.department || {};
+                return department.name || '-';
             }
         },
         {

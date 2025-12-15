@@ -90,6 +90,17 @@
 			}
 		},
 		{
+			"label": "QLNS_App",
+			"type": "shell",
+			"command": "yarn start --clear",
+			"options": {
+				"cwd": "QLNS_App"
+			},
+			"presentation": {
+				"panel": "new"
+			}
+		},
+		{
 			"label": "Start All",
 			"dependsOn": [
 				"Frontend",
@@ -100,6 +111,7 @@
 				"Application Service",
 				"AI Face Recognition Service",
 				"Mobile App (Face Recognition)",
+				"QLNS_App",
 				"Salary Service",
 				"Job Service"
 			],

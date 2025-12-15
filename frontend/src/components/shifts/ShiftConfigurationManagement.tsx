@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-    Table,
     Button,
     Modal,
     Form,
@@ -12,12 +11,15 @@ import {
     Space,
     Tag,
     message,
-    Popconfirm,
-    Card
+    Popconfirm
 } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import shiftService from '@/service/shiftService';
 import dayjs from 'dayjs';
+import { ServerSideTable } from '@/components/common/ServerSideTable';
+import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
+import { ExcelExportButton } from '@/components/common/ExcelExport';
+import type { ExcelColumn } from '@/components/common/ExcelExport';
 
 const { TextArea } = Input;
 
@@ -25,12 +27,39 @@ const ShiftConfigurationManagement = () => {
     const [form] = Form.useForm();
     const [loading, setLoading] = useState(false);
     const [configurations, setConfigurations] = useState<any[]>([]);
+    const [allConfigurations, setAllConfigurations] = useState<any[]>([]);
     const [modalVisible, setModalVisible] = useState(false);
     const [editingConfig, setEditingConfig] = useState<any>(null);
     const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+    const [selectedRows, setSelectedRows] = useState<any[]>([]);
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+    // Fetch all data for Excel export
     useEffect(() => {
-        loadConfigurations();
+        const fetchAllData = async () => {
+            try {
+                const response = await shiftService.getAllShiftConfigurations();
+                if (response.data?.success) {
+                    setAllConfigurations(response.data.data || []);
+                }
+            } catch (error) {
+                console.error('Error fetching all configurations:', error);
+            }
+        };
+        fetchAllData();
+    }, [refreshTrigger]);
+
+    // Fetch data callback for ServerSideTable
+    const fetchData = useCallback(async (params: any) => {
+        console.log('[ShiftConfigurationManagement] Fetching data with params:', params);
+        try {
+            const response = await shiftService.getAllShiftConfigurationsPaginated(params);
+            return response.data || { data: [], total: 0 };
+        } catch (error: any) {
+            console.error('Error fetching shift configurations:', error);
+            message.error('Đội tải dữ liệu thất bại');
+            return { data: [], total: 0 };
+        }
     }, []);
 
     // Convert time string like 'HH:mm' or 'HH:mm:ss' into a Dayjs object.
@@ -129,7 +158,7 @@ const ShiftConfigurationManagement = () => {
             }
 
             handleCloseModal();
-            loadConfigurations();
+            setRefreshTrigger(prev => prev + 1);
         } catch (error: any) {
             message.error(error.response?.data?.message || 'Có lỗi xảy ra');
         } finally {
@@ -142,7 +171,7 @@ const ShiftConfigurationManagement = () => {
             setLoading(true);
             await shiftService.deleteShiftConfiguration(id);
             message.success('Xóa cấu hình ca thành công');
-            loadConfigurations();
+            setRefreshTrigger(prev => prev + 1);
         } catch (error: any) {
             message.error(error.response?.data?.message || 'Không thể xóa cấu hình ca');
         } finally {
@@ -159,7 +188,8 @@ const ShiftConfigurationManagement = () => {
             await shiftService.bulkDeleteShiftConfigurations(ids);
             message.success('Xóa các cấu hình ca thành công');
             setSelectedRowKeys([]);
-            loadConfigurations();
+            setSelectedRows([]);
+            setRefreshTrigger(prev => prev + 1);
         } catch (error: any) {
             message.error(error.response?.data?.message || 'Không thể xóa các cấu hình đã chọn');
         } finally {
@@ -167,44 +197,72 @@ const ShiftConfigurationManagement = () => {
         }
     };
 
-    const columns = [
+    const columns: ServerSideColumnType<any>[] = [
         {
             title: 'Tên ca',
             dataIndex: 'name',
             key: 'name',
+            searchField: 'name',
+            sortable: true,
+            filterType: 'text',
+            width: 150,
             render: (text: string) => <strong>{text}</strong>
         },
         {
-            title: 'Thời gian',
-            key: 'time',
-            render: (_: any, record: any) => (
-                <span>
-                    {record.start_time?.substring(0, 5)} - {record.end_time?.substring(0, 5)}
-                </span>
-            )
+            title: 'Giờ bắt đầu',
+            dataIndex: 'start_time',
+            key: 'start_time',
+            searchField: 'start_time',
+            sortable: true,
+            filterType: 'text',
+            width: 120,
+            render: (time: string) => time?.substring(0, 5) || '-'
+        },
+        {
+            title: 'Giờ kết thúc',
+            dataIndex: 'end_time',
+            key: 'end_time',
+            searchField: 'end_time',
+            sortable: true,
+            filterType: 'text',
+            width: 120,
+            render: (time: string) => time?.substring(0, 5) || '-'
         },
         {
             title: 'Hệ số làm việc',
             dataIndex: 'working_unit',
             key: 'working_unit',
+            searchField: 'working_unit',
+            sortable: true,
+            filterType: 'number',
+            width: 140,
             render: (unit: any) => <Tag color={parseFloat(unit) > 1 ? 'gold' : 'default'}>{unit}</Tag>,
         },
         {
             title: 'Mô tả',
             dataIndex: 'description',
             key: 'description',
+            searchField: 'description',
+            sortable: true,
+            filterType: 'text',
+            width: 200,
             ellipsis: true
         },
         {
             title: 'Tạo lúc',
             dataIndex: 'created_at',
             key: 'created_at',
+            searchField: 'created_at',
+            sortable: true,
+            filterType: 'date',
+            width: 160,
             render: (val: string) => val ? dayjs(val).format('DD/MM/YYYY HH:mm') : '-'
         },
         {
             title: 'Thao tác',
             key: 'actions',
             width: 140,
+            fixed: 'right',
             render: (_: any, record: any) => (
                 <Space>
                     <Button type="link" icon={<EditOutlined />} onClick={() => handleOpenModal(record)}></Button>
@@ -222,50 +280,65 @@ const ShiftConfigurationManagement = () => {
         }
     ];
 
+    const excelColumns: ExcelColumn[] = [
+        { title: 'Tên ca', dataIndex: 'shift_name', width: 25 },
+        { title: 'Giờ bắt đầu', dataIndex: 'start_time', width: 15 },
+        { title: 'Giờ kết thúc', dataIndex: 'end_time', width: 15 },
+        { title: 'Thời gian nghỉ (phút)', dataIndex: 'break_minutes', width: 20 },
+        { title: 'Mô tả', dataIndex: 'description', width: 30 }
+    ];
+
     return (
         <>
             <div style={{ marginBottom: 16 }}>
-                <Button
-                    type="primary"
-                    icon={<PlusOutlined />}
-                    onClick={() => handleOpenModal()}
-                >
-                    Thêm ca mới
-                </Button>
-                {selectedRowKeys.length > 0 && (
-                <Popconfirm
-                    title="Xóa các cấu hình được chọn?"
-                    description="Bạn có chắc chắn muốn xóa các ca đã chọn?"
-                    onConfirm={() => handleBulkDelete()}
-                    okText="Xóa"
-                    cancelText="Hủy"
-                >
+                <Space>
                     <Button
                         type="primary"
-                        danger
-                        style={{ marginLeft: 8 }}
-                        icon={<DeleteOutlined />}
+                        icon={<PlusOutlined />}
+                        onClick={() => handleOpenModal()}
                     >
-                        Xóa đã chọn
+                        Thêm ca mới
                     </Button>
-                </Popconfirm>
-                )}
+                    {selectedRowKeys.length > 0 && (
+                    <Popconfirm
+                        title="Xóa các cấu hình được chọn?"
+                        description="Bạn có chắc chắn muốn xóa các ca đã chọn?"
+                        onConfirm={() => handleBulkDelete()}
+                        okText="Xóa"
+                        cancelText="Hủy"
+                    >
+                        <Button
+                            type="primary"
+                            danger
+                            icon={<DeleteOutlined />}
+                        >
+                            Xóa đã chọn
+                        </Button>
+                    </Popconfirm>
+                    )}
+                    <ExcelExportButton
+                        data={allConfigurations}
+                        columns={excelColumns}
+                        fileName={`cau-hinh-ca-${dayjs().format('YYYY-MM-DD')}`}
+                        title="DANH SÁCH CẤU HÌNH CA"
+                        description={`Xuất ngày ${dayjs().format('DD/MM/YYYY')}`}
+                    />
+                </Space>
             </div>
 
-            <Table
+            <ServerSideTable
                 columns={columns}
-                dataSource={configurations}
+                fetchData={fetchData}
                 rowKey="id"
-                loading={loading}
-                rowSelection={{
-                    selectedRowKeys,
-                    onChange: (keys: React.Key[]) => setSelectedRowKeys(keys),
-                }}
+                defaultSortField="created_at"
+                defaultSortOrder="desc"
+                defaultPageSize={10}
+                refreshTrigger={refreshTrigger}
                 scroll={{ x: "max-content" }}
-                pagination={{
-                    pageSize: 10,
-                    showSizeChanger: true,
-                    showTotal: (total) => `Tổng ${total} ca`
+                bordered
+                onSelectionChange={(keys, rows) => {
+                    setSelectedRowKeys(keys);
+                    setSelectedRows(rows);
                 }}
             />
 

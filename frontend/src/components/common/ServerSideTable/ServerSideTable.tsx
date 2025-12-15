@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from 'react';
-import { Table, Input, Button, Space, Select, DatePicker } from 'antd';
+import { Table, Input, Button, Space, Select, DatePicker, Slider, InputNumber } from 'antd';
 import { SearchOutlined, FilterOutlined } from '@ant-design/icons';
 import type { ColumnType, SortOrder } from 'antd/es/table/interface';
 import dayjs from 'dayjs';
@@ -42,6 +42,7 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
     handleFilterChange,
     handleSearchChange,
     handleSelectionChange,
+    // expose reload via onDataChange prop
   } = useServerSideTable<T>({
     fetchData,
     defaultSortField,
@@ -49,6 +50,16 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
     defaultPageSize,
     refreshTrigger,
   });
+  // call onDataChange when data or pagination changes so parent can access current page data
+  React.useEffect(() => {
+    if (typeof (props as any).onDataChange === 'function') {
+      try {
+        (props as any).onDataChange(data, tableState.pagination);
+      } catch (err) {
+        console.warn('onDataChange callback error', err);
+      }
+    }
+  }, [data, tableState.pagination, props]);
 
   const createFilterDropdown = (
     column: ServerSideColumnType<T>,
@@ -186,9 +197,9 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
         const parsedRange = rangeValue?.split(',');
 
         return ({ confirm }: any) => {
-          let localDates: [dayjs.Dayjs, dayjs.Dayjs] | null = parsedRange 
+          let localDates: [dayjs.Dayjs, dayjs.Dayjs] | undefined = parsedRange 
             ? [dayjs(parsedRange[0]), dayjs(parsedRange[1])] 
-            : null;
+            : undefined;
 
           return (
             <div style={{ padding: 8, minWidth: 280 }}>
@@ -197,7 +208,13 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
                 format="DD/MM/YYYY"
                 defaultValue={localDates}
                 onChange={(dates) => {
-                  localDates = dates as [dayjs.Dayjs, dayjs.Dayjs] | null;
+                  // dates can be NoUndefinedRangeValueType<Dayjs> | null where items may be null;
+                  // ensure both items are non-null Dayjs before assigning to localDates
+                  if (!dates || !Array.isArray(dates) || dates.length !== 2 || !dates[0] || !dates[1]) {
+                    localDates = undefined;
+                  } else {
+                    localDates = [dates[0] as dayjs.Dayjs, dates[1] as dayjs.Dayjs];
+                  }
                 }}
                 allowClear
               />
@@ -220,6 +237,117 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
                       handleSearchChange(rangeKey, value);
                     } else {
                       handleSearchChange(rangeKey, undefined);
+                    }
+                    confirm();
+                  }}
+                >
+                  Tìm
+                </Button>
+              </Space>
+            </div>
+          );
+        };
+      }
+      case 'number': {
+        // Provide a range Slider (two handles) and synced InputNumber fields.
+        return ({ confirm }: any) => {
+          const rangeKey = `${searchField}_range`;
+          const currentRange = tableState.searchValues[rangeKey];
+
+          // allow column to specify min/max hints (optional)
+          const colMin = (column as any).min ?? 0;
+          // default max = 10,000,000,000 (10 billion)
+          const colMax = (column as any).max ?? 10000000000;
+
+          let localMin: number | undefined = undefined;
+          let localMax: number | undefined = undefined;
+          if (currentRange && typeof currentRange === 'string' && currentRange.includes(',')) {
+            const parts = currentRange.split(',');
+            const a = parts[0] ? Number(parts[0]) : undefined;
+            const b = parts[1] ? Number(parts[1]) : undefined;
+            if (!isNaN(a as number)) localMin = a as number;
+            if (!isNaN(b as number)) localMax = b as number;
+          }
+
+          // Internal mutable refs captured by closures
+          let _min = localMin ?? colMin;
+          let _max = localMax ?? colMax;
+
+          // Accept number | number[] to match Antd Slider onChange typing and handle range arrays.
+          const onSliderChange = (vals: number | number[]) => {
+            if (Array.isArray(vals)) {
+              _min = vals[0];
+              _max = vals[1];
+            } else {
+              // single value (shouldn't happen for range Slider) - keep both ends equal
+              _min = vals;
+              _max = vals;
+            }
+          };
+
+          const onMinInput = (val: number | null) => {
+            _min = val ?? colMin;
+            if (_min > _max) _max = _min;
+          };
+
+          const onMaxInput = (val: number | null) => {
+            _max = val ?? colMax;
+            if (_max < _min) _min = _max;
+          };
+
+          return (
+            <div style={{ padding: 8, minWidth: 320 }}>
+              <div style={{ padding: '0 8px 12px 8px' }}>
+                <Slider
+                  range
+                  min={colMin}
+                  max={colMax}
+                  defaultValue={[_min as number, _max as number]}
+                  onChange={onSliderChange}
+                  tooltip={{ formatter: (v: number | undefined) => v === undefined || v === null ? '' : String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',') }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+                <InputNumber
+                  style={{ width: '50%' }}
+                  min={colMin}
+                  max={colMax}
+                  defaultValue={_min}
+                  onChange={onMinInput}
+                  formatter={(v) => v === null || v === undefined ? '' : String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                  parser={(v: string | undefined) => v ? Number(v.replace(/,/g, '')) : NaN}
+                />
+                <span style={{ width: 8, textAlign: 'center' }}>—</span>
+                <InputNumber
+                  style={{ width: '50%' }}
+                  min={colMin}
+                  max={colMax}
+                  defaultValue={_max}
+                  onChange={onMaxInput}
+                  formatter={(v) => v === null || v === undefined ? '' : String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                  parser={(v: string | undefined) => v ? Number(v.replace(/,/g, '')) : NaN}
+                />
+              </div>
+              <Space>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    handleSearchChange(rangeKey, undefined);
+                    confirm();
+                  }}
+                >
+                  Reset
+                </Button>
+                <Button
+                  type="primary"
+                  size="small"
+                  onClick={() => {
+                    const minVal = _min !== undefined && _min !== null ? String(_min) : '';
+                    const maxVal = _max !== undefined && _max !== null ? String(_max) : '';
+                    if (minVal === '' && maxVal === '') {
+                      handleSearchChange(rangeKey, undefined);
+                    } else {
+                      handleSearchChange(rangeKey, `${minVal},${maxVal}`);
                     }
                     confirm();
                   }}
@@ -297,8 +425,9 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
     });
   }, [processedColumns, tableState.pagination.current, tableState.pagination.pageSize]);
 
+
   const handleTableChange = (pagination: any, _filters: any, sorter: any) => {
-    console.log('[ServerSideTable] onChange pagination:', pagination, 'sorter:', sorter);
+    
     if (pagination.current !== tableState.pagination.current ||
         pagination.pageSize !== tableState.pagination.pageSize) {
       handlePaginationChange(pagination.current, pagination.pageSize);
@@ -356,7 +485,7 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
   return (
     // Debug: log the pagination props passed to AntD Table on each render
     <>
-      {console.log('[ServerSideTable] render pagination prop ->', tableState.pagination)}
+      
       <Table<T>
         {...restProps}
         columns={finalColumns}

@@ -2,11 +2,13 @@
 
 import React, { useState } from 'react';
 import dayjs from 'dayjs';
-import { Button, Form, Col, Row, Descriptions, theme, Table, Grid } from 'antd';
+import { Button, Form, Col, Row, Descriptions, theme, Table, Grid, Space } from 'antd';
 import { LeftOutlined, RightCircleFilled } from '@ant-design/icons';
 import type { DescriptionsProps } from 'antd';
 import { useRouter } from 'next/navigation';
 import constantConfig from '@/config/constant';
+import { ExcelExportButton } from '@/components/common/ExcelExport';
+import type { ExcelColumn } from '@/components/common/ExcelExport';
 
 // Use shared constants to avoid mapping mismatches
 const { Gender, Relationship } = constantConfig;
@@ -193,9 +195,29 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
         </Col>
       </Row>
       <br /><br />
-      <Descriptions
-        title="Thông tin gia đình"
-      />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <Descriptions
+          title="Thông tin gia đình"
+        />
+        <ExcelExportButton
+          data={userData?.profileFamily?.map((member: FamilyMember, index: number) => ({ 
+            name: member.fullName, 
+            relationship: getRelationshipLabel(member.relationship),
+            birthday: member.birthday ? dayjs(member.birthday).format('DD/MM/YYYY') : '-',
+            dependent: member.dependent ? 'Có' : 'Không'
+          })) || []}
+          columns={[
+            { title: 'Họ và tên', dataIndex: 'name', width: 30 },
+            { title: 'Quan hệ', dataIndex: 'relationship', width: 20 },
+            { title: 'Ngày sinh', dataIndex: 'birthday', width: 15 },
+            { title: 'Phụ thuộc', dataIndex: 'dependent', width: 15 }
+          ]}
+          fileName={`thong-tin-gia-dinh-${userData?.username || 'user'}-${dayjs().format('YYYY-MM-DD')}`}
+          title="THÔNG TIN GIA ĐÌNH"
+          description={`Nhân viên: ${userData?.fullName || ''} - Xuất ngày ${dayjs().format('DD/MM/YYYY')}`}
+          buttonSize="small"
+        />
+      </div>
       <Table
         dataSource={userData?.profileFamily?.map((member: FamilyMember, index: number) => ({ key: index, ...member })) || []}
         columns={columns}

@@ -1,17 +1,22 @@
 "use client";
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { Button, Space, message, Tooltip, Tag } from 'antd';
-import { CheckOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { Button, Space, message, Tooltip, Tag, DatePicker, Modal } from 'antd';
+import viVN from 'antd/locale/vi_VN';
+import { CheckOutlined, CheckCircleOutlined, CalendarOutlined } from '@ant-design/icons';
 import { ServerSideTable } from '@/components/common/ServerSideTable';
 import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
 import { attendanceService } from '@/service/attendanceService';
 import dayjs from 'dayjs';
 
+const { MonthPicker } = DatePicker;
+
 const AttendanceApprovalManagement: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [selectedRows, setSelectedRows] = useState<any[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [selectedMonth, setSelectedMonth] = useState(dayjs());
+  const [approvingMonth, setApprovingMonth] = useState(false);
 
   const handleApproveAttendance = async (monthlyAttendanceId: number) => {
     try {
@@ -45,6 +50,30 @@ const AttendanceApprovalManagement: React.FC = () => {
     } catch (err: any) {
       message.error(err.message || 'Lỗi khi duyệt các bản ghi đã chọn');
     }
+  };
+
+  const handleApproveAllMonth = async () => {
+    const monthStr = selectedMonth.format('YYYY-MM');
+    const monthDisplay = selectedMonth.format('MM/YYYY');
+    
+    Modal.confirm({
+      title: 'Xác nhận duyệt tất cả',
+      content: `Bạn có chắc chắn muốn duyệt TẤT CẢ bảng chấm công (chưa duyệt) của tháng ${monthDisplay}?`,
+      okText: 'Duyệt tất cả',
+      cancelText: 'Hủy',
+      onOk: async () => {
+        setApprovingMonth(true);
+        try {
+          const result = await attendanceService.approveAllByMonth(monthStr);
+          message.success(`Đã duyệt ${result.approved} bảng chấm công cho tháng ${monthDisplay}`);
+          setRefreshTrigger(prev => prev + 1);
+        } catch (err: any) {
+          message.error(err.message || 'Lỗi khi duyệt tất cả bảng chấm công');
+        } finally {
+          setApprovingMonth(false);
+        }
+      }
+    });
   };
 
   // Wrapper to normalize paging keys for backend
@@ -302,13 +331,38 @@ const AttendanceApprovalManagement: React.FC = () => {
 
   return (
     <div style={{ padding: '24px' }}>
-      {selectedRowKeys.length > 0 && (
-        <div style={{ marginBottom: 16 }}>
-          <Button type="primary" onClick={handleApproveSelected}>
-            <CheckOutlined /> Duyệt bảng chấm công ({selectedRowKeys.length})
+      <Space style={{ marginBottom: 16 }} wrap align="center">
+        <DatePicker 
+          value={selectedMonth}
+          onChange={(date) => date && setSelectedMonth(date)}
+          picker="month"
+          placeholder="Chọn tháng"
+          format="MM/YYYY"
+          style={{ width: 150 }}
+          locale={viVN}
+        />
+
+        <Tooltip title="Duyệt tất cả bảng chấm công (chưa duyệt) của tháng đã chọn">
+          <Button
+            type="primary"
+            icon={<CalendarOutlined />}
+            onClick={handleApproveAllMonth}
+            loading={approvingMonth}
+            style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+          >
+            Duyệt tất cả {selectedMonth.format('MM/YYYY')}
           </Button>
-        </div>
-      )}
+        </Tooltip>
+
+        <Button 
+          type="default" 
+          onClick={handleApproveSelected} 
+          disabled={selectedRowKeys.length === 0}
+          style={{ marginLeft: 8 }}
+        >
+          <CheckOutlined /> Duyệt đã chọn {selectedRowKeys.length > 0 ? `(${selectedRowKeys.length})` : ''}
+        </Button>
+      </Space>
       
       <ServerSideTable
         columns={columns}
@@ -318,7 +372,11 @@ const AttendanceApprovalManagement: React.FC = () => {
         defaultSortOrder="desc"
         defaultPageSize={20}
         showSelection={true}
-        rowSelection={rowSelection}
+        onSelectionChange={(keys, rows) => {
+          setSelectedRowKeys(keys);
+          setSelectedRows(rows);
+        }}
+        getCheckboxProps={(record: any) => ({ disabled: Boolean(record?.isApproved), name: `select-${record?.id}` })}
         refreshTrigger={refreshTrigger}
         scroll={{ x: 'max-content' }}
         bordered

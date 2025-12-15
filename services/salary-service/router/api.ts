@@ -64,12 +64,10 @@ router.get('/users/:userId/payslips', authenticateToken, payslipCtrl.getPayslips
 router.get('/payslips/me', authenticateToken, payslipCtrl.getMyPayslips as express.RequestHandler);
 router.get('/auth/payslips/me', authenticateToken, payslipCtrl.getMyPayslips as express.RequestHandler);
 
-// Public/admin: list payslips paginated with optional month filter
-// GET /payslips?month=YYYY-MM&page=0&pageSize=25
+// Paginated list with full server-side search/filter/sort (replaces old listPayslipsByMonth)
+// GET /payslips?page=1&pageSize=25&allMonths=true&sort=created_at&order=desc&fullName=John
 router.get('/payslips', authenticateToken, payslipCtrl.listPaginatedPayslips as express.RequestHandler);
 
-// Admin: list payslips for a given year+month (for debugging/inspection)
-router.get('/payslips/admin/list-by-month', authenticateToken, payslipCtrl.listPayslipsByMonth as express.RequestHandler);
 // Get single payslip by id (enriched with user and department)
 router.get('/payslips/:id', authenticateToken, payslipCtrl.getPayslipById as express.RequestHandler);
 

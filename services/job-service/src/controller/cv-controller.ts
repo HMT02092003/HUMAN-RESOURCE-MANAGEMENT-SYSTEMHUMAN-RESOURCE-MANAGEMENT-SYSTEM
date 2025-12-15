@@ -198,10 +198,15 @@ export const CvController = {
 
   listCvs: (async (req: Request, res: Response): Promise<any> => {
     try {
-      const { page = '1', pageSize = '10', sortField = 'uploaded_at', sortOrder = 'desc' } = req.query;
+      // Accept multiple naming conventions from frontend: page/pageSize OR page/limit, sortField OR sort, sortOrder OR order
+      let { page = '1', pageSize = '10', sortField = 'uploaded_at', sortOrder = 'desc' } = req.query as any;
+      // Fallbacks
+      if (!pageSize && req.query.limit) pageSize = String(req.query.limit);
+      if (!sortField && req.query.sort) sortField = String(req.query.sort);
+      if (!sortOrder && req.query.order) sortOrder = String(req.query.order);
 
       const pageNum = Math.max(1, parseInt(page as string, 10));
-      const pageSizeNum = Math.min(100, Math.max(1, parseInt(pageSize as string, 10)));
+      const pageSizeNum = Math.min(100, Math.max(1, parseInt(String(pageSize), 10)));
       const offset = (pageNum - 1) * pageSizeNum;
 
       const validSortFields = ['cv_id', 'user_id', 'file_path', 'uploaded_at'];
@@ -245,19 +250,56 @@ export const CvController = {
 
       console.log(`User has ${scopeResult.scope} scope access to ${allowedUserIds.length} users:`, allowedUserIds);
 
-      // Query CVs - auth-service đã xử lý scope, chỉ whereIn allowedUserIds
-      const rows = await knex('cvs')
-        .select('cv_id', 'user_id', 'file_path', 'original_text', 'uploaded_at')
-        .whereIn('user_id', allowedUserIds)
-        .orderBy(safeSortField, safeSortOrder)
-        .limit(pageSizeNum)
-        .offset(offset);
 
-      // Đếm tổng số với cùng filter
-      const countResult = await knex('cvs')
-        .whereIn('user_id', allowedUserIds)
-        .count('* as count')
-        .first();
+      // Build query with optional filters from query params
+      const filePathFilter = (req.query.file_path as string) || (req.query.filePath as string) || undefined;
+      const uploadedFrom = (req.query.uploaded_atFrom as string) || (req.query.uploadedAtFrom as string) || undefined;
+      const uploadedTo = (req.query.uploaded_atTo as string) || (req.query.uploadedAtTo as string) || undefined;
+      const fullNameFilter = (req.query.fullName as string) || (req.query.full_name as string) || undefined;
+
+      // Start building base query
+      let baseQuery = knex('cvs').select('cv_id', 'user_id', 'file_path', 'original_text', 'uploaded_at').whereIn('user_id', allowedUserIds);
+
+      // Apply file_path text search (ILIKE)
+      if (filePathFilter) {
+        baseQuery = baseQuery.whereILike('file_path', `%${filePathFilter}%`);
+      }
+
+      // Apply uploaded_at range filters
+      if (uploadedFrom && uploadedTo) {
+        baseQuery = baseQuery.whereBetween('uploaded_at', [uploadedFrom, uploadedTo]);
+      } else if (uploadedFrom) {
+        baseQuery = baseQuery.where('uploaded_at', '>=', uploadedFrom);
+      } else if (uploadedTo) {
+        baseQuery = baseQuery.where('uploaded_at', '<=', uploadedTo);
+      }
+
+      // If searching by user full name, filter allowedUserIds down by querying AuthService for those users and matching names
+      if (fullNameFilter) {
+        try {
+          const usersInfo = await AuthService.getUsersByIds(allowedUserIds, tokenToSend);
+          const matching = (usersInfo || []).filter((u: any) => {
+            const name = (u.fullName || '').toString().toLowerCase();
+            return name.includes(fullNameFilter.toLowerCase());
+          }).map((u: any) => u.id);
+
+          if (matching.length === 0) {
+            return res.json({ success: true, data: [], pagination: { page: pageNum, pageSize: pageSizeNum, total: 0, totalPages: 0 }, total: 0 });
+          }
+
+          baseQuery = baseQuery.whereIn('user_id', matching);
+        } catch (err) {
+          console.error('Failed to filter users by name:', err);
+        }
+      }
+
+      // Count total with same filters
+      const countQuery = baseQuery.clone().clearSelect().count('* as count').first();
+
+      // Apply ordering / limit / offset to baseQuery for rows
+      const rows = await baseQuery.orderBy(safeSortField, safeSortOrder).limit(pageSizeNum).offset(offset);
+
+      const countResult = await countQuery;
       const total = parseInt(String(countResult?.count || 0), 10);
 
       // Lấy thông tin user

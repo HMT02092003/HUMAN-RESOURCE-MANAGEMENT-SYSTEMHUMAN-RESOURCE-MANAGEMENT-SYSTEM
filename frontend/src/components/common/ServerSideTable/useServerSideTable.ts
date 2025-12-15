@@ -47,10 +47,15 @@ export function useServerSideTable<T = any>(options: UseServerSideTableOptions<T
     const params: TableQueryParams = {
       page: pagination.current,
       limit: pagination.pageSize,
+      // include pageSize for backends that expect that param name
+      pageSize: pagination.pageSize,
     };
 
     if (sorter.field) params.sort = sorter.field;
     if (sorter.order) params.order = sorter.order;
+    // include sortField/sortOrder for backends that expect those names
+    if (sorter.field) params.sortField = sorter.field;
+    if (sorter.order) params.sortOrder = sorter.order;
 
     Object.entries(filters).forEach(([key, value]) => {
       if (value !== undefined && value !== null && value !== '') {
@@ -85,7 +90,6 @@ export function useServerSideTable<T = any>(options: UseServerSideTableOptions<T
       setLoading(true);
       try {
         const params = buildQueryParams();
-        console.log('[useServerSideTable] Loading data with params:', params);
         const response: any = await fetchData(params);
 
         if (!isMountedRef.current) return;
@@ -118,8 +122,7 @@ export function useServerSideTable<T = any>(options: UseServerSideTableOptions<T
             total: typeof total === 'number' ? total : 0,
           },
         }));
-        // log completion with the page that was requested
-        console.log('[useServerSideTable] loadData complete ->', { page: params.page, pageSize: params.limit, total });
+        // loadData complete
       } catch (error: any) {
         if (isMountedRef.current) {
           message.error(error?.message || 'Lỗi khi tải dữ liệu');
@@ -132,9 +135,9 @@ export function useServerSideTable<T = any>(options: UseServerSideTableOptions<T
     }, 150);
   }, [buildQueryParams, fetchData]);
 
-  // Log full tableState when it changes for debugging
+  // tableState change (no-op logging in production)
   useEffect(() => {
-    console.log('[useServerSideTable] tableState changed ->', tableState);
+    // intentionally left blank
   }, [tableState]);
 
   useEffect(() => {
@@ -149,9 +152,8 @@ export function useServerSideTable<T = any>(options: UseServerSideTableOptions<T
     refreshTrigger,
   ]);
 
-  // Debug: log pagination changes to help diagnose pagination issues
   useEffect(() => {
-    console.log('[useServerSideTable] pagination state changed ->', tableState.pagination);
+    // pagination state changed
   }, [tableState.pagination.current, tableState.pagination.pageSize, tableState.pagination.total]);
 
   useEffect(() => {
@@ -165,7 +167,6 @@ export function useServerSideTable<T = any>(options: UseServerSideTableOptions<T
   }, []);
 
   const handlePaginationChange = useCallback((page: number, pageSize: number) => {
-    console.log('[useServerSideTable] handlePaginationChange ->', { page, pageSize });
     setTableState(prev => {
       const next = {
         ...prev,
@@ -175,8 +176,7 @@ export function useServerSideTable<T = any>(options: UseServerSideTableOptions<T
           pageSize,
         },
       } as TableState;
-      // immediate log of the computed next state to help debugging
-      console.log('[useServerSideTable] setTableState next.pagination ->', next.pagination);
+      // computed next state
       return next;
     });
   }, []);

@@ -2,13 +2,13 @@ import { Request, Response } from 'express';
 import { ShiftService } from '../services/ShiftService';
 import CheckScopeService from '../services/CheckScopeService';
 import { getDecodedToken } from '../utils/decode-token';
-import { getDecodedToken } from '../utils/decode-token';
+
 
 export class ShiftController {
   // ========== SHIFT MANAGEMENT (Quản lý mẫu ca) ==========
 
   /**
-   * Lấy danh sách mẫu ca
+   * Lấy danh sách mẫu ca (không phân trang)
    * GET /shifts
    */
   static async getAllShifts(_req: Request, res: Response) {
@@ -22,6 +22,28 @@ export class ShiftController {
       });
     } catch (error: any) {
       console.error('Error in getAllShifts:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Lỗi khi lấy danh sách ca'
+      });
+    }
+  }
+
+  /**
+   * Lấy danh sách mẫu ca có phân trang, tìm kiếm, sắp xếp
+   * GET /shifts/paginated
+   */
+  static async getAllShiftsPaginated(req: Request, res: Response) {
+    try {
+      const result = await ShiftService.getAllShiftsPaginated(req.query);
+
+      res.json({
+        success: true,
+        ...result,
+        message: 'Lấy danh sách ca thành công'
+      });
+    } catch (error: any) {
+      console.error('Error in getAllShiftsPaginated:', error);
       res.status(500).json({
         success: false,
         message: error.message || 'Lỗi khi lấy danh sách ca'
@@ -646,7 +668,7 @@ export class ShiftController {
       console.log('[ShiftController] getSchedulesForApproval - has Authorization header?', !!req.headers['authorization']);
       
       // Check scope
-      const scopeResult = await CheckScopeService.checkUserScope('ShiftApproval', token);
+      const scopeResult = await CheckScopeService.checkUserScope('shiftApproval', token);
       
       if (!scopeResult.hasAccess) {
         return res.status(403).json({
@@ -658,8 +680,18 @@ export class ShiftController {
       // Get current user ID from token to exclude their own schedules
       let currentUserId: number | null = null;
       try {
-        const decoded = getDecodedToken(token.replace('Bearer ', ''));
-        currentUserId = decoded?.id || null;
+        const normalizedToken = token.replace('Bearer ', '').trim();
+        if (normalizedToken) {
+          const decoded = getDecodedToken(normalizedToken) as any;
+          if (decoded) {
+            // Try 'id' first, then 'sub' — use bracket access because decoded may be an index-signature object
+            const maybeId = decoded['id'] ?? decoded['sub'];
+            if (maybeId != null) {
+              const parsed = parseInt(String(maybeId), 10);
+              currentUserId = isNaN(parsed) ? null : parsed;
+            }
+          }
+        }
       } catch (e) {
         console.warn('[ShiftController] Could not decode token for current user ID', e);
       }
@@ -777,7 +809,7 @@ export class ShiftController {
       // Handle department search - find users by department and filter
       if (filters.searchDepartment) {
         try {
-          const allUsers = await CheckScopeService.getUsersByIds(scopedUserIds.length > 0 ? scopedUserIds : []);
+          const allUsers = await CheckScopeService.getUsersByIds(scopedUserIds.length > 0 ? scopedUserIds : ([] as number[]));
           const deptUsers = allUsers.filter((u: any) => 
             u.department?.name?.toLowerCase().includes(filters.searchDepartment.toLowerCase())
           );
@@ -798,7 +830,7 @@ export class ShiftController {
       // Handle chevron search - find users by chevron and filter
       if (filters.searchChevron) {
         try {
-          const allUsers = await CheckScopeService.getUsersByIds(scopedUserIds.length > 0 ? scopedUserIds : []);
+          const allUsers = await CheckScopeService.getUsersByIds(scopedUserIds.length > 0 ? scopedUserIds : ([] as number[]));
           const chevronUsers = allUsers.filter((u: any) => 
             u.chevron?.name?.toLowerCase().includes(filters.searchChevron.toLowerCase())
           );
@@ -825,7 +857,7 @@ export class ShiftController {
       );
 
       // Fetch user details
-      const userIds = Array.from(new Set(result.data.map((s: any) => Number(s.user_id)).filter((n: number) => !isNaN(n))));
+      const userIds: number[] = Array.from(new Set(result.data.map((s: any) => Number(s.user_id)).filter((n: number) => !isNaN(n))));
       let users: any[] = [];
       try {
         if (userIds.length > 0) {
@@ -905,7 +937,7 @@ export class ShiftController {
       const approvedBy = (req as any).user?.id;
       
       // Check scope
-      const scopeResult = await CheckScopeService.checkUserScope('ShiftApproval', token);
+      const scopeResult = await CheckScopeService.checkUserScope('shiftApproval', token);
       
       if (!scopeResult.hasAccess) {
         return res.status(403).json({
@@ -977,7 +1009,7 @@ export class ShiftController {
       const approvedBy = (req as any).user?.id;
       
       // Check scope
-      const scopeResult = await CheckScopeService.checkUserScope('ShiftApproval', token);
+      const scopeResult = await CheckScopeService.checkUserScope('shiftApproval', token);
       
       if (!scopeResult.hasAccess) {
         return res.status(403).json({

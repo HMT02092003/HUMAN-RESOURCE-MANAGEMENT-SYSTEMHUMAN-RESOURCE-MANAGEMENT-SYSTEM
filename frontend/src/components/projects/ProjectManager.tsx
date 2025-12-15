@@ -1,13 +1,16 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Space, Tag, Progress, Avatar, Modal, message } from 'antd';
-import type { ColumnsType } from 'antd/es/table';
+import { Button, Space, Tag, Progress, Avatar, Modal, message } from 'antd';
 import { PlusOutlined, EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { ServerSideTable } from '@/components/common/ServerSideTable';
+import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
 import { useRouter } from 'next/navigation';
 import { Project } from '@/types/project';
 import dayjs from 'dayjs';
 import jobService from '@/service/jobService';
+import { ExcelExportButton } from '@/components/common/ExcelExport';
+import type { ExcelColumn } from '@/components/common/ExcelExport';
 
 const statusColors = {
   planning: 'blue',
@@ -27,17 +30,13 @@ const statusLabels = {
 
 const ProjectManager: React.FC = () => {
   const router = useRouter();
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [excelData, setExcelData] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(10);
-  const [total, setTotal] = useState<number>(0);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [selectedRows, setSelectedRows] = useState<any[]>([]);
 
-  useEffect(() => {
-    loadProjects(1, 10);
-  }, []);
+  // ServerSideTable will trigger fetchData; no immediate load here
 
   const getInitials = (name: string) => {
     if (!name) return '';
@@ -46,15 +45,16 @@ const ProjectManager: React.FC = () => {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
 
-  const loadProjects = async (page: number, pageSize: number) => {
+  // fetchData will be used by ServerSideTable
+  const fetchData = async (params: any) => {
     setLoading(true);
     try {
-      // Backend expects 0-based page index. Convert 1-based `page` (from Table) to 0-based for API.
-      const apiPage = Math.max(0, (page || 1) - 1);
-      const resp: any = await jobService.getAllProjectByScope({ page: apiPage, pageSize });
-      // resp may be an axios response: resp.data
+      // Backend expects 0-based page index. Convert 1-based `page` to 0-based for API if necessary
+      const apiParams = { ...params };
+      if (apiParams.page && apiParams.page >= 1) apiParams.page = Math.max(0, apiParams.page - 1);
+
+      const resp: any = await jobService.getAllProjectByScope(apiParams);
       const body = resp?.data ?? resp;
-      // backend sample: { success: true, data: { results: [...], total }, scope }
       const payload = body?.data ?? body;
 
       let items: any[] = [];
@@ -74,9 +74,7 @@ const ProjectManager: React.FC = () => {
         totalCount = items.length;
       }
 
-      // Map backend shape to frontend Project type using only backend fields (no user enrichment)
       const mapped = (items || []).map((p: any) => {
-        // Normalize manager: backend may return manager_id as an object or primitive
         const rawManager = p.manager_id ?? p.manager;
         let managerMapped: any = { id: null, name: '', avatar: null, role: '', email: '' };
         if (rawManager) {
@@ -92,7 +90,6 @@ const ProjectManager: React.FC = () => {
           }
         }
 
-        // Normalize members: each member may have user_id as an object or primitive
         const mappedMembers = (p.members || []).map((m: any) => {
           const raw = m.user_id ?? m.userId ?? m;
           let id: any = null;
@@ -105,7 +102,6 @@ const ProjectManager: React.FC = () => {
               id = raw.id ?? null;
               name = raw.fullName ?? raw.full_name ?? raw.name ?? raw.username ?? raw.email ?? `User ${id ?? ''}`;
               avatar = raw.avatar ?? raw.avatar_url ?? raw.profile_picture ?? raw.identificationPhoto ?? null;
-              // prefer member.role (project role) but fallback to user role/position
               role = role || raw.role || raw.position || '';
             } else {
               id = raw;
@@ -142,12 +138,18 @@ const ProjectManager: React.FC = () => {
         } as Project;
       });
 
-      setProjects(mapped);
-      setTotal(totalCount);
-      setCurrentPage(page);
-      setPageSize(pageSize);
-    } catch (error) {
-      message.error('Không thể tải danh sách dự án');
+      return {
+        data: mapped,
+        total: totalCount,
+        pagination: {
+          page: payload?.pagination?.page ?? (params.page ?? 1),
+          pageSize: payload?.pagination?.pageSize ?? (params.limit ?? params.pageSize ?? 10),
+          total: totalCount
+        }
+      };
+    } catch (err) {
+      console.error('fetchData projects error', err);
+      return { data: [], total: 0, pagination: { page: params.page ?? 1, pageSize: params.limit ?? params.pageSize ?? 10, total: 0 } };
     } finally {
       setLoading(false);
     }
@@ -195,14 +197,7 @@ const ProjectManager: React.FC = () => {
     });
   };
 
-  // Table row selection configuration
-  const rowSelection = {
-    selectedRowKeys,
-    onChange: (newSelectedRowKeys: React.Key[], newSelectedRows: any[]) => {
-      setSelectedRowKeys(newSelectedRowKeys);
-      setSelectedRows(newSelectedRows);
-    }
-  };
+  // Table row selection handled via ServerSideTable's onSelectionChange
 
   const handleDelete = (project: Project) => {
     Modal.confirm({
@@ -211,9 +206,15 @@ const ProjectManager: React.FC = () => {
       okText: 'Xóa',
       okType: 'danger',
       cancelText: 'Hủy',
-      onOk: () => {
-        message.success('Đã xóa dự án thành công!');
-        loadProjects(currentPage, pageSize);
+      async onOk() {
+        try {
+          await jobService.deleteProject([project.id]);
+          message.success('Đã xóa dự án thành công!');
+          setRefreshTrigger((s) => s + 1);
+        } catch (err) {
+          console.error('Failed to delete project', err);
+          message.error('Xóa dự án thất bại');
+        }
       }
     });
   };
@@ -225,13 +226,15 @@ const ProjectManager: React.FC = () => {
     }).format(amount);
   };
 
-  const columns: ColumnsType<Project> = [
+  const columns: ServerSideColumnType<Project>[] = [
     {
       title: 'Mã dự án',
       dataIndex: 'id',
       key: 'id',
       fixed: 'left',
-      sorter: (a, b) => a.id.localeCompare(b.id),
+      sorter: true,
+      filterType: 'text',
+      searchField: 'id'
     },
     {
       title: 'Tên dự án',
@@ -239,6 +242,8 @@ const ProjectManager: React.FC = () => {
       key: 'name',
       fixed: 'left',
       ellipsis: true,
+      filterType: 'text',
+      searchField: 'name',
       render: (text, record) => (
         <div>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>{text}</div>
@@ -250,11 +255,9 @@ const ProjectManager: React.FC = () => {
       title: 'Trạng thái',
       dataIndex: 'status',
       key: 'status',
-      filters: Object.keys(statusLabels).map(key => ({
-        text: statusLabels[key as keyof typeof statusLabels],
-        value: key
-      })),
-      onFilter: (value, record) => record.status === value,
+      filterType: 'select',
+      filterOptions: Object.keys(statusLabels).map(key => ({ value: key, label: statusLabels[key as keyof typeof statusLabels] })),
+      searchField: 'status',
       render: (status: Project['status']) => (
         <Tag color={statusColors[status]}>
           {statusLabels[status]}
@@ -265,7 +268,9 @@ const ProjectManager: React.FC = () => {
       title: 'Tiến độ',
       dataIndex: 'progress',
       key: 'progress',
-      sorter: (a, b) => a.progress - b.progress,
+      sorter: true,
+      filterType: 'number',
+      searchField: 'progress',
       render: (progress: number) => (
         <Progress
           percent={progress}
@@ -279,6 +284,8 @@ const ProjectManager: React.FC = () => {
       // don't use a path that returns a primitive; render gets full record to be robust
       dataIndex: 'manager',
       key: 'manager',
+      filterType: 'text',
+      searchField: 'manager',
       render: (_manager, record) => {
         // manager can come in different shapes depending on backend:
         // - record.manager (normalized object)
@@ -331,20 +338,26 @@ const ProjectManager: React.FC = () => {
       title: 'Khách hàng',
       dataIndex: 'customer',
       key: 'customer',
-      ellipsis: true
+      ellipsis: true,
+      filterType: 'text',
+      searchField: 'customer'
     },
     {
       title: 'Ngân sách',
       dataIndex: 'budget',
       key: 'budget',
-      sorter: (a, b) => (a.budget || 0) - (b.budget || 0),
+      sorter: true,
+      filterType: 'number',
+      searchField: 'budget',
       render: (budget: number) => formatCurrency(budget || 0)
     },
     {
       title: 'Đã chi',
       dataIndex: 'spent',
       key: 'spent',
-      sorter: (a, b) => (a.spent || 0) - (b.spent || 0),
+      sorter: true,
+      filterType: 'number',
+      searchField: 'spent',
       render: (spent: number, record) => (
         <span style={{
           color: (spent || 0) > (record.budget || 0) ? '#ff4d4f' : '#52c41a'
@@ -356,6 +369,8 @@ const ProjectManager: React.FC = () => {
     {
       title: 'Thời gian',
       key: 'dateRange',
+      filterType: 'dateRange',
+      searchField: 'startDate',
       render: (_, record) => (
         <div style={{ fontSize: 12 }}>
           <div>{dayjs(record.startDate).format('DD/MM/YYYY')}</div>
@@ -394,47 +409,53 @@ const ProjectManager: React.FC = () => {
     },
   ];
 
+  const excelColumns: ExcelColumn[] = [
+    { title: 'Mã dự án', dataIndex: 'id', width: 15 },
+    { title: 'Tên dự án', dataIndex: 'name', width: 30 },
+    { title: 'Mô tả', dataIndex: 'description', width: 40 },
+    { title: 'Trạng thái', dataIndex: 'status', width: 20, render: (val: any) => statusLabels[val as keyof typeof statusLabels] || val },
+    { title: 'Tiến độ (%)', dataIndex: 'progress', width: 15 },
+    { title: 'Ngày bắt đầu', dataIndex: 'start_date', width: 15, render: (val: any) => val ? dayjs(val).format('DD/MM/YYYY') : '' },
+    { title: 'Ngày kết thúc', dataIndex: 'end_date', width: 15, render: (val: any) => val ? dayjs(val).format('DD/MM/YYYY') : '' }
+  ];
+
   return (
     <div>
-      <div style={{ marginBottom: 16, display: 'flex'}}>
-        <div>
-          <Button
-            icon={<PlusOutlined />}
-            type="primary"
-            onClick={handleCreate}
-          >
-            Tạo dự án mới
+      <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Button
+          icon={<PlusOutlined />}
+          type="primary"
+          onClick={handleCreate}
+        >
+          Tạo dự án mới
+        </Button>
+        {selectedRowKeys && selectedRowKeys.length > 0 && (
+          <Button danger ghost onClick={deleteSelected} style={{ borderColor: '#ff4d4f' }}>
+            Xóa ({selectedRowKeys.length})
           </Button>
-        </div>
-        &nbsp;&nbsp;&nbsp;
-        <div>
-          {selectedRowKeys && selectedRowKeys.length > 0 ? (
-            <Button danger ghost onClick={deleteSelected} style={{ marginRight: 8, borderColor: '#ff4d4f' }}>
-              Xóa ({selectedRowKeys.length})
-            </Button>
-          ) : null}
-        </div>
+        )}
+        <ExcelExportButton
+          data={excelData}
+          columns={excelColumns}
+          fileName={`danh-sach-du-an-${dayjs().format('YYYY-MM-DD')}`}
+          title="DANH SÁCH DỰ ÁN"
+          description={`Xuất ngày ${dayjs().format('DD/MM/YYYY')}`}
+        />
       </div>
-
-      <Table<Project>
-        rowSelection={rowSelection}
+      <ServerSideTable<Project>
         columns={columns}
-        dataSource={projects}
-        rowKey={(record) => record.id}
-        loading={loading}
-        pagination={{
-          current: currentPage,
-          pageSize: pageSize,
-          total: total,
-          showSizeChanger: true,
-          pageSizeOptions: ['10', '20', '50', '100'],
-          showTotal: (total) => `Tổng ${total} dự án`,
+        fetchData={fetchData}
+        rowKey={(record) => String(record.id)}
+        showSelection
+        onSelectionChange={(keys, rows) => {
+          setSelectedRowKeys(keys);
+          setSelectedRows(rows);
         }}
-        onChange={(pagination) => {
-          const nextPage = pagination.current || 1;
-          const nextSize = pagination.pageSize || 10;
-          loadProjects(nextPage, nextSize);
+        onDataChange={(data, pagination) => {
+          setExcelData(data as Project[]);
         }}
+        defaultPageSize={10}
+        refreshTrigger={refreshTrigger}
         bordered
         scroll={{ x: 1800 }}
       />

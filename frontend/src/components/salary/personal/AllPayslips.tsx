@@ -1,12 +1,16 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { DatePicker, Button, Table, message, Space, Input, Modal, Descriptions, Row, Col } from 'antd';
+import { DatePicker, Button, message, Space, Input, Modal, Descriptions, Row, Col } from 'antd';
 import type { InputRef } from 'antd';
 import type { ColumnType } from 'antd/es/table';
+import ServerSideTable from '@/components/common/ServerSideTable/ServerSideTable';
+import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
 import dayjs from 'dayjs';
 import salaryService from '@/service/salaryService';
 import { SearchOutlined } from '@ant-design/icons';
+import { ExcelExportButton } from '@/components/common/ExcelExport';
+import type { ExcelColumn } from '@/components/common/ExcelExport';
 
 const { MonthPicker } = DatePicker;
 
@@ -48,41 +52,9 @@ const AllPayslips: React.FC = () => {
 
   const searchInput = useRef<InputRef>(null);
 
-  useEffect(() => { fetchPayslips(); }, [page, pageSize]);
+  // ServerSideTable will drive data loading through its fetchData prop below.
 
-  const fetchPayslips = async (m?: any) => {
-    setLoading(true);
-    try {
-      // By default fetch all payslips for the authenticated user (no month filter).
-      // Only pass the month filter when an explicit month is provided (user selected).
-      const params: any = {};
-      if (m) params.month = (m || month).format('YYYY-MM');
-      const res = Object.keys(params).length ? await salaryService.getMyPayslips(params) : await salaryService.getMyPayslips();
-      if (res.success) {
-  const all = res.data || [];
-        setTotal(all.length || 0);
-        // client-side pagination for the current user's rows
-        const start = page * pageSize;
-        const pageRows = all.slice(start, start + pageSize);
-        setData(pageRows);
-      } else {
-        setData([]);
-        message.error(res.message || 'Lỗi khi tải danh sách bảng lương');
-      }
-    } catch (err: any) {
-      console.error(err);
-      message.error(err?.message || 'Lỗi khi tải danh sách bảng lương');
-    } finally { setLoading(false); }
-  };
-
-  const handleMonthChange = (d: any) => { if (!d) { setMonth(dayjs()); setPage(0); fetchPayslips(); return; } setMonth(d); setPage(0); fetchPayslips(d); };
-
-  const handleTableChange = (pagination: any) => {
-    const newPage = (pagination.current || 1) - 1;
-    const newPageSize = pagination.pageSize || pageSize;
-    setPage(newPage);
-    setPageSize(newPageSize);
-  };
+  const handleMonthChange = (d: any) => { if (!d) { setMonth(dayjs()); return; } setMonth(d); };
 
   const formatCurrency = (text: string | number | undefined | null) => {
     if (text === null || text === undefined) return '0';
@@ -109,24 +81,23 @@ const AllPayslips: React.FC = () => {
     } finally { setDetailLoading(false); }
   };
 
-  const columns: ColumnType<PayslipDataType>[] = [
+  const columns: ServerSideColumnType<PayslipDataType>[] = [
     { title: 'Tên nhân viên', dataIndex: 'user', key: 'user', render: (_v, r:any) => r.fullName || r.username || 'N/A' },
     { title: 'Phòng ban', dataIndex: ['department','name'], key: 'department', render: (_,_r:any) => {
         // department may be present in several shapes depending on backend: prefer record.department.name, then record.user.department.name, then departmentName
         return _r?.department?.name ?? _r?.user?.department?.name ?? _r?.departmentName ?? 'N/A';
       } },
-    { title: 'Năm', dataIndex: 'year', key: 'year' },
-    { title: 'Tháng', dataIndex: 'month', key: 'month' },
-    { title: 'Lương cơ bản', dataIndex: 'base_salary', key: 'base_salary', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Phụ cấp', dataIndex: 'allowances', key: 'allowances', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Lương tăng ca', dataIndex: 'overtime_pay', key: 'overtime_pay', render: (t)=> formatCurrency(t) + ' VNĐ' }, 
-    { title: 'Tổng lương (Chưa khấu trừ)', dataIndex: 'gross_salary', key: 'gross_salary', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'BHXH', dataIndex: 'social_insurance', key: 'social_insurance', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'BHYT', dataIndex: 'health_insurance', key: 'health_insurance', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Thuế TNCN', dataIndex: 'personal_income_tax', key: 'personal_income_tax', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Tổng khấu trừ', dataIndex: 'total_deductions', key: 'total_deductions', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Tổng tiền phạt', dataIndex: 'penalty_total', key: 'penalty_total', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Lương thực nhận', dataIndex: 'net_salary', key: 'net_salary', render: (t)=> <b style={{ color: 'green' }}>{formatCurrency(t) + ' VNĐ'}</b> },
+    { title: 'Kỳ', dataIndex: 'month', key: 'month', searchField: 'month', filterType: 'dateRange', render: (_,_r:any) => `${_r.year || ''}-${String(_r.month || '').padStart(2,'0')}` },
+    { title: 'Lương cơ bản', dataIndex: 'base_salary', key: 'base_salary', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'Phụ cấp', dataIndex: 'allowances', key: 'allowances', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'Lương tăng ca', dataIndex: 'overtime_pay', key: 'overtime_pay', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' }, 
+    { title: 'Tổng lương (Chưa khấu trừ)', dataIndex: 'gross_salary', key: 'gross_salary', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'BHXH', dataIndex: 'social_insurance', key: 'social_insurance', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'BHYT', dataIndex: 'health_insurance', key: 'health_insurance', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'Thuế TNCN', dataIndex: 'personal_income_tax', key: 'personal_income_tax', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'Tổng khấu trừ', dataIndex: 'total_deductions', key: 'total_deductions', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'Tổng tiền phạt', dataIndex: 'penalty_total', key: 'penalty_total', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'Lương thực nhận', dataIndex: 'net_salary', key: 'net_salary', filterType: 'number', min: 0, max: 10000000000, render: (t)=> <b style={{ color: 'green' }}>{formatCurrency(t) + ' VNĐ'}</b> },
     { title: 'Ghi chú', dataIndex: 'notes', key: 'notes' },
     { title: 'Ngày tạo', dataIndex: 'created_at', key: 'created_at', render: (t)=> formatDate(t) },
     { title: 'Ngày cập nhật', dataIndex: 'updated_at', key: 'updated_at', render: (t)=> formatDate(t) },
@@ -138,15 +109,54 @@ const AllPayslips: React.FC = () => {
     ) },
   ];
 
+  const excelColumns: ExcelColumn[] = [
+    { title: 'Năm', dataIndex: 'year', width: 10 },
+    { title: 'Tháng', dataIndex: 'month', width: 10 },
+    { title: 'Lương cơ bản', dataIndex: 'base_salary', width: 15 },
+    { title: 'Phụ cấp', dataIndex: 'allowances', width: 15 },
+    { title: 'Lương tăng ca', dataIndex: 'overtime_pay', width: 15 },
+    { title: 'Tổng lương', dataIndex: 'gross_salary', width: 15 },
+    { title: 'BHXH', dataIndex: 'social_insurance', width: 15 },
+    { title: 'BHYT', dataIndex: 'health_insurance', width: 15 },
+    { title: 'Thuế TNCN', dataIndex: 'personal_income_tax', width: 15 },
+    { title: 'Tổng khấu trừ', dataIndex: 'total_deductions', width: 15 },
+    { title: 'Tổng tiền phạt', dataIndex: 'penalty_total', width: 15 },
+    { title: 'Lương thực nhận', dataIndex: 'net_salary', width: 15 },
+    { title: 'Ghi chú', dataIndex: 'notes', width: 30 }
+  ];
+
   return (
     <div style={{ padding: 24 }}>
-      <Table
+      <div style={{ marginBottom: 16 }}>
+        <ExcelExportButton
+          data={data}
+          columns={excelColumns}
+          fileName={`phieu-luong-cua-toi-${dayjs().format('YYYY-MM-DD')}`}
+          title="PHIẾU LƯƠNG CỦA TÔI"
+          description={`Xuất ngày ${dayjs().format('DD/MM/YYYY')}`}
+        />
+      </div>
+
+      <ServerSideTable
         columns={columns}
-        dataSource={data}
-        loading={loading}
         rowKey={(r:any) => r.id || `${r.user_id}-${r.year}-${r.month}`}
-        pagination={{ current: page + 1, pageSize, total, showSizeChanger: true }}
-        onChange={(pagination) => handleTableChange(pagination)}
+        fetchData={async (params: any) => {
+          // Forward table params to server-side paginated endpoint so backend applies filters/sort/pagination.
+          // useServerSideTable already converts *_range -> fieldFrom/fieldTo; pass params through.
+          try {
+            const res = await salaryService.listMyPayslipsPaginated(params);
+            if (!res.success) return { data: [], total: 0, page: params.page || 1, pageSize: params.limit || 10 };
+            return {
+              data: res.data || [],
+              total: typeof res.total === 'number' ? res.total : (res.data ? res.data.length : 0),
+              page: params.page || res.page || 1,
+              pageSize: params.limit || params.pageSize || res.pageSize || 10,
+            };
+          } catch (e: any) {
+            return { data: [], total: 0, page: params.page || 1, pageSize: params.limit || 10 };
+          }
+        }}
+        pagination={{ pageSize: pageSize, showSizeChanger: true }}
         scroll={{ x: 'max-content' }}
       />
 
