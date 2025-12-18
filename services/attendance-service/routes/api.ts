@@ -4,7 +4,6 @@
  */
 import { Router, Request, Response } from 'express';
 import { authenticateToken } from '../src/middleware/authenticateToken';
-import AttendanceCalculationService from '../src/services/attendance/AttendanceCalculationService';
 import { 
   getAllMonthlyAttendance, 
   getUserMonthlyFull, 
@@ -34,7 +33,7 @@ const wrap = (fn: any) => {
 };
 
 // Middleware to disable cache for shift/schedule endpoints (prevent 304 Not Modified)
-const noCache = (req: Request, res: Response, next: any) => {
+const noCache = (_req: Request, res: Response, next: any) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   res.set('Pragma', 'no-cache');
   res.set('Expires', '0');
