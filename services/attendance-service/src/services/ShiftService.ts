@@ -248,8 +248,20 @@ export class ShiftService {
     // Get total count before pagination
     const total = await query.clone().clearOrder().resultSize();
 
+    // Debug log
+    try {
+      const sql = query.clone().toKnexQuery().toString();
+      console.log('[ShiftService.getUserSchedulesPaginated] Query SQL:', sql);
+      console.log('[ShiftService.getUserSchedulesPaginated] userId:', userId, 'filters:', JSON.stringify(filters));
+      console.log('[ShiftService.getUserSchedulesPaginated] Total count:', total);
+    } catch (e) {
+      // ignore
+    }
+
     // Apply pagination
     const schedules = await applyPagination(query, page, limit);
+
+    console.log('[ShiftService.getUserSchedulesPaginated] Returned rows:', schedules.length);
 
     return {
       data: schedules,

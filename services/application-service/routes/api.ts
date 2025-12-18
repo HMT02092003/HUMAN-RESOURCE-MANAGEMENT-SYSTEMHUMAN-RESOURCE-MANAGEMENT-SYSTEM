@@ -63,6 +63,9 @@ router.get('/applications/stats', authenticateToken, ApplicationController.getSt
 // Lấy đơn từ theo khoảng thời gian
 router.get('/applications/date-range', authenticateToken, ApplicationController.getByDateRange);
 
+// Duyệt nhiều đơn cùng lúc - ĐẶT TRƯỚC :id route
+router.post('/applications/bulk-approve', authenticateToken, ApplicationController.bulkApprove);
+
 // Duyệt đơn từ - ĐẶT TRƯỚC :id route
 router.post('/applications/:id/approve', authenticateToken, ApplicationController.approve);
 

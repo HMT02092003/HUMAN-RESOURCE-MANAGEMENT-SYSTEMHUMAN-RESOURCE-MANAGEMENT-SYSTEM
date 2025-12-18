@@ -34,11 +34,9 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
     const [selectedRows, setSelectedRows] = useState<any[]>([]);
     const [detailModalVisible, setDetailModalVisible] = useState(false);
     const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(null);
-    const [approveModalVisible, setApproveModalVisible] = useState(false);
-    const [selectedApplication, setSelectedApplication] = useState<any>(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
-    const [approveForm] = Form.useForm();
     const [allApplications, setAllApplications] = useState<any[]>([]);
+    const [loading, setLoading] = useState(false);
 
     // Fetch all data for Excel export
     useEffect(() => {
@@ -117,10 +115,22 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
         setDetailModalVisible(true);
     };
 
-    const handleApproveClick = (record: any) => {
-        setSelectedApplication(record);
-        setApproveModalVisible(true);
-        approveForm.resetFields();
+    const handleApproveClick = async (record: any) => {
+        Modal.confirm({
+            title: 'Xác nhận duyệt đơn',
+            content: `Bạn có chắc chắn muốn duyệt đơn của ${record.userInfo?.fullName || 'nhân viên này'}?`,
+            okText: 'Duyệt',
+            cancelText: 'Hủy',
+            onOk: async () => {
+                try {
+                    await applicationService.approveApplication(record.id, {});
+                    message.success('Duyệt đơn từ thành công');
+                    setRefreshTrigger(prev => prev + 1);
+                } catch (error: any) {
+                    message.error(error.response?.data?.message || 'Duyệt đơn từ thất bại');
+                }
+            }
+        });
     };
 
     const handleRejectClick = (record: any) => {
@@ -142,17 +152,32 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
         });
     };
 
-    const handleApproveSubmit = async () => {
-        try {
-            const values = await approveForm.validateFields();
-            await applicationService.approveApplication(selectedApplication.id, values);
-            message.success('Duyệt đơn từ thành công');
-            setApproveModalVisible(false);
-            setSelectedApplication(null);
-            setRefreshTrigger(prev => prev + 1); // Trigger reload
-        } catch (error: any) {
-            message.error(error.response?.data?.message || 'Duyệt đơn từ thất bại');
+    const handleBulkApprove = async () => {
+        if (selectedRowKeys.length === 0) {
+            message.warning('Vui lòng chọn ít nhất một đơn để duyệt');
+            return;
         }
+
+        Modal.confirm({
+            title: 'Xác nhận duyệt hàng loạt',
+            content: `Bạn có chắc chắn muốn duyệt ${selectedRowKeys.length} đơn đã chọn?`,
+            okText: 'Duyệt tất cả',
+            cancelText: 'Hủy',
+            onOk: async () => {
+                try {
+                    setLoading(true);
+                    await applicationService.bulkApproveApplications(selectedRowKeys as number[]);
+                    message.success(`Đã duyệt thành công ${selectedRowKeys.length} đơn`);
+                    setSelectedRowKeys([]);
+                    setSelectedRows([]);
+                    setRefreshTrigger(prev => prev + 1);
+                } catch (error: any) {
+                    message.error(error.response?.data?.message || 'Duyệt hàng loạt thất bại');
+                } finally {
+                    setLoading(false);
+                }
+            }
+        });
     };
 
     // Define columns với ServerSideTable format
@@ -299,6 +324,8 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
                             <Button
                                 type="primary"
                                 icon={<CheckOutlined />}
+                                onClick={handleBulkApprove}
+                                loading={loading}
                                 style={{
                                     borderRadius: '8px',
                                     height: '48px',
@@ -355,7 +382,13 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
                 columns={columns}
                 fetchData={applicationService.getAllApplications}
                 rowKey="id"
-                rowSelection={rowSelection}
+                // Enable selection callbacks so checkboxes are active
+                onSelectionChange={(keys, rows) => {
+                    setSelectedRowKeys(keys);
+                    setSelectedRows(rows as any[]);
+                }}
+                // Only allow selecting pending applications (status === 0)
+                getCheckboxProps={(record: any) => ({ disabled: record.status !== 0 })}
                 defaultPageSize={10}
                 scroll={{ x: 'auto' }}
                 bordered
@@ -387,28 +420,6 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
                     setSelectedApplicationId(null);
                 }}
             />
-
-            {/* Approve Modal */}
-            <Modal
-                title="Duyệt đơn từ"
-                open={approveModalVisible}
-                onOk={handleApproveSubmit}
-                onCancel={() => {
-                    setApproveModalVisible(false);
-                    setSelectedApplication(null);
-                }}
-                okText="Duyệt"
-                cancelText="Hủy"
-            >
-                <Form form={approveForm} layout="vertical">
-                    <Form.Item
-                        label="Ghi chú (không bắt buộc)"
-                        name="note"
-                    >
-                        <Input.TextArea rows={4} placeholder="Nhập ghi chú..." />
-                    </Form.Item>
-                </Form>
-            </Modal>
         </div>
     );
 };

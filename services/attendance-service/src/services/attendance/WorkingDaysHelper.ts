@@ -61,7 +61,8 @@ export async function calculateStandardWorkingDaysInMonth(month: string): Promis
     }
   }
   
-  console.log(`📊 Tháng ${month}: Số công chuẩn = ${workingDays} ngày`);
+  // minimal informational log
+  console.log('Standard working days calculated', { month, workingDays });
   return workingDays;
 }
 

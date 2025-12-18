@@ -101,6 +101,19 @@
   background-color: #f5f5f5;
 }
 
+/* Lighter active/selected tile (was too dark blue) */
+.react-calendar__tile--active {
+  background: #cbe6ff !important;
+  color: rgba(0,0,0,0.85) !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+}
+
+.react-calendar__tile--active:enabled:hover,
+.react-calendar__tile--active:enabled:focus {
+  background: #b3ddff !important;
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
   .react-calendar__tile {

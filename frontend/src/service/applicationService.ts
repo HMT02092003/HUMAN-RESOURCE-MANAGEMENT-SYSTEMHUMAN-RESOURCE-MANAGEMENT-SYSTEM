@@ -145,6 +145,16 @@ const ApplicationService = {
     }
   },
 
+  // Duyệt nhiều applications cùng lúc
+  bulkApproveApplications: async (ids: number[]) => {
+    try {
+      const response = await api.post('/api/applications/bulk-approve', { ids });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
   // Từ chối application
   rejectApplication: async (id: number, rejectionData: RejectApplicationRequest) => {
     try {

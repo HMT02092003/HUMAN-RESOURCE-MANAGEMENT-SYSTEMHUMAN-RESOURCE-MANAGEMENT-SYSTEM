@@ -250,7 +250,7 @@ export class ShiftController {
     try {
       const userId = (req as any).user?.id;
       const page = parseInt(req.query['page'] as string) || 1;
-      const limit = parseInt(req.query['limit'] as string) || 10;
+      const limit = parseInt((req.query['limit'] || req.query['pageSize']) as string) || 10;
       // Accept multiple possible query param names from frontend
       const rawStatus = req.query['status'] as string | undefined;
       const rawStartDate = (req.query['startDate'] || req.query['dateFrom'] || req.query['date_from']) as string | undefined;

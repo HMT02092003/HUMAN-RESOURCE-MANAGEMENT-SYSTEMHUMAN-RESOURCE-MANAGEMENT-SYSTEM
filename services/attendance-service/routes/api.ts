@@ -4,6 +4,7 @@
  */
 import { Router, Request, Response } from 'express';
 import { authenticateToken } from '../src/middleware/authenticateToken';
+import AttendanceCalculationService from '../src/services/attendance/AttendanceCalculationService';
 import { 
   getAllMonthlyAttendance, 
   getUserMonthlyFull, 
@@ -20,6 +21,7 @@ import {
   updateSettingByKey,
   getSettingByKey,
 }  from '../src/controller/SettingsController.js';
+import { getHolidays } from '../src/controller/HolidayController';
 import { ShiftController } from '../src/controller/ShiftController.js';
 
 const router = Router();
@@ -29,6 +31,15 @@ const wrap = (fn: any) => {
   return (req: Request, res: Response, next: any) => {
     Promise.resolve(fn(req, res)).then(() => {}).catch(next);
   };
+};
+
+// Middleware to disable cache for shift/schedule endpoints (prevent 304 Not Modified)
+const noCache = (req: Request, res: Response, next: any) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.set('Surrogate-Control', 'no-store');
+  next();
 };
 
 // ===================================
@@ -112,7 +123,8 @@ router.post('/calculate-standard-working-days', (req: Request, res: Response, ne
       const { calculateStandardWorkingDaysInMonth } = await import('../src/services/attendance/WorkingDaysHelper');
       const standardWorkingDays = await calculateStandardWorkingDaysInMonth(month);
       
-      console.log(`✅ [attendance-service] Calculated standard working days for ${month}: ${standardWorkingDays}`);
+      // minimal log for operations invoked by other services
+      console.log('Calculated standard working days', { month, standardWorkingDays });
       
       res.json({ standardWorkingDays });
     } catch (error: any) {
@@ -124,7 +136,8 @@ router.post('/calculate-standard-working-days', (req: Request, res: Response, ne
 
 // GET/POST /api/attendance/monthly-summaries-by-scope - return monthly_attendances for users in scope
 const handleMonthlySummariesByScope = async (req: any, res: any) => {
-  console.log('🎯 Route hit: /monthly-summaries-by-scope', { method: req.method, query: req.query, body: req.body });
+  // Keep a concise trace of route usage without dumping request body
+  console.log('Route: /monthly-summaries-by-scope', { method: req.method, query: req.query });
   const controller = await import('@/controller/AttendanceController');
   return controller.getMonthlySummariesByScopeController(req, res as any);
 };
@@ -209,62 +222,32 @@ router.put('/shifts/:id', authenticateToken, wrap(ShiftController.updateShift));
 router.delete('/shifts/:id', authenticateToken, wrap(ShiftController.deleteShift));
 router.post('/shifts/bulk-delete', authenticateToken, wrap(ShiftController.bulkDeleteShifts));
 
-// Employee Schedules (Lịch đăng ký ca)
-router.get('/schedules/my', authenticateToken, wrap(ShiftController.getMySchedules));
-router.get('/schedules/my/paginated', authenticateToken, wrap(ShiftController.getMySchedulesPaginated));
-router.get('/schedules/pending', authenticateToken, wrap(ShiftController.getPendingSchedules));
-router.get('/schedules/stats/:year/:month', authenticateToken, wrap(ShiftController.getMonthlyStats));
+// Employee Schedules (Lịch đăng ký ca) - Apply noCache middleware to prevent 304 responses
+router.get('/schedules/my', noCache, authenticateToken, wrap(ShiftController.getMySchedules));
+router.get('/schedules/my/paginated', noCache, authenticateToken, wrap(ShiftController.getMySchedulesPaginated));
+router.get('/schedules/pending', noCache, authenticateToken, wrap(ShiftController.getPendingSchedules));
+router.get('/schedules/stats/:year/:month', noCache, authenticateToken, wrap(ShiftController.getMonthlyStats));
 // Schedule Approval Management (static routes) should be defined before '/schedules/:id' to avoid
 // Express treating 'approval' as a dynamic :id parameter.
-router.get('/schedules/approval', authenticateToken, wrap(ShiftController.getSchedulesForApproval));
-router.post('/schedules/approve', authenticateToken, wrap(ShiftController.bulkApproveSchedules));
-router.post('/schedules/approve-month', authenticateToken, wrap(ShiftController.approveMonthSchedules));
-router.post('/schedules/delete', authenticateToken, wrap(ShiftController.bulkDeleteSchedules));
+router.get('/schedules/approval', noCache, authenticateToken, wrap(ShiftController.getSchedulesForApproval));
+router.post('/schedules/approve', noCache, authenticateToken, wrap(ShiftController.bulkApproveSchedules));
+router.post('/schedules/approve-month', noCache, authenticateToken, wrap(ShiftController.approveMonthSchedules));
+router.post('/schedules/delete', noCache, authenticateToken, wrap(ShiftController.bulkDeleteSchedules));
 
 // Dynamic schedule route (by id)
-router.get('/schedules/:id', authenticateToken, wrap(ShiftController.getScheduleById));
-router.post('/schedules', authenticateToken, wrap(ShiftController.createSchedule));
-router.post('/schedules/bulk', authenticateToken, wrap(ShiftController.bulkCreateSchedules));
-router.put('/schedules/:id', authenticateToken, wrap(ShiftController.updateSchedule));
-router.delete('/schedules/:id', authenticateToken, wrap(ShiftController.cancelSchedule));
-router.post('/schedules/:id/approve', authenticateToken, wrap(ShiftController.approveSchedule));
-router.post('/schedules/:id/reject', authenticateToken, wrap(ShiftController.rejectSchedule));
+router.get('/schedules/:id', noCache, authenticateToken, wrap(ShiftController.getScheduleById));
+router.post('/schedules', noCache, authenticateToken, wrap(ShiftController.createSchedule));
+router.post('/schedules/bulk', noCache, authenticateToken, wrap(ShiftController.bulkCreateSchedules));
+router.put('/schedules/:id', noCache, authenticateToken, wrap(ShiftController.updateSchedule));
+router.delete('/schedules/:id', noCache, authenticateToken, wrap(ShiftController.cancelSchedule));
+router.post('/schedules/:id/approve', noCache, authenticateToken, wrap(ShiftController.approveSchedule));
+router.post('/schedules/:id/reject', noCache, authenticateToken, wrap(ShiftController.rejectSchedule));
 
 // ===================================
 // HOLIDAYS ROUTES
 // ===================================
 router.get('/holidays', authenticateToken, async (req: Request, res: Response) => {
-  try {
-    const { year, month } = req.query;
-    const HolidayModel = (await import('@/Models/HolidayModel')).default;
-    
-    let query = HolidayModel.query();
-    
-    if (year && month) {
-      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-      const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
-      query = query.where(function() {
-        this.whereBetween('start_date', [startDate, endDate])
-          .orWhereBetween('end_date', [startDate, endDate])
-          .orWhere(function() {
-            this.where('start_date', '<=', startDate).andWhere('end_date', '>=', endDate);
-          });
-      });
-    }
-    
-    const holidays = await query.orderBy('start_date', 'asc');
-    
-    res.json({
-      success: true,
-      data: holidays
-    });
-  } catch (error: any) {
-    console.error('❌ Error fetching holidays:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Không thể lấy danh sách ngày lễ'
-    });
-  }
+  await getHolidays(req, res);
 });
 
 export default router;

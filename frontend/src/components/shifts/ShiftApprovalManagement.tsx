@@ -136,6 +136,8 @@ const ShiftApprovalManagement: React.FC = () => {
             await shiftService.approveShiftRegistration(id);
             message.success('Duyệt đơn đăng ký thành công');
             setRefreshTrigger(prev => prev + 1);
+            // Notify other components (e.g., the user's calendar/list) to refresh
+            try { window.dispatchEvent(new CustomEvent('shifts:updated', { detail: { ids: [id] } })); } catch (e) {}
         } catch (error: any) {
             message.error(error.response?.data?.message || 'Duyệt đơn thất bại');
         }
@@ -146,6 +148,7 @@ const ShiftApprovalManagement: React.FC = () => {
             await shiftService.rejectShiftRegistration(id);
             message.success('Từ chối đơn đăng ký thành công');
             setRefreshTrigger(prev => prev + 1);
+            try { window.dispatchEvent(new CustomEvent('shifts:updated', { detail: { ids: [id] } })); } catch (e) {}
         } catch (error: any) {
             message.error(error.response?.data?.message || 'Từ chối đơn thất bại');
         }
@@ -163,6 +166,7 @@ const ShiftApprovalManagement: React.FC = () => {
             setSelectedRowKeys([]);
             setSelectedRows([]);
             setRefreshTrigger(prev => prev + 1);
+            try { window.dispatchEvent(new CustomEvent('shifts:updated', { detail: { ids: selectedRowKeys } })); } catch (e) {}
         } catch (error: any) {
             message.error(error.response?.data?.message || 'Duyệt hàng loạt thất bại');
         }
@@ -180,6 +184,7 @@ const ShiftApprovalManagement: React.FC = () => {
             setSelectedRowKeys([]);
             setSelectedRows([]);
             setRefreshTrigger(prev => prev + 1);
+            try { window.dispatchEvent(new CustomEvent('shifts:updated', { detail: { ids: selectedRowKeys } })); } catch (e) {}
         } catch (error: any) {
             message.error(error.response?.data?.message || 'Từ chối hàng loạt thất bại');
         }
@@ -427,7 +432,12 @@ const ShiftApprovalManagement: React.FC = () => {
                 columns={columns}
                 fetchData={shiftService.getSchedulesForApproval}
                 rowKey="id"
-                rowSelection={rowSelection}
+                // enable selection behavior by providing callbacks/props
+                onSelectionChange={(keys, rows) => {
+                    setSelectedRowKeys(keys);
+                    setSelectedRows(rows as any[]);
+                }}
+                getCheckboxProps={(record: any) => ({ disabled: record.status !== 'pending', name: record.id })}
                 defaultPageSize={20}
                 scroll={{ x: 'auto' }}
                 bordered

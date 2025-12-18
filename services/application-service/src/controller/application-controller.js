@@ -1,10 +1,16 @@
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc.js';
+import timezone from 'dayjs/plugin/timezone.js';
 import { ApplicationModel } from '../Models/ApplicationModel.js';
 import { ApplicationStatus } from '../config/application-constants.js';
 import AuthService from '../service/AuthService.js';
 import CheckScopeService from '../service/CheckScopeService.js';
 import { deleteFiles } from '../middleware/upload.js';
 import axios from 'axios';
+
+// Extend dayjs với timezone plugin
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 // Sử dụng API Gateway thay vì gọi trực tiếp
 const API_GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://127.0.0.1:4000';
@@ -722,20 +728,38 @@ export class ApplicationController {
             return isInMonth;
           }
           
-          // ✨ Đối với đơn overtime, dùng date
-          if (app.type === 'overtime' && app.data && app.data.date) {
-            const otDate = new Date(app.data.date);
-            const isInMonth = otDate.getFullYear() === targetYear && 
-                              otDate.getMonth() + 1 === targetMonth;
-            if (isInMonth) {
-              console.log(`✅ overtime application in month ${targetYear}-${targetMonth}:`, {
-                id: app.id,
-                date: app.data.date,
-                startTime: app.data.startTime,
-                endTime: app.data.endTime
+          // ✨ Đối với đơn overtime, dùng overtimeDate hoặc date
+          if (app.type === 'overtime' && app.data) {
+            const otDateField = app.data.overtimeDate || app.data.date;
+            if (otDateField) {
+              // Convert UTC date sang timezone VN để lấy đúng ngày
+              // Ví dụ: "2025-12-15T17:00:00.000Z" (UTC) = 2025-12-16 00:00 (VN)
+              const otDateVN = dayjs(otDateField).tz('Asia/Ho_Chi_Minh');
+              const otYear = otDateVN.year();
+              const otMonth = otDateVN.month() + 1; // dayjs month is 0-indexed
+              const isInMonth = otYear === targetYear && otMonth === targetMonth;
+              
+              console.log(`🔍 [Filter OT] App ${app.id}:`, {
+                overtimeDateUTC: otDateField,
+                overtimeDateVN: otDateVN.format('YYYY-MM-DD HH:mm:ss'),
+                extractedYear: otYear,
+                extractedMonth: otMonth,
+                targetYear,
+                targetMonth,
+                isInMonth
               });
+              
+              if (isInMonth) {
+                console.log(`✅ overtime application in month ${targetYear}-${targetMonth}:`, {
+                  id: app.id,
+                  overtimeDate: app.data.overtimeDate,
+                  date: app.data.date,
+                  startTime: app.data.startTime,
+                  overtimeHours: app.data.overtimeHours
+                });
+              }
+              return isInMonth;
             }
-            return isInMonth;
           }
           
           // Đối với các loại đơn khác, dùng applicationDate hoặc createdAt
@@ -1223,6 +1247,70 @@ export class ApplicationController {
       res.status(400).json({
         success: false,
         message: error.message || 'Có lỗi xảy ra khi duyệt đơn từ',
+        timestamp: dayjs().format()
+      });
+    }
+  }
+
+  /**
+   * Duyệt nhiều đơn từ cùng lúc
+   * POST /applications/bulk-approve
+   * Body: { ids: number[] }
+   */
+  static async bulkApprove(req, res) {
+    try {
+      const { ids } = req.body;
+      const approvedBy = req.user?.id;
+
+      if (!approvedBy) {
+        return res.status(401).json({
+          success: false,
+          message: 'Người duyệt không được xác thực'
+        });
+      }
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Danh sách ID không hợp lệ'
+        });
+      }
+
+      console.log(`📝 Bulk approving ${ids.length} applications by user ${approvedBy}...`);
+
+      // Sử dụng Objection.js để update nhiều records cùng lúc
+      const updatedCount = await ApplicationModel.query()
+        .whereIn('id', ids)
+        .where('status', 0) // Chỉ approve các đơn đang pending
+        .patch({
+          status: 1, // approved
+          approvedBy: approvedBy,
+          approvedDate: new Date().toISOString()
+        });
+
+      if (updatedCount === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Không có đơn nào được duyệt. Vui lòng kiểm tra lại trạng thái đơn.'
+        });
+      }
+
+      console.log(`✅ Successfully approved ${updatedCount} applications`);
+
+      res.json({
+        success: true,
+        message: `Đã duyệt thành công ${updatedCount} đơn từ`,
+        data: {
+          approvedCount: updatedCount,
+          requestedCount: ids.length
+        },
+        timestamp: dayjs().format()
+      });
+    } catch (error) {
+      console.error('❌ Error in bulkApprove:', error);
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Có lỗi xảy ra khi duyệt đơn hàng loạt',
         timestamp: dayjs().format()
       });
     }

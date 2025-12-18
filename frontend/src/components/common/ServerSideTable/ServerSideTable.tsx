@@ -24,7 +24,10 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
     defaultSortField = 'created_at',
     defaultSortOrder = 'desc',
     defaultPageSize = 10,
-    showSelection = false,
+    // NOTE: make checkboxes visible by default for easier bulk actions discovery.
+    // They will be inert (disabled) unless the caller provides `onSelectionChange`
+    // or a custom `getCheckboxProps` to enable selection behavior.
+    showSelection = true,
     onSelectionChange,
     getCheckboxProps,
     refreshTrigger,
@@ -471,6 +474,16 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
     }
   };
 
+  // Determine effective checkbox props:
+  // - If parent passed `getCheckboxProps`, use it.
+  // - Else if parent provided `onSelectionChange`, enable selection with default (no disabled)
+  // - Else, render checkboxes but keep them disabled (inert) so they "do nothing" visually.
+  const effectiveGetCheckboxProps = getCheckboxProps
+    ? getCheckboxProps
+    : onSelectionChange
+    ? undefined
+    : (record: T) => ({ disabled: true });
+
   const rowSelection = showSelection
     ? {
         selectedRowKeys,
@@ -478,7 +491,7 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
           handleSelectionChange(keys, rows);
           onSelectionChange?.(keys, rows);
         },
-        getCheckboxProps,
+        getCheckboxProps: effectiveGetCheckboxProps as any,
       }
     : undefined;
 

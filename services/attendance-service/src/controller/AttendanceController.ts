@@ -85,6 +85,7 @@ export const getUserMonthlyFull = async (req: Request, res: Response) => {
         totalHours: Number(db.totalWorkHours || 0),
         averageHours: Number(db.averageWorkHours || 0),
         overtimeHours: Number(db.totalOvertimeHours || 0),
+        totalOvertimeHours: Number(db.totalOvertimeHours || 0),
         totalLatePenalty: Number(db.totalLatePenalty || 0),
         totalEarlyLeavePenalty: Number(db.totalEarlyLeavePenalty || 0),
         totalPenalty: Number(db.totalPenalty || 0),

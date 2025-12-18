@@ -232,10 +232,20 @@ export class MonthlyReportService {
       const earlyLeavePenalty = Number(record.earlyLeavePenalty ?? 0);
       const workHours = Number(record.dailyTotalWorkHours ?? record.workHours ?? record.totalHours ?? 0);
       
-      // Calculate effective OT working unit based on holiday/normal rate
-      const rawOtWorkingUnit = Number(record.otWorkingUnit ?? 0);
+      /**
+       * ✅ KHÔNG NHÂN HỆ SỐ NỮA - DB ĐÃ LƯU GIÁ TRỊ SAU KHI NHÂN RATE!
+       * 
+       * DB đã lưu otWorkingUnit là giá trị SAU KHI NHÂN HỆ SỐ rồi.
+       * Nếu nhân thêm 1 lần nữa sẽ bị sai (nhân 2 lần).
+       * 
+       * Lý do: Dữ liệu cũ hoặc AttendanceCalculationService đang lưu giá trị đã nhân rate.
+       * → Trả ra trực tiếp, KHÔNG nhân thêm!
+       */
+      const otWorkingUnit = Number(record.otWorkingUnit ?? 0); // ĐÃ bao gồm rate
+      const overtimeHours = Number(record.overtimeHours ?? 0); // ✨ Số giờ OT thực tế
       const isHolidayOT = Boolean(record.isHoliday || record.isPublicHoliday);
-      const effectiveOtWorkingUnit = rawOtWorkingUnit * (isHolidayOT ? holidayOtRate : normalOtRate);
+      // KHÔNG nhân rate nữa!
+      const effectiveOtWorkingUnit = otWorkingUnit;
 
       const isWorkDay = (record.isWorkingDay !== false) && !record.isHoliday;
       const isFuture = record.isFuture === true;
@@ -321,10 +331,14 @@ export class MonthlyReportService {
         lateArrivalPenalty,
         earlyLeavePenalty,
         dailyTotalWorkHours: workHours,
-        // ✅ Added otWorkingUnit for FE to display OT
+        // ✅ OT Working Units (ĐÃ bao gồm rate từ DB)
         dailyWorkingUnit: Number(record.dailyWorkingUnit ?? 0),
-        otWorkingUnit: rawOtWorkingUnit,
-        effectiveOtWorkingUnit, // Công OT đã nhân tỷ lệ (1.5x hoặc 3x)
+        otWorkingUnit, // Công OT (ĐÃ bao gồm rate từ DB)
+        effectiveOtWorkingUnit, // Alias của otWorkingUnit (cùng giá trị)
+        overtimeHours, // ✨ Số giờ làm thêm thực tế
+        // Backwards compatibility: include otMinutes (FE expects minutes) and otSalary if present
+        otMinutes: Number(record.otMinutes ?? Math.round((overtimeHours || 0) * 60)),
+        otSalary: Number(record.otSalary ?? 0),
         totalWorkingUnit: Number(record.totalWorkingUnit ?? 0)
       } : undefined;
 
@@ -458,7 +472,19 @@ export class MonthlyReportService {
       totalEffectiveOtWorkingUnits: 0
     };
 
+    // Ensure backwards-compatible alias for total overtime hours
+    if ((monthlyStats as any).overtimeHours !== undefined && (monthlyStats as any).totalOvertimeHours === undefined) {
+      (monthlyStats as any).totalOvertimeHours = (monthlyStats as any).overtimeHours;
+    }
+
     const [yearStr, monthStr] = (month || '').split('-');
+    
+    // Calculate total overtime hours from daily details for summary
+    const summaryTotalOvertimeHours = processedDailyDetails.reduce((sum: number, d: any) => {
+      const dayOvertimeHours = Number(d.attendanceData?.overtimeHours ?? 0);
+      return sum + dayOvertimeHours;
+    }, 0);
+
     const response = {
       success: true,
       data: {
@@ -483,7 +509,9 @@ export class MonthlyReportService {
             weekendDays,
             totalLateMinutes,
             totalEarlyLeaveMinutes,
-            onTimeDays
+            onTimeDays,
+            // Expose total overtime hours for frontend (compatibility)
+            totalOvertimeHours: Math.round(summaryTotalOvertimeHours * 100) / 100
           }
         }
       }
@@ -662,14 +690,23 @@ export class MonthlyReportService {
 
       // 6️⃣ Process attendance rows và tính toán
 
+      /**
+       * ✅ KHỞI TẠO CÁC BIẾN TỔNG HỢP THÁNG
+       * 
+       * - totalWorkHours: Tổng giờ làm việc thực tế
+       * - totalWorkingUnits: Tổng công (bao gồm cả OT, nghỉ phép, công tác)
+       * - totalOtWorkingUnits: Tổng công OT RAW (chưa nhân hệ số)
+       * - totalOvertimeHours: Tổng số giờ làm thêm thực tế (mới)
+       * - totalLatePenalty/totalEarlyLeavePenalty: Tổng tiền phạt
+       */
       let totalWorkHours = 0;
       let totalLateMinutes = 0;
       let totalEarlyLeaveMinutes = 0;
-      let totalWorkingUnits = 0; // ✨ Tổng công (bao gồm cả OT, nghỉ phép, công tác)
-      let totalOtWorkingUnits = 0; // ✨ Tổng công OT riêng biệt
+      let totalWorkingUnits = 0;
+      let totalOtWorkingUnits = 0;
+      let totalOvertimeHours = 0; // ✨ Tổng giờ OT thực tế
       let totalLatePenalty = 0;
       let totalEarlyLeavePenalty = 0;
-      // ✅ REMOVED: totalOvertimeMinutes (deprecated, calculate from totalOtWorkingUnits)
 
       let presentDays = 0;
       let lateDays = 0;
@@ -720,16 +757,17 @@ export class MonthlyReportService {
           
           // ✨ Lấy công từ calculation
           const dailyUnits = parseFloat((calc.totalWorkingUnit || 0).toString()); // Tổng công (bao gồm cả OT)
-          const otUnits = parseFloat((calc.otWorkingUnit || 0).toString()); // Công OT riêng
+          const otUnits = parseFloat((calc.otWorkingUnit || 0).toString()); // Công OT RAW
+          const otHours = parseFloat((calc.overtimeHours || 0).toString()); // ✨ Giờ OT thực tế
 
           totalWorkHours += workHours;
           totalLateMinutes += lateMin;
           totalEarlyLeaveMinutes += earlyMin;
           totalWorkingUnits += dailyUnits; // ✨ Cộng tổng công
-          totalOtWorkingUnits += otUnits; // ✨ Cộng công OT
+          totalOtWorkingUnits += otUnits; // ✨ Cộng công OT (RAW)
+          totalOvertimeHours += otHours; // ✨ Cộng giờ OT thực tế
           totalLatePenalty += latePenalty;
           totalEarlyLeavePenalty += earlyPenalty;
-          // ✅ REMOVED: totalOvertimeMinutes (deprecated)
 
           // ✨ Tổng số ngày đi làm = số ngày có chấm công
           const hasAttendance = !!(r.checkInTime || r.checkOutTime);
@@ -744,10 +782,10 @@ export class MonthlyReportService {
           totalLateMinutes += parseFloat(r.lateMinutes?.toString() || '0');
           totalEarlyLeaveMinutes += parseFloat(r.earlyDepartureMinutes?.toString() || '0');
           totalWorkingUnits += parseFloat(r.totalWorkingUnit?.toString() || '0'); // ✨ Dùng totalWorkingUnit thay vì dailyWorkingUnit
-          totalOtWorkingUnits += parseFloat(r.otWorkingUnit?.toString() || '0'); // ✨ Công OT
+          totalOtWorkingUnits += parseFloat(r.otWorkingUnit?.toString() || '0'); // ✨ Công OT (RAW)
+          totalOvertimeHours += parseFloat(r.overtimeHours?.toString() || '0'); // ✨ Giờ OT thực tế
           totalLatePenalty += parseFloat(r.lateArrivalPenalty?.toString() || '0');
           totalEarlyLeavePenalty += parseFloat(r.earlyLeavePenalty?.toString() || '0');
-          // ✅ REMOVED: totalOvertimeMinutes (deprecated, use totalOtWorkingUnits instead)
 
           const hasAttendance = !!(r.checkInTime && r.checkOutTime);
           if (hasAttendance && rowIsScheduledWorkDay && !isFuture) presentDays++;
@@ -891,17 +929,19 @@ export class MonthlyReportService {
 
       const averageWorkHours = presentDays > 0 ? Math.round((totalWorkHours / presentDays) * 100) / 100 : 0;
 
-      // ✨ Tiền phạt nghỉ không phép = (Lương / Số ngày làm việc trong tháng) * Số ngày nghỉ không phép
+      /**
+       * ✅ TÍNH TIỀN PHẠT NGHỈ KHÔNG PHÉP
+       * Công thức: (Lương cơ bản / Số ngày làm việc trong tháng) * Số ngày nghỉ không phép
+       */
       const salary = await SalaryService.fetchSalary(userId);
       const baseSalary = salary?.baseSalary ? parseFloat(salary.baseSalary.toString()) : 0;
-
-      // Dùng totalScheduledDays (tổng số ngày làm việc trong tháng) để tính lương ngày
       const dailySalary = totalScheduledDays > 0 ? baseSalary / totalScheduledDays : 0;
-      // Calculate penalty: dailySalary * unauthorizedAbsenceDays, rounded to integer (no decimals)
       const totalUnauthorizedAbsencePenalty = Math.round(dailySalary * unauthorizedAbsenceDaysFinal);
 
-      // ✨ Calculate overtime hours from working units (assume 8h per unit for display)
-      const totalOvertimeHours = Math.round(totalOtWorkingUnits * 8 * 100) / 100;
+      /**
+       * ✅ LƯU Ý: totalOvertimeHours đã được tính trong vòng lặp (cộng dồn từ calc.overtimeHours)
+       * KHÔNG cần tính lại từ totalOtWorkingUnits
+       */
 
       console.log(`\n📊 [attendance] Calculation summary for ${m}:`);
       console.log(`   - Total scheduled days: ${totalScheduledDays}`);

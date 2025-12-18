@@ -94,6 +94,16 @@ interface UserSalaryInfo {
   allowance?: number;
 }
 
+/**
+ * ✅ KẾT QUẢ TÍNH TOÁN CHẤM CÔNG
+ * 
+ * Các trường chính:
+ * - workHours: Tổng giờ làm việc thực tế (không bao gồm OT)
+ * - dailyWorkingUnit: Công cơ bản (không bao gồm OT)
+ * - otWorkingUnit: Công OT RAW (chưa nhân hệ số) = overtimeHours / 8
+ * - overtimeHours: Số giờ làm thêm thực tế (NEW)
+ * - totalWorkingUnit: Tổng công = dailyWorkingUnit + otWorkingUnit
+ */
 interface AttendanceCalculation {
   workHours: number;
   lateMinutes: number;
@@ -107,7 +117,8 @@ interface AttendanceCalculation {
   earlyLeavePenaltyAmount: number;
   dailyWorkingUnit: number; // Công cơ bản (không bao gồm OT)
   totalWorkingUnit: number; // Tổng công (bao gồm cả OT)
-  otWorkingUnit: number; // Công OT riêng
+  otWorkingUnit: number; // Công OT RAW (chưa nhân hệ số)
+  overtimeHours?: number; // ✨ Số giờ làm thêm thực tế
 }
 
 interface ApprovedLeaveApplication {
@@ -403,32 +414,55 @@ export class AttendanceCalculationService {
   }
 
   public static async getApprovedOvertimeApplication(userId: number, date: string): Promise<any | null> {
+    // Keep minimal logs here: call + result or error.
+    console.log('getApprovedOvertimeApplication called', { userId, date });
     try {
-      const response = await axios.get(`${process.env['APPLICATION_SERVICE_URL'] || 'http://localhost:4004'}/api/applications/user/${userId}/approved`, { params: { year: dayjs(date).year(), month: dayjs(date).month() + 1 } });
-      const applications = response.data.data || [];
+      const serviceUrl = process.env['APPLICATION_SERVICE_URL'] || 'http://localhost:4004';
+      const year = dayjs(date).year();
+      const month = dayjs(date).month() + 1;
+      const apiUrl = `${serviceUrl}/api/applications/user/${userId}/approved`;
+      console.log('Fetching approved applications', { apiUrl, year, month });
+
+      const response = await axios.get(apiUrl, { params: { year, month }, timeout: 10000 });
+      const applications = response.data?.data || [];
+      console.log('✅ API response:', { total: applications.length, status: response.status });
+
+      // Find the first matching approved overtime app by comparing dates in VN timezone
       const overtimeApp = applications.find((app: any) => {
-        if (app.type !== 'overtime') return false;
+        // Accept different representations of approved status (string 'approved' or numeric 1)
+        const isApprovedStatus = app.status === 'approved' || app.status === 1 || app.status === '1' || (typeof app.status === 'string' && app.status.toLowerCase() === 'approved');
+        
+        console.log(`🔍 Checking app ${app.id}:`, { type: app.type, status: app.status, isApprovedStatus });
+        
+        if (app.type !== 'overtime' || !isApprovedStatus) return false;
+        
         const appData = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
-        // Check both "date" and "overtimeDate" fields for compatibility
         const otDate = appData.overtimeDate || appData.date;
-        if (!otDate) return false;
-
-        // ✨ QUAN TRỌNG: So sánh chỉ phần ngày, không quan tâm timezone
-        // overtimeDate từ DB là UTC string (2025-12-11T17:00:00.000Z)
-        // Chỉ cần lấy phần YYYY-MM-DD mà không convert timezone
-        const normalizedOtDate = dayjs.utc(otDate).format('YYYY-MM-DD');
+        if (!otDate) {
+          console.log(`  ⚠️ App ${app.id}: No overtimeDate/date field`);
+          return false;
+        }
+        
+        const normalizedOtDate = dayjs(otDate).tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
         const normalizedCheckDate = dayjs(date).format('YYYY-MM-DD');
-
-        console.log(`🔍 Comparing OT dates: otDate=${otDate} -> ${normalizedOtDate}, checkDate=${date} -> ${normalizedCheckDate}`);
+        
+        console.log(`  📅 App ${app.id} date comparison:`, {
+          otDateUTC: otDate,
+          otDateVN: normalizedOtDate,
+          checkDate: normalizedCheckDate,
+          match: normalizedOtDate === normalizedCheckDate
+        });
+        
         return normalizedOtDate === normalizedCheckDate;
       });
-      console.log(`🔍 [getApprovedOvertimeApplication] userId=${userId}, date=${date}, found=${!!overtimeApp}`);
-      if (overtimeApp) {
-        console.log(`✅ OT App found:`, { id: overtimeApp.id, data: overtimeApp.data });
-      }
+
+      if (overtimeApp) console.log('Found OT app', { id: overtimeApp.id });
       return overtimeApp || null;
     } catch (error: any) {
-      console.error('Error fetching overtime applications:', error?.message || error);
+      console.error('Error fetching approved OT applications:', error?.message || error);
+      if (error?.response) {
+        console.error('Response status:', error.response.status);
+      }
       return null;
     }
   }
@@ -591,6 +625,7 @@ export class AttendanceCalculationService {
         dailyWorkingUnit: 0,
         totalWorkingUnit: 0,
         otWorkingUnit: 0,
+        overtimeHours: 0,
         standardHours
       };
     }
@@ -630,7 +665,8 @@ export class AttendanceCalculationService {
       earlyLeavePenaltyAmount: 0,
       dailyWorkingUnit: 0,
       totalWorkingUnit: 0,
-      otWorkingUnit: 0
+      otWorkingUnit: 0,
+      overtimeHours: 0
     };
 
     // Tính toán tiền phạt đi muộn ngay cả khi chưa có check-out
@@ -677,15 +713,18 @@ export class AttendanceCalculationService {
       console.log('- Work hours:', result.workHours);
 
       // Tính overtime nếu có đơn OT đã duyệt
-      console.log('🔍 OT Check:', {
-        hasApprovedOtEndTime: !!approvedOtEndTime,
-        approvedOtEndTime,
-        checkOutTime: checkOut.format('HH:mm:ss'),
-        expectedCheckOutTime: expectedCheckOut.format('HH:mm:ss'),
-        isAfterExpected: checkOut.isAfter(expectedCheckOut)
-      });
+      console.log('\n🔍 ===== BẮT ĐẦU TÍNH OT =====');
+      console.log('📋 Thông tin kiểm tra OT:');
+      console.log('  - Có approvedOtEndTime?:', !!approvedOtEndTime);
+      console.log('  - approvedOtEndTime:', approvedOtEndTime);
+      console.log('  - approvedOtStartTime:', approvedOtStartTime);
+      console.log('  - checkOutTime:', checkOut.format('HH:mm:ss'));
+      console.log('  - expectedCheckOutTime (hết giờ làm việc):', expectedCheckOut.format('HH:mm:ss'));
+      console.log('  - Checkout sau giờ làm việc?:', checkOut.isAfter(expectedCheckOut));
+      console.log('  - Ngày là holiday?:', isHoliday);
 
-      if (approvedOtEndTime && checkOut.isAfter(expectedCheckOut)) {
+      // ✨ FIX: Bỏ điều kiện checkOut.isAfter(expectedCheckOut) - chỉ cần có đơn OT đã duyệt là tính
+      if (approvedOtEndTime) {
         const approvedOtEnd = dayjs(approvedOtEndTime).tz('Asia/Ho_Chi_Minh');
 
         // ✨ Fallback: Nếu không có OT start time (do lỗi hoặc đơn cũ), dùng expectedCheckOut (hết giờ làm việc) làm mốc bắt đầu tính OT
@@ -697,42 +736,71 @@ export class AttendanceCalculationService {
         console.log('- Approved OT start:', approvedOtStart.format('YYYY-MM-DD HH:mm:ss'));
         console.log('- Approved OT end:', approvedOtEnd.format('YYYY-MM-DD HH:mm:ss'));
         console.log('- Check out:', checkOut.format('YYYY-MM-DD HH:mm:ss'));
-        console.log('- Is after OT start?', checkOut.isAfter(approvedOtStart));
-        console.log('- Is before/equal OT end?', checkOut.isSameOrBefore(approvedOtEnd));
 
-        // ✨ Chỉ tính OT nếu checkout nằm trong khung giờ OT đã duyệt
-        if (checkOut.isAfter(approvedOtStart) && checkOut.isSameOrBefore(approvedOtEnd)) {
-          // Tính OT từ OT start time, không phải từ expected checkout
-          result.otMinutes = checkOut.diff(approvedOtStart, 'minute');
+        /**
+         * ✅ LOGIC TÍNH OT (ƯU TIÊN CAO)
+         * 
+         * Điều kiện tính OT:
+         * - Phải có đơn OT đã duyệt (approvedOtEndTime có giá trị)
+         * - Checkout >= OT start time
+         * 
+         * Công thức tính:
+         * 1. Xác định effective OT end = MIN(checkout, registered OT end)
+         *    → Nếu checkout sớm hơn → tính đến checkout
+         *    → Nếu checkout muộn hơn → tính full OT đã đăng ký
+         * 
+         * 2. OT minutes = effectiveOtEnd - OT start
+         * 3. OT hours = OT minutes / 60
+         * 4. otWorkingUnit = OT hours / 8 (RAW - chưa nhân hệ số)
+         *    → Hệ số sẽ được nhân ở MonthlyReportService khi tổng hợp
+         */
+        if (checkOut.isAfter(approvedOtStart) || checkOut.isSame(approvedOtStart)) {
+          // Tính số phút OT thực tế: từ OT start đến MIN(checkout, OT end)
+          const effectiveOtEnd = checkOut.isBefore(approvedOtEnd) ? checkOut : approvedOtEnd;
+          result.otMinutes = effectiveOtEnd.diff(approvedOtStart, 'minute');
 
-          // ✨ Tính công OT thay vì tính lương OT
-          // Lấy tỷ lệ OT theo công từ settings
-          const otRateKey = isHoliday ? 'HolidayOvertimeRateInUnits' : 'OvertimeRateInUnits';
-          const otRateSetting = await SettingsService.getSettingValue(otRateKey);
-          const otRate = otRateSetting?.rate || (isHoliday ? 3.0 : 1.5);
-
-          // Tính công OT: (số giờ OT / 8) * tỉ lệ OT
+          // Tính số giờ OT (raw - chưa nhân hệ số)
           const otHours = result.otMinutes / 60;
-          result.otWorkingUnit = (otHours / 8) * otRate;
-          result.otSalary = 0; // Không tính lương OT riêng nữa
+          
+          // ✨ LƯU RAW OT WORKING UNIT (chưa nhân rate)
+          // Công OT = số giờ OT / 8 (1 ngày công)
+          // Rate sẽ được nhân ở MonthlyReportService để tránh nhân 2 lần
+          result.otWorkingUnit = otHours / 8;
+          result.overtimeHours = otHours; // ✨ Lưu số giờ OT thực tế
+          result.otSalary = 0; // Không tính lương OT riêng
 
-          console.log('⏰ Overtime calculation (units-based):');
-          console.log('- Is holiday:', isHoliday);
-          console.log('- OT rate (units):', otRate);
-          console.log('- OT minutes:', result.otMinutes);
-          console.log('- OT hours:', otHours.toFixed(2));
-          console.log('- OT working units:', result.otWorkingUnit.toFixed(4));
+          console.log('\n✅ ===== TÍNH OT THÀNH CÔNG =====');
+          console.log('⏰ Chi tiết tính toán OT:');
+          console.log('  - OT start:', approvedOtStart.format('HH:mm:ss'));
+          console.log('  - OT end (registered):', approvedOtEnd.format('HH:mm:ss'));
+          console.log('  - Checkout:', checkOut.format('HH:mm:ss'));
+          console.log('  - Effective OT end:', effectiveOtEnd.format('HH:mm:ss'));
+          console.log('  - OT minutes:', result.otMinutes);
+          console.log('  - OT hours:', otHours.toFixed(2));
+          console.log('  - Công thức: (', otHours.toFixed(2), '/ 8) = RAW working unit (chưa nhân hệ số)');
+          console.log('  - 🎯 OT working units (RAW):', result.otWorkingUnit.toFixed(4));
+          console.log('  - 📊 Overtime hours:', result.overtimeHours.toFixed(2));
+          console.log('===== KẾT THÚC TÍNH OT =====\n');
         } else {
           result.otMinutes = 0;
           result.otSalary = 0;
           result.otWorkingUnit = 0;
-          console.log('⚠️ Checkout time exceeds approved OT time - no OT calculated');
+          result.overtimeHours = 0;
+          console.log('\n❌ ===== KHÔNG TÍNH OT =====');
+          console.log('⚠️ Lý do: Checkout trước giờ bắt đầu OT');
+          console.log('  - Checkout:', checkOut.format('HH:mm:ss'));
+          console.log('  - OT start:', approvedOtStart.format('HH:mm:ss'));
+          console.log('===== KẾT THÚC =====\n');
         }
       } else {
         result.otMinutes = 0;
         result.otSalary = 0;
         result.otWorkingUnit = 0;
-        console.log('ℹ️ No approved OT or checkout before expected time - no OT calculated');
+        console.log('\n❌ ===== KHÔNG TÍNH OT =====');
+        console.log('⚠️ Lý do: Không có đơn OT đã duyệt');
+        console.log('  - Có approvedOtEndTime?:', !!approvedOtEndTime);
+        console.log('  - 🎯 otWorkingUnit được set = 0');
+        console.log('===== KẾT THÚC =====\n');
       }
     }
 

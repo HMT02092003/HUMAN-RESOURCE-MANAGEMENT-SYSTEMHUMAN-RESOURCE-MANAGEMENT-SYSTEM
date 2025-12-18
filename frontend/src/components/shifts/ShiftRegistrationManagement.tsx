@@ -81,6 +81,7 @@ const ShiftRegistrationManagement = () => {
                         page: 1, 
                         pageSize: 10000
                     });
+                    console.debug('[ShiftRegistration] loadCalendarData - raw response:', response);
                     
                     let payload: any;
                     if (Array.isArray(response)) {
@@ -100,6 +101,7 @@ const ShiftRegistrationManagement = () => {
                     }
 
                     const rows = Array.isArray(payload) ? payload : (payload?.results ?? payload?.data ?? payload?.items ?? []);
+                    console.debug('[ShiftRegistration] loadCalendarData - extracted rows count:', Array.isArray(rows) ? rows.length : 0, 'sample:', Array.isArray(rows) && rows.length ? rows.slice(0,3) : rows);
                     setCalendarRegistrations(Array.isArray(rows) ? rows : []);
                 } catch (error) {
                     console.error('Error loading calendar data:', error);
@@ -108,6 +110,26 @@ const ShiftRegistrationManagement = () => {
         };
         loadCalendarData();
     }, [activeTab, refreshTrigger]);
+
+    // Listen for global updates (e.g., approvals made by managers) and refresh local data
+    useEffect(() => {
+        const onShiftsUpdated = (e: any) => {
+            console.debug('[ShiftRegistration] received shifts:updated event', e && e.detail);
+            setRefreshTrigger(prev => prev + 1);
+        };
+
+        try {
+            window.addEventListener('shifts:updated', onShiftsUpdated as EventListener);
+        } catch (e) {
+            // ignore in non-browser environments
+        }
+
+        return () => {
+            try {
+                window.removeEventListener('shifts:updated', onShiftsUpdated as EventListener);
+            } catch (e) {}
+        };
+    }, []);
 
     const getStatusText = (status: string) => {
         const statusMap: Record<string, string> = {
