@@ -1,13 +1,14 @@
 "use client";
 import React, { useState, useRef, useEffect } from 'react';
-import { Button, ConfigProvider, message, Space, Table, Tooltip, Modal, Popconfirm, Input, Select, Grid, Row, Col } from 'antd';
+import { Button, ConfigProvider, message, Space, Tooltip, Modal, Popconfirm, Input, Select, Grid, Row, Col } from 'antd';
 import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, PlusOutlined, KeyOutlined, SearchOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import { roleService } from '@/service/roleService';
-import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { ExcelExportButton } from '@/components/common/ExcelExport';
 import type { ExcelColumn } from '@/components/common/ExcelExport';
+import { ServerSideTable } from '@/components/common/ServerSideTable';
+import type { ServerSideColumnType } from '@/components/common/ServerSideTable';
 
 // Định nghĩa interface cho dữ liệu vai trò
 interface Role {
@@ -35,92 +36,82 @@ const Roles: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState<boolean>(false);
   const router = useRouter();
-  const [loading, setLoading] = useState<boolean>(false);
   const [roles, setRoles] = useState<Role[]>([]);
-  const [searchText, setSearchText] = useState('');
-  const [searchColumn, setSearchColumn] = useState('name');
-
-  // Server-side pagination and sorting state
-  const [pagination, setPagination] = useState({ current: 1, pageSize: 12, total: 0 });
-  const [sorter, setSorter] = useState<{ field: string; order: 'ascend' | 'descend' | undefined }>({ field: '', order: undefined });
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Giả lập quyền hạn
   const createPer: boolean = true;
   const updatePer: boolean = true;
   const deletePer: boolean = true;
 
-  const getColumnSearchProps = (dataIndex: string) => ({
-    filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: any) => (
-      <div style={{ padding: 8 }}>
-        <Input
-          placeholder={`Tìm kiếm ${dataIndex}`}
-          value={selectedKeys[0]}
-          onChange={e => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-          onPressEnter={() => confirm()}
-          style={{ marginBottom: 8, display: 'block' }}
-        />
-        <Space>
-          <Button
-            type="primary"
-            onClick={() => confirm()}
-            icon={<SearchOutlined />}
-            size="small"
-            style={{ width: 90 }}
-          >
-            Tìm kiếm
-          </Button>
-          <Button
-            onClick={() => clearFilters && clearFilters()}
-            size="small"
-            style={{ width: 90 }}
-          >
-            Đặt lại
-          </Button>
-        </Space>
-      </div>
-    ),
-    filterIcon: (filtered: boolean) => (
-      <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />
-    ),
-    onFilter: (value: boolean | React.Key, record: Role): boolean => {
-      const recordValue = record[dataIndex];
-      if (!recordValue) return false;
-      return recordValue.toString().toLowerCase().includes(value.toString().toLowerCase());
-    },
-  });
+  // Fetch function cho ServerSideTable
+  const fetchData = async (params: any) => {
+    try {
+      const apiParams: any = {
+        page: params.page,
+        limit: params.limit,
+      };
 
-  const columns: ColumnsType<Role> = [
-    {
-      title: "Tên vai trò",
-      dataIndex: 'name',
-      key: 'roles.name',
-      sorter: true,
-      width: 200,
-      ...getColumnSearchProps('name'),
-    },
-    {
-      title: "Mô tả vai trò",
-      dataIndex: 'description',
-      key: 'roles.description',
-      sorter: true,
-      width: 150,
-      ...getColumnSearchProps('description'),
-    },
-    {
-      title: "Ngày tạo",
-      dataIndex: 'createdAt',
-      key: 'roles.createdAt',
-      sorter: true,
-      render: (text: Date | string) => formatDate(text),
-      width: 150,
-    },
-    {
-      title: "Phân quyền",
-      dataIndex: 'decentralization',
-      key: "decentralization",
-      width: 150,
-      render: (_: any, record: Role) => {
-        return (
+      if (params.sort && params.order) {
+        apiParams.sort = params.sort;
+        apiParams.order = params.order;
+      }
+
+      // Xử lý search
+      if (params.search && params.search_field) {
+        apiParams[params.search_field] = params.search;
+      }
+
+      const response = await roleService.getAllRoles(apiParams);
+      return {
+        data: response.data || [],
+        total: response.total || 0
+      };
+    } catch (error: any) {
+      message.error(error.response?.data?.error || 'Có lỗi xảy ra khi tải dữ liệu');
+      return { data: [], total: 0 };
+    }
+  };
+    const columns: ServerSideColumnType<Role>[] = [
+      {
+        title: "Tên vai trò",
+        dataIndex: 'name',
+        key: 'name',
+        searchable: true,
+        sortable: true,
+        searchField: 'name',
+        filterType: 'text',
+        width: 200,
+      },
+      {
+        title: "Mô tả vai trò",
+        dataIndex: 'description',
+        key: 'description',
+        searchable: true,
+        sortable: true,
+        searchField: 'description',
+        filterType: 'text',
+        width: 150,
+      },
+      {
+        title: "Ngày tạo",
+        dataIndex: 'createdAt',
+        key: 'createdAt',
+        sortable: true,
+        searchable: false,
+        filterType: 'none',
+        render: (text: Date | string) => formatDate(text),
+        width: 150,
+      },
+      {
+        title: "Phân quyền",
+        dataIndex: 'decentralization',
+        key: "decentralization",
+        width: 150,
+        searchable: false,
+        sortable: false,
+        filterType: 'none',
+        render: (_: any, record: Role) => (
           <Button
             onClick={() => router.push(`roles/decentralization/${record.id}`)}
             type="primary"
@@ -129,107 +120,58 @@ const Roles: React.FC = () => {
             Phân quyền
           </Button>
         )
-      }
-    },
-    {
-      title: <>&nbsp;&nbsp;<SettingOutlined /></>,
-      key: "actions",
-      fixed: 'right' as const,
-      width: 80,
-      render: (_: any, record: Role) => (
-        <ConfigProvider
-          theme={{
-            components: {
-              Button: {
-                colorBgContainer: "transparent",
-                colorText: "#595959",
-                colorBorder: "transparent",
-                borderRadius: 4,
-                boxShadow: "none",
+      },
+      {
+        title: <>&nbsp;&nbsp;<SettingOutlined /></>,
+        key: "actions",
+        fixed: 'right' as const,
+        width: 80,
+        searchable: false,
+        sortable: false,
+        filterType: 'none',
+        render: (_: any, record: Role) => (
+          <ConfigProvider
+            theme={{
+              components: {
+                Button: {
+                  colorBgContainer: "transparent",
+                  colorText: "#595959",
+                  colorBorder: "transparent",
+                  borderRadius: 4,
+                  boxShadow: "none",
+                },
               },
-            },
-          }}
-        >
-          <Space size="small">
-            <Tooltip title="Chỉnh sửa">
-              <Button
-                type="default"
-                shape="circle"
-                icon={<EditOutlined />}
-                size="small"
-                onClick={() => {
-                  router.push(`roles/edit/${record.id}`);
-                }}
-                hidden={!updatePer}
-              />
-            </Tooltip>
-          </Space>
-        </ConfigProvider>
-      ),
-    },
-  ];
+            }}
+          >
+            <Space size="small">
+              <Tooltip title="Chỉnh sửa">
+                <Button
+                  type="default"
+                  shape="circle"
+                  icon={<EditOutlined />}
+                  size="small"
+                  onClick={() => {
+                    router.push(`roles/edit/${record.id}`);
+                  }}
+                  hidden={!updatePer}
+                />
+              </Tooltip>
+            </Space>
+          </ConfigProvider>
+        ),
+      },
+    ];
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const params: any = {
-        page: pagination.current,
-        limit: pagination.pageSize,
-      };
-
-      if (sorter.field && sorter.order) {
-        params.sort = sorter.field;
-        params.order = sorter.order === 'ascend' ? 'asc' : 'desc';
+    const handleDelete = async () => {
+      try {
+        await roleService.deleteMultipleRoles(selectedRowKeys as any);
+        setSelectedRowKeys([]);
+        setRefreshTrigger(prev => prev + 1);
+        message.success('Xóa vai trò thành công!');
+      } catch (error: any) {
+        message.error(error.response?.data?.error || 'Có lỗi xảy ra khi xóa vai trò');
       }
-
-      const response = await roleService.getAllRoles(params);
-      setRoles(response.data || []);
-      setPagination(prev => ({ ...prev, total: response.total || 0 }));
-    } catch (error: any) {
-      message.error(error.response?.data?.error || 'Có lỗi xảy ra khi tải dữ liệu');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchData();
-  }, [pagination.current, pagination.pageSize, sorter.field, sorter.order]);
-
-  const handleTableChange = (
-    paginationConfig: any,
-    filters: any,
-    sorterConfig: any
-  ) => {
-    setPagination({
-      current: paginationConfig.current,
-      pageSize: paginationConfig.pageSize,
-      total: pagination.total,
-    });
-
-    if (sorterConfig.field) {
-      setSorter({
-        field: sorterConfig.field,
-        order: sorterConfig.order,
-      });
-    } else {
-      setSorter({ field: '', order: undefined });
-    }
-  };
-
-  const handleDelete = async () => {
-    try {
-      setLoading(true);
-      await roleService.deleteMultipleRoles(selectedRowKeys);
-      message.success('Xóa vai trò thành công!');
-      await fetchData();
-      setSelectedRowKeys([]);
-    } catch (error: any) {
-      message.error(error.response?.data?.error || 'Có lỗi xảy ra khi xóa vai trò');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
   const rowSelection = {
     selectedRowKeys,
@@ -295,29 +237,22 @@ const Roles: React.FC = () => {
 
       <Row>
         <Col xs={24}>
-          <div style={{ overflowX: 'auto' }}>
-            <Table
-              ref={tableRef as React.Ref<any>}
-              columns={columns}
-              dataSource={roles || []}
-              loading={loading}
-              rowKey="id"
-              rowSelection={rowSelection}
-              scroll={{ x: 'max-content' }}
-              pagination={{
-                current: pagination.current,
-                pageSize: pagination.pageSize,
-                total: pagination.total,
-                showSizeChanger: true,
-                pageSizeOptions: ['12', '24', '36', '48'],
-                showTotal: (total: number) => `Tổng số: ${total} bản ghi`,
-                size: screens.lg ? 'default' : 'small'
-              }}
-              onChange={handleTableChange}
-              rowClassName={(_, index) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
-              size={screens.lg ? 'middle' : 'small'}
-            />
-          </div>
+          <ServerSideTable
+            columns={columns}
+            fetchData={fetchData}
+            rowKey="id"
+            defaultSortField="createdAt"
+            defaultSortOrder="desc"
+            defaultPageSize={12}
+            showSelection={true}
+            onSelectionChange={(keys) => setSelectedRowKeys(keys)}
+            refreshTrigger={refreshTrigger}
+            showTotal={true}
+            onDataChange={(data) => setRoles(data)}
+            scroll={{ x: 'max-content' }}
+            rowClassName={(_: any, index: number) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
+            size={screens.lg ? 'middle' : 'small'}
+          />
         </Col>
       </Row>
 

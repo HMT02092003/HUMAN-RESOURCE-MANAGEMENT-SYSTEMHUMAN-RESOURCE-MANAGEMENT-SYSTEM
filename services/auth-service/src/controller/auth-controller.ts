@@ -143,9 +143,9 @@ export const loginHandler = async (req: Request, res: Response) => {
       username: user.username
     };
 
-    // Tạo access token - thời hạn ngắn (1 phút)
+    // Tạo access token - thời hạn ngắn (30 phút cho mobile app)
     const accessToken = jwt.sign(accessTokenPayload, JWT_SECRET, {
-      expiresIn: '1m' // 1 phút
+      expiresIn: '30m' // 30 phút
     });
 
     // Tạo refresh token - thời hạn dài (7 ngày)
@@ -157,7 +157,7 @@ export const loginHandler = async (req: Request, res: Response) => {
     res.cookie('token', accessToken, {
       httpOnly: false,
       secure: process.env.NODE_ENV !== 'development',
-      maxAge: 60 * 1000, // 1 phút
+      maxAge: 30 * 60 * 1000, // 30 phút
     });
 
     res.cookie('refreshToken', refreshToken, {
@@ -320,13 +320,13 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
     // For now, we'll just return the original valid refreshToken if it was passed in the request.
 
     const newAccessToken = jwt.sign(accessTokenPayload, JWT_SECRET, {
-      expiresIn: '1m' // 1 phút
+      expiresIn: '30m' // 30 phút (giống login)
     });
 
     res.cookie('token', newAccessToken, {
       httpOnly: false,
       secure: process.env.NODE_ENV !== 'development',
-      maxAge: 60 * 1000, // 1 phút
+      maxAge: 30 * 60 * 1000, // 30 phút
     });
 
     // --- End: Replicating loginHandler's user data and token generation ---

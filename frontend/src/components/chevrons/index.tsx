@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Button, ConfigProvider, Tooltip, Space, Table, Modal, message, Input, Grid, Row, Col } from "antd";
+import { Button, ConfigProvider, Tooltip, Space, Modal, message, Grid, Row, Col } from "antd";
 import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, SearchOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
 import { chevronService } from '@/service/chevronService';
 import { ExcelExportButton } from '@/components/common/ExcelExport';
 import type { ExcelColumn } from '@/components/common/ExcelExport';
+import { ServerSideTable } from '@/components/common/ServerSideTable';
+import type { ServerSideColumnType } from '@/components/common/ServerSideTable';
 
 // Định nghĩa interfaces
 interface ChevronData {
@@ -58,186 +60,78 @@ const Index: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<React.Key[]>([]);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState<boolean>(false);
   const [chevronData, setChevronData] = useState<ChevronData[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [totalRecords, setTotalRecords] = useState(0);
   const router = useRouter();
-
-  // 🔥 Server-side: State cho pagination, sort và search
-  const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
-  const [sorter, setSorter] = useState<{ field: string; order: 'asc' | 'desc' }>({ field: 'created_at', order: 'desc' });
-  const [searchKeyword, setSearchKeyword] = useState<string>('');
-  const [searchField, setSearchField] = useState<string | undefined>(undefined);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Giả lập quyền hạn
   const createPer: boolean = true;
   const updatePer: boolean = true;
   const deletePer: boolean = true;
 
-  useEffect(() => {
-    loadData();
-  }, [pagination.current, pagination.pageSize, sorter.field, sorter.order, searchKeyword]);
-
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (params: any) => {
     try {
-      const params: any = {
-        page: pagination.current,
-        limit: pagination.pageSize,
-        sort: sorter.field,
-        order: sorter.order,
+      const apiParams: any = {
+        page: params.page,
+        limit: params.limit,
+        sort: params.sort || 'created_at',
+        order: params.order || 'desc',
       };
 
-      if (searchKeyword) {
-        params.search = searchKeyword;
-        if (searchField) params.search_field = searchField;
+      if (params.search && params.search_field) {
+        apiParams.search = params.search;
+        apiParams.search_field = params.search_field;
       }
 
-      const response = await chevronService.getAllChevrons(params);
-      setChevronData(response.data || []);
-      setPagination(prev => ({ ...prev, total: response.total || 0 }));
+      const response = await chevronService.getAllChevrons(apiParams);
+      return {
+        data: response.data || [],
+        total: response.total || 0
+      };
     } catch (error) {
       console.error('Error loading data:', error);
       message.error('Đã xảy ra lỗi khi tải dữ liệu!');
-    } finally {
-      setLoading(false);
+      return { data: [], total: 0 };
     }
   };
 
-  const handleTableChange = (
-    paginationConfig: any,
-    filters: any,
-    sorterConfig: any
-  ) => {
-    setPagination({
-      current: paginationConfig.current,
-      pageSize: paginationConfig.pageSize,
-      total: pagination.total,
-    });
-
-    if (sorterConfig.field && sorterConfig.order) {
-      setSorter({
-        field: sorterConfig.field,
-        order: sorterConfig.order === 'ascend' ? 'asc' : 'desc',
-      });
-    } else {
-      setSorter({ field: 'created_at', order: 'desc' });
-    }
-  };
-
-  // 🔥 Server-side search handler
-  const handleSearch = (value: string) => {
-    // Global search
-    setSearchField(undefined);
-    setSearchKeyword(value);
-    setPagination(prev => ({ ...prev, current: 1 })); // Reset về trang 1 khi search
-  };
-
-  const handleColumnSearch = (field: string, value: string) => {
-    setSearchField(field);
-    setSearchKeyword(value);
-    setPagination(prev => ({ ...prev, current: 1 }));
-  };
-
-  const columns = [
+  const columns: ServerSideColumnType<ChevronData>[] = [
     {
       title: 'Tên chức vụ',
       dataIndex: 'name',
       key: 'name',
-      sorter: true,
+      searchable: true,
+      sortable: true,
+      searchField: 'name',
+      filterType: 'text',
       width: 200,
-      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: any) => (
-        <div style={{ padding: 8 }}>
-          <Input
-            placeholder="Tìm theo tên"
-            value={selectedKeys && selectedKeys[0] ? selectedKeys[0] : ''}
-            onChange={e => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-            onPressEnter={() => {
-              const val = (selectedKeys && selectedKeys[0]) || '';
-              handleColumnSearch('name', val);
-              confirm();
-            }}
-            style={{ width: 188, marginBottom: 8, display: 'block' }}
-            size="small"
-          />
-          <Space>
-            <Button
-              type="primary"
-              onClick={() => {
-                const val = (selectedKeys && selectedKeys[0]) || '';
-                handleColumnSearch('name', val);
-                confirm();
-              }}
-              size="small"
-            >Tìm</Button>
-            <Button
-              onClick={() => {
-                clearFilters && clearFilters();
-                setSearchField(undefined);
-                setSearchKeyword('');
-                confirm();
-              }}
-              size="small"
-            >Xóa</Button>
-          </Space>
-        </div>
-      ),
-      filterIcon: (filtered: boolean) => <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />,
     },
     {
       title: 'Mô tả chức vụ',
       dataIndex: 'description',
       key: 'description',
-      sorter: true,
+      searchable: true,
+      sortable: true,
+      searchField: 'description',
+      filterType: 'text',
       width: 300,
-      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: any) => (
-        <div style={{ padding: 8 }}>
-          <Input
-            placeholder="Tìm theo mô tả"
-            value={selectedKeys && selectedKeys[0] ? selectedKeys[0] : ''}
-            onChange={e => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-            onPressEnter={() => {
-              const val = (selectedKeys && selectedKeys[0]) || '';
-              handleColumnSearch('description', val);
-              confirm();
-            }}
-            style={{ width: 220, marginBottom: 8, display: 'block' }}
-            size="small"
-          />
-          <Space>
-            <Button
-              type="primary"
-              onClick={() => {
-                const val = (selectedKeys && selectedKeys[0]) || '';
-                handleColumnSearch('description', val);
-                confirm();
-              }}
-              size="small"
-            >Tìm</Button>
-            <Button
-              onClick={() => {
-                clearFilters && clearFilters();
-                setSearchField(undefined);
-                setSearchKeyword('');
-                confirm();
-              }}
-              size="small"
-            >Xóa</Button>
-          </Space>
-        </div>
-      ),
-      filterIcon: (filtered: boolean) => <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />,
     },
     {
       title: "Hệ số chức vụ",
       dataIndex: 'chevronCoefficient',
       key: 'chevronCoefficient',
-      sorter: true,
+      sortable: true,
+      searchable: false,
+      filterType: 'none',
       width: 150,
     },
     {
       title: "Ngày tạo",
       dataIndex: "created_at",
       key: "created_at",
-      sorter: true,
+      sortable: true,
+      searchable: false,
+      filterType: 'none',
       width: 150,
       render: (text: Date) => formatDate(text),
     },
@@ -245,6 +139,9 @@ const Index: React.FC = () => {
       title: <>&nbsp;&nbsp;<SettingOutlined /></>,
       key: "actions",
       fixed: 'right' as 'right',
+      searchable: false,
+      sortable: false,
+      filterType: 'none',
       width: 5,
       render: (_: unknown, record: ChevronData) => (
         <ConfigProvider
@@ -294,20 +191,17 @@ const Index: React.FC = () => {
   };
 
   const handleDelete = async () => {
-    setLoading(true);
     try {
       await chevronService.deleteMultipleChevrons(selectedIds);
       
-      // Reload data after successful deletion
-      await loadData();
       setSelectedIds([]);
       setHiddenDeleteBtn(true);
+      setRefreshTrigger(prev => prev + 1);
       message.success('Xóa thành công!');
     } catch (error) {
       console.error('Error deleting data:', error);
       message.error('Đã xảy ra lỗi khi xóa dữ liệu!');
     } finally {
-      setLoading(false);
       hideDeleteModal();
     }
   };
@@ -347,7 +241,7 @@ const Index: React.FC = () => {
                   columns={excelColumns}
                   fileName="Danh_sach_chuc_vu"
                   title="DANH SÁCH CHỨC VỤ"
-                  description={`Tổng số: ${pagination.total} chức vụ | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
+                  description={`Tổng số: ${totalRecords} chức vụ | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
                   type="primary"
                   className="btn-top"
                 >
@@ -363,29 +257,21 @@ const Index: React.FC = () => {
       <Row>
         <Col xs={24}>
           <div style={{ overflowX: 'auto' }}>
-            <Table
+            <ServerSideTable<ChevronData>
               ref={tableRef as React.Ref<any>}
               columns={columns}
-              dataSource={chevronData}
-              loading={loading}
+              fetchData={loadData}
               rowKey="id"
-              rowSelection={{
-                selectedRowKeys: selectedIds,
-                onChange: onChangeSelection
+              defaultSortField="created_at"
+              defaultSortOrder="desc"
+              defaultPageSize={10}
+              showSelection={true}
+              onSelectionChange={onChangeSelection}
+              refreshTrigger={refreshTrigger}
+              onDataChange={(data, pagination) => {
+                setChevronData(data);
+                setTotalRecords(pagination?.total || 0);
               }}
-              scroll={{ x: 'max-content' }}
-              pagination={{
-                current: pagination.current,
-                pageSize: pagination.pageSize,
-                total: pagination.total,
-                showSizeChanger: true,
-                pageSizeOptions: ['10', '50', '100', '500'],
-                showTotal: (total: number) => `Tổng số: ${total} bản ghi`,
-                size: screens.lg ? 'default' : 'small'
-              }}
-              onChange={handleTableChange}
-              rowClassName={(_, index) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
-              size={screens.lg ? 'middle' : 'small'}
             />
           </div>
         </Col>

@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Button, ConfigProvider, Tooltip, Space, Table, Modal, message, Input, Grid, Row, Col } from "antd";
+import { Button, ConfigProvider, Tooltip, Space, Modal, message, Grid, Row, Col } from "antd";
 import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, SearchOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
 import { departmentService } from '@/service/departmentService';
 import { ExcelExportButton } from '@/components/common/ExcelExport';
 import type { ExcelColumn } from '@/components/common/ExcelExport';
+import { ServerSideTable } from '@/components/common/ServerSideTable';
+import type { ServerSideColumnType } from '@/components/common/ServerSideTable';
 
 // Định nghĩa interfaces
 interface DepartmentData {
@@ -52,174 +54,80 @@ const Index: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<React.Key[]>([]);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState<boolean>(false);
   const [DepartmentData, setDepartmentData] = useState<DepartmentData[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [totalRecords, setTotalRecords] = useState(0);
   const router = useRouter();
-
-  // 🔥 Server-side: State cho pagination, sort và search
-  const [pagination, setPagination] = useState({
-    current: 1,
-    pageSize: 10,
-    total: 0
-  });
-  const [searchField, setSearchField] = useState<string | undefined>(undefined);
-  const [sorter, setSorter] = useState<{ field: string; order: 'asc' | 'desc' }>({
-    field: 'created_at',
-    order: 'desc'
-  });
-  const [searchKeyword, setSearchKeyword] = useState<string>('');
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Giả lập quyền hạn
   const createPer: boolean = true;
   const updatePer: boolean = true;
   const deletePer: boolean = true;
 
-  // 🔥 Server-side: Gọi API với params
-  const loadData = async () => {
-    setLoading(true);
+  // Fetch function cho ServerSideTable
+  const loadData = async (params: any) => {
     try {
-      const params: any = {
-        page: pagination.current,
-        limit: pagination.pageSize,
-        sort: sorter.field,
-        order: sorter.order,
+      const apiParams: any = {
+        page: params.page,
+        limit: params.limit,
+        sort: params.sort || 'created_at',
+        order: params.order || 'desc',
       };
 
-      if (searchKeyword) {
-        params.search = searchKeyword;
-        if (searchField) params.search_field = searchField;
+      if (params.search && params.search_field) {
+        apiParams.search = params.search;
+        apiParams.search_field = params.search_field;
       }
 
-      const response = await departmentService.getAllDepartments(params);
-      const data = response.data || response || [];
-      const total = response.total || data.length;
-      
-      setDepartmentData(data);
-      setPagination(prev => ({ ...prev, total }));
+      const response = await departmentService.getAllDepartments(apiParams);
+      return {
+        data: response.data || response || [],
+        total: response.total || 0
+      };
     } catch (error) {
       console.error('Error loading data:', error);
       message.error('Đã xảy ra lỗi khi tải dữ liệu!');
-    } finally {
-      setLoading(false);
+      return { data: [], total: 0 };
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, [pagination.current, pagination.pageSize, sorter.field, sorter.order, searchKeyword]);
-
-  // 🔥 Server-side search handler
-  const handleSearch = (value: string) => {
-    // Global search (no specific column)
-    setSearchField(undefined);
-    setSearchKeyword(value);
-    setPagination(prev => ({ ...prev, current: 1 })); // Reset về trang 1 khi search
-  };
-
-  const handleColumnSearch = (field: string, value: string) => {
-    setSearchField(field);
-    setSearchKeyword(value);
-    setPagination(prev => ({ ...prev, current: 1 }));
-  };
-
-  const columns = [
+  const columns: ServerSideColumnType<DepartmentData>[] = [
     {
       title: 'Tên phòng ban',
       dataIndex: 'name',
       key: 'name',
-      sorter: true,
+      searchField: 'name',
+      filterType: 'text',
+      sortable: true,
+      searchable: true,
+      searchPlaceholder: 'Tìm theo tên',
       width: 200,
-      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: any) => (
-        <div style={{ padding: 8 }}>
-          <Input
-            placeholder="Tìm theo tên"
-            value={selectedKeys && selectedKeys[0] ? selectedKeys[0] : ''}
-            onChange={e => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-            onPressEnter={() => {
-              const val = (selectedKeys && selectedKeys[0]) || '';
-              handleColumnSearch('name', val);
-              confirm();
-            }}
-            style={{ width: 188, marginBottom: 8, display: 'block' }}
-            size="small"
-          />
-          <Space>
-            <Button
-              type="primary"
-              onClick={() => {
-                const val = (selectedKeys && selectedKeys[0]) || '';
-                handleColumnSearch('name', val);
-                confirm();
-              }}
-              size="small"
-            >Tìm</Button>
-            <Button
-              onClick={() => {
-                clearFilters && clearFilters();
-                setSearchField(undefined);
-                setSearchKeyword('');
-                confirm();
-              }}
-              size="small"
-            >Xóa</Button>
-          </Space>
-        </div>
-      ),
-      filterIcon: (filtered: boolean) => <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />,
     },
     {
       title: 'Mô tả phòng ban',
       dataIndex: 'description',
       key: 'description',
-      sorter: true,
+      searchField: 'description',
+      filterType: 'text',
+      sortable: true,
+      searchable: true,
+      searchPlaceholder: 'Tìm theo mô tả',
       width: 300,
-      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: any) => (
-        <div style={{ padding: 8 }}>
-          <Input
-            placeholder="Tìm theo mô tả"
-            value={selectedKeys && selectedKeys[0] ? selectedKeys[0] : ''}
-            onChange={e => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-            onPressEnter={() => {
-              const val = (selectedKeys && selectedKeys[0]) || '';
-              handleColumnSearch('description', val);
-              confirm();
-            }}
-            style={{ width: 220, marginBottom: 8, display: 'block' }}
-            size="small"
-          />
-          <Space>
-            <Button
-              type="primary"
-              onClick={() => {
-                const val = (selectedKeys && selectedKeys[0]) || '';
-                handleColumnSearch('description', val);
-                confirm();
-              }}
-              size="small"
-            >Tìm</Button>
-            <Button
-              onClick={() => {
-                clearFilters && clearFilters();
-                setSearchField(undefined);
-                setSearchKeyword('');
-                confirm();
-              }}
-              size="small"
-            >Xóa</Button>
-          </Space>
-        </div>
-      ),
-      filterIcon: (filtered: boolean) => <SearchOutlined style={{ color: filtered ? '#1890ff' : undefined }} />,
     },
     {
       title: "Ngày tạo",
       dataIndex: "created_at",
       key: "created_at",
-      sorter: true,
+      sortable: true,
+      searchable: false,
+      filterType: 'none',
       render: (text: Date) => formatDate(text),
     },
     {
       title: <>&nbsp;&nbsp;<SettingOutlined /></>,
       key: "actions",
+      sortable: false,
+      searchable: false,
+      filterType: 'none',
       fixed: 'right' as 'right',
       width: 5,
       render: (_: unknown, record: DepartmentData) => (
@@ -270,15 +178,13 @@ const Index: React.FC = () => {
   };
 
   const handleDelete = async () => {
-    setLoading(true);
     try {
       await departmentService.deleteMultipleDepartments(selectedIds);
       
-      // Reload data after delete
       setSelectedIds([]);
       setHiddenDeleteBtn(true);
       message.success('Xóa thành công!');
-      loadData();
+      setRefreshTrigger(prev => prev + 1);
     } catch (error) {
       console.error('Error deleting data:', error);
       message.error('Đã xảy ra lỗi khi xóa dữ liệu!');
@@ -344,7 +250,7 @@ const Index: React.FC = () => {
                   columns={excelColumns}
                   fileName="Danh_sach_phong_ban"
                   title="DANH SÁCH PHÒNG BAN"
-                  description={`Tổng số: ${pagination.total} phòng ban | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
+                  description={`Tổng số: ${totalRecords} phòng ban | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
                   type="primary"
                   className="btn-top"
                 >
@@ -359,30 +265,28 @@ const Index: React.FC = () => {
 
       <Row>
         <Col xs={24}>
-          <div style={{ overflowX: 'auto' }}>
-            <Table
-              ref={tableRef as React.Ref<any>}
-              columns={columns}
-              dataSource={DepartmentData}
-              loading={loading}
-              rowKey="id"
-              rowSelection={{
-                selectedRowKeys: selectedIds,
-                onChange: onChangeSelection
-              }}
-              scroll={{ x: 'max-content' }}
-              pagination={{
-                ...pagination,
-                showSizeChanger: true,
-                pageSizeOptions: ['10', '50', '100', '500'],
-                showTotal: (total: number) => `Tổng số: ${total} bản ghi`,
-                size: screens.lg ? 'default' : 'small'
-              }}
-              onChange={handleTableChange}
-              rowClassName={(_, index) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
-              size={screens.lg ? 'middle' : 'small'}
-            />
-          </div>
+          <ServerSideTable
+            columns={columns}
+            fetchData={loadData}
+            rowKey="id"
+            defaultSortField="created_at"
+            defaultSortOrder="desc"
+            defaultPageSize={10}
+            showSelection={true}
+            onSelectionChange={(keys) => {
+              setSelectedIds(keys);
+              setHiddenDeleteBtn(keys.length === 0);
+            }}
+            refreshTrigger={refreshTrigger}
+            showTotal={true}
+            onDataChange={(data, pagination) => {
+              setDepartmentData(data);
+              setTotalRecords(pagination.total);
+            }}
+            scroll={{ x: 'max-content' }}
+            rowClassName={(_: any, index: number) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
+            size={screens.lg ? 'middle' : 'small'}
+          />
         </Col>
       </Row>
 

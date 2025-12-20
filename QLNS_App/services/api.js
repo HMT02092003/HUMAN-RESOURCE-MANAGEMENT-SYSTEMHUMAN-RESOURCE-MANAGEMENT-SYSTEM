@@ -77,12 +77,26 @@ api.interceptors.response.use(
                 console.error('❌ [API] Session expired, refresh failed:', refreshError.message);
                 await AuthTokenManager.clearTokens();
                 
-                // Thông báo cho người dùng
+                // Thông báo cho người dùng và chuyển về màn hình login
                 Alert.alert(
                     'Phiên đăng nhập hết hạn',
                     'Vui lòng đăng nhập lại',
-                    [{ text: 'OK' }]
+                    [{ 
+                        text: 'OK', 
+                        onPress: () => {
+                            // Reset navigation to Login screen
+                            // Note: This requires NavigationContainer ref to be available
+                            // For now, just clear tokens - user will be auto-redirected by AuthContext
+                        }
+                    }]
                 );
+                
+                // Return a rejected promise with a specific error that AuthContext can catch
+                return Promise.reject({
+                    ...error,
+                    tokenExpired: true,
+                    needsReauth: true
+                });
             }
         }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Table, Button, Tooltip, ConfigProvider, Modal, message, Tag, Row, Col, Grid, Input, Typography, Select, DatePicker } from 'antd';
+import { Button, Tooltip, ConfigProvider, Modal, message, Tag, Row, Col, Grid, Typography } from 'antd';
 import {
   PlusCircleOutlined,
   DeleteOutlined,
@@ -7,7 +7,6 @@ import {
   CloudUploadOutlined,
   EyeOutlined,
   FormOutlined,
-  SearchOutlined,
   DownloadOutlined
 } from "@ant-design/icons";
 import dayjs from 'dayjs';
@@ -16,6 +15,8 @@ import { useRouter } from "next/navigation";
 import constantConfig from "@/config/constant";
 import { ExcelExportButton } from '@/components/common/ExcelExport';
 import type { ExcelColumn } from '@/components/common/ExcelExport';
+import { ServerSideTable } from '@/components/common/ServerSideTable';
+import type { ServerSideColumnType } from '@/components/common/ServerSideTable';
 
 const { statusOptions, Gender } = constantConfig;
 
@@ -120,23 +121,10 @@ interface SorterState {
 const UserTable = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [userData, setUserData] = useState<any[]>([]);
-  // per-column search map. Values can be string, number, array (for ranges), etc.
-  const [columnSearch, setColumnSearch] = useState<Record<string, any>>({});
-  const [loading, setLoading] = useState(false);
+  const [totalRecords, setTotalRecords] = useState(0);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   
-  // 💡 Sắp xếp mặc định: ID giảm dần (mới nhất lên đầu)
-  const [sorter, setSorter] = useState<SorterState>({
-    field: 'id',
-    order: 'descend'
-  });
-
-  const [pagination, setPagination] = useState({
-    current: 1,
-    pageSize: 10,
-    total: 0
-  });
   const router = useRouter();
   const screens = Grid.useBreakpoint();
 
@@ -145,91 +133,73 @@ const UserTable = () => {
   const deletePer = true;
   const viewPer = true;
 
-  // 🔥 Server-side: Gọi API mỗi khi thay đổi pagination, sort, hoặc filter
-  const fetchUsers = useCallback(async () => {
-    setLoading(true);
+  // 🔥 Fetch function để dùng với ServerSideTable
+  const fetchUsers = async (params: any) => {
     try {
-      // Chuẩn bị params để gửi lên server
-      const params: any = {
-        page: pagination.current,
-        pageSize: pagination.pageSize,
-        sortField: sorter.field,
-        sortOrder: sorter.order,
+      // Xử lý date range params
+      const apiParams: any = { ...params };
+      
+      // Xử lý date range
+      if (params.birthday_range) {
+        const [start, end] = params.birthday_range.split(',');
+        apiParams.birthdayFrom = start;
+        apiParams.birthdayTo = end;
+        delete apiParams.birthday_range;
+      }
+      if (params.startDate_range) {
+        const [start, end] = params.startDate_range.split(',');
+        apiParams.startDateFrom = start;
+        apiParams.startDateTo = end;
+        delete apiParams.startDate_range;
+      }
+      if (params.createdAt_range) {
+        const [start, end] = params.createdAt_range.split(',');
+        apiParams.createdAtFrom = start;
+        apiParams.createdAtTo = end;
+        delete apiParams.createdAt_range;
+      }
+
+      // Đổi tên params cho phù hợp với API
+      apiParams.pageSize = params.limit;
+      delete apiParams.limit;
+      
+      // Xử lý sort field
+      if (params.sort) {
+        apiParams.sortField = params.sort;
+        delete apiParams.sort;
+      }
+      if (params.order) {
+        apiParams.sortOrder = params.order === 'asc' ? 'ascend' : 'descend';
+        delete apiParams.order;
+      }
+
+      const response = await UserService.getAllUsersAll(apiParams);
+      
+      return {
+        data: response.results || response || [],
+        total: response.total || 0
       };
-
-      // Thêm các column filters
-      Object.keys(columnSearch).forEach(key => {
-        const value = columnSearch[key];
-        if (value !== undefined && value !== null && value !== '') {
-          // Xử lý date range
-          if (Array.isArray(value) && value.length === 2) {
-            if (key === 'birthday') {
-              params.birthdayFrom = value[0];
-              params.birthdayTo = value[1];
-            } else if (key === 'startDate') {
-              params.startDateFrom = value[0];
-              params.startDateTo = value[1];
-            } else if (key === 'createdAt') {
-              params.createdAtFrom = value[0];
-              params.createdAtTo = value[1];
-            }
-          } else {
-            // Map column key to API param
-            const paramMap: Record<string, string> = {
-              'id': 'search', // ID tìm kiếm global
-              'username': 'username',
-              'fullName': 'fullName',
-              'email': 'email',
-              'phone': 'phone',
-              'gender': 'gender',
-              'status': 'status',
-              'role.name': 'search', // Role search via global
-              'department.name': 'search', // Department search via global
-              'chevron.name': 'search', // Chevron search via global
-            };
-            const paramKey = paramMap[key] || key;
-            params[paramKey] = value;
-          }
-        }
-      });
-
-      const response = await UserService.getAllUsersAll(params);
-      
-      // API trả về { results: [...], total: N, page: N, pageSize: N }
-      const users = response.results || response || [];
-      const total = response.total || users.length;
-      
-      setUserData(users);
-      setPagination(prev => ({ ...prev, total }));
     } catch (error: any) {
       const data = error?.response?.data;
       message.destroy();
       message.error(data?.message || data?.error || error.message || 'Có lỗi xảy ra khi tải người dùng!');
-    } finally {
-      setLoading(false);
+      return { data: [], total: 0 };
     }
-  }, [pagination.current, pagination.pageSize, sorter.field, sorter.order, columnSearch]);
-
-  // 🔥 Gọi API khi các dependencies thay đổi
-  useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+  };
 
   const handleDelete = async () => {
-    setLoading(true);
     try {
       await UserService.deleteMultipleUsers(selectedRowKeys as number[]);
       setSelectedRowKeys([]);
       setIsDeleteModalVisible(false);
-      // Reload sau khi xóa
-      fetchUsers();
+      message.success('Xóa người dùng thành công!');
+      // Reload data
+      setRefreshTrigger(prev => prev + 1);
     } catch (error: any) {
       console.error('Error deleting users:', error);
       const data = error?.response?.data;
       message.destroy();
       message.error(data?.message || data?.error || error.message || 'Có lỗi xảy ra khi xóa người dùng!');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -363,24 +333,25 @@ const UserTable = () => {
     };
   }
 
-  const columns = [
+  const columns: ServerSideColumnType<any>[] = [
     {
       title: "ID",
       dataIndex: "id",
       key: "id",
-      // 💡 Thêm sắp xếp mặc định cho cột ID (dùng cho việc load lần đầu và reload)
-      sorter: true, // Cho phép sắp xếp trên cột này (client-side)
-      ...getColumnSearchProps('id'),
-      defaultSortOrder: sorter.field === 'id' ? sorter.order : undefined,
+      searchField: "search",
+      filterType: "text",
+      sortable: true,
+      searchable: true,
       width: 80,
     },
     {
       title: "Tên đăng nhập",
       dataIndex: "username",
       key: "username",
-      sorter: true, // client-side sorting enabled
-      ...getColumnSearchProps('username'),
-      defaultSortOrder: sorter.field === 'username' ? sorter.order : undefined,
+      searchField: "username",
+      filterType: "text",
+      sortable: true,
+      searchable: true,
       width: 150,
       render: (text: string) => <Typography.Text copyable>{text || '-'}</Typography.Text>,
     },
@@ -388,6 +359,9 @@ const UserTable = () => {
       title: "Ảnh",
       dataIndex: "identificationPhoto",
       key: "identificationPhoto",
+      filterType: "none",
+      sortable: false,
+      searchable: false,
       width: 80,
       render: (url: string) => url ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -402,9 +376,10 @@ const UserTable = () => {
       title: "Họ và tên",
       dataIndex: "fullName",
       key: "fullName",
-      sorter: true,
-      ...getColumnSearchProps('fullName'),
-      defaultSortOrder: sorter.field === 'fullName' ? sorter.order : undefined,
+      searchField: "fullName",
+      filterType: "text",
+      sortable: true,
+      searchable: true,
       width: 200,
       render: (_: any, record: any) => record.fullName || '-'
     },
@@ -412,9 +387,11 @@ const UserTable = () => {
       title: "Ngày sinh",
       dataIndex: "birthday",
       key: "birthday",
-      sorter: true,
-      ...getColumnSearchProps('birthday', { type: 'dateRange', placeholder: 'Ngày sinh' }),
-      defaultSortOrder: sorter.field === 'birthday' ? sorter.order : undefined,
+      searchField: "birthday",
+      filterType: "dateRange",
+      sortable: true,
+      searchable: true,
+      searchPlaceholder: "Ngày sinh",
       render: (text: Date) => formatDate(text),
       width: 150,
     },
@@ -422,9 +399,10 @@ const UserTable = () => {
       title: "Email",
       dataIndex: "email",
       key: "email",
-      sorter: true,
-      ...getColumnSearchProps('email'),
-      defaultSortOrder: sorter.field === 'email' ? sorter.order : undefined,
+      searchField: "email",
+      filterType: "text",
+      sortable: true,
+      searchable: true,
       width: 250,
       render: (text: string) => <Typography.Text copyable>{text || '-'}</Typography.Text>
     },
@@ -432,9 +410,10 @@ const UserTable = () => {
       title: "Số điện thoại",
       dataIndex: "phone",
       key: "phone",
-      sorter: true,
-      ...getColumnSearchProps('phone'),
-      defaultSortOrder: sorter.field === 'phone' ? sorter.order : undefined,
+      searchField: "phone",
+      filterType: "text",
+      sortable: true,
+      searchable: true,
       width: 150,
       render: (text: string) => <Typography.Text copyable>{text || '-'}</Typography.Text>
     },
@@ -442,10 +421,11 @@ const UserTable = () => {
       title: "Giới tính",
       dataIndex: "gender",
       key: "gender",
-      sorter: true,
-      // Use select filter for gender to make selection easier for users
-      ...getColumnSearchProps('gender', { type: 'select', options: Gender.map(g => ({ value: g.key, label: g.value })) }),
-      defaultSortOrder: sorter.field === 'gender' ? sorter.order : undefined,
+      searchField: "gender",
+      filterType: "select",
+      filterOptions: Gender.map(g => ({ value: g.key, label: g.value })),
+      sortable: true,
+      searchable: true,
       render: (gender: number) => {
         return Gender.find((g) => g.key === gender)?.value || "-";
       },
@@ -455,9 +435,11 @@ const UserTable = () => {
       title: "Trạng thái",
       dataIndex: "status",
       key: "status",
-      sorter: true,
-      ...getColumnSearchProps('status', { type: 'select', options: statusOptions.map(s => ({ value: s.value, label: s.label })) }),
-      defaultSortOrder: sorter.field === 'status' ? sorter.order : undefined,
+      searchField: "status",
+      filterType: "select",
+      filterOptions: statusOptions.map(s => ({ value: s.value, label: s.label })),
+      sortable: true,
+      searchable: true,
       render: (status: string | number) => {
         const statusNum = typeof status === 'string' ? parseInt(status, 10) : status;
         const label = statusOptions.find((s) => s.value === statusNum)?.label || "-";
@@ -470,11 +452,12 @@ const UserTable = () => {
     },
     {
       title: "Vai trò",
-      dataIndex: "role.name",
+      dataIndex: ["role", "name"],
       key: "role.name",
-      sorter: true,
-      ...getColumnSearchProps('role.name'),
-      defaultSortOrder: sorter.field === 'role.name' ? sorter.order : undefined,
+      searchField: "search",
+      filterType: "text",
+      sortable: true,
+      searchable: true,
       width: 200,
       render: (_: any, record: any) => `${record.role?.name || ''}`.trim()
     },
@@ -482,9 +465,10 @@ const UserTable = () => {
       title: "Phòng ban",
       dataIndex: ["department", "name"],
       key: "department",
-      sorter: true,
-      ...getColumnSearchProps('department.name'),
-      defaultSortOrder: sorter.field === 'department' ? sorter.order : undefined,
+      searchField: "search",
+      filterType: "text",
+      sortable: true,
+      searchable: true,
       width: 200,
       render: (text: string) => text || '-'
     },
@@ -492,9 +476,10 @@ const UserTable = () => {
       title: "Chức vụ",
       dataIndex: ["chevron", "name"],
       key: "chevron",
-      sorter: true,
-      ...getColumnSearchProps('chevron.name'),
-      defaultSortOrder: sorter.field === 'chevron' ? sorter.order : undefined,
+      searchField: "search",
+      filterType: "text",
+      sortable: true,
+      searchable: true,
       width: 200,
       render: (text: string) => text || '-'
     },
@@ -502,9 +487,11 @@ const UserTable = () => {
       title: "Ngày vào làm",
       dataIndex: "startDate",
       key: "startDate",
-      sorter: true,
-      ...getColumnSearchProps('startDate', { type: 'dateRange', placeholder: 'Ngày vào làm' }),
-      defaultSortOrder: sorter.field === 'startDate' ? sorter.order : undefined,
+      searchField: "startDate",
+      filterType: "dateRange",
+      sortable: true,
+      searchable: true,
+      searchPlaceholder: "Ngày vào làm",
       render: (text: Date) => formatDate(text),
       width: 180,
     },
@@ -512,15 +499,20 @@ const UserTable = () => {
       title: "Ngày tạo",
       dataIndex: "createdAt",
       key: "createdAt",
-      sorter: true,
-      ...getColumnSearchProps('createdAt', { type: 'dateRange', placeholder: 'Ngày tạo' }),
-      defaultSortOrder: sorter.field === 'createdAt' ? sorter.order : undefined,
+      searchField: "createdAt",
+      filterType: "dateRange",
+      sortable: true,
+      searchable: true,
+      searchPlaceholder: "Ngày tạo",
       render: (text: Date) => formatDate(text),
       width: 180,
     },
     {
       title: "Thao tác",
       key: "actions",
+      filterType: "none",
+      sortable: false,
+      searchable: false,
       fixed: "right" as "right",
       width: 150,
       render: (_: any, record: any) => (
@@ -634,7 +626,7 @@ const UserTable = () => {
               columns={excelColumns}
               fileName="Danh_sach_nhan_vien"
               title="DANH SÁCH NHÂN VIÊN"
-              description={`Tổng số: ${pagination.total} nhân viên | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
+              description={`Tổng số: ${totalRecords} nhân viên | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
               className="btn-top"
               style={{
                 backgroundColor: '#52c41a',
@@ -652,26 +644,26 @@ const UserTable = () => {
 
       <Row>
         <Col xs={24}>
-          <div style={{ overflowX: 'auto' }}>
-            {/* 💡 TRUYỀN `columns` VÀ `onChange` ĐÃ CẬP NHẬT */}
-            <Table
-              rowSelection={rowSelection}
-              columns={columns}
-              dataSource={userData}
-              loading={loading}
-              rowKey="id"
-              scroll={{ x: 'max-content' }}
-              pagination={{
-                ...pagination,
-                showSizeChanger: true,
-                showTotal: (total) => `Tổng số: ${total} bản ghi`,
-                size: screens.lg ? 'default' : 'small'
-              }}
-              onChange={handleTableChange}
-              rowClassName={(record, index) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
-              size={screens.lg ? 'middle' : 'small'}
-            />
-          </div>
+          <ServerSideTable
+            columns={columns}
+            fetchData={fetchUsers}
+            rowKey="id"
+            defaultSortField="id"
+            defaultSortOrder="desc"
+            defaultPageSize={10}
+            showSelection={true}
+            onSelectionChange={(keys) => setSelectedRowKeys(keys)}
+            getCheckboxProps={(record: any) => ({ disabled: record.id === 1 })}
+            refreshTrigger={refreshTrigger}
+            showTotal={true}
+            onDataChange={(data, pagination) => {
+              setUserData(data);
+              setTotalRecords(pagination.total);
+            }}
+            scroll={{ x: 'max-content' }}
+            rowClassName={(record: any, index: number) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
+            size={screens.lg ? 'middle' : 'small'}
+          />
         </Col>
       </Row>
 

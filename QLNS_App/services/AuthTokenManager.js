@@ -262,18 +262,26 @@ class AuthTokenManager {
         throw new Error('No refresh token available');
       }
 
-      console.log('🔄 [AUTH] Calling refresh endpoint...');
+      console.log('🔄 [AUTH] Calling refresh endpoint with token length:', refreshToken.length);
       const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, {
         refreshToken,
       });
 
-      console.log('🔄 [AUTH] Refresh response received:', JSON.stringify(response.data, null, 2));
+      console.log('🔄 [AUTH] Refresh response status:', response.status);
+      console.log('🔄 [AUTH] Refresh response data:', JSON.stringify(response.data, null, 2));
 
       // Backend có thể trả về "token" hoặc "accessToken" - handle cả hai
       const newToken = response.data.token || response.data.accessToken;
       if (newToken) {
         await storageHandler.setItem(this.ACCESS_TOKEN_KEY, newToken);
         console.log('✅ [AUTH] New access token saved after refresh');
+        
+        // Also update refresh token if server returns a new one (sliding refresh)
+        if (response.data.refreshToken && response.data.refreshToken !== refreshToken) {
+          await storageHandler.setItem(this.REFRESH_TOKEN_KEY, response.data.refreshToken);
+          console.log('✅ [AUTH] New refresh token saved (sliding refresh)');
+        }
+        
         return newToken;
       } else {
         console.error('❌ [AUTH] No token in refresh response');
@@ -281,6 +289,9 @@ class AuthTokenManager {
       }
     } catch (error) {
       console.error('❌ [AUTH] Error refreshing token:', error.response?.data || error.message);
+      console.error('❌ [AUTH] Error status:', error.response?.status);
+      
+      // If refresh fails (e.g. refresh token expired), clear all tokens
       await this.clearTokens();
       throw error;
     }
