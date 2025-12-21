@@ -1689,7 +1689,10 @@ export const getUsersByIds = async (req: Request, res: Response) => {
         'email',
         'departmentId',
         'chevronId',
-        'identificationPhoto'
+        'identificationPhoto',
+        'phone',
+        'birthday',
+        'gender'
       ])
       .whereIn('id', numericUserIds)
       .where('status', 1); // Only active users
@@ -1721,7 +1724,10 @@ export const getUsersByIds = async (req: Request, res: Response) => {
       return {
         ...user,
         department,
-        chevron
+        chevron,
+        // Thêm position/jobTitle từ chevron.name để dễ dùng
+        position: chevron?.name || null,
+        jobTitle: chevron?.name || null
       };
     }));
 

@@ -143,6 +143,38 @@ class AttendanceService {
     }
   }
 
+  // 📊 API: Lấy bảng công chi tiết theo ngày (cho xuất Excel) - SỬ DỤNG SCOPE
+  async getDailyAttendanceForExport(month: string): Promise<any> {
+    try {
+      console.log('📊 Calling daily-attendance-export API:', `/api/attendance/daily-attendance-export?month=${month}`);
+      const response = await apiService.get('/api/attendance/daily-attendance-export', {
+        params: { month }
+      });
+      console.log('📥 Daily attendance export response:', response.data);
+      
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error fetching daily attendance for export:', error);
+      throw error;
+    }
+  }
+
+  // 📊 API: Lấy TẤT CẢ bảng duyệt theo scope (cho xuất Excel) - KHÔNG PHÂN TRANG
+  async getMonthlySummariesForExport(params?: { month?: string; [key: string]: any }): Promise<any> {
+    try {
+      console.log('📊 Calling monthly-summaries-export API:', '/api/attendance/monthly-summaries-export', params);
+      const response = await apiService.get('/api/attendance/monthly-summaries-export', {
+        params
+      });
+      console.log('📥 Monthly summaries export response:', response.data);
+      
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error fetching monthly summaries for export:', error);
+      throw error;
+    }
+  }
+
   // Duyệt bảng chấm công (gộp từ attendanceApprovalService)
   async approveAttendance(approvalData: any): Promise<any> {
     try {

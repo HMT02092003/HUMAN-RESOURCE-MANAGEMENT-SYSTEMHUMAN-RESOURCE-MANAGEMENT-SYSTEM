@@ -29,6 +29,177 @@ import dayjs from 'dayjs';
  */
 // approveAttendance removed — approval flow is not exposed by this service anymore.
 
+/**
+ * API: Lấy bảng công chi tiết theo ngày cho xuất Excel (SỬ DỤNG SCOPE)
+ * GET /api/attendance/daily-attendance-export
+ * Query params: month (YYYY-MM)
+ * 
+ * LẤY TRỰC TIẾP TỪ BẢNG time_attendances (không dùng dailyDetails)
+ * Tự động lấy dữ liệu theo scope của người dùng đăng nhập:
+ * - Admin: Tất cả
+ * - Manager: Phòng ban của họ
+ * - User: Chỉ của họ
+ */
+export const getDailyAttendanceForExport = async (req: Request, res: Response) => {
+  try {
+    console.log('\n📊 === GET DAILY ATTENDANCE FOR EXPORT (WITH SCOPE) ===');
+    
+    const { month } = req.query;
+    
+    if (!month) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tháng là bắt buộc (format: YYYY-MM)'
+      });
+    }
+
+    // Lấy token để check scope
+    let token = req.cookies?.['token'];
+    if (!token && req.headers.authorization) {
+      const authHeader = req.headers.authorization;
+      token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
+    }
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'Token không hợp lệ'
+      });
+    }
+
+    // Check scope của người dùng để lấy danh sách user IDs có quyền xem
+    const CheckScopeService = (await import('../services/CheckScopeService')).default;
+    const scopeResult = await CheckScopeService.checkUserScope('users', token);
+    
+    if (!scopeResult.hasAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Không có quyền truy cập'
+      });
+    }
+
+    console.log('🔐 Scope check result:', { 
+      scope: scopeResult.scope, 
+      userCount: scopeResult.userIds.length 
+    });
+
+    // Xác định userIds theo scope
+    let userIds: number[] = [];
+    if (scopeResult.scope === 'personal' || scopeResult.userIds.length === 0) {
+      const decoded = getDecodedToken(token);
+      userIds = [Number(decoded?.sub || 0)];
+    } else {
+      userIds = scopeResult.userIds;
+    }
+
+    if (userIds.length === 0) {
+      return res.json({
+        success: true,
+        data: [],
+        message: 'Không có user nào trong scope',
+        daysInMonth: 0,
+        month: month as string
+      });
+    }
+
+    // Tính toán ngày đầu và cuối tháng
+    const monthStr = month as string;
+    const [year, monthNum] = monthStr.split('-');
+    const startDate = dayjs(`${year}-${monthNum}-01`).startOf('month');
+    const endDate = startDate.endOf('month');
+    const daysInMonth = endDate.date();
+    
+    const startDateStr = startDate.format('YYYY-MM-DD');
+    const endDateStr = endDate.format('YYYY-MM-DD');
+
+    console.log('📅 Date range:', { startDateStr, endDateStr, daysInMonth });
+    
+    // Lấy tất cả time_attendances trong tháng cho các users trong scope
+    const timeAttendances = await TimeAttendanceModel.query()
+      .whereIn('userId', userIds)
+      .whereBetween('date', [startDateStr, endDateStr])
+      .orderBy('userId', 'asc')
+      .orderBy('date', 'asc');
+
+    console.log('⏰ Time attendances count:', timeAttendances.length);
+
+    // Fetch user info đầy đủ (bao gồm department, position)
+    const users = await CheckScopeService.getUsersByIds(userIds);
+    const usersMap = new Map(users.map((u: any) => [u.id, u]));
+
+    console.log('👥 Users:', users.length, 'Sample:', users[0]);
+
+    // Group attendance records by userId
+    const attendancesByUser = new Map<number, any[]>();
+    timeAttendances.forEach((att: any) => {
+      if (!attendancesByUser.has(att.userId)) {
+        attendancesByUser.set(att.userId, []);
+      }
+      attendancesByUser.get(att.userId)!.push(att);
+    });
+
+    // Build result với daily breakdown
+    const result = userIds.map((userId, index) => {
+      const user = usersMap.get(userId);
+      const userAttendances = attendancesByUser.get(userId) || [];
+      
+      // Create a map: dayOfMonth -> attendance record
+      const dailyMap = new Map<number, any>();
+      userAttendances.forEach((att: any) => {
+        const dayOfMonth = dayjs(att.date).date();
+        dailyMap.set(dayOfMonth, att);
+      });
+      
+      // Build result object with daily columns
+      const row: any = {
+        stt: index + 1,
+        fullName: user?.fullName || user?.firstName || user?.lastName || `User ${userId}`,
+        position: user?.position || user?.jobTitle || user?.chevron?.name || 'Chưa xác định',
+        department: user?.department?.name || 'Chưa phân công',
+      };
+      
+      let totalWorkingDays = 0;
+      
+      // Add columns for each day (1-31)
+      for (let day = 1; day <= daysInMonth; day++) {
+        const att = dailyMap.get(day);
+        
+        if (!att) {
+          row[`day${day}`] = 0;
+          continue;
+        }
+        
+        // Tính giá trị công dựa trên dailyWorkingUnit (hoặc totalWorkingUnit)
+        // dailyWorkingUnit là số công thực tế (0, 0.5, 1, 1.5, 2...)
+        const workValue = Number(att.dailyWorkingUnit || att.totalWorkingUnit || 0);
+        row[`day${day}`] = workValue;
+        totalWorkingDays += workValue;
+      }
+      
+      row.totalWorkingDays = Math.round(totalWorkingDays * 100) / 100; // Làm tròn 2 chữ số
+      
+      return row;
+    });
+
+    console.log(`✅ Exported ${result.length} records for month ${monthStr}`);
+    console.log('📊 Sample result:', result[0]);
+
+    return res.json({
+      success: true,
+      data: result,
+      daysInMonth,
+      month: monthStr
+    });
+    
+  } catch (error: any) {
+    console.error('❌ Error in getDailyAttendanceForExport:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Có lỗi xảy ra khi lấy dữ liệu'
+    });
+  }
+};
+
 // API 3: Lấy thông tin chấm công đầy đủ của 1 user
 // ⭐ CẬP NHẬT: Tính toán chính xác theo yêu cầu mới
 export const getUserMonthlyFull = async (req: Request, res: Response) => {
@@ -209,6 +380,112 @@ export const getMonthlyAttendanceByMonth = async (req: Request, res: Response) =
   } catch (error: any) {
     console.error('❌ Error in getMonthlyAttendanceByMonth:', error);
     return res.status(500).json({ success: false, message: error.message || 'Internal error' });
+  }
+};
+
+/**
+ * API: Lấy TẤT CẢ dữ liệu bảng duyệt theo scope cho xuất Excel
+ * GET /api/attendance/monthly-summaries-export
+ * Query params: month (optional YYYY-MM), và các filters khác
+ * 
+ * Tự động lấy tất cả dữ liệu theo scope của người dùng (không có phân trang):
+ * - Admin: Tất cả
+ * - Manager: Phòng ban của họ  
+ * - User: Chỉ của họ
+ */
+export const getMonthlySummariesForExport = async (req: Request, res: Response) => {
+  try {
+    console.log('\n📊 === GET MONTHLY SUMMARIES FOR EXPORT (WITH SCOPE) ===');
+    
+    // Lấy token để check scope
+    let token = req.cookies?.['token'];
+    if (!token && req.headers.authorization) {
+      const authHeader = req.headers.authorization;
+      token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
+    }
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: 'Token không hợp lệ'
+      });
+    }
+
+    // Check scope của người dùng
+    const CheckScopeService = (await import('../services/CheckScopeService')).default;
+    const scopeResult = await CheckScopeService.checkUserScope('users', token);
+    
+    if (!scopeResult.hasAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Không có quyền truy cập'
+      });
+    }
+
+    console.log('🔐 Scope check result:', { 
+      scope: scopeResult.scope, 
+      userCount: scopeResult.userIds.length 
+    });
+
+    // Build query với filters từ params (nếu có)
+    let query = MonthlySummaryModel.query();
+    
+    // Filter theo tháng nếu có
+    const { month, ...otherFilters } = req.query;
+    if (month) {
+      query = query.where('month', month as string);
+    }
+
+    // Áp dụng scope filtering
+    if (scopeResult.scope === 'personal' || scopeResult.userIds.length === 0) {
+      const decoded = getDecodedToken(token);
+      query = query.where('userId', Number(decoded?.sub || 0));
+    } else if (scopeResult.userIds.length > 0) {
+      query = query.whereIn('userId', scopeResult.userIds);
+    }
+
+    // Apply các filters khác nếu có
+    const queryBuilder = await import('@/utils/query-builder');
+    query = queryBuilder.applyFilters(query, otherFilters);
+
+    // Lấy TẤT CẢ dữ liệu (không phân trang)
+    const results = await query.orderBy('month', 'desc').orderBy('userId', 'asc');
+
+    // Fetch user info
+    const userIds = [...new Set(results.map((r: any) => r.userId))];
+    const users = await CheckScopeService.getUsersByIds(userIds);
+    const usersMap = new Map(users.map((u: any) => [u.id, u]));
+
+    // Format results với user data
+    const formattedResults = results.map((record: any) => {
+      const user = usersMap.get(record.userId);
+      return {
+        ...record,
+        user: user ? {
+          id: user.id,
+          username: user.username,
+          fullName: user.fullName,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          department: user.department
+        } : null
+      };
+    });
+
+    console.log(`✅ Exported ${formattedResults.length} records`);
+
+    return res.json({
+      success: true,
+      data: formattedResults,
+      total: formattedResults.length
+    });
+
+  } catch (error: any) {
+    console.error('❌ Error in getMonthlySummariesForExport:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Có lỗi xảy ra khi lấy dữ liệu'
+    });
   }
 };
 
@@ -611,6 +888,108 @@ export const updateForgotCheck = async (req: Request, res: Response) => {
       success: false,
       message: 'Lỗi khi cập nhật chấm công',
       error: error.message
+    });
+  }
+};
+
+/**
+ * API: Lấy danh sách time_attendances (bảng công chi tiết từng ngày)
+ * GET /api/attendance/time-attendances
+ * Supports filtering, sorting, pagination
+ */
+export const getTimeAttendancesController = async (req: Request, res: Response) => {
+  try {
+    // Frontend sends 1-based page
+    const pageFromFrontend = Number(req.query['page'] ?? req.body?.page ?? 1);
+    const page = Math.max(1, pageFromFrontend);
+    
+    // Accept both 'pageSize' and 'limit'
+    const pageSize = Number(req.query['pageSize'] ?? req.query['limit'] ?? req.body?.pageSize ?? req.body?.limit ?? 20);
+    
+    // Build query - không dùng eager loading để tránh lỗi relation
+    // Sẽ fetch user data từ auth-service nếu cần
+    let query = TimeAttendanceModel.query()
+      .orderBy('time_attendances.date', 'DESC');
+
+    // Apply filters
+    // Date filter
+    if (req.query['date']) {
+      query = query.where('time_attendances.date', req.query['date']);
+    }
+    if (req.query['month']) {
+      const monthStr = String(req.query['month']);
+      query = query.whereRaw(`DATE_FORMAT(time_attendances.date, '%Y-%m') = ?`, [monthStr]);
+    }
+    
+    // Status filter
+    if (req.query['status']) {
+      query = query.where('time_attendances.status', req.query['status']);
+    }
+
+    // UserId filter (for specific user)
+    if (req.query['userId']) {
+      query = query.where('time_attendances.userId', Number(req.query['userId']));
+    }
+
+    // Sorting
+    const sortField = req.query['sortField'] as string || 'date';
+    const sortOrder = (req.query['sortOrder'] as string || 'desc').toLowerCase();
+    
+    if (sortField && ['date', 'userId', 'status'].includes(sortField)) {
+      query = query.clearOrder().orderBy(`time_attendances.${sortField}`, sortOrder as 'asc' | 'desc');
+    }
+
+    // Count total
+    const countQuery = query.clone().clearOrder();
+    const totalResult = await countQuery.count('time_attendances.id as count').first();
+    const total = Number((totalResult as any)?.count || 0);
+
+    // Apply pagination
+    const offset = (page - 1) * pageSize;
+    query = query.limit(pageSize).offset(offset);
+
+    // Execute query
+    const results = await query;
+
+    // Format response với các field cần thiết
+    const formattedResults = results.map((record: any) => ({
+      id: record.id,
+      userId: record.userId,
+      date: record.date,
+      check_in_time: record.checkInTime,
+      check_out_time: record.checkOutTime,
+      work_hours: record.dailyTotalWorkHours || 0,
+      working_units: record.dailyWorkingUnit || 0,
+      overtime_hours: record.otWorkingUnit || 0,
+      overtime_salary: 0, // TODO: Calculate if needed
+      late_minutes: record.lateMinutes || 0,
+      early_leave_minutes: record.earlyDepartureMinutes || 0,
+      late_penalty: record.lateArrivalPenalty || 0,
+      early_penalty: record.earlyLeavePenalty || 0,
+      status: 'present', // Default status
+      notes: '',
+      // Placeholder for user data - frontend sẽ cần fetch riêng hoặc cache
+      user: {
+        id: record.userId,
+        username: `user_${record.userId}`,
+        fullName: `User ${record.userId}`,
+      },
+      shift: null,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      results: formattedResults,
+      data: formattedResults, // Alias for compatibility
+      total,
+      page,
+      pageSize
+    });
+  } catch (error: any) {
+    console.error('Error in getTimeAttendancesController:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: error.message || 'Internal Server Error' 
     });
   }
 };

@@ -12,7 +12,10 @@ import {
   approveAllByMonth, 
   calculateAndSaveMonthly,
   bulkCalculateMonthly,
-  updateForgotCheck
+  updateForgotCheck,
+  getTimeAttendancesController,
+  getDailyAttendanceForExport,
+  getMonthlySummariesForExport
 } from '../src/controller/AttendanceController';
 import {
   getSettings,
@@ -49,6 +52,18 @@ const noCache = (_req: Request, res: Response, next: any) => {
 // GET /api/user/:userId/monthly-full?year=2025&month=10
 router.get('/user/:userId/monthly-full', authenticateToken, async (req: Request, res: Response) => {
   await getUserMonthlyFull(req, res);
+});
+
+// API: Lấy bảng công chi tiết theo ngày (cho xuất Excel) - SỬ DỤNG SCOPE
+// GET /api/attendance/daily-attendance-export?month=2025-12
+router.get('/daily-attendance-export', authenticateToken, async (req: Request, res: Response) => {
+  await getDailyAttendanceForExport(req, res);
+});
+
+// API: Lấy TẤT CẢ bảng duyệt theo scope (cho xuất Excel) - KHÔNG PHÂN TRANG
+// GET /api/attendance/monthly-summaries-export?month=2025-12
+router.get('/monthly-summaries-export', authenticateToken, async (req: Request, res: Response) => {
+  await getMonthlySummariesForExport(req, res);
 });
 
 // API: Chấm công tự động (check-in/check-out)
@@ -144,6 +159,11 @@ const handleMonthlySummariesByScope = async (req: any, res: any) => {
 router.route('/monthly-summaries-by-scope')
   .get(authenticateToken, (req: any, res: any, next: any) => { handleMonthlySummariesByScope(req, res).catch(next); })
   .post(authenticateToken, (req: any, res: any, next: any) => { handleMonthlySummariesByScope(req, res).catch(next); });
+
+// GET /api/attendance/time-attendances - Lấy danh sách chấm công chi tiết từng ngày
+router.get('/time-attendances', authenticateToken, async (req: Request, res: Response) => {
+  await getTimeAttendancesController(req, res);
+});
 
 // ===================================
 // SETTINGS ROUTES
