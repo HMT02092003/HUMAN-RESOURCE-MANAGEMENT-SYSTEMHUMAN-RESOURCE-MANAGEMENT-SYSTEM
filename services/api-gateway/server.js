@@ -1,5 +1,7 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import { createServer } from 'http';
+import { Server as SocketIOServer } from 'socket.io';
 
 // Load environment variables TRƯỚC KHI import các module khác
 const envPath = path.resolve(process.cwd(), '.env');
@@ -15,8 +17,63 @@ import { getServices, ROUTE_CONFIG } from './config/services.js';
 import { createOptimizedProxy, requestLogger } from './middleware/proxy.js';
 
 const app = express();
+const httpServer = createServer(app);
+const io = new SocketIOServer(httpServer, {
+  cors: {
+    origin: true,
+    credentials: true
+  },
+  path: '/socket.io/'
+});
+
 const PORT = process.env.PORT || 4000;
 const SERVICES = getServices(); // Lấy services từ env vars
+
+// Store connected users: { userId: socketId }
+const connectedUsers = new Map();
+
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+  console.log(`🔌 Socket connected: ${socket.id}`);
+
+  // User authentication
+  socket.on('authenticate', (userId) => {
+    if (userId) {
+      connectedUsers.set(userId, socket.id);
+      socket.userId = userId;
+      console.log(`✅ User ${userId} authenticated with socket ${socket.id}`);
+    }
+  });
+
+  // Handle disconnect
+  socket.on('disconnect', () => {
+    if (socket.userId) {
+      connectedUsers.delete(socket.userId);
+      console.log(`👋 User ${socket.userId} disconnected`);
+    } else {
+      console.log(`👋 Socket ${socket.id} disconnected`);
+    }
+  });
+});
+
+// Export socket functions for use in other modules
+export function emitToUser(userId, event, data) {
+  const socketId = connectedUsers.get(userId);
+  if (socketId) {
+    io.to(socketId).emit(event, data);
+    return true;
+  }
+  return false;
+}
+
+export function emitToUsers(userIds, event, data) {
+  const results = userIds.map(userId => emitToUser(userId, event, data));
+  return results.filter(r => r).length;
+}
+
+export function broadcastToAll(event, data) {
+  io.emit(event, data);
+}
 
 // CORS configuration
 app.use(cors({
@@ -75,8 +132,9 @@ app.get('/', (req, res) => {
 });
 
 // Khởi động server (với xử lý lỗi startup)
-const server = app.listen(PORT, '0.0.0.0', () => {
+const server = httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 API Gateway v2.0 running on port ${PORT}`);
+  console.log(`🔌 WebSocket server ready at ws://localhost:${PORT}`);
   console.log(`🌐 Health check: http://localhost:${PORT}/gateway-health`);
   
   // Hiển thị trạng thái services

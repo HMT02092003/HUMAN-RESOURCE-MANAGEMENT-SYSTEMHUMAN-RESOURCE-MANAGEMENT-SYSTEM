@@ -141,6 +141,49 @@ class AuthService {
       };
     }
   }
+
+  /**
+   * Get users in scope for KPI management
+   * Returns list of users that the current user can view KPI for
+   */
+  static async getUsersInScope(currentUserId: number, token: string): Promise<any[]> {
+    try {
+      // Normalize token format
+      let authHeader = token || '';
+      if (authHeader && !authHeader.startsWith('Bearer ')) {
+        authHeader = `Bearer ${authHeader}`;
+      }
+
+      console.debug('[AuthService] Getting users in scope for user', currentUserId);
+
+      const response = await axios.get(
+        `${AUTH_SERVICE_URL}/api/users/in-scope`,
+        {
+          headers: {
+            Authorization: authHeader,
+            'Content-Type': 'application/json'
+          },
+          timeout: 5000
+        }
+      );
+
+      if (response.data && response.data.success) {
+        return response.data.data || response.data.users || [];
+      }
+
+      console.warn('[AuthService] Get users in scope returned failure', { data: response.data });
+      return [];
+
+    } catch (error: any) {
+      console.error('[AuthService] Error getting users in scope:', error.message);
+      // Fallback: return just the current user
+      return [{
+        id: currentUserId,
+        fullName: `User ${currentUserId}`,
+        name: `User ${currentUserId}`
+      }];
+    }
+  }
 }
 
 export default AuthService;

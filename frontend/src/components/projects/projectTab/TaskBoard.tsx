@@ -18,6 +18,8 @@ import TaskCreateWithAI from './TaskCreateWithAI';
 import jobService from '@/service/jobService';
 import { attendanceService } from '@/service/attendanceService';
 import dayjs from 'dayjs';
+import Cookies from 'js-cookie';
+import { getDecodedToken } from '@/utils/decode-token';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -27,7 +29,7 @@ interface TaskBoardProps {
 }
 
 interface Column {
-  id: 'todo' | 'in_progress' | 'done';
+  id: 'todo' | 'in_progress' | 'pending_approval' | 'done';
   title: string;
   color: string;
 }
@@ -35,6 +37,7 @@ interface Column {
 const columns: Column[] = [
   { id: 'todo', title: 'Chưa bắt đầu', color: '#d9d9d9' },
   { id: 'in_progress', title: 'Đang thực hiện', color: '#1890ff' },
+  { id: 'pending_approval', title: 'Chờ phê duyệt', color: '#fa8c16' },
   { id: 'done', title: 'Hoàn thành', color: '#52c41a' }
 ];
 
@@ -56,6 +59,9 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
   const [loading, setLoading] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isProjectManager, setIsProjectManager] = useState(false);
+  const [projectManagerIdState, setProjectManagerIdState] = useState<string | null>(null);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isAIModalVisible, setIsAIModalVisible] = useState(false);
   const [isManualModalVisible, setIsManualModalVisible] = useState(false);
@@ -121,9 +127,10 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
     try {
       setLoading(true);
       const params = viewMode === 'me' ? { assignee_id: 'me' } : {};
-      const [tasksRes, membersRes] = await Promise.all([
+      const [tasksRes, membersRes, projectRes] = await Promise.all([
         jobService.getProjectTasks(projectId, params),
-        jobService.getProjectMembers(projectId)
+        jobService.getProjectMembers(projectId),
+        jobService.getProjectById(projectId)
       ]);
 
       // Map API data to Task format
@@ -170,6 +177,99 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
 
       setTasks(mappedTasks);
       setMembers(mappedMembers);
+
+      // Get project manager_id from project data (handle multiple possible response shapes)
+      console.log('🔎 [TaskBoard] raw projectRes:', projectRes);
+      let projectManagerId =
+        // Axios-style: { data: { project: { manager_id }}}
+        projectRes?.data?.project?.manager_id ||
+        // Old-style: { project: { manager_id }}
+        projectRes?.project?.manager_id ||
+        // Direct payload: { manager_id: 3 }
+        projectRes?.data?.manager_id ||
+        projectRes?.manager_id ||
+        null;
+
+      // Fallback: if manager_id not present, try the overview endpoint
+      if (!projectManagerId) {
+        try {
+          const overviewRes = await jobService.getProjectOverview(projectId);
+          console.log('🔎 [TaskBoard] projectOverviewRes:', overviewRes);
+          const overviewManagerId =
+            overviewRes?.data?.project?.manager_id ||
+            overviewRes?.project?.manager_id ||
+            overviewRes?.data?.manager_id ||
+            overviewRes?.manager_id ||
+            null;
+          if (overviewManagerId) projectManagerId = overviewManagerId;
+        } catch (e) {
+          console.warn('⚠️ [TaskBoard] Could not fetch project overview for manager_id fallback', e);
+        }
+      }
+
+      // Determine current user and whether they are project manager
+      try {
+        // Robust token extraction: check several common storage keys
+        const tokenKeys = ['token', 'accessToken', 'access_token', 'authToken', 'authorization'];
+        let token: string | undefined | null = null;
+        let tokenKeyUsed: string | null = null;
+        if (typeof window !== 'undefined') {
+          for (const k of tokenKeys) {
+            const fromLocal = window.localStorage?.getItem(k);
+            const fromCookie = Cookies.get(k);
+            if (fromLocal) { token = fromLocal; tokenKeyUsed = `localStorage:${k}`; break; }
+            if (fromCookie) { token = fromCookie; tokenKeyUsed = `cookie:${k}`; break; }
+          }
+        } else {
+          for (const k of tokenKeys) {
+            const fromCookie = Cookies.get(k);
+            if (fromCookie) { token = fromCookie; tokenKeyUsed = `cookie:${k}`; break; }
+          }
+        }
+
+        const decoded = token ? getDecodedToken(token) : null;
+        const uid = decoded?.sub ? String(decoded.sub) : null;
+        setCurrentUserId(uid);
+
+        console.log('🔐 [TaskBoard] token check:', { tokenKeyUsed, tokenPreview: token ? `${String(token).slice(0,10)}...` : null, decoded });
+
+        if (!uid) {
+          console.warn('⚠️ [TaskBoard] No user ID found in token (uid is null).');
+          setIsProjectManager(false);
+          return;
+        }
+
+        // Check 1: Is user the project manager (by manager_id)?
+        const isProjectOwner = projectManagerId && String(projectManagerId) === String(uid);
+
+        // Check 2: Does user have manager role in project members?
+        const memberMatch = mappedMembers.find(m => String(m.id) === String(uid));
+        const roleStr = memberMatch ? String(memberMatch.role || '').toLowerCase() : '';
+        const hasManagerRole = roleStr.includes('manager') || 
+                               roleStr.includes('project') || 
+                               roleStr.includes('quản') || 
+                               roleStr.includes('ql') || 
+                               roleStr.includes('trưởng') || 
+                               roleStr.includes('admin') || 
+                               roleStr.includes('pm');
+
+        const isManager = !!(isProjectOwner || hasManagerRole);
+        setIsProjectManager(isManager);
+        setProjectManagerIdState(projectManagerId ? String(projectManagerId) : null);
+        
+        console.log('🔍 [TaskBoard] Manager check:', {
+          currentUserId: uid,
+          projectManagerId: projectManagerId,
+          isProjectOwner: isProjectOwner,
+          memberMatch: memberMatch ? { id: memberMatch.id, role: memberMatch.role } : null,
+          hasManagerRole: hasManagerRole,
+          finalIsManager: isManager
+        });
+      } catch (err) {
+        console.error('❌ [TaskBoard] Error detecting user role:', err);
+        setCurrentUserId(null);
+        setIsProjectManager(false);
+      }
     } catch (error: any) {
       message.error(`Lỗi tải dữ liệu: ${error.response?.data?.details || error.message}`);
     } finally {
@@ -182,6 +282,22 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
   };
 
   const handleTaskClick = (task: Task) => {
+    // Only project managers can update task info, and only when task is in 'todo'
+    const isManagerForUI = !!(
+      (projectManagerIdState && currentUserId && String(projectManagerIdState) === String(currentUserId)) ||
+      isProjectManager
+    );
+
+    if (!isManagerForUI) {
+      message.warning('Chỉ quản lý dự án mới có quyền cập nhật thông tin task');
+      return;
+    }
+
+    if (task.status !== 'todo') {
+      message.warning('Chỉ được cập nhật thông tin khi task ở trạng thái "Chưa bắt đầu"');
+      return;
+    }
+
     setSelectedTask(task);
     // If backend didn't provide a startDate, compute a reasonable estimate
     // from dueDate - estimatedDays so the edit modal is pre-filled for convenience.
@@ -321,17 +437,24 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
     }
   };
 
-  const handleStatusChange = useCallback(async (taskId: string, newStatus: 'todo' | 'in_progress' | 'done') => {
+  const handleStatusChange = useCallback(async (taskId: string, newStatus: 'todo' | 'in_progress' | 'pending_approval' | 'done') => {
     try {
       setUpdatingTaskId(taskId);
       const response = await jobService.updateTaskStatus(projectId, taskId, newStatus);
 
       if (response.data.success) {
-        message.success('Cập nhật trạng thái thành công!');
+        const statusLabels = {
+          'todo': 'Chưa bắt đầu',
+          'in_progress': 'Đang làm',
+          'pending_approval': 'Chờ duyệt',
+          'done': 'Hoàn thành'
+        };
+        message.success(`Cập nhật trạng thái thành công: ${statusLabels[newStatus]}!`);
         await loadTasksAndMembers();
       }
     } catch (error: any) {
-      message.error(`Lỗi cập nhật: ${error.response?.data?.details || error.message}`);
+      const errorMsg = error.response?.data?.message || error.response?.data?.details || error.message;
+      message.error(`Lỗi cập nhật: ${errorMsg}`);
     } finally {
       setUpdatingTaskId(null);
     }
@@ -341,17 +464,32 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
     setViewMode(prev => prev === 'all' ? 'me' : 'all');
   }, []);
 
-  const renderTaskCard = (task: Task) => (
+  const renderTaskCard = (task: Task) => {
+    // Check if task is overdue
+    const isOverdue = task.dueDate && dayjs(task.dueDate).isBefore(dayjs(), 'day') && task.status !== 'done';
+    
+    const cardStyle = {
+      marginBottom: 12,
+      cursor: 'pointer',
+      position: 'relative' as const,
+      ...(isOverdue ? {
+        borderColor: '#ff4d4f',
+        borderWidth: 2,
+        backgroundColor: '#fff2f0'
+      } : {})
+    };
+
+    return (
     <Card
       key={task.id}
       size="small"
       hoverable
-      style={{ marginBottom: 12, cursor: 'pointer', position: 'relative' }}
+      style={cardStyle}
       onClick={() => handleTaskClick(task)}
       bodyStyle={{ padding: 12 }}
     >
-      {/* Delete Button - Only show for TODO tasks */}
-      {task.status === 'todo' && (
+      {/* Delete Button - only visible to project managers for TODO tasks */}
+      {task.status === 'todo' && isProjectManager ? (
         <Popconfirm
           title="Xóa task này?"
           description="Bạn có chắc chắn muốn xóa task này?"
@@ -375,7 +513,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
             onClick={(e) => e.stopPropagation()}
           />
         </Popconfirm>
-      )}
+      ) : null}
 
       <div style={{ marginBottom: 8 }}>
         <Tag color={priorityColors[task.priority]} style={{ marginRight: 4 }}>
@@ -405,9 +543,16 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
 
       {task.tags && task.tags.length > 0 && (
         <div style={{ marginBottom: 8 }}>
-          {task.tags.map(tag => (
-            <Tag key={tag} style={{ fontSize: 11 }}>{tag}</Tag>
-          ))}
+          {task.tags
+            .filter(tag => {
+              const t = String(tag || '').toLowerCase();
+              // hide tags that are actually status markers we already show elsewhere
+              if (t.includes('phê duyệt') || t.includes('chờ phê duyệt') || t.includes('pending') || t.includes('pending_approval')) return false;
+              return true;
+            })
+            .map(tag => (
+              <Tag key={tag} style={{ fontSize: 11 }}>{tag}</Tag>
+            ))}
         </div>
       )}
 
@@ -474,6 +619,24 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
           const startDisabled = notStarted || (updatingTaskId !== null && updatingTaskId !== task.id);
           const completeDisabled = notStarted || (updatingTaskId !== null && updatingTaskId !== task.id);
 
+          // Check if current user has permission to update task status
+          const isAssignee = !!(task.assignee && currentUserId && String(task.assignee.id) === String(currentUserId));
+          // Only assignee can start/complete tasks (project manager cannot unless also assignee)
+          const canUpdateStatus = isAssignee;
+          const isProjectOwnerForUI = projectManagerIdState && currentUserId && String(projectManagerIdState) === String(currentUserId);
+          
+          // Always log for debugging
+          console.log(`🔍 [TaskBoard] Permission for "${task.title}":`, {
+            taskId: task.id,
+            assigneeId: task.assignee?.id,
+            assigneeName: task.assignee?.name,
+            currentUserId: currentUserId,
+            isAssignee: isAssignee,
+            isProjectManager: isProjectManager,
+            isProjectOwnerForUI: isProjectOwnerForUI,
+            canUpdateStatus: canUpdateStatus
+          });
+
           const startButton = (
             <Button
               type="primary"
@@ -504,7 +667,8 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
 
           return (
             <>
-              {task.status !== 'in_progress' && task.status !== 'done' && (
+              {/* Start button - only show if user has permission */}
+              {canUpdateStatus && (task.status !== 'in_progress' && task.status !== 'done' && task.status !== 'pending_approval') ? (
                 notStarted ? (
                   <Tooltip title={`Task bắt đầu vào ${dayjs(task.startDate).format('DD/MM/YYYY')}`}>
                     {startButton}
@@ -519,9 +683,10 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
                     {startButton}
                   </Popconfirm>
                 )
-              )}
+              ) : null}
 
-              {task.status !== 'done' && (
+              {/* Complete button - only show if user has permission */}
+              {canUpdateStatus && (task.status !== 'done' && task.status !== 'todo' && task.status !== 'pending_approval') ? (
                 notStarted ? (
                   <Tooltip title={`Task bắt đầu vào ${dayjs(task.startDate).format('DD/MM/YYYY')}`}>
                     {completeButton}
@@ -529,15 +694,48 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
                 ) : (
                   <Popconfirm
                     title="Đánh dấu hoàn thành?"
-                    onConfirm={() => handleStatusChange(task.id, 'done')}
+                    description="Task sẽ chuyển sang trạng thái chờ duyệt"
+                    onConfirm={() => handleStatusChange(task.id, 'pending_approval')}
                     okText="Có"
                     cancelText="Không"
                   >
                     {completeButton}
                   </Popconfirm>
                 )
+              ) : null}
+
+              {/* Approve button - only show if user is project manager */}
+              {task.status === 'pending_approval' && isProjectOwnerForUI && (
+                <Tooltip title="Phê duyệt (Quản lý)">
+                  <Popconfirm
+                    title="Phê duyệt task này?"
+                    description="Task sẽ được đánh dấu là hoàn thành"
+                    onConfirm={() => handleStatusChange(task.id, 'done')}
+                    okText="Phê duyệt"
+                    cancelText="Hủy"
+                  >
+                    <Button
+                      type="primary"
+                      size="small"
+                      icon={<CheckCircleOutlined />}
+                      style={{
+                        marginLeft: 8,
+                        fontSize: 12,
+                        backgroundColor: '#52c41a',
+                        borderColor: '#52c41a',
+                        color: '#fff',
+                        borderRadius: 6,
+                        boxShadow: '0 2px 8px rgba(82,196,26,0.15)'
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Phê duyệt
+                    </Button>
+                  </Popconfirm>
+                </Tooltip>
               )}
 
+              {/* Status tag for completed tasks */}
               {task.status === 'done' && (
                 <Tag color="success" icon={<CheckCircleOutlined />}>
                   Đã hoàn thành
@@ -548,51 +746,62 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
         })()}
       </div>
     </Card>
-  );
+    );
+  };
 
   return (
     <div className="task-board">
       <div style={{ marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 auto' }}>
-          {viewMode === 'me' && (
-            <Tag color="blue" icon={<UserOutlined />}>
-              Công việc của tôi
-            </Tag>
-          )}
-
           <Button
-            type={viewMode === 'me' ? 'primary' : 'default'}
-            icon={viewMode === 'me' ? <UserOutlined /> : <TeamOutlined />}
+            type={viewMode === 'me' ? 'default' : 'primary'}
+            icon={<TeamOutlined />}
             onClick={handleToggleViewMode}
             loading={loading}
-            style={{ minWidth: 160 }}
+            disabled={viewMode === 'all'}
+            style={{ minWidth: 140 }}
           >
-            {viewMode === 'me' ? 'Xem tất cả' : 'Công việc của tôi'}
+            Xem tất cả
+          </Button>
+          
+          <Button
+            type={viewMode === 'me' ? 'primary' : 'default'}
+            icon={<UserOutlined />}
+            onClick={handleToggleViewMode}
+            loading={loading}
+            disabled={viewMode === 'me'}
+            style={{ minWidth: 140 }}
+          >
+            Công việc của tôi
           </Button>
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <Button
-            type="primary"
-            style={{backgroundColor:"#52c41a"}}
-            onClick={() => setIsManualModalVisible(true)}
-          >
-            <PlusOutlined /> Tạo thủ công
-          </Button>
+          { (projectManagerIdState && currentUserId && String(projectManagerIdState) === String(currentUserId)) ? (
+            <>
+              <Button
+                type="primary"
+                style={{backgroundColor:"#52c41a"}}
+                onClick={() => setIsManualModalVisible(true)}
+              >
+                <PlusOutlined /> Tạo thủ công
+              </Button>
 
-          <Button
-            icon={<FaMagic />}
-            onClick={() => setIsAIModalVisible(true)}
-            style={{
-              background: 'linear-gradient(90deg, #9871e8ff 0%, #0066ff 100%)',
-              border: 'none',
-              color: '#fff',
-              boxShadow: '0 2px 8px rgba(24,144,255,0.2)',
-              minWidth: 140
-            }}
-          >
-            Tạo với AI
-          </Button>
+              <Button
+                icon={<FaMagic />}
+                onClick={() => setIsAIModalVisible(true)}
+                style={{
+                  background: 'linear-gradient(90deg, #9871e8ff 0%, #0066ff 100%)',
+                  border: 'none',
+                  color: '#fff',
+                  boxShadow: '0 2px 8px rgba(24,144,255,0.2)',
+                  minWidth: 140
+                }}
+              >
+                Tạo với AI
+              </Button>
+            </>
+          ) : null}
         </div>
       </div>
 

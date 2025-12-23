@@ -11,6 +11,7 @@ import ProjectRequiredSkillModel from '../Models/ProjectRequiredSkillModel.ts';
 import ProjectSuggestionModel from '../Models/ProjectSuggestionModel.ts';
 import ProjectExpenseModel from '../Models/ProjectExpenseModel.ts';
 import AuthService from '../integrations/AuthService.ts';
+import CheckScopeService from '../integrations/CheckScopeService.ts';
 import { TaskModel } from '../Models/TaskModel.ts';
 import { analyzeJobWithAI, JobAnalysisResult } from '../services/geminiService.ts';
 import { findMatchingCandidates, CandidateMatch } from '../services/candidateMatchingService.ts';
@@ -20,6 +21,7 @@ import { transaction } from 'objection';
 import { Metadata } from 'pdf-parse';
 import { assessWorkload } from '../services/geminiService.ts';
 import { analyzeTaskTimeline, validateTaskDependencies } from '../services/geminiService.ts';
+import * as kpiService from '../services/kpiService.ts';
 
 
 SkillModel.knex(knex);
@@ -1227,6 +1229,9 @@ export class ProjectController {
 
             const trx = await transaction.start(knex);
 
+                // Note: Removed restriction that only project managers can assign tasks.
+                // Assignment by creators to other users is now allowed.
+
             try {
                 // ============ STEP 1: VALIDATE DEPENDENCIES ============
                 if (payload.depends_on && Array.isArray(payload.depends_on) && payload.depends_on.length > 0 && payload.project_id) {
@@ -1645,7 +1650,7 @@ export class ProjectController {
             }
 
             // Validate status
-            const validStatuses = ['todo', 'in_progress', 'done'];
+            const validStatuses = ['todo', 'in_progress', 'pending_approval', 'done'];
             if (!validStatuses.includes(status)) {
                 res.status(400).json({
                     error: 'Invalid status',
@@ -1653,6 +1658,8 @@ export class ProjectController {
                 });
                 return;
             }
+
+            const userId = (req as any).user?.id;
 
             console.log(`[Project Controller] Updating task ${task_id} status to ${status}`);
 
@@ -1664,28 +1671,158 @@ export class ProjectController {
                 });
 
             if (!task) {
-                res.status(404).json({ error: 'Task not found in this project' });
+                res.status(404).json({ error: 'Không tìm thấy công việc trong dự án này' });
                 return;
             }
 
+            // Authorization: only assignee or project manager can update task status
+            const isAssignee = task.assignee_id && Number(task.assignee_id) === Number(userId);
+            
+            // Check if user is project manager (2 ways: by manager_id OR by role in members)
+            // Way 1: Check project.manager_id
+            const project = await ProjectModel.query().findById(Number(project_id));
+            const isProjectOwner = project && Number(project.manager_id) === Number(userId);
+            
+            // Way 2: Check role in project_members
+            const pmRecord = await ProjectMemberModel.query()
+                .where('project_id', Number(project_id))
+                .andWhere('user_id', Number(userId))
+                .first();
+            
+            const hasManagerRole = !!pmRecord && typeof pmRecord.role === 'string' && /manager|project|quản|ql|trưởng|admin|administrator|pm/i.test(pmRecord.role);
+            
+            const isManager = !!(isProjectOwner || hasManagerRole);
+            
+            console.log(`[Project Controller] Authorization check for task ${task_id}:`, {
+                userId: userId,
+                assignee_id: task.assignee_id,
+                isAssignee: isAssignee,
+                project_manager_id: project?.manager_id,
+                isProjectOwner: isProjectOwner,
+                pmRecord_role: pmRecord?.role,
+                hasManagerRole: hasManagerRole,
+                isManager: isManager,
+                allowed: isAssignee || isManager
+            });
+            
+            if (!isAssignee && !isManager) {
+                res.status(403).json({ 
+                    error: 'Không có quyền', 
+                    message: 'Chỉ người được giao hoặc quản lý dự án mới có thể cập nhật trạng thái công việc',
+                    details: {
+                        userId: userId,
+                        assignee_id: task.assignee_id,
+                        isAssignee: isAssignee,
+                        isManager: isManager,
+                        project_manager_id: project?.manager_id,
+                        isProjectOwner: isProjectOwner,
+                        hasManagerRole: hasManagerRole
+                    }
+                });
+                return;
+            }
+
+            // Validate status transition
+            const currentStatus = task.status;
+            
+            // Logic: todo -> in_progress -> pending_approval -> done
+            // Không được phép skip status
+            if (currentStatus === 'todo' && status === 'done') {
+                res.status(400).json({ 
+                    error: 'Invalid status transition', 
+                    message: 'Task must go through in_progress before done' 
+                });
+                return;
+            }
+
+            if (currentStatus === 'todo' && status === 'pending_approval') {
+                res.status(400).json({ 
+                    error: 'Invalid status transition', 
+                    message: 'Task must go through in_progress before pending_approval' 
+                });
+                return;
+            }
+
+            if (currentStatus === 'in_progress' && status === 'done') {
+                res.status(400).json({ 
+                    error: 'Invalid status transition', 
+                    message: 'Task must go through pending_approval before done. User should click "Complete" button.' 
+                });
+                return;
+            }
+
+            // Khi user bấm hoàn thành -> chuyển sang pending_approval, không phải done
+            let updatePayload: any = {
+                status: status,
+                updated_at: new Date().toISOString()
+            };
+
+            // Nếu status là pending_approval, lưu thời gian completed_at
+            if (status === 'pending_approval') {
+                updatePayload.completed_at = new Date().toISOString();
+                console.log(`[Update Task Status] Setting completed_at for task ${task_id}: ${updatePayload.completed_at}`);
+            }
+
+            // If manager directly sets status to done from pending_approval, ensure completed_at exists
+            if (status === 'done' && currentStatus === 'pending_approval') {
+                // Normalize completed_at to ISO string (DB drivers may return Date objects)
+                const ensuredCompletedAt = task.completed_at
+                    ? (typeof task.completed_at === 'string' ? task.completed_at : dayjs(task.completed_at).toISOString())
+                    : new Date().toISOString();
+
+                updatePayload.completed_at = ensuredCompletedAt;
+                // Also set approved fields if the updater is a manager
+                if (userId) {
+                    updatePayload.approved_by = userId;
+                    updatePayload.approved_at = new Date().toISOString();
+                }
+                console.log(`[Update Task Status] Manager approving task ${task_id}, ensured completed_at: ${updatePayload.completed_at}`);
+            }
+
+            console.log(`[Update Task Status] Updating task ${task_id} from ${currentStatus} to ${status}`);
+
             // Update task status
             const updatedTask = await TaskModel.query()
-                .patchAndFetchById(task_id, {
-                    status: status,
-                    updated_at: new Date().toISOString()
-                });
+                .patchAndFetchById(task_id, updatePayload);
 
-            // Add timeline event: task created
+            console.log(`[Update Task Status] ✅ Task ${task_id} updated successfully. New status: ${updatedTask.status}, completed_at: ${updatedTask.completed_at}`);
+
+            // Add timeline event
             await ProjectTimelineModel.query().insert({
                 project_id: task.project_id,
                 event_type: 'task_updated',
                 title: 'Cập nhật trạng thái task',
-                description: `Task "${task.title}" đã được cập nhật trạng thái thành ${status} bởi user ${task.assignee_id || 'unknown'}`,
+                description: `Task "${task.title}" đã được cập nhật trạng thái từ ${currentStatus} thành ${status}`,
                 user_id: task.assignee_id || null,
                 event_time: dayjs().toISOString(),
-                metadata: { task_id: updatedTask.task_id, new_status: status }
+                metadata: { 
+                    task_id: updatedTask.task_id, 
+                    old_status: currentStatus,
+                    new_status: status 
+                }
             } as any);
 
+            // Notification logic removed: notifications table absent in DB
+
+            // If status is done (approved), save KPI record
+            if (status === 'done') {
+                try {
+                    if (updatedTask.assignee_id) {
+                        console.log(`[Update Task Status] Saving KPI record for task ${updatedTask.task_id}`);
+                        console.log('[Update Task Status] Updated task payload before KPI save:', JSON.stringify(updatedTask));
+                        const kpiRecord = await kpiService.saveTaskKpiRecord(updatedTask, userId);
+                        if (kpiRecord) {
+                            console.log(`[Update Task Status] ✅ KPI record saved:`, { kpi_id: kpiRecord.kpi_id, completion_status: kpiRecord.completion_status, delay_days: kpiRecord.delay_days });
+                        } else {
+                            console.warn('[Update Task Status] ⚠️ KPI service returned null — KPI not saved');
+                        }
+                    } else {
+                        console.warn('[Update Task Status] ⚠️ updatedTask has no assignee_id, skipping KPI save');
+                    }
+                } catch (err) {
+                    console.error('[Update Task Status] ❌ Failed to save KPI record:', err);
+                }
+            }
 
             // Fetch assignee info if exists
             let assigneeInfo = null;
@@ -1719,6 +1856,7 @@ export class ProjectController {
                     estimated_hours: updatedTask.estimated_hours,
                     actual_hours: updatedTask.actual_hours,
                     due_date: updatedTask.due_date,
+                    completed_at: updatedTask.completed_at,
                     tags: updatedTask.tags,
                     created_at: updatedTask.created_at,
                     updated_at: updatedTask.updated_at
@@ -2148,6 +2286,9 @@ export class ProjectController {
                 res.status(404).json({ error: 'Task not found' });
                 return;
             }
+
+            // Note: Removed restriction that only project managers may update task details.
+            // Any authenticated creator/member can update fields (including assignee).
 
             // Auto-calculate estimated_days from dates if provided
             let estimatedDays = payload.estimated_days;
@@ -2789,6 +2930,843 @@ export class ProjectController {
         } catch (error: any) {
             console.error('[Project Expenses] Reject error:', error);
             res.status(500).json({ error: 'Failed to reject expense', details: error.message });
+        }
+    };
+
+    /**
+     * POST /projects/:project_id/tasks/:task_id/approve - Duyệt task (chỉ project manager)
+     */
+    static approveTask: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { project_id, task_id } = req.params;
+            const userId = (req as any).user?.id;
+
+            if (!userId) {
+                res.status(401).json({ error: 'User not authenticated' });
+                return;
+            }
+
+            // Validate project exists
+            const project = await ProjectModel.query().findById(Number(project_id));
+            if (!project) {
+                res.status(404).json({ error: 'Project not found' });
+                return;
+            }
+
+            // Check if user is project manager
+            if (project.manager_id !== userId) {
+                res.status(403).json({ error: 'Only project manager can approve tasks' });
+                return;
+            }
+
+            // Validate task exists and is pending approval
+            const task = await TaskModel.query().findOne({ task_id });
+            if (!task) {
+                res.status(404).json({ error: 'Task not found' });
+                return;
+            }
+
+            if (task.status !== 'pending_approval') {
+                res.status(400).json({ 
+                    error: 'Task is not pending approval', 
+                    message: `Current status: ${task.status}` 
+                });
+                return;
+            }
+
+            // Update task to done
+            // Ensure completed_at is an ISO string
+            const approvedCompletedAt = task.completed_at
+                ? (typeof task.completed_at === 'string' ? task.completed_at : dayjs(task.completed_at).toISOString())
+                : new Date().toISOString();
+
+            const updatedTask = await TaskModel.query()
+                .patchAndFetchById(task_id, {
+                    status: 'done',
+                    approved_by: userId,
+                    approved_at: new Date().toISOString(),
+                    // Ensure completed_at is set if not present so KPI calculation uses a concrete completion time
+                    completed_at: approvedCompletedAt,
+                    updated_at: new Date().toISOString()
+                });
+
+            // Add timeline event
+            await ProjectTimelineModel.query().insert({
+                project_id: Number(project_id),
+                event_type: 'task_approved',
+                title: 'Task được phê duyệt',
+                description: `Task "${task.title}" đã được phê duyệt`,
+                user_id: userId,
+                event_time: dayjs().toISOString(),
+                metadata: { task_id, approved_by: userId }
+            } as any);
+
+            // Notification logic removed: notifications table absent in DB
+
+            // Save KPI record for assignee with detailed debug logging
+            if (task.assignee_id) {
+                console.log(`[Approve Task] Saving KPI record for assignee ${task.assignee_id} in project ${project_id}`);
+                try {
+                    console.log('[Approve Task] Updated task payload before KPI save:', JSON.stringify(updatedTask));
+                    const kpiRecord = await kpiService.saveTaskKpiRecord(updatedTask, userId);
+                    if (kpiRecord) {
+                        console.log(`[Approve Task] ✅ KPI record saved:`, {
+                            kpi_id: kpiRecord.kpi_id,
+                            completion_status: kpiRecord.completion_status,
+                            delay_days: kpiRecord.delay_days
+                        });
+                    } else {
+                        console.warn('[Approve Task] ⚠️ KPI service returned null — check task fields and logs above');
+                    }
+                } catch (error) {
+                    console.error('[Approve Task] ❌ Failed to save KPI record:', error);
+                }
+            } else {
+                console.warn(`[Approve Task] ⚠️ Task ${task_id} has no assignee_id, skipping KPI tracking`);
+            }
+
+            res.json({
+                success: true,
+                data: updatedTask,
+                message: 'Task approved successfully'
+            });
+        } catch (error: any) {
+            console.error('[Approve Task] Error:', error);
+            res.status(500).json({ error: 'Failed to approve task', details: error.message });
+        }
+    };
+
+    /**
+     * POST /projects/:project_id/tasks/:task_id/reject - Từ chối task (chỉ project manager)
+     */
+    static rejectTask: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { project_id, task_id } = req.params;
+            const { reason } = req.body;
+            const userId = (req as any).user?.id;
+
+            if (!userId) {
+                res.status(401).json({ error: 'User not authenticated' });
+                return;
+            }
+
+            // Validate project exists
+            const project = await ProjectModel.query().findById(Number(project_id));
+            if (!project) {
+                res.status(404).json({ error: 'Project not found' });
+                return;
+            }
+
+            // Check if user is project manager
+            if (project.manager_id !== userId) {
+                res.status(403).json({ error: 'Only project manager can reject tasks' });
+                return;
+            }
+
+            // Validate task exists and is pending approval
+            const task = await TaskModel.query().findOne({ task_id });
+            if (!task) {
+                res.status(404).json({ error: 'Task not found' });
+                return;
+            }
+
+            if (task.status !== 'pending_approval') {
+                res.status(400).json({ 
+                    error: 'Task is not pending approval', 
+                    message: `Current status: ${task.status}` 
+                });
+                return;
+            }
+
+            // Update task back to in_progress
+            const updatedTask = await TaskModel.query()
+                .patchAndFetchById(task_id, {
+                    status: 'in_progress',
+                    completed_at: null, // Clear completed_at
+                    updated_at: new Date().toISOString()
+                });
+
+            // Add timeline event
+            await ProjectTimelineModel.query().insert({
+                project_id: Number(project_id),
+                event_type: 'task_rejected',
+                title: 'Task bị từ chối',
+                description: `Task "${task.title}" bị từ chối${reason ? `: ${reason}` : ''}`,
+                user_id: userId,
+                event_time: dayjs().toISOString(),
+                metadata: { task_id, rejected_by: userId, reason: reason || null }
+            } as any);
+
+            // Notification logic removed: notifications table absent in DB
+
+            res.json({
+                success: true,
+                data: updatedTask,
+                message: 'Task rejected'
+            });
+        } catch (error: any) {
+            console.error('[Reject Task] Error:', error);
+            res.status(500).json({ error: 'Failed to reject task', details: error.message });
+        }
+    };
+
+    /**
+     * GET /kpi/user/:user_id - Lấy KPI của user
+     */
+    static getUserKpi: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { user_id } = req.params;
+            const { period_type, project_id } = req.query;
+
+            const periodType = period_type as 'daily' | 'weekly' | 'monthly' || 'monthly';
+            const projectIdNum = project_id ? Number(project_id) : undefined;
+
+            const kpi = await kpiService.getUserKpi(
+                Number(user_id),
+                periodType,
+                projectIdNum
+            );
+
+            if (!kpi) {
+                // Tính KPI mới nếu chưa có
+                const calculated = await kpiService.calculateAndSaveUserKpiForAllPeriods(
+                    Number(user_id),
+                    projectIdNum
+                );
+
+                res.json({
+                    success: true,
+                    data: calculated[periodType],
+                    message: 'KPI calculated'
+                });
+                return;
+            }
+
+            res.json({
+                success: true,
+                data: kpi
+            });
+        } catch (error: any) {
+            console.error('[Get User KPI] Error:', error);
+            res.status(500).json({ error: 'Failed to get user KPI', details: error.message });
+        }
+    };
+
+    /**
+     * GET /notifications - Lấy notifications của user hiện tại
+     */
+    static getNotifications: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        // Notifications endpoint removed because notifications table does not exist
+        res.status(410).json({ success: false, error: 'Notifications feature removed' });
+    };
+
+    /**
+     * GET /notifications/unread-count - Lấy số lượng notifications chưa đọc
+     */
+    static getUnreadNotificationCount: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        res.status(410).json({ success: false, error: 'Notifications feature removed' });
+    };
+
+    /**
+     * PUT /notifications/:notification_id/read - Đánh dấu notification đã đọc
+     */
+    static markNotificationAsRead: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        res.status(410).json({ success: false, error: 'Notifications feature removed' });
+    };
+
+    /**
+     * PUT /notifications/mark-all-read - Đánh dấu tất cả notifications đã đọc
+     */
+    static markAllNotificationsAsRead: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        res.status(410).json({ success: false, error: 'Notifications feature removed' });
+    };
+
+    /**
+     * POST /kpi/test-calculate - TEST: Tính KPI thủ công để kiểm tra logic
+     * Body: { user_id: number, project_id?: number, task_id?: string }
+     * 
+     * Endpoint này để test và debug logic tính KPI
+     * Sẽ trả về chi tiết các task được tính, kết quả KPI, và giải thích
+     */
+    static testCalculateKpi: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { user_id, project_id, task_id } = req.body;
+
+            if (!user_id) {
+                res.status(400).json({ 
+                    error: 'user_id is required',
+                    message: 'Vui lòng cung cấp user_id để tính KPI'
+                });
+                return;
+            }
+
+            console.log(`\n========== TEST KPI CALCULATION ==========`);
+            console.log(`User ID: ${user_id}, Project ID: ${project_id || 'all'}, Task ID: ${task_id || 'all'}`);
+
+            // Nếu có task_id, lấy thông tin task để phân tích
+            let taskInfo = null;
+            if (task_id) {
+                taskInfo = await TaskModel.query().findOne({ task_id });
+                if (taskInfo) {
+                    console.log(`\n[TEST] Task được chỉ định:`);
+                    console.log(`- ID: ${taskInfo.task_id}`);
+                    console.log(`- Title: ${taskInfo.title}`);
+                    console.log(`- Status: ${taskInfo.status}`);
+                    console.log(`- Assignee ID: ${taskInfo.assignee_id}`);
+                    console.log(`- Due Date: ${taskInfo.due_date}`);
+                    console.log(`- Completed At: ${taskInfo.completed_at}`);
+                    console.log(`- Approved At: ${taskInfo.approved_at}`);
+                    
+                    // Phân tích task này
+                    if (taskInfo.completed_at && taskInfo.due_date) {
+                        const completedAt = dayjs(taskInfo.completed_at);
+                        const dueDate = dayjs(taskInfo.due_date);
+                        const delayDays = completedAt.diff(dueDate, 'day', true);
+                        
+                        console.log(`\n[TEST] Phân tích task:`);
+                        if (delayDays <= 0) {
+                            console.log(`✅ Task VƯỢT TIẾN ĐỘ: Hoàn thành SỚM ${Math.abs(delayDays).toFixed(1)} ngày`);
+                        } else {
+                            console.log(`⏰ Task CHẬM TIẾN ĐỘ: Hoàn thành MUỘN ${delayDays.toFixed(1)} ngày`);
+                        }
+                    }
+                }
+            }
+
+            // Tính KPI cho cả 3 khoảng thời gian
+            const kpiResults = await kpiService.calculateAndSaveUserKpiForAllPeriods(
+                Number(user_id),
+                project_id ? Number(project_id) : null
+            );
+
+            console.log(`\n[TEST] ✅ KPI đã được tính và lưu thành công!`);
+            console.log(`========== END TEST KPI CALCULATION ==========\n`);
+
+            res.json({
+                success: true,
+                message: 'Tính KPI thành công - kiểm tra console logs để xem chi tiết',
+                data: {
+                    task_analyzed: taskInfo ? {
+                        task_id: taskInfo.task_id,
+                        title: taskInfo.title,
+                        status: taskInfo.status,
+                        assignee_id: taskInfo.assignee_id,
+                        due_date: taskInfo.due_date,
+                        completed_at: taskInfo.completed_at,
+                        approved_at: taskInfo.approved_at,
+                        delay_analysis: taskInfo.completed_at && taskInfo.due_date ? {
+                            delay_days: dayjs(taskInfo.completed_at).diff(dayjs(taskInfo.due_date), 'day', true),
+                            is_late: dayjs(taskInfo.completed_at).isAfter(dayjs(taskInfo.due_date)),
+                            explanation: dayjs(taskInfo.completed_at).isAfter(dayjs(taskInfo.due_date))
+                                ? `Task chậm ${dayjs(taskInfo.completed_at).diff(dayjs(taskInfo.due_date), 'day', true).toFixed(1)} ngày`
+                                : `Task hoàn thành sớm ${Math.abs(dayjs(taskInfo.completed_at).diff(dayjs(taskInfo.due_date), 'day', true)).toFixed(1)} ngày`
+                        } : null
+                    } : null,
+                    kpi_results: {
+                        daily: {
+                            kpi_id: kpiResults.daily.kpi_id,
+                            period_start: kpiResults.daily.period_start,
+                            period_end: kpiResults.daily.period_end,
+                            total_tasks: kpiResults.daily.total_tasks,
+                            completed_tasks: kpiResults.daily.completed_tasks,
+                            on_time_tasks: kpiResults.daily.on_time_tasks,
+                            late_tasks: kpiResults.daily.late_tasks,
+                            overdue_tasks: kpiResults.daily.overdue_tasks,
+                            pending_approval_tasks: kpiResults.daily.pending_approval_tasks,
+                            kpi_score: kpiResults.daily.kpi_score,
+                            completion_rate: kpiResults.daily.completion_rate,
+                            on_time_rate: kpiResults.daily.on_time_rate,
+                            avg_completion_days: kpiResults.daily.avg_completion_days,
+                            avg_delay_days: kpiResults.daily.avg_delay_days
+                        },
+                        weekly: {
+                            kpi_id: kpiResults.weekly.kpi_id,
+                            period_start: kpiResults.weekly.period_start,
+                            period_end: kpiResults.weekly.period_end,
+                            total_tasks: kpiResults.weekly.total_tasks,
+                            completed_tasks: kpiResults.weekly.completed_tasks,
+                            on_time_tasks: kpiResults.weekly.on_time_tasks,
+                            late_tasks: kpiResults.weekly.late_tasks,
+                            overdue_tasks: kpiResults.weekly.overdue_tasks,
+                            pending_approval_tasks: kpiResults.weekly.pending_approval_tasks,
+                            kpi_score: kpiResults.weekly.kpi_score,
+                            completion_rate: kpiResults.weekly.completion_rate,
+                            on_time_rate: kpiResults.weekly.on_time_rate,
+                            avg_completion_days: kpiResults.weekly.avg_completion_days,
+                            avg_delay_days: kpiResults.weekly.avg_delay_days
+                        },
+                        monthly: {
+                            kpi_id: kpiResults.monthly.kpi_id,
+                            period_start: kpiResults.monthly.period_start,
+                            period_end: kpiResults.monthly.period_end,
+                            total_tasks: kpiResults.monthly.total_tasks,
+                            completed_tasks: kpiResults.monthly.completed_tasks,
+                            on_time_tasks: kpiResults.monthly.on_time_tasks,
+                            late_tasks: kpiResults.monthly.late_tasks,
+                            overdue_tasks: kpiResults.monthly.overdue_tasks,
+                            pending_approval_tasks: kpiResults.monthly.pending_approval_tasks,
+                            kpi_score: kpiResults.monthly.kpi_score,
+                            completion_rate: kpiResults.monthly.completion_rate,
+                            on_time_rate: kpiResults.monthly.on_time_rate,
+                            avg_completion_days: kpiResults.monthly.avg_completion_days,
+                            avg_delay_days: kpiResults.monthly.avg_delay_days
+                        }
+                    },
+                    explanation: {
+                        vi: {
+                            title: 'CÁCH TÍNH KPI TRONG HỆ THỐNG',
+                            overview: 'KPI được tính dựa trên hiệu suất hoàn thành công việc của nhân viên',
+                            calculation_formula: {
+                                kpi_score: 'KPI Score = (Tỷ lệ hoàn thành × 50%) + (Tỷ lệ đúng hạn × 40%) - Phạt quá hạn',
+                                completion_rate: 'Tỷ lệ hoàn thành = (Số task hoàn thành / Tổng số task) × 100%',
+                                on_time_rate: 'Tỷ lệ đúng hạn = (Số task đúng hạn / Số task hoàn thành) × 100%',
+                                overdue_penalty: 'Phạt quá hạn = min((Số task quá hạn / Tổng task) × 30, 30) điểm'
+                            },
+                            task_classification: {
+                                completed: 'Task hoàn thành: status = done VÀ có completed_at',
+                                on_time: 'Đúng hạn: completed_at <= due_date (vượt tiến độ)',
+                                late: 'Chậm hạn: completed_at > due_date (chậm tiến độ)',
+                                overdue: 'Quá hạn: status ≠ done VÀ hiện tại > due_date',
+                                pending_approval: 'Chờ duyệt: status = pending_approval'
+                            },
+                            time_comparison: {
+                                key_point: 'QUAN TRỌNG: So sánh completed_at (thời gian user hoàn thành) với due_date (deadline)',
+                                example_on_time: 'Ví dụ đúng hạn: due_date = 25/11, completed_at = 20/11 → Sớm 5 ngày',
+                                example_late: 'Ví dụ chậm hạn: due_date = 13/11, completed_at = 22/12 → Muộn 39 ngày'
+                            },
+                            periods: {
+                                daily: 'Hàng ngày: Tính KPI cho ngày hôm nay',
+                                weekly: 'Hàng tuần: Tính KPI cho tuần hiện tại (ISO week)',
+                                monthly: 'Hàng tháng: Tính KPI cho tháng hiện tại'
+                            }
+                        }
+                    }
+                }
+            });
+        } catch (error: any) {
+            console.error('[TEST KPI] Error:', error);
+            res.status(500).json({ 
+                error: 'Failed to calculate test KPI', 
+                details: error.message,
+                message: 'Lỗi khi tính KPI - kiểm tra console logs'
+            });
+        }
+    };
+
+    /**
+     * GET /projects/:project_id/kpi-report - Lấy báo cáo KPI đầy đủ cho project
+     * Support filter, sort, search cho màn quản lý KPI nhân viên
+     * 
+     * Query params:
+     * - month: Tháng cần xem (1-12)
+     * - year: Năm cần xem (2024, 2025...)
+     * - page: Trang hiện tại
+     * - pageSize: Số bản ghi mỗi trang
+     * - sortField: Trường cần sắp xếp (name, kpi_score, total_done, etc.)
+     * - sortOrder: ascend | descend
+     * - search: Tìm kiếm theo tên nhân viên
+     */
+    static getProjectKpiReport: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { project_id } = req.params;
+            const {
+                month,
+                year,
+                page = '1',
+                pageSize = '10',
+                sortField = 'kpi_score',
+                sortOrder = 'descend',
+                search
+            } = req.query;
+
+            console.log(`\n========== GET PROJECT KPI REPORT ==========`);
+            console.log(`Project ID: ${project_id}, Month: ${month || 'current'}, Year: ${year || 'current'}`);
+
+            // Validate project exists
+            const project = await ProjectModel.query().findById(Number(project_id));
+            if (!project) {
+                res.status(404).json({ error: 'Project not found' });
+                return;
+            }
+
+            // Determine time period
+            const targetMonth = month ? Number(month) : dayjs().month() + 1;
+            const targetYear = year ? Number(year) : dayjs().year();
+            
+            const periodStart = dayjs(`${targetYear}-${String(targetMonth).padStart(2, '0')}-01`).startOf('month');
+            const periodEnd = periodStart.endOf('month');
+
+            console.log(`[KPI Report] Period: ${periodStart.format('YYYY-MM-DD')} to ${periodEnd.format('YYYY-MM-DD')}`);
+
+            // Get all project members
+            const projectMembers = await ProjectMemberModel.query()
+                .where('project_id', Number(project_id))
+                .select('user_id', 'role');
+
+            if (projectMembers.length === 0) {
+                res.json({
+                    success: true,
+                    project_summary: {
+                        total_members: 0,
+                        total_tasks: 0,
+                        total_done: 0,
+                        avg_kpi: 0
+                    },
+                    members: [],
+                    pagination: {
+                        page: 1,
+                        pageSize: Number(pageSize),
+                        total: 0,
+                        totalPages: 0
+                    }
+                });
+                return;
+            }
+
+            const userIds = projectMembers.map(m => m.user_id);
+
+            // Fetch all tasks for these users in the project during the period
+            const allTasks = await TaskModel.query()
+                .where('project_id', Number(project_id))
+                .whereIn('assignee_id', userIds)
+                .where(builder => {
+                    builder
+                        .whereBetween('created_at', [periodStart.toISOString(), periodEnd.toISOString()])
+                        .orWhereBetween('completed_at', [periodStart.toISOString(), periodEnd.toISOString()]);
+                });
+
+            console.log(`[KPI Report] Found ${allTasks.length} tasks for ${userIds.length} members`);
+
+            // Get user information from auth service
+            const authHeader = req.headers.authorization || (req as any).cookies?.token;
+            let users: any[] = [];
+            try {
+                users = await AuthService.getUsersByIds(userIds, authHeader);
+                console.log(`[KPI Report] Fetched ${users.length} user profiles`);
+            } catch (err) {
+                console.error('[KPI Report] Failed to fetch users:', err);
+            }
+
+            const userMap = new Map(users.map(u => [Number(u.id || u.user_id), u]));
+
+            // Calculate KPI for each member
+            const memberStats = userIds.map(userId => {
+                const userTasks = allTasks.filter(t => Number(t.assignee_id) === Number(userId));
+                const userInfo = userMap.get(Number(userId));
+
+                // Calculate stats
+                const totalAssigned = userTasks.length;
+                const doneTasks = userTasks.filter(t => t.status === 'done' && t.completed_at);
+                const totalDone = doneTasks.length;
+
+                let countEarly = 0;
+                let countOnTime = 0;
+                let countLate = 0;
+                const lateTasks: any[] = [];
+                let totalDelayHours = 0;
+
+                doneTasks.forEach(task => {
+                    if (!task.completed_at || !task.due_date) return;
+
+                    const completedAt = dayjs(task.completed_at);
+                    const dueDate = dayjs(task.due_date);
+                    const delayHours = completedAt.diff(dueDate, 'hour', true);
+
+                    if (delayHours < 0) {
+                        countEarly++;
+                    } else if (delayHours === 0 || Math.abs(delayHours) < 1) {
+                        countOnTime++;
+                    } else {
+                        countLate++;
+                        totalDelayHours += delayHours;
+                        lateTasks.push({
+                            task_id: task.task_id,
+                            title: task.title,
+                            due_date: task.due_date,
+                            completed_at: task.completed_at,
+                            delay_hours: Math.round(delayHours * 10) / 10,
+                            delay_days: Math.round(delayHours / 24 * 10) / 10
+                        });
+                    }
+                });
+
+                // Calculate KPI score: (early + on_time) / total_done * 100
+                const kpiScore = totalDone > 0 
+                    ? Math.round((countEarly + countOnTime) / totalDone * 100)
+                    : 0;
+
+                const avgDelayHours = countLate > 0 
+                    ? Math.round(totalDelayHours / countLate * 10) / 10
+                    : 0;
+
+                // Get pending approval tasks
+                const pendingApprovalTasks = userTasks.filter(t => t.status === 'pending_approval').length;
+
+                // Get overdue tasks (not done yet but past due_date)
+                const now = dayjs();
+                const overdueTasks = userTasks.filter(t => 
+                    t.status !== 'done' && 
+                    t.due_date && 
+                    dayjs(t.due_date).isBefore(now)
+                ).length;
+
+                return {
+                    user_id: userId,
+                    name: userInfo?.fullName || userInfo?.full_name || userInfo?.username || `User ${userId}`,
+                    email: userInfo?.email || '',
+                    role: projectMembers.find(m => m.user_id === userId)?.role || '',
+                    avatar: userInfo?.identificationPhoto || null,
+                    stats: {
+                        total_assigned: totalAssigned,
+                        total_done: totalDone,
+                        count_early: countEarly,
+                        count_on_time: countOnTime,
+                        count_late: countLate,
+                        pending_approval: pendingApprovalTasks,
+                        overdue: overdueTasks,
+                        avg_delay_hours: avgDelayHours,
+                        kpi_score: kpiScore
+                    },
+                    late_tasks: lateTasks,
+                    // Add badge color based on KPI score
+                    badge: kpiScore >= 90 ? 'A' : kpiScore >= 80 ? 'B' : kpiScore >= 70 ? 'C' : 'D',
+                    badge_color: kpiScore >= 90 ? 'green' : kpiScore >= 80 ? 'blue' : kpiScore >= 70 ? 'yellow' : 'red'
+                };
+            });
+
+            // Apply search filter
+            let filteredMembers = memberStats;
+            if (search && typeof search === 'string' && search.trim()) {
+                const searchLower = search.trim().toLowerCase();
+                filteredMembers = memberStats.filter(m => 
+                    m.name.toLowerCase().includes(searchLower) ||
+                    m.email.toLowerCase().includes(searchLower)
+                );
+            }
+
+            // Apply sorting
+            const sortFieldMap: Record<string, string> = {
+                name: 'name',
+                kpi_score: 'stats.kpi_score',
+                total_done: 'stats.total_done',
+                total_assigned: 'stats.total_assigned',
+                count_late: 'stats.count_late',
+                avg_delay_hours: 'stats.avg_delay_hours'
+            };
+
+            const actualSortField = sortFieldMap[sortField as string] || 'stats.kpi_score';
+            const sortOrderMultiplier = sortOrder === 'ascend' ? 1 : -1;
+
+            filteredMembers.sort((a, b) => {
+                let aVal: any = a;
+                let bVal: any = b;
+
+                // Navigate nested fields
+                const fields = actualSortField.split('.');
+                for (const field of fields) {
+                    aVal = aVal?.[field];
+                    bVal = bVal?.[field];
+                }
+
+                // Handle string comparison
+                if (typeof aVal === 'string' && typeof bVal === 'string') {
+                    return aVal.localeCompare(bVal) * sortOrderMultiplier;
+                }
+
+                // Handle numeric comparison
+                const aNum = Number(aVal) || 0;
+                const bNum = Number(bVal) || 0;
+                return (aNum - bNum) * sortOrderMultiplier;
+            });
+
+            // Pagination
+            const pageNum = Math.max(1, parseInt(page as string, 10));
+            const pageSizeNum = Math.min(100, Math.max(1, parseInt(pageSize as string, 10)));
+            const total = filteredMembers.length;
+            const totalPages = Math.ceil(total / pageSizeNum);
+            const offset = (pageNum - 1) * pageSizeNum;
+            const paginatedMembers = filteredMembers.slice(offset, offset + pageSizeNum);
+
+            // Calculate project summary
+            const totalTasks = allTasks.length;
+            const totalDoneInProject = allTasks.filter(t => t.status === 'done').length;
+            const avgKpi = memberStats.length > 0
+                ? Math.round(memberStats.reduce((sum, m) => sum + m.stats.kpi_score, 0) / memberStats.length)
+                : 0;
+
+            console.log(`[KPI Report] Summary: ${totalTasks} tasks, ${totalDoneInProject} done, avg KPI: ${avgKpi}%`);
+            console.log(`[KPI Report] Returning ${paginatedMembers.length} members (page ${pageNum}/${totalPages})`);
+            console.log(`========== END KPI REPORT ==========\n`);
+
+            res.json({
+                success: true,
+                project_summary: {
+                    project_id: Number(project_id),
+                    project_name: project.name,
+                    total_members: userIds.length,
+                    total_tasks: totalTasks,
+                    total_done: totalDoneInProject,
+                    avg_kpi: avgKpi,
+                    period: {
+                        month: targetMonth,
+                        year: targetYear,
+                        start: periodStart.format('YYYY-MM-DD'),
+                        end: periodEnd.format('YYYY-MM-DD')
+                    }
+                },
+                members: paginatedMembers,
+                pagination: {
+                    page: pageNum,
+                    pageSize: pageSizeNum,
+                    total: total,
+                    totalPages: totalPages
+                }
+            });
+        } catch (error: any) {
+            console.error('[GET KPI Report] Error:', error);
+            res.status(500).json({ 
+                error: 'Failed to get KPI report', 
+                details: error.message
+            });
+        }
+    };
+
+    /**
+     * GET /kpi/users - Lấy KPI tất cả users trong scope theo tháng/năm
+     * Query params: month, year
+     */
+    static getAllUsersKpi: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const userId = (req as any).user?.id;
+            const token = req.headers.authorization?.replace('Bearer ', '');
+
+            if (!userId || !token) {
+                res.status(401).json({ error: 'User not authenticated' });
+                return;
+            }
+
+            const { month, year } = req.query;
+
+            // Default to current month/year
+            const now = dayjs();
+            const targetMonth = month ? parseInt(month as string) : now.month() + 1;
+            const targetYear = year ? parseInt(year as string) : now.year();
+
+
+            console.log(`[Get All Users KPI] User ${userId} requesting KPI for ${targetMonth}/${targetYear}`);
+
+            // Pre-check permission and scope: only department/global scope may view KPI management
+            const scopeCheck = await CheckScopeService.checkUserScope('kpiManagement', token);
+            console.log('[Get All Users KPI] Scope check (pre):', scopeCheck);
+
+            if (!scopeCheck.hasAccess || scopeCheck.scope === 'personal') {
+                console.warn(`[Get All Users KPI] User ${userId} does not have permission to view KPI management (scope: ${scopeCheck.scope})`);
+                res.status(403).json({ success: false, error: 'Forbidden: insufficient permission to view KPI management' });
+                return;
+            }
+
+            const kpiList = await kpiService.getAllUsersKpiInScope(
+                userId,
+                targetMonth,
+                targetYear,
+                token
+            );
+
+            res.json({
+                success: true,
+                data: kpiList,
+                month: targetMonth,
+                year: targetYear
+            });
+        } catch (error: any) {
+            console.error('[Get All Users KPI] Error:', error);
+            res.status(500).json({ 
+                error: 'Failed to get KPI data', 
+                details: error.message 
+            });
+        }
+    };
+
+    /**
+     * GET /kpi/users/:user_id/summary - Lấy KPI summary của một user
+     * Query params: month, year
+     */
+    static getUserKpiSummary: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { user_id } = req.params;
+            const { month, year } = req.query;
+
+            // Default to current month/year
+            const now = dayjs();
+            const targetMonth = month ? parseInt(month as string) : now.month() + 1;
+            const targetYear = year ? parseInt(year as string) : now.year();
+
+            console.log(`[Get User KPI Summary] User ${user_id} for ${targetMonth}/${targetYear}`);
+
+            const summary = await kpiService.getUserKpiSummary(
+                parseInt(user_id),
+                targetMonth,
+                targetYear
+            );
+
+            res.json({
+                success: true,
+                data: summary
+            });
+        } catch (error: any) {
+            console.error('[Get User KPI Summary] Error:', error);
+            res.status(500).json({ 
+                error: 'Failed to get user KPI summary', 
+                details: error.message 
+            });
+        }
+    };
+
+    /**
+     * GET /kpi/users/:user_id/projects - Lấy KPI chi tiết theo từng dự án
+     * Query params: month, year
+     */
+    static getUserProjectKpiDetails: RequestHandler = async (req: Request, res: Response): Promise<void> => {
+        try {
+            const { user_id } = req.params;
+            const { month, year } = req.query;
+
+            // Default to current month/year
+            const now = dayjs();
+            const targetMonth = month ? parseInt(month as string) : now.month() + 1;
+            const targetYear = year ? parseInt(year as string) : now.year();
+
+            console.log(`[Get User Project KPI] User ${user_id} for ${targetMonth}/${targetYear}`);
+
+            const details = await kpiService.getUserProjectKpiDetails(
+                parseInt(user_id),
+                targetMonth,
+                targetYear
+            );
+
+            // Fetch project names from database
+            const projectIds = details.map(d => d.project_id);
+            const projects = await ProjectModel.query().whereIn('project_id', projectIds);
+            const projectMap = projects.reduce((acc, p) => {
+                acc[p.project_id] = p.name;
+                return acc;
+            }, {} as Record<number, string>);
+
+            const detailsWithProjectNames = details.map(d => ({
+                ...d,
+                project_name: projectMap[d.project_id] || `Project ${d.project_id}`
+            }));
+
+            res.json({
+                success: true,
+                data: detailsWithProjectNames
+            });
+        } catch (error: any) {
+            console.error('[Get User Project KPI] Error:', error);
+            res.status(500).json({ 
+                error: 'Failed to get user project KPI details', 
+                details: error.message 
+            });
         }
     };
 

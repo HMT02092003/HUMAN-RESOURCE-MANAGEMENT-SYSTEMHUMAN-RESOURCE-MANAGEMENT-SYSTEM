@@ -163,6 +163,48 @@ export const rejectExpense = (projectId: string, expenseId: string, reason?: str
   return api.post(`${JOB_SERVICE_PREFIX}/projects/${projectId}/expenses/${expenseId}/reject`, { reason });
 };
 
+// Task Approval APIs
+export const approveTask = (projectId: string, taskId: string) => {
+  return api.post(`${JOB_SERVICE_PREFIX}/projects/${projectId}/tasks/${taskId}/approve`);
+};
+
+export const rejectTask = (projectId: string, taskId: string, reason?: string) => {
+  return api.post(`${JOB_SERVICE_PREFIX}/projects/${projectId}/tasks/${taskId}/reject`, { reason });
+};
+
+// KPI APIs - Quản lý KPI nhân viên
+// Lấy KPI tất cả users trong scope theo tháng/năm
+export const getAllUsersKpi = (params?: { month?: number; year?: number }) => {
+  return api.get(`${JOB_SERVICE_PREFIX}/kpi/users`, { params });
+};
+
+// Lấy KPI summary của một user
+export const getUserKpiSummary = (userId: string, params?: { month?: number; year?: number }) => {
+  return api.get(`${JOB_SERVICE_PREFIX}/kpi/users/${userId}/summary`, { params });
+};
+
+// Lấy KPI chi tiết theo từng dự án của user
+export const getUserProjectKpiDetails = (userId: string, params?: { month?: number; year?: number }) => {
+  return api.get(`${JOB_SERVICE_PREFIX}/kpi/users/${userId}/projects`, { params });
+};
+
+// Notification APIs
+export const getNotifications = (params?: { is_read?: boolean; limit?: number; offset?: number }) => {
+  return api.get(`${JOB_SERVICE_PREFIX}/notifications`, { params });
+};
+
+export const getUnreadNotificationCount = () => {
+  return api.get(`${JOB_SERVICE_PREFIX}/notifications/unread-count`);
+};
+
+export const markNotificationAsRead = (notificationId: number) => {
+  return api.put(`${JOB_SERVICE_PREFIX}/notifications/${notificationId}/read`);
+};
+
+export const markAllNotificationsAsRead = () => {
+  return api.put(`${JOB_SERVICE_PREFIX}/notifications/mark-all-read`);
+};
+
 export default {
   analyzeJob,
   findCandidates,
@@ -192,4 +234,13 @@ export default {
   deleteExpense,
   approveExpense,
   rejectExpense,
+  approveTask,
+  rejectTask,
+  getAllUsersKpi,
+  getUserKpiSummary,
+  getUserProjectKpiDetails,
+  getNotifications,
+  getUnreadNotificationCount,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
 };

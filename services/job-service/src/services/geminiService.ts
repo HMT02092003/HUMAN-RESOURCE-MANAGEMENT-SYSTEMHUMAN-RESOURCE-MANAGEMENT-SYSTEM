@@ -5,7 +5,7 @@ import SkillModel from '../Models/SkillModel.ts';
 
 dayjs.extend(isBetween);
 
-const MODEL_NAME = 'gemini-2.0-flash';
+const MODEL_NAME = 'gemini-2.5-flash';
 const apiKey = process.env.GEMINI_API_KEY;
 
 if (!apiKey) {

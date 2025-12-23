@@ -140,6 +140,13 @@ export async function seed(knex) {
       "description": "Cấu hình ca làm việc (quản lý lịch, ca, cấu hình chung)",
       "value": 31,
       "key": "shiftConfiguration",
+    },
+    {
+      "id": 21,
+      "name": "Quản lí KPI nhân viên",
+      "description": "Quản lí KPI nhân viên",
+      "value": 31,
+      "key": "kpiManagement",
     }
   ];
 

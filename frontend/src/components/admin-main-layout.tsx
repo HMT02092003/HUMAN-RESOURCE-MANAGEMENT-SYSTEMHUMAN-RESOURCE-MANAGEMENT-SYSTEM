@@ -28,6 +28,7 @@ import Link from 'next/link';
 import TopBarProgress from 'react-topbar-progress-indicator';
 import { decodePermissions } from '@/utils/decode-permisison';
 import LoadingProgress from '@/components/LoadingProgress';
+import NotificationBell from '@/components/common/NotificationBell';
 import { authService } from '@/service/authService';
 import { get } from 'lodash';
 import Cookies from 'js-cookie';
@@ -188,8 +189,7 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         <ProfileOutlined />,
         [
             getItem('Quản lí hồ sơ', 'CV', <FileTextOutlined />),
-            getItem('Danh sách dự án', 'projects', <FileTextOutlined />),
-        ],
+            getItem('Danh sách dự án', 'projects', <FileTextOutlined />),            getItem('Quản lý KPI nhân viên', 'kpi-management', <CheckCircleOutlined />),        ],
     ),
 
 ];
@@ -505,6 +505,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
             case 'projects':
                 router.push('/projects');
                 break;
+            case 'kpi-management':
+                router.push('/kpi-management');
+                break;
             default:
                 break;
         }
@@ -674,6 +677,11 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                             gap: isMobile ? '8px' : '16px',
                             flexWrap: 'wrap'
                         }}>
+                            {/* Notification Bell */}
+                            {userData?.user?.id && (
+                                <NotificationBell userId={userData.user.id} />
+                            )}
+                            
                             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow>
                                 <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
                                     <Avatar style={{ backgroundColor: color, verticalAlign: 'middle' }} size="default">

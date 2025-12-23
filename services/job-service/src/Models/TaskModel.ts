@@ -17,6 +17,9 @@ export class TaskModel extends Model {
   tags?: any;
   depends_on?: string[] | null; // NEW: array of task_ids that must complete first
   ai_metadata?: any; // NEW: AI analysis result
+  completed_at?: string | null; // Thời gian user bấm hoàn thành
+  approved_by?: number | null; // User ID của người duyệt
+  approved_at?: string | null; // Thời gian được duyệt
   created_at?: string;
   updated_at?: string;
 
@@ -39,7 +42,7 @@ export class TaskModel extends Model {
         description: { type: ['string', 'null'] },
         status: { 
           type: ['string', 'null'],
-          enum: ['todo', 'in_progress', 'done', null] // Removed 'review'
+          enum: ['todo', 'in_progress', 'pending_approval', 'done', null]
         },
         priority: { 
           type: ['string', 'null'],
@@ -54,6 +57,9 @@ export class TaskModel extends Model {
     tags: { type: ['array', 'null'] },
   depends_on: { type: ['array', 'null'] }, // NEW: array of task_ids
   ai_metadata: { type: ['object', 'null'] }, // NEW: JSON object
+  completed_at: { type: ['string', 'null'], format: 'date-time' },
+  approved_by: { type: ['integer', 'null'] },
+  approved_at: { type: ['string', 'null'], format: 'date-time' },
   created_at: { type: ['string', 'null'], format: 'date-time' },
         updated_at: { type: ['string', 'null'], format: 'date-time' }
       }

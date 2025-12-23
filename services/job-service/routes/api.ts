@@ -43,6 +43,20 @@ router.delete('/projects/:project_id/expenses/:expense_id', authenticateToken, P
 router.post('/projects/:project_id/expenses/:expense_id/approve', authenticateToken, ProjectController.approveExpense);
 router.post('/projects/:project_id/expenses/:expense_id/reject', authenticateToken, ProjectController.rejectExpense);
 
+// Task Approval endpoints
+router.post('/projects/:project_id/tasks/:task_id/approve', authenticateToken, ProjectController.approveTask);
+router.post('/projects/:project_id/tasks/:task_id/reject', authenticateToken, ProjectController.rejectTask);
+
+// KPI endpoints - Quản lý KPI nhân viên
+// Lấy KPI tất cả users trong scope theo tháng/năm
+router.get('/kpi/users', authenticateToken, ProjectController.getAllUsersKpi);
+// Lấy KPI summary của một user
+router.get('/kpi/users/:user_id/summary', authenticateToken, ProjectController.getUserKpiSummary);
+// Lấy KPI chi tiết theo từng dự án của user
+router.get('/kpi/users/:user_id/projects', authenticateToken, ProjectController.getUserProjectKpiDetails);
+
+// Notification endpoints removed (notifications table not present)
+
 // Project CRUD endpoints
 router.post('/projects', authenticateToken, ProjectController.createProject);
 router.get('/projects', authenticateToken, ProjectController.getAllProjectsByScope);
