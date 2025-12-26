@@ -16,7 +16,8 @@ import uvicorn
 from app.core.config import settings
 from app.core.database import engine, Base
 from app.api.routes import face_recognition
-from app.services.yolov11_face_recognition_service import YOLOv11FaceRecognitionService
+# Updated: Using InsightFace with Manual ONNX (no library needed, works with buffalo_l models)
+from app.services.insightface_recognition_service import InsightFaceRecognitionService
 
 # Configure logging
 logging.basicConfig(
@@ -38,12 +39,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"❌ Failed to create database tables: {e}")
     
-    # Initialize AI models
+    # Initialize AI models (InsightFace Manual ONNX: Detection + Alignment + Recognition)
     try:
-        await YOLOv11FaceRecognitionService.initialize_models()
-        logger.info("✅ YOLOv11 + ArcFace models initialized successfully")
+        await InsightFaceRecognitionService.initialize_models()
+        logger.info("✅ InsightFace (Manual ONNX) initialized successfully")
     except Exception as e:
-        logger.error(f"❌ Failed to initialize YOLOv11 + ArcFace models: {e}")
+        logger.error(f"❌ Failed to initialize InsightFace: {e}")
     
     logger.info("🎉 AI Face Recognition Service started successfully!")
     

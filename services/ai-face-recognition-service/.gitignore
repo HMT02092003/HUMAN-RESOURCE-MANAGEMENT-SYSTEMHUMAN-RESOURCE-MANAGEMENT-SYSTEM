@@ -81,3 +81,16 @@ debug_*.py
 # AI model cache
 *.onnx.cache
 *.pt.cache
+
+# InsightFace model bundles and onnx weights (do not commit large model files)
+.insightface/
+.insightface/models/
+.insightface/models/**
+
+# Local model folders
+models/
+models/**
+
+# Anti-spoofing model artifacts
+models/anti_spoofing/
+models/anti_spoofing/**

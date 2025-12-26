@@ -1,167 +1,99 @@
 # AI Face Recognition Service
 
-Service chuyên biệt cho việc nhận diện khuôn mặt sử dụng AI và machine learning.
+## ✅ SẴN SÀNG SỬ DỤNG
 
-## Tính năng
+Service nhận diện khuôn mặt với InsightFace + Quality Check + Liveness Detection.
 
-- **Nhận diện khuôn mặt**: Sử dụng Python với thư viện face_recognition và PyTorch
-- **Training model**: Thêm ảnh training để cải thiện độ chính xác
-- **API RESTful**: Cung cấp các endpoint để tích hợp với các service khác
-- **Xử lý ảnh**: Upload và xử lý ảnh từ mobile app và web
+---
 
-## Cài đặt
-
-### Yêu cầu hệ thống
-
-- Node.js 18+
-- Python 3.8+
-- MySQL/MariaDB
-
-### Python Dependencies
+## 🚀 KHỞI ĐỘNG
 
 ```bash
-pip install -r requirements.txt
+conda activate face_env
+python main.py
 ```
 
-### Node.js Dependencies
+Service chạy tại: **http://localhost:4006**
 
-```bash
-yarn install
+---
+
+## 📡 API ENDPOINTS
+
+### 1. Register Face
+```
+POST /api/v1/face-recognition/register-face
 ```
 
-## Cấu hình
-
-1. Copy `env.example` thành `.env`
-2. Cập nhật các thông số database và cấu hình khác
-
-```env
-PORT=4006
-DB_HOST=localhost
-DB_PORT=3306
-DB_USER=root
-DB_PASSWORD=your_password
-DB_NAME=hrms_db
-CONFIDENCE_THRESHOLD=0.3
+### 2. Recognize Face (Attendance)
+```
+POST /api/v1/face-recognition/recognize-face
 ```
 
-## Chạy service
-
-### Development
-
-```bash
-yarn dev
+### 3. **Detect Face với UI (NEW)** ⭐
+```
+POST /api/v1/face-recognition/detect-face-with-ui
 ```
 
-### Production
+**Features:**
+- ✅ Khung **XANH**: Vị trí tốt, đang nhận diện
+- ✅ Khung **ĐỎ**: Có vấn đề, cần điều chỉnh
+- ✅ Text hướng dẫn người dùng realtime
+- ✅ Chỉ lấy face **LỚN NHẤT** (gần camera)
+- ✅ Khung oval hướng dẫn giữa màn hình
 
-```bash
-yarn start
-```
+---
 
-## API Endpoints
-
-### 1. Nhận diện khuôn mặt
-
-```
-POST /api/face-recognition/recognize
-Content-Type: multipart/form-data
-
-Body:
-- image: File ảnh cần nhận diện
-```
-
-**Response thành công:**
-```json
-{
-  "success": true,
-  "recognized": true,
-  "userId": 123,
-  "userInfo": {
-    "username": "john_doe",
-    "fullName": "John Doe",
-    "email": "john@example.com"
-  },
-  "confidence": 0.85,
-  "message": "Nhận diện thành công"
-}
-```
-
-### 2. Thêm ảnh training
+## 🎯 CẤU TRÚC
 
 ```
-POST /api/face-recognition/add-training-image
-Content-Type: multipart/form-data
+app/services/
+├── face_quality_service.py       ✅ Check blur/brightness/head pose
+├── face_liveness_service.py      ✅ Anti-spoofing (ONNX)
+└── face_recognition_service.py   ✅ Main orchestrator
 
-Body:
-- image: File ảnh training
-- userId: ID người dùng
-- username: Tên đăng nhập
+app/utils/
+├── image_utils.py                ✅ Image processing
+└── face_ui_helper.py             ✅ UI drawing (NEW)
+
+models/
+└── anti_spoofing/
+    └── 2.7_80x80_MiniFASNetV2.onnx ✅ Liveness model
 ```
 
-### 3. Kiểm tra trạng thái
+---
 
-```
-GET /api/face-recognition/status
-```
+## 💻 USAGE
 
-## Cấu trúc thư mục
+```python
+from app.services.face_recognition_service import face_recognizer
+import cv2
 
-```
-src/
-├── controllers/
-│   └── faceRecognitionController.js    # Controller xử lý logic
-├── routes/
-│   └── faceRecognition.js              # Định nghĩa routes
-├── lib/
-│   └── database.js                     # Kết nối database
-└── face_recognition/                    # Python scripts
-    ├── recognize.py                     # Script nhận diện chính
-    ├── add_training_image.py           # Script thêm ảnh training
-    └── weights/                        # Model weights
-```
+# Load image
+image = cv2.imread("face.jpg")
 
-## Tích hợp với Mobile App
+# Option 1: Process with UI
+result, annotated_img = face_recognizer.process_face_with_ui(image)
+cv2.imshow("Result", annotated_img)
 
-Mobile app sẽ gửi ảnh tới endpoint `/api/ai/recognize` thông qua API Gateway.
-
-## Monitoring
-
-- Health check: `GET /health`
-- Logs được ghi ra console và có thể tích hợp với logging service
-
-## Troubleshooting
-
-### Lỗi Python không tìm thấy
-
-Đảm bảo Python đã được cài đặt và có thể chạy từ command line:
-
-```bash
-python3 --version
-# hoặc
-python --version
+# Option 2: Process without UI
+result = face_recognizer.process_face(image)
+if result.success:
+    print(f"✅ Success: {result.face_data.embedding[:5]}...")
 ```
 
-### Lỗi model weights
+---
 
-Kiểm tra thư mục `weights/` có chứa file model cần thiết không.
+## 🔧 FEATURES
 
-### Lỗi database connection
+- ✅ **Clean Architecture** (3 services độc lập)
+- ✅ **Singleton Pattern** (model load 1 lần)
+- ✅ **UI Feedback** (khung xanh/đỏ + text hướng dẫn)
+- ✅ **Multiple Faces** (tự động chọn face lớn nhất)
+- ✅ **Quality Check** (blur, brightness, head pose)
+- ✅ **Liveness Detection** (anti-spoofing)
+- ✅ **GPU Support** (CUDA acceleration)
 
-Kiểm tra cấu hình database trong file `.env` và đảm bảo database đang chạy.
+---
 
-
-Cách 1 (Khuyến nghị): Dùng Conda để có dlib prebuilt
-Cài Miniconda (nếu chưa có).
-Mở terminal tại services/ai-face-recognition-service:
-Trỏ service dùng đúng Python:
-PowerShell:
-$env:PYTHON_PATH="$(conda info --base)\envs\fr\python.exe"; npm run dev
-Git Bash:
-export PYTHON_PATH="$(conda info --base)/envs/fr/python.exe"; npm run dev
-
-Git Bash: export PYTHON_PATH="$(pwd)/.venv/Scripts/python.exe"; npm run dev
-
-thêm cái này vào đẻ kích hoạt môi trườngd
-$ source /e/Anaconda/etc/profile.d/conda.sh
-conda activate fr
-(fr) 
+**Version**: 2.0.0 (Clean Architecture + UI)  
+**Status**: ✅ PRODUCTION READY

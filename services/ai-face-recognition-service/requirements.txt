@@ -1,40 +1,66 @@
-# AI Face Recognition Service Dependencies - YOLOv11 + ArcFace
-# Core Framework
+# ============================================================================
+# AI FACE RECOGNITION SERVICE - REQUIREMENTS (OPTIMIZED & MINIMAL)
+# ============================================================================
+# Clean Architecture - Only essential libraries
+# No MediaPipe, No Dlib, No heavy dependencies
+# ============================================================================
+
+# --- CORE WEB FRAMEWORK ---
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 
-# Database
+# --- DATABASE ---
 sqlalchemy==2.0.23
 psycopg2-binary==2.9.9
 alembic==1.12.1
 
-# AI & Computer Vision - YOLOv11 + ArcFace Stack
-opencv-python==4.8.1.78
-numpy==1.26.4
-pillow==10.0.1
-torch>=2.0.0
-torchvision>=0.15.0
-ultralytics>=8.0.0
-scikit-learn>=1.3.0
+# --- COMPUTER VISION (Core) ---
+opencv-python==4.8.1.78             # Chỉ cần OpenCV cho image processing
+numpy==1.26.4                       # Required by OpenCV và InsightFace
+pillow                    # Image loading/saving
 
-# YOLOv11 Face Detection
-yolov5>=7.0.0
+# --- INSIGHTFACE (Face Recognition) ---
+insightface>=0.7.3                  # Main library - bao gồm detection + recognition + landmarks
 
-# ArcFace Dependencies  
-timm>=0.9.0
+# --- ONNX RUNTIME (Inference Engine) ---
+# CHỌN 1 TRONG 2 options dưới đây:
 
-# HTTP Requests for service communication
-requests>=2.31.0
+# Option 1: GPU (CUDA) - Nếu có GPU NVIDIA
+onnxruntime-gpu>=1.16.0
 
-# Image processing optimization
-cmake>=3.18
-wheel
+# Option 2: CPU only - Nếu không có GPU, comment dòng trên và uncomment dòng dưới
+# onnxruntime>=1.16.0
 
-# Utilities
+# --- HTTP CLIENT ---
+requests>=2.31.0                    # For service communication
+
+# --- CONFIGURATION ---
 python-dotenv==1.0.0
 pydantic==2.5.0
 pydantic-settings==2.0.3
 
-# Development (optional)
+# --- DEVELOPMENT/TESTING (Optional) ---
 pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# ============================================================================
+# NOTES:
+# ============================================================================
+# 1. MediaPipe đã được loại bỏ (không cần thiết cho head pose)
+#    => Sử dụng InsightFace landmarks thay thế
+#
+# 2. Silent-Face-Anti-Spoofing model (ONNX) cần tải riêng:
+#    - Download từ: https://github.com/minivision-ai/Silent-Face-Anti-Spoofing
+#    - Đặt file .onnx vào: models/anti_spoofing/
+#    - Hoặc tải bằng script: python scripts/download_anti_spoofing_model.py
+#
+# 3. InsightFace models (buffalo_l) sẽ tự động download lần đầu chạy
+#
+# 4. Để cài đặt:
+#    pip install -r requirements.txt
+#
+# 5. Nếu lỗi khi cài insightface trên Windows, cài thêm:
+#    pip install cmake wheel
+#
+# ============================================================================

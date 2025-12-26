@@ -24,6 +24,7 @@ class FaceEmbedding(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, nullable=False, index=True)
     username = Column(String(100), nullable=False, index=True)
+    full_name = Column(String(255), nullable=True)  # Tên đầy đủ của nhân viên
     face_embedding = Column(Text, nullable=False)  # JSON string of face vector
     image_path = Column(String(500), nullable=True)
     confidence_score = Column(Integer, default=0)

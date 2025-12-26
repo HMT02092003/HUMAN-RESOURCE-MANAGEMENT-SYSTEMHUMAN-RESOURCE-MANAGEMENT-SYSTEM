@@ -1,211 +1,250 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"label": "Frontend",
-			"type": "shell",
-			"command": "yarn dev",
-			"options": {
-				"cwd": "frontend"
-			},
-			"presentation": {
-				"panel": "new"
-			}
-		},
-		{
-			"label": "API Gateway (Port 4000)",
-			"type": "shell",
-			"command": "yarn dev",
-			"options": {
-				"cwd": "services/api-gateway"
-			},
-			"presentation": {
-				"panel": "new"
-			}
-		},
-		{
-			"label": "Auth Service",
-			"type": "shell",
-			"command": "yarn dev",
-			"options": {
-				"cwd": "services/auth-service"
-			},
-			"presentation": {
-				"panel": "new"
-			}
-		},
-		{
-			"label": "Employee Service",
-			"type": "shell",
-			"command": "yarn dev",
-			"options": {
-				"cwd": "services/employee-service"
-			},
-			"presentation": {
-				"panel": "new"
-			}
-		},
-		{
-			"label": "Attendance Service",
-			"type": "shell",
-			"command": "yarn dev",
-			"options": {
-				"cwd": "services/attendance-service"
-			},
-			"presentation": {
-				"panel": "new"
-			}
-		},
-		{
-			"label": "AI Face Recognition Service",
-			"type": "shell",
-			"command": "conda activate face_env && python main.py",
-			"options": {
-				"cwd": "services/ai-face-recognition-service"
-			},
-			"presentation": {
-				"panel": "new"
-			}
-		},
-		{
-			"label": "Application Service",
-			"type": "shell",
-			"command": "yarn dev",
-			"options": {
-				"cwd": "services/application-service"
-			},
-			"presentation": {
-				"panel": "new"
-			}
-		},
-		{
-			"label": "Mobile App (Face Recognition)",
-			"type": "shell",
-			"command": "yarn start",
-			"options": {
-				"cwd": "services/app-face-recognition"
-			},
-			"presentation": {
-				"panel": "new"
-			}
-		},
-		{
-			"label": "QLNS_App",
-			"type": "shell",
-			"command": "yarn start --clear",
-			"options": {
-				"cwd": "QLNS_App"
-			},
-			"presentation": {
-				"panel": "new"
-			}
-		},
-		{
-			"label": "Start All",
-			"dependsOn": [
-				"Frontend",
-				"API Gateway (Port 4000)",
-				"Auth Service",
-				"Employee Service",
-				"Attendance Service",
-				"Application Service",
-				"AI Face Recognition Service",
-				"Mobile App (Face Recognition)",
-				"QLNS_App",
-				"Salary Service",
-				"Job Service"
-			],
-			"dependsOrder": "parallel",
-			"problemMatcher": [],
-			"group": {
-				"kind": "build",
-				"isDefault": true
-			}
-		},
-		{
-			"label": "Stop All Services",
-			"type": "shell",
-			"command": "taskkill /f /im node.exe",
-			"windows": {
-				"command": "taskkill /f /im node.exe"
-			},
-			"linux": {
-				"command": "pkill -f node"
-			},
-			"osx": {
-				"command": "pkill -f node"
-			},
-			"presentation": {
-				"panel": "new"
-			},
-			"problemMatcher": []
-		},
-		{
-			"label": "Stop All Services (Alternative)",
-			"type": "shell",
-			"command": "echo 'Stopping all Node.js processes...' && taskkill /f /im node.exe 2>nul || echo 'No Node.js processes found'",
-			"windows": {
-				"command": "echo 'Stopping all Node.js processes...' && taskkill /f /im node.exe 2>nul || echo 'No Node.js processes found'"
-			},
-			"linux": {
-				"command": "echo 'Stopping all Node.js processes...' && pkill -f node || echo 'No Node.js processes found'"
-			},
-			"osx": {
-				"command": "echo 'Stopping all Node.js processes...' && pkill -f node || echo 'No Node.js processes found'"
-			},
-			"presentation": {
-				"panel": "new"
-			},
-			"problemMatcher": []
-		},
-		{
-			"label": "Create New Service",
-			"type": "shell",
-			"command": "node create-service.js ${input:serviceName} ${input:servicePort} ${input:databaseName}",
-			"presentation": {
-				"echo": true,
-				"reveal": "always",
-				"focus": false,
-				"panel": "new"
-			},
-			"problemMatcher": []
-		},
-		{
-			"label": "Salary Service",
-			"type": "shell",
-			"command": "yarn dev",
-			"options": {
-				"cwd": "services/salary-service"
-			},
-			"isBackground": true,
-			"group": "none"
-		},
-		{
-			"label": "Job Service",
-			"type": "shell",
-			"command": "yarn dev",
-			"options": {
-				"cwd": "services/job-service"
-			},
-			"isBackground": true,
-			"group": "none"
-		}
-	],
-	"inputs": [
-		{
-			"id": "serviceName",
-			"description": "Enter service name (e.g., user-service)",
-			"type": "promptString"
-		},
-		{
-			"id": "servicePort",
-			"description": "Enter port number (e.g., 4005)",
-			"type": "promptString"
-		},
-		{
-			"id": "databaseName",
-			"description": "Enter database name (e.g., user_service)",
-			"type": "promptString"
-		}
-	]
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Frontend",
+            "type": "shell",
+            "command": "yarn dev",
+            "options": {
+                "cwd": "frontend"
+            },
+            "presentation": {
+                "panel": "new"
+            }
+        },
+        {
+            "label": "API Gateway (Port 4000)",
+            "type": "shell",
+            "command": "yarn dev",
+            "options": {
+                "cwd": "services/api-gateway"
+            },
+            "presentation": {
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Auth Service",
+            "type": "shell",
+            "command": "yarn dev",
+            "options": {
+                "cwd": "services/auth-service"
+            },
+            "presentation": {
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Employee Service",
+            "type": "shell",
+            "command": "yarn dev",
+            "options": {
+                "cwd": "services/employee-service"
+            },
+            "presentation": {
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Attendance Service",
+            "type": "shell",
+            "command": "yarn dev",
+            "options": {
+                "cwd": "services/attendance-service"
+            },
+            "presentation": {
+                "panel": "new"
+            }
+        },
+        {
+            "label": "AI Face Recognition Service",
+            "type": "shell",
+            "command": "start_service.bat",
+            "options": {
+                "cwd": "services/ai-face-recognition-service",
+                "shell": {
+                    "executable": "cmd.exe",
+                    "args": [
+                        "/d",
+                        "/c"
+                    ]
+                }
+            },
+            "presentation": {
+                "panel": "dedicated",
+                "reveal": "always",
+                "focus": false
+            },
+            "isBackground": true,
+            "problemMatcher": {
+                "pattern": {
+                    "regexp": "^ERROR"
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "Starting AI Face Recognition Service|Starting FastAPI",
+                    "endsPattern": "Application startup complete|Uvicorn running"
+                }
+            }
+        },
+        {
+            "label": "Application Service",
+            "type": "shell",
+            "command": "yarn dev",
+            "options": {
+                "cwd": "services/application-service"
+            },
+            "presentation": {
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Mobile App (Face Recognition)",
+            "type": "shell",
+            "command": "yarn start --clear",
+            "options": {
+                "cwd": "services/app-face-recognition"
+            },
+            "presentation": {
+                "panel": "new"
+            }
+        },
+        {
+            "label": "QLNS_App",
+            "type": "shell",
+            "command": "yarn start --clear",
+            "options": {
+                "cwd": "QLNS_App"
+            },
+            "presentation": {
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Start All",
+            "dependsOn": [
+                "Frontend",
+                "API Gateway (Port 4000)",
+                "Auth Service",
+                "Employee Service",
+                "Attendance Service",
+                "Application Service",
+                "AI Face Recognition Service",
+                "Mobile App (Face Recognition)",
+                "QLNS_App",
+                "Salary Service",
+                "Job Service"
+            ],
+            "dependsOrder": "parallel",
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        },
+        {
+            "label": "Stop All Services",
+            "type": "shell",
+            "command": "taskkill /f /im node.exe",
+            "windows": {
+                "command": "taskkill /f /im node.exe"
+            },
+            "linux": {
+                "command": "pkill -f node"
+            },
+            "osx": {
+                "command": "pkill -f node"
+            },
+            "presentation": {
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Stop All Services (Alternative)",
+            "type": "shell",
+            "command": "echo 'Stopping all Node.js processes...' && taskkill /f /im node.exe 2>nul || echo 'No Node.js processes found'",
+            "windows": {
+                "command": "echo 'Stopping all Node.js processes...' && taskkill /f /im node.exe 2>nul || echo 'No Node.js processes found'"
+            },
+            "linux": {
+                "command": "echo 'Stopping all Node.js processes...' && pkill -f node || echo 'No Node.js processes found'"
+            },
+            "osx": {
+                "command": "echo 'Stopping all Node.js processes...' && pkill -f node || echo 'No Node.js processes found'"
+            },
+            "presentation": {
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Create New Service",
+            "type": "shell",
+            "command": "node create-service.js ${input:serviceName} ${input:servicePort} ${input:databaseName}",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "new"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Salary Service",
+            "type": "shell",
+            "command": "yarn dev",
+            "options": {
+                "cwd": "services/salary-service"
+            },
+            "isBackground": true,
+            "group": "none"
+        },
+        {
+            "label": "Job Service",
+            "type": "shell",
+            "command": "yarn dev",
+            "options": {
+                "cwd": "services/job-service"
+            },
+            "isBackground": true,
+            "group": "none"
+        },
+        {
+            "label": "Stop AI Service",
+            "type": "shell",
+            "command": "for /f \"tokens=5\" %a in ('netstat -ano ^| findstr :4006') do @taskkill /F /PID %a",
+            "options": {
+                "shell": {
+                    "executable": "cmd.exe",
+                    "args": [
+                        "/d",
+                        "/c"
+                    ]
+                }
+            },
+            "presentation": {
+                "panel": "new",
+                "reveal": "always"
+            },
+            "problemMatcher": []
+        }
+    ],
+    "inputs": [
+        {
+            "id": "serviceName",
+            "description": "Enter service name (e.g., user-service)",
+            "type": "promptString"
+        },
+        {
+            "id": "servicePort",
+            "description": "Enter port number (e.g., 4005)",
+            "type": "promptString"
+        },
+        {
+            "id": "databaseName",
+            "description": "Enter database name (e.g., user_service)",
+            "type": "promptString"
+        }
+    ]
 }

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, View, Alert } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import CameraView from './components/CameraView';
+import EnhancedCameraViewV2 from './components/EnhancedCameraViewV2';
 import AttendanceConfirmation from './components/AttendanceConfirmation';
 import AuthTokenManager from './services/AuthTokenManager';
 
@@ -16,26 +16,31 @@ export default function App() {
   React.useEffect(() => {
     (async () => {
       try {
+        console.log('🔐 [APP] Checking for existing token...');
         const token = await AuthTokenManager.getAccessToken();
         if (token) {
+          console.log('✅ [APP] Token found, user already logged in');
           setUser({ tokenLoaded: true });
         } else {
+          console.log('🔑 [APP] No token found, attempting auto-login...');
           // auto login using provided admin credentials
           try {
             const result = await AuthTokenManager.loginAndSave('admin', '123456@');
+            console.log('🔐 [APP] Login result:', { hasAccess: !!result?.access, hasUser: !!result?.user });
             if (result && result.access) {
               setUser({ loggedIn: true, user: result.user, token: result.access });
-              console.log('Auto-login success:', result.user?.username || 'admin');
+              console.log('✅ [APP] Auto-login success:', result.user?.username || 'admin');
             } else {
-              console.warn('Auto-login did not return access token');
+              console.error('❌ [APP] Auto-login did not return access token');
+              Alert.alert('Lỗi đăng nhập', 'Không thể đăng nhập tự động. Vui lòng kiểm tra kết nối mạng và thử lại.');
             }
           } catch (e) {
-            console.error('Auto-login failed', e);
-            Alert.alert('Lỗi đăng nhập', 'Không thể đăng nhập tự động. Vui lòng kiểm tra kết nối mạng và thử lại.');
+            console.error('❌ [APP] Auto-login failed:', e);
+            Alert.alert('Lỗi đăng nhập', `Không thể đăng nhập tự động: ${e.message || 'Unknown error'}`);
           }
         }
       } catch (e) {
-        console.error('Auth init error', e);
+        console.error('❌ [APP] Auth init error:', e);
       } finally {
         setAuthLoading(false);
       }
@@ -56,8 +61,11 @@ export default function App() {
   };
 
   const resetCapture = () => {
+    console.log('🔄 [APP] Resetting capture state - returning to camera');
+    console.log('🔄 [APP] This will unmount AttendanceConfirmation and remount Camera');
     setCapturedImage(null);
     setRecognitionResult(null);
+    // Reset sẽ cho phép camera tiếp tục auto-capture
   };
 
   return (
@@ -82,7 +90,9 @@ export default function App() {
 
             // If no captured image, show camera. We don't require `user` to be present to
             // display the camera; token requirements are enforced when confirming.
-            return <CameraView onCapture={handleCapture} />;
+            // KHÔNG dùng key={Date.now()} vì sẽ gây remount liên tục
+            // Using EnhancedCameraViewV2 with local face detection and smart throttling
+            return <EnhancedCameraViewV2 onCapture={handleCapture} />;
           })()
         }
       </View>

@@ -44,6 +44,11 @@ export async function testConnection() {
   }
 }
 
+// Expose gateway base URL resolver for other modules (e.g., camera preview)
+export async function getGatewayBaseUrl() {
+  return await getBaseUrl();
+}
+
 export async function sendImageForRecognition(imageUri, meta = {}) {
   const base = await getBaseUrl();
   const form = new FormData();
@@ -56,8 +61,12 @@ export async function sendImageForRecognition(imageUri, meta = {}) {
   // Thêm recognition_type bắt buộc (mặc định là check_in)
   form.append('recognition_type', meta.recognition_type || 'check_in');
   
+  // Thêm validation_mode (mặc định là 'normal' cho chấm công bình thường)
+  // Sử dụng 'strict' khi cần kiểm tra chất lượng và liveness đầy đủ
+  form.append('validation_mode', meta.validation_mode || 'normal');
+  
   Object.entries(meta || {}).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && key !== 'recognition_type') {
+    if (value !== undefined && value !== null && key !== 'recognition_type' && key !== 'validation_mode') {
       form.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
     }
   });
@@ -101,12 +110,27 @@ export async function submitAttendance(payload) {
       console.log('AttendanceAPI: Using token from payload');
     }
 
+    // Ensure we have a valid access token before sending. If not, try a refresh.
     const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+    if (!authToken) {
+      try {
+        const refreshToken = await AuthTokenManager.getRefreshToken();
+        if (refreshToken) {
+          console.log('AttendanceAPI: No access token, but refresh token found. Attempting refresh...');
+          const newToken = await AuthTokenManager.refreshAccessToken();
+          if (newToken) authToken = newToken;
+        }
+      } catch (e) {
+        console.warn('AttendanceAPI: Error while attempting token refresh', e);
+      }
+    }
+
     if (authToken) {
       headers['Authorization'] = `Bearer ${authToken}`;
       console.log('AttendanceAPI: Authorization header set');
     } else {
-      console.warn('AttendanceAPI: No token available - request will be unauthorized');
+      console.warn('AttendanceAPI: No token available - aborting attendance submission (unauthenticated)');
+      return { success: false, message: 'Not authenticated. Please login to submit attendance.' };
     }
 
     const requestBody = {
@@ -135,7 +159,7 @@ export async function submitAttendance(payload) {
       // attempt refresh once
       const newToken = await AuthTokenManager.refreshAccessToken();
       if (newToken) {
-        console.log('AttendanceAPI: Token refreshed, retrying request...');
+        console.log('AttendanceAPI: Token refreshed successfully, retrying request...');
         headers['Authorization'] = `Bearer ${newToken}`;
         const retry = await fetch(`${base}/api/attendance/record`, {
           method: 'POST',
@@ -147,7 +171,9 @@ export async function submitAttendance(payload) {
         if (retry.ok) return retryData;
         return { success: false, message: retryData?.message || `HTTP ${retry.status}`, error: retryData };
       }
-      console.error('AttendanceAPI: Token refresh failed or no refresh token');
+      console.error('❌ AttendanceAPI: Token refresh failed - session expired');
+      console.error('❌ AttendanceAPI: User needs to login again');
+      await AuthTokenManager.clearTokens();
       return { success: false, message: data?.message || 'Unauthorized - please login again', error: data };
     }
 
@@ -169,7 +195,7 @@ export async function submitAttendance(payload) {
   }
 }
 
-const AttendanceAPI = { testConnection, sendImageForRecognition, submitAttendance };
+const AttendanceAPI = { testConnection, sendImageForRecognition, submitAttendance, getGatewayBaseUrl };
 export default AttendanceAPI;
 
 
