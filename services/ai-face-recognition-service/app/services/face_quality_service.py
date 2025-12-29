@@ -210,87 +210,52 @@ class FaceQualityChecker:
             - pitch: Góc ngẩng/cúi (-90 đến +90)
             - roll: Góc nghiêng (-180 đến +180)
         """
+        # For backward-compatibility we implement calculate_head_pose and
+        # delegate to it. This function kept for callers expecting
+        # `check_head_pose`.
         try:
-            # Lấy tọa độ các điểm
-            left_eye = landmarks[0]      # [x, y]
-            right_eye = landmarks[1]
-            nose = landmarks[2]
-            left_mouth = landmarks[3]
-            right_mouth = landmarks[4]
-            
-            # === 1. Tính ROLL (góc nghiêng) ===
-            # Dựa vào đường nối 2 mắt
-            eye_dx = right_eye[0] - left_eye[0]
-            eye_dy = right_eye[1] - left_eye[1]
-            roll = np.degrees(np.arctan2(eye_dy, eye_dx))
-            
-            # Chuẩn hóa về khoảng [-180, 180]
-            if roll > 180:
-                roll -= 360
-            elif roll < -180:
-                roll += 360
-            
-            # === 2. Tính YAW (góc quay trái/phải) ===
-            # So sánh khoảng cách từ mũi đến 2 mắt
-            dist_nose_to_left_eye = np.linalg.norm(nose - left_eye)
-            dist_nose_to_right_eye = np.linalg.norm(nose - right_eye)
-            
-            # Tính tỷ lệ bất đối xứng
-            # Nếu mặt quay phải: mũi gần mắt phải hơn
-            # Nếu mặt quay trái: mũi gần mắt trái hơn
-            eye_center_x = (left_eye[0] + right_eye[0]) / 2
-            nose_offset_x = nose[0] - eye_center_x
-            eye_distance = np.linalg.norm(right_eye - left_eye)
-            
-            # Chuẩn hóa offset theo khoảng cách giữa 2 mắt
-            normalized_offset = nose_offset_x / (eye_distance / 2) if eye_distance > 0 else 0
-            
-            # Ước lượng yaw từ offset (đơn giản hóa)
-            # Giá trị normalized_offset thường trong khoảng [-0.5, 0.5] khi mặt thẳng
-            yaw = normalized_offset * 45  # Scale lên độ
-            
-            # Giới hạn yaw trong khoảng [-90, 90]
-            yaw = np.clip(yaw, -90, 90)
-            
-            # === 3. Tính PITCH (góc ngẩng/cúi) ===
-            # So sánh vị trí Y của mũi với tâm 2 mắt và tâm miệng
-            eye_center_y = (left_eye[1] + right_eye[1]) / 2
-            mouth_center_y = (left_mouth[1] + right_mouth[1]) / 2
-            
-            # Khoảng cách dọc từ mắt đến miệng (chiều cao khuôn mặt)
-            face_height = mouth_center_y - eye_center_y
-            
-            # Vị trí tương đối của mũi
-            nose_relative_y = nose[1] - eye_center_y
-            
-            # Ước lượng pitch
-            # Nếu mặt nhìn thẳng: mũi nằm giữa mắt và miệng
-            # Nếu cúi đầu: mũi gần miệng hơn
-            # Nếu ngẩng đầu: mũi gần mắt hơn
-            if face_height > 0:
-                pitch_ratio = (nose_relative_y / face_height) - 0.5  # Chuẩn hóa về [-0.5, 0.5]
-                pitch = pitch_ratio * 60  # Scale lên độ
-            else:
-                pitch = 0
-            
-            # Giới hạn pitch trong khoảng [-45, 45]
-            pitch = np.clip(pitch, -45, 45)
-            
-            logger.debug(f"Head pose: yaw={yaw:.1f}°, pitch={pitch:.1f}°, roll={roll:.1f}°")
-            
-            return {
-                'yaw': float(yaw),
-                'pitch': float(pitch),
-                'roll': float(roll)
-            }
-            
+            return self.calculate_head_pose(landmarks)
         except Exception as e:
-            logger.error(f"Error calculating head pose: {e}")
-            return {
-                'yaw': 0.0,
-                'pitch': 0.0,
-                'roll': 0.0
-            }
+            logger.error(f"Error in check_head_pose delegating to calculate_head_pose: {e}")
+            return {'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
+
+    def calculate_head_pose(self, landmarks: np.ndarray) -> Dict[str, float]:
+        """
+        Tính toán Yaw, Pitch, Roll từ 5 điểm landmarks (InsightFace)
+        0: left eye, 1: right eye, 2: nose, 3: left mouth, 4: right mouth
+        """
+        try:
+            left_eye = np.array(landmarks[0], dtype=np.float32)
+            right_eye = np.array(landmarks[1], dtype=np.float32)
+            nose = np.array(landmarks[2], dtype=np.float32)
+            left_mouth = np.array(landmarks[3], dtype=np.float32)
+            right_mouth = np.array(landmarks[4], dtype=np.float32)
+
+            # 1. YAW (Quay trái/phải) - dựa vào độ lệch mũi so với tâm mắt
+            eye_dist = np.linalg.norm(right_eye - left_eye)
+            eye_center_x = (left_eye[0] + right_eye[0]) / 2.0
+            # Reduce sensitivity: use 70 instead of 90 multiplier to make yaw less aggressive
+            yaw = ((nose[0] - eye_center_x) / (eye_dist / 2.0)) * 70.0 if eye_dist > 0 else 0.0
+
+            # 2. PITCH (Gật/Ngửa) - dựa trên tỉ lệ vị trí mũi giữa mắt và miệng
+            eye_center_y = (left_eye[1] + right_eye[1]) / 2.0
+            mouth_center_y = (left_mouth[1] + right_mouth[1]) / 2.0
+            face_height = mouth_center_y - eye_center_y
+            if face_height > 0:
+                nose_rel_y = (nose[1] - eye_center_y) / face_height
+                pitch = (nose_rel_y - 0.45) * 150.0
+            else:
+                pitch = 0.0
+
+            # 3. ROLL (Nghiêng đầu) - góc đường nối hai mắt
+            dY = right_eye[1] - left_eye[1]
+            dX = right_eye[0] - left_eye[0]
+            roll = np.degrees(np.arctan2(dY, dX))
+
+            return {'yaw': float(yaw), 'pitch': float(pitch), 'roll': float(roll)}
+        except Exception as e:
+            logger.error(f"Error pose calc: {e}")
+            return {'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
 
 
 # Singleton instance

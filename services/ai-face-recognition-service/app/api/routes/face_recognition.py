@@ -16,6 +16,7 @@ from app.core.database import get_db
 # Using NEW Clean Architecture Services
 from app.services.face_recognition_service import face_recognizer
 from app.services.insightface_recognition_service import InsightFaceRecognitionService
+from app.services.face_quality_service import face_quality_checker
 from app.utils.image_utils import base64_to_image, validate_image
 from app.schemas.face_recognition import (
     FaceEmbeddingResponse,
@@ -94,6 +95,9 @@ async def recognize_face(
     image: UploadFile = File(..., description="Image to recognize"),
     recognition_type: str = Form(..., description="Type of recognition: check_in or check_out"),
     validation_mode: str = Form(default="normal", description="Validation mode: 'strict' for full checks, 'normal' for basic checks only"),
+    baseline_yaw: str = Form(default="0", description="Baseline yaw from step1 (optional)"),
+    baseline_roll: str = Form(default="0", description="Baseline roll from step1 (optional)"),
+    baseline_pitch: str = Form(default="0", description="Baseline pitch from step1 (optional)"),
     db: Session = Depends(get_db)
 ):
     """
@@ -121,11 +125,11 @@ async def recognize_face(
                 detail="recognition_type must be 'check_in' or 'check_out'"
             )
         
-        # Validate validation mode
-        if validation_mode not in ["normal", "strict"]:
+        # Validate validation mode (support 'normal', 'strict' and 'challenge')
+        if validation_mode not in ["normal", "strict", "challenge"]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="validation_mode must be 'normal' or 'strict'"
+                detail="validation_mode must be 'normal', 'strict' or 'challenge'"
             )
         
         # Read image data
@@ -145,27 +149,103 @@ async def recognize_face(
                 }
             )
         
-        # Skip validation if mode is 'normal' (for regular attendance)
+        # CHALLENGE MODE: require the user to move head (yaw OR pitch OR roll)
+        if validation_mode == "challenge":
+            try:
+                # Detect faces quickly using the face recognizer
+                faces = face_recognizer.app.get(img)
+                if not faces or len(faces) == 0:
+                    return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={
+                        "success": False,
+                        "require_challenge": True,
+                        "message": "Không tìm thấy khuôn mặt. Vui lòng đưa mặt vào camera."
+                    })
+
+                # Take the largest / first face
+                face = faces[0]
+                # landmarks: numpy array shape (5,2)
+                kps = face.kps
+                angles = face_quality_checker.check_head_pose(kps)
+                yaw, pitch, roll = angles.get('yaw', 0.0), angles.get('pitch', 0.0), angles.get('roll', 0.0)
+                logger.info(f"📐 Challenge Pose: Yaw={yaw:.1f}, Pitch={pitch:.1f}, Roll={roll:.1f}")
+
+                # NEW: Delta check vs baseline sent from client (pre-step1 capture)
+                try:
+                    base_yaw = float(baseline_yaw)
+                    base_roll = float(baseline_roll)
+                    base_pitch = float(baseline_pitch)
+                except Exception:
+                    return JSONResponse(status_code=400, content={
+                        "success": False,
+                        "message": "Dữ liệu baseline không hợp lệ."
+                    })
+
+                # Compute deltas between current pose and baseline
+                delta_yaw = abs(yaw - base_yaw)
+                delta_roll = abs(roll - base_roll)
+                delta_pitch = abs(pitch - base_pitch)
+                logger.info(f"🔄 Delta Check: dYaw={delta_yaw:.1f}, dRoll={delta_roll:.1f}, dPitch={delta_pitch:.1f}")
+
+                # Require a clear movement compared to baseline (>= 15° on any axis)
+                is_moved_enough = delta_yaw > 15.0 or delta_roll > 15.0 or delta_pitch > 15.0
+                if not is_moved_enough:
+                    logger.warning("❌ Fake detected: No sufficient movement between steps.")
+                    return JSONResponse(status_code=400, content={
+                        "success": False,
+                        "require_challenge": True,
+                        "message": "Chưa phát hiện chuyển động đủ lớn. Vui lòng quay đầu rõ ràng hơn."
+                    })
+
+                # If movement detected, proceed to recognition (fast path)
+                service = InsightFaceRecognitionService()
+                result = await service.recognize_face(image_data, recognition_type, db)
+                return JSONResponse(status_code=status.HTTP_200_OK, content=result)
+            except Exception as e:
+                logger.error(f"Error during challenge validation: {e}")
+                return JSONResponse(status_code=500, content={"success": False, "message": str(e)})
+
+        # Light validation for 'normal' mode: allow up to 25 degrees on any axis
         if validation_mode == "normal":
-            logger.info("⚡ NORMAL MODE: Skipping quality and liveness checks")
+            logger.info("⚡ NORMAL MODE: Light pose validation (max 25°)")
+            try:
+                faces = face_recognizer.app.get(img)
+                if not faces or len(faces) == 0:
+                    return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={
+                        "success": False,
+                        "error": "NO_FACE",
+                        "message": "Không tìm thấy khuôn mặt. Vui lòng đưa mặt vào camera."
+                    })
+
+                face = faces[0]
+                kps = face.kps
+                angles = face_quality_checker.check_head_pose(kps)
+                yaw, pitch, roll = angles.get('yaw', 0.0), angles.get('pitch', 0.0), angles.get('roll', 0.0)
+                logger.info(f"📐 Normal Pose Check: Yaw={yaw:.1f}, Pitch={pitch:.1f}, Roll={roll:.1f}")
+
+                # If any angle exceeds 25°, ask to look straight
+                if abs(yaw) > 25.0 or abs(pitch) > 25.0 or abs(roll) > 25.0:
+                    return JSONResponse(status_code=400, content={
+                        "success": False,
+                        "error": "HEAD_POSE_TOO_LARGE",
+                        "message": "Vui lòng nhìn thẳng vào camera (góc < 25°)."
+                    })
+
+            except Exception as e:
+                logger.warning(f"Normal mode: quick pose check failed: {e}")
+
             logger.info("📋 Processing face recognition directly...")
-            
             service = InsightFaceRecognitionService()
             result = await service.recognize_face(image_data, recognition_type, db)
-            
+
             if result.get("success"):
                 result["validation"] = {
                     "mode": "normal",
-                    "quality_check": "skipped",
+                    "quality_check": "light_pose",
                     "liveness_check": "skipped"
                 }
                 logger.info(f"✅ Recognition successful: {result.get('data', {}).get('user', {}).get('username', 'Unknown')}")
-            
-            # Always return 200 OK for normal mode, let client handle success/failure
-            return JSONResponse(
-                status_code=status.HTTP_200_OK,
-                content=result
-            )
+
+            return JSONResponse(status_code=status.HTTP_200_OK, content=result)
         
         # STRICT MODE: Full 3-stage validation
         logger.info("=" * 50)

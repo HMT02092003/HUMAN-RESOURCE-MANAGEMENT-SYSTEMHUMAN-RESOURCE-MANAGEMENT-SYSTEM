@@ -1,13 +1,8 @@
+//
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  StyleSheet, 
-  Dimensions,
-  ActivityIndicator,
-  Animated,
-  Platform
+    View, Text, StyleSheet, Dimensions,
+    ActivityIndicator, Animated, Alert, TouchableOpacity, SafeAreaView, Platform, StatusBar
 } from 'react-native';
 import { Camera } from 'expo-camera';
 import * as FaceDetector from 'expo-face-detector';
@@ -15,276 +10,328 @@ import { Ionicons } from '@expo/vector-icons';
 import AttendanceAPI from '../services/AttendanceAPI';
 import FaceValidationHelper from '../utils/FaceValidationHelper';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const CAMERA_RATIO = '4:3';
+const STATUSBAR_HEIGHT = Platform.OS === 'ios' ? 40 : StatusBar.currentHeight;
 
 export default function EnhancedCameraViewV2({ onCapture }) {
-  // --- STATE ---
-  const [hasPermission, setHasPermission] = useState(null);
-  const [cameraReady, setCameraReady] = useState(false);
-  const [cameraType, setCameraType] = useState(Camera.Constants.Type.front);
+    // --- STATE ---
+    const [step, setStep] = useState(1);
+    const [hasPermission, setHasPermission] = useState(null);
+    const [cameraReady, setCameraReady] = useState(false);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [cameraType, setCameraType] = useState(Camera.Constants.Type.front);
   
-  const [currentValidation, setCurrentValidation] = useState({
-    isValid: false,
-    message: 'Đang tìm khuôn mặt...',
-    color: '#007AFF' 
-  });
+    // Chỉ còn lại State điểm số và hướng dẫn
+    const [score, setScore] = useState(0); 
+    const [guidance, setGuidance] = useState({ text: 'Đưa mặt vào khung', color: '#90A4AE', icon: 'scan' });
+
+    // --- REFS ---
+    const cameraRef = useRef(null);
+    const processingRef = useRef(false);
+    const stableCountRef = useRef(0);
+    const step1PhotoRef = useRef(null);
+    const baselinePoseRef = useRef({ yaw: 0, roll: 0 });
+    const isMounted = useRef(true);
+    const stepTransitionRef = useRef(false); 
+    const progressAnim = useRef(new Animated.Value(0)).current;
+
+    // Settings
+    const faceDetectorSettings = useMemo(() => ({
+        mode: FaceDetector.FaceDetectorMode.fast,
+        detectLandmarks: FaceDetector.FaceDetectorLandmarks.none,
+        runClassifications: FaceDetector.FaceDetectorClassifications.none,
+        minDetectionInterval: 100, 
+        tracking: true,
+    }), []);
+
+    useEffect(() => {
+        isMounted.current = true;
+        (async () => {
+            const { status } = await Camera.requestCameraPermissionsAsync();
+            if (isMounted.current) setHasPermission(status === 'granted');
+        })();
+        return () => { isMounted.current = false; };
+    }, []);
+
+    const resetFlow = () => {
+        setStep(1); setScore(0);
+        step1PhotoRef.current = null;
+        stableCountRef.current = 0;
+        stepTransitionRef.current = false;
+        Animated.timing(progressAnim, { toValue: 0, duration: 200, useNativeDriver: false }).start();
+        setGuidance({ text: 'Đưa mặt vào khung', color: '#90A4AE', icon: 'scan' });
+    };
+
+    const handleFacesDetected = ({ faces }) => {
+        if (processingRef.current || !isMounted.current) return;
+        if (stepTransitionRef.current) return; 
+
+        if (!faces || faces.length === 0) {
+            if (step === 1) {
+                    setScore(0);
+                    setGuidance({ text: 'Không thấy mặt', color: '#F44336', icon: 'alert-circle' });
+                    stableCountRef.current = 0;
+            }
+            return;
+        }
+    
+        const face = FaceValidationHelper.getLargestFace(faces);
+        if (!face) return;
+
+        const yaw = face.yawAngle || 0;
+        const roll = face.rollAngle || 0;
+
+        // ================= STEP 1: CĂN CHỈNH (NỚI LỎNG) =================
+        if (step === 1) {
+                // [LOGIC MỚI]: Tính điểm dễ hơn
+                const maxErr = Math.max(Math.abs(yaw), Math.abs(roll));
+        
+                // Công thức cũ: 100 - (err * 3) -> Lệch 10 độ mất 30 điểm (Còn 70 -> Trượt)
+                // Công thức mới: 100 - (err * 1.2) -> Lệch 10 độ mất 12 điểm (Còn 88 -> ĐẬU)
+                // Lệch 15 độ -> 100 - 18 = 82 (dễ chịu)
+                let currentScore = Math.max(0, 100 - Math.round(maxErr * 1.2));
+                setScore(currentScore);
+
+            let valid = false;
+            let msg = '';
+            let color = '#4CAF50';
+            let icon = 'happy';
+
+            // Ngưỡng đậu là 80 điểm (Tương đương cho phép nghiêng ~13 độ)
+            if (currentScore >= 80) {
+                valid = true;
+                msg = 'VỊ TRÍ TỐT...';
+                icon = 'checkmark-circle';
+            } else {
+                // Chỉ báo lỗi khi điểm quá thấp
+                color = '#FF9800'; 
+            
+                if (Math.abs(roll) > 15) { // Nới lên 15 độ
+                    msg = 'ĐỂ ĐẦU THẲNG HƠN';
+                    icon = 'resize';
+                } else if (Math.abs(yaw) > 15) { // Nới lên 15 độ
+                    msg = yaw > 0 ? 'QUAY PHẢI MỘT CHÚT' : 'QUAY TRÁI MỘT CHÚT';
+                    icon = 'eye';
+                } else {
+                    msg = 'CĂN CHỈNH LẠI';
+                    icon = 'scan';
+                }
+            }
+
+            setGuidance({ text: msg, color, icon });
+
+            if (valid) {
+                stableCountRef.current += 1;
+                Animated.timing(progressAnim, {
+                    toValue: (stableCountRef.current / 5) * 100,
+                    duration: 100, useNativeDriver: false
+                }).start();
+
+                if (stableCountRef.current >= 5) {
+                    baselinePoseRef.current = { yaw, roll };
+                    captureStep1();
+                }
+            } else {
+                stableCountRef.current = 0;
+                Animated.timing(progressAnim, { toValue: 0, duration: 200, useNativeDriver: false }).start();
+            }
+        }
+
+        // ================= STEP 2: QUAY ĐẦU =================
+        else if (step === 2) {
+            setGuidance({ text: 'QUAY NHẸ SANG BÊN', color: '#2196F3', icon: 'refresh' });
+        
+            const deltaYaw = Math.abs(yaw - baselinePoseRef.current.yaw);
+            const deltaRoll = Math.abs(roll - baselinePoseRef.current.roll);
+
+            // Hiển thị % tiến độ quay đầu
+            const turnProgress = Math.min(100, Math.round((Math.max(deltaYaw, deltaRoll) / 20) * 100));
+            setScore(turnProgress); 
+
+            // Ngưỡng quay: 18 độ
+            if (deltaYaw > 18 || deltaRoll > 18) {
+                setTimeout(() => captureStep2(), 300);
+            }
+        }
+      };
+
+      const handleManualCapture = () => {
+        if (processingRef.current) return;
+        if (step === 1) captureStep1(); else captureStep2();
+      };
+
+      const captureStep1 = async () => {
+          if (!cameraRef.current || processingRef.current) return;
+          try {
+              processingRef.current = true; 
+              const photo = await cameraRef.current.takePictureAsync({ skipProcessing: true });
+              step1PhotoRef.current = photo.uri;
+          
+              setStep(2); stableCountRef.current = 0;
+              Animated.timing(progressAnim, { toValue: 0, duration: 0 }).start();
+              stepTransitionRef.current = true; processingRef.current = false; 
+              setTimeout(() => { stepTransitionRef.current = false; }, 1500); 
+          } catch (e) { processingRef.current = false; }
+      };
+
+      const captureStep2 = async () => {
+          if (stepTransitionRef.current || processingRef.current || !cameraRef.current) return;
+          try {
+              processingRef.current = true; setIsProcessing(true);
+              setGuidance({ text: 'ĐANG KIỂM TRA...', color: '#9C27B0', icon: 'cloud-upload' });
+
+              const photoStep2 = await cameraRef.current.takePictureAsync({ skipProcessing: true });
+              const res = await AttendanceAPI.sendImageForRecognition(photoStep2.uri, {
+                  recognition_type: 'check_in', validation_mode: 'challenge',
+                  baseline_yaw: baselinePoseRef.current.yaw.toString(),
+                  baseline_roll: baselinePoseRef.current.roll.toString()
+              });
+
+              if (!isMounted.current) return;
+              if (res?.success) {
+                  onCapture(step1PhotoRef.current || photoStep2.uri, res);
+              } else {
+                  setIsProcessing(false); processingRef.current = false;
+                  Alert.alert("Chưa đạt", "Vui lòng quay đầu rõ ràng hơn.", [{ text: "Thử lại", onPress: () => resetFlow() }]);
+              }
+          } catch (e) { setIsProcessing(false); processingRef.current = false; resetFlow(); }
+      };
+
+      const toggleCamera = () => {
+        setCameraType(cameraType === Camera.Constants.Type.back ? Camera.Constants.Type.front : Camera.Constants.Type.back);
+      };
+
+      const progressWidth = progressAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] });
+
+      return (
+        <View style={styles.container}>
+          <Camera
+            ref={cameraRef}
+            style={styles.camera}
+            type={cameraType}
+            ratio="16:9"
+            onCameraReady={() => setCameraReady(true)}
+            onFacesDetected={cameraReady ? handleFacesDetected : undefined}
+            faceDetectorSettings={faceDetectorSettings}
+          >
+            <SafeAreaView style={styles.safeArea}>
+            
+                {/* TOP ZONE */}
+                <View style={styles.topContainer}>
+                    <View style={styles.stepBox}>
+                        <Text style={styles.stepText}>
+                            {step === 1 ? 'BƯỚC 1: CĂN MẶT' : 'BƯỚC 2: QUAY ĐẦU'}
+                        </Text>
+                    </View>
+
+                    <View style={[styles.msgBubble, { backgroundColor: guidance.color }]}>
+                        <Ionicons name={guidance.icon} size={24} color="#FFF" style={{ marginRight: 10 }} />
+                        <Text style={styles.msgText}>{guidance.text}</Text>
+                        {stepTransitionRef.current && <ActivityIndicator size="small" color="#FFF" style={{ marginLeft: 10 }}/>}
+                    </View>
+
+                    {step === 1 && (
+                        <View style={styles.progressWrapper}>
+                            <Animated.View style={[styles.progressBar, { width: progressWidth }]} />
+                        </View>
+                    )}
+                </View>
+
+                {/* BOTTOM ZONE */}
+                <View style={styles.bottomControlBar}>
+                
+                    {/* TRÁI: ĐIỂM SỐ (Thay thế Server Status) */}
+                    <View style={styles.leftInfoContainer}>
+                        <View style={[styles.scoreCircle, { borderColor: score >= 80 ? '#4CAF50' : '#FF9800' }]}>
+                             <Text style={[styles.scoreValue, { color: score >= 80 ? '#4CAF50' : '#FF9800' }]}>
+                                {score}
+                             </Text>
+                        </View>
+                        <Text style={styles.scoreLabel}>{step === 1 ? 'ĐIỂM CHUẨN' : 'TIẾN ĐỘ'}</Text>
+                    </View>
+
+                    {/* GIỮA: NÚT CHỤP */}
+                    <View style={styles.centerControl}>
+                        <TouchableOpacity 
+                            style={styles.captureBtn} 
+                            onPress={handleManualCapture}
+                            disabled={isProcessing || stepTransitionRef.current}
+                            activeOpacity={0.7}
+                        >
+                            <View style={styles.captureBtnInner} />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* PHẢI: XOAY CAM */}
+                    <TouchableOpacity style={styles.sideControl} onPress={toggleCamera}>
+                        <Ionicons name="camera-reverse" size={32} color="#FFF" />
+                        <Text style={styles.controlLabel}>Xoay</Text>
+                    </TouchableOpacity>
+                </View>
+            </SafeAreaView>
+
+            {isProcessing && (
+               <View style={styles.loadingOverlay}>
+                 <ActivityIndicator size="large" color="#FFF" />
+                 <Text style={styles.loadingText}>Đang xử lý...</Text>
+               </View>
+            )}
+          </Camera>
+        </View>
+      );
+    }
+
+    const styles = StyleSheet.create({
+      container: { flex: 1, backgroundColor: '#000' },
+      camera: { flex: 1 },
+      safeArea: { flex: 1, justifyContent: 'space-between' },
+
+      topContainer: { alignItems: 'center', marginTop: STATUSBAR_HEIGHT + 10, zIndex: 20 },
   
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [stableFrameCount, setStableFrameCount] = useState(0);
-  const [connectionStatus, setConnectionStatus] = useState(null);
+      stepBox: {
+          backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 5, paddingHorizontal: 15, 
+          borderRadius: 15, marginBottom: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)'
+      },
+      stepText: { color: '#FFD700', fontSize: 13, fontWeight: '800' },
 
-  // --- REFS ---
-  const cameraRef = useRef(null);
-  const lastBackendCallTime = useRef(0);
-  const processingRef = useRef(false);
-  const stableCountRef = useRef(0);
-  const isMounted = useRef(true);
-  const progressAnim = useRef(new Animated.Value(0)).current;
+      msgBubble: {
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+          paddingVertical: 12, paddingHorizontal: 25, borderRadius: 30, elevation: 5,
+          minWidth: 260
+      },
+      msgText: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
 
-  // --- CẤU HÌNH ---
-  const faceDetectorSettings = useMemo(() => ({
-    mode: FaceDetector.FaceDetectorMode.fast,
-    detectLandmarks: FaceDetector.FaceDetectorLandmarks.none,
-    runClassifications: FaceDetector.FaceDetectorClassifications.none,
-    minDetectionInterval: 200, 
-    tracking: true,
-  }), []);
+      progressWrapper: {
+          width: 220, height: 6, backgroundColor: 'rgba(255,255,255,0.2)', 
+          borderRadius: 3, marginTop: 15, overflow: 'hidden'
+      },
+      progressBar: { height: '100%', backgroundColor: '#4CAF50', borderRadius: 3 },
 
-  // --- EFFECT ---
-  useEffect(() => {
-    isMounted.current = true;
-    (async () => {
-      const { status } = await Camera.requestCameraPermissionsAsync();
-      if (isMounted.current) setHasPermission(status === 'granted');
-      checkConnection();
-    })();
-    return () => { isMounted.current = false; };
-  }, []);
+      bottomControlBar: {
+          flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end',
+          paddingHorizontal: 25, paddingBottom: 40, width: '100%',
+      },
 
-  const checkConnection = async () => {
-    try {
-      const ok = await AttendanceAPI.testConnection();
-      if (isMounted.current) setConnectionStatus(ok ? 'connected' : 'disconnected');
-    } catch (error) {
-      if (isMounted.current) setConnectionStatus('disconnected');
-    }
-  };
+      // LEFT: Score Display
+      leftInfoContainer: { alignItems: 'center', justifyContent: 'center', width: 80, marginBottom: 10 },
+      scoreCircle: { 
+          width: 50, height: 50, borderRadius: 25, borderWidth: 3,
+          alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.5)',
+          marginBottom: 5
+      },
+      scoreValue: { fontSize: 20, fontWeight: 'bold' },
+      scoreLabel: { color: '#CCC', fontSize: 10, fontWeight: '600' },
 
-  // --- XỬ LÝ NHẬN DIỆN ---
-  const handleFacesDetected = ({ faces: detectedFaces }) => {
-    if (processingRef.current || !isMounted.current) return;
-    
-    // 1. Nếu không có mặt
-    if (!detectedFaces || detectedFaces.length === 0) {
-      if (currentValidation.message !== 'ĐƯA MẶT VÀO CAMERA') {
-        setCurrentValidation({
-          isValid: false,
-          message: 'ĐƯA MẶT VÀO CAMERA',
-          color: '#90A4AE' 
-        });
-        resetStability();
-      }
-      return;
-    }
-    
-    // 2. Lấy mặt to nhất
-    const mainFace = FaceValidationHelper.getLargestFace(detectedFaces);
-    if (!mainFace) return;
+      centerControl: { alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+      captureBtn: {
+          width: 76, height: 76, borderRadius: 38,
+          backgroundColor: 'rgba(255,255,255,0.2)', borderWidth: 4, borderColor: '#FFF',
+          justifyContent: 'center', alignItems: 'center',
+      },
+      captureBtnInner: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FFF' },
 
-    // --- LOGIC VALIDATE TẠI CHỖ ---
-    const imageSize = { width: SCREEN_WIDTH, height: SCREEN_HEIGHT };
-    
-    const faceArea = mainFace.bounds.size.width * mainFace.bounds.size.height;
-    const frameArea = imageSize.width * imageSize.height;
-    const sizePercent = (faceArea / frameArea) * 100;
-    const rollAngle = mainFace.rollAngle || 0; 
+      sideControl: { alignItems: 'center', justifyContent: 'center', width: 80, marginBottom: 15 },
+      controlLabel: { color: '#FFF', fontSize: 11, marginTop: 4 },
 
-    let isValid = true;
-    let message = 'GIỮ YÊN';
-    let color = '#4CAF50';
-
-    // ĐIỀU KIỆN 1: Kích thước (10% - 85%)
-    if (sizePercent < 10) { 
-      isValid = false;
-      message = 'LẠI GẦN HƠN';
-      color = '#FF9500';
-    } else if (sizePercent > 85) {
-      isValid = false;
-      message = 'XA RA MỘT CHÚT';
-      color = '#FF9500';
-    }
-    // ĐIỀU KIỆN 2: Góc nghiêng (Roll) - CHỈNH VỀ 18 ĐỘ THEO YÊU CẦU
-    else if (Math.abs(rollAngle) > 18) {
-      isValid = false;
-      message = 'GIỮ ĐẦU THẲNG';
-      color = '#FF9500';
-    }
-
-    // Cập nhật UI
-    setCurrentValidation({ isValid, message, color });
-    
-    // Logic Auto-capture
-    if (isValid) {
-      stableCountRef.current += 1;
-      const newCount = stableCountRef.current;
-      setStableFrameCount(newCount);
-      
-      Animated.timing(progressAnim, {
-        toValue: (newCount / 8) * 100, 
-        duration: 150,
-        useNativeDriver: false
-      }).start();
-      
-      const now = Date.now();
-      if (newCount >= 8 && (now - lastBackendCallTime.current) > 3000) {
-        captureAndRecognize();
-      }
-    } else {
-      resetStability();
-    }
-  };
-
-  const resetStability = () => {
-    if (stableCountRef.current === 0) return;
-    stableCountRef.current = 0;
-    setStableFrameCount(0);
-    Animated.timing(progressAnim, { toValue: 0, duration: 200, useNativeDriver: false }).start();
-  };
-
-  const captureAndRecognize = async () => {
-    if (processingRef.current || !cameraRef.current || !cameraReady) return;
-
-    try {
-      processingRef.current = true;
-      setIsProcessing(true);
-      lastBackendCallTime.current = Date.now();
-      
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.8,
-        base64: false, 
-        skipProcessing: true,
-      });
-
-      const aiResponse = await AttendanceAPI.sendImageForRecognition(photo.uri, {
-        recognition_type: 'check_in', validation_mode: 'normal', location: { latitude: null, longitude: null }
-      });
-
-      if (!isMounted.current) return;
-      onCapture(photo.uri, aiResponse);
-
-      if (aiResponse?.success) {
-        setCurrentValidation({ isValid: true, message: 'THÀNH CÔNG!', color: '#4CAF50' });
-      } else {
-        const msg = aiResponse?.message || 'Không nhận diện được';
-        setCurrentValidation({ isValid: false, message: msg, color: '#FF6B6B' });
-        setTimeout(() => {
-          if (isMounted.current) {
-            processingRef.current = false;
-            setIsProcessing(false);
-            resetStability();
-          }
-        }, 3000);
-      }
-    } catch (error) {
-      if (isMounted.current) {
-        processingRef.current = false;
-        setIsProcessing(false);
-        resetStability();
-      }
-    }
-  };
-
-  if (hasPermission === null) return <View style={styles.container}><ActivityIndicator /></View>;
-  if (hasPermission === false) return <View style={styles.container}><Text style={{color:'#fff'}}>Thiếu quyền Camera</Text></View>;
-
-  const progressWidth = progressAnim.interpolate({
-    inputRange: [0, 100], outputRange: ['0%', '100%']
-  });
-
-  return (
-    <View style={styles.container}>
-      <View style={styles.cameraContainer}>
-        <Camera
-          ref={cameraRef}
-          style={styles.camera}
-          type={cameraType}
-          ratio={CAMERA_RATIO}
-          autoFocus={Camera.Constants.AutoFocus.on}
-          // [FIX QUAN TRỌNG]: 
-          // mirrorImage={true} để ảnh chụp giống hệt soi gương
-          // Bỏ wrapper scaleX để camera hiển thị tự nhiên
-          mirrorImage={cameraType === Camera.Constants.Type.front} 
-          onCameraReady={() => { if (isMounted.current) setCameraReady(true); }}
-          onFacesDetected={cameraReady ? handleFacesDetected : undefined}
-          faceDetectorSettings={faceDetectorSettings}
-        >
-          {/* UI Overlay */}
-          <View style={styles.statusContainer}>
-            <View style={[styles.statusBar, { backgroundColor: currentValidation.color }]}>
-              <Ionicons name={currentValidation.isValid ? "checkmark-circle" : "scan-outline"} size={24} color="#FFF" />
-              <Text style={styles.statusText}>
-                {currentValidation.message} {stableFrameCount > 0 && stableFrameCount < 8 ? `(${stableFrameCount}/8)` : ''}
-              </Text>
-            </View>
-          </View>
-
-          {stableFrameCount > 0 && (
-            <View style={styles.progressWrapper}>
-              <Animated.View style={[styles.progressBar, { width: progressWidth }]} />
-            </View>
-          )}
-
-          {isProcessing && (
-            <View style={styles.processingOverlay}>
-              <ActivityIndicator size="large" color="#007AFF" />
-              <Text style={styles.processingText}>ĐANG XỬ LÝ...</Text>
-            </View>
-          )}
-
-          <View style={styles.bottomControls}>
-            <TouchableOpacity onPress={() => {
-              resetStability();
-              setCameraReady(false);
-              setCameraType(cameraType === Camera.Constants.Type.back ? Camera.Constants.Type.front : Camera.Constants.Type.back);
-            }} style={styles.iconButton}>
-              <Ionicons name="camera-reverse" size={30} color="#FFF" />
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              onPress={captureAndRecognize}
-              disabled={isProcessing}
-              style={styles.captureButton}
-            >
-              <View style={[
-                styles.captureInner,
-                { backgroundColor: currentValidation.isValid ? '#4CAF50' : '#FFF' }
-              ]} />
-            </TouchableOpacity>
-
-            <View style={styles.iconButton}>
-              <Ionicons name={connectionStatus === 'connected' ? "wifi" : "wifi-outline"} size={24} color={connectionStatus === 'connected' ? "#4CAF50" : "#FF6B6B"} />
-            </View>
-          </View>
-        </Camera>
-      </View>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  cameraContainer: { width: SCREEN_WIDTH, height: SCREEN_HEIGHT, backgroundColor: '#000' },
-  camera: { flex: 1, width: '100%', height: '100%' },
-  statusContainer: { position: 'absolute', top: 60, width: '100%', alignItems: 'center', zIndex: 20 },
-  statusBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 30, minWidth: 200, justifyContent: 'center', elevation: 5 },
-  statusText: { color: '#FFF', marginLeft: 10, fontWeight: 'bold', fontSize: 16 },
-  progressWrapper: { position: 'absolute', top: 110, left: '20%', width: '60%', height: 6, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 3, overflow: 'hidden', zIndex: 20 },
-  progressBar: { height: '100%', backgroundColor: '#4CAF50' },
-  bottomControls: { position: 'absolute', bottom: 50, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingHorizontal: 20, zIndex: 30 },
-  iconButton: { width: 50, height: 50, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 25 },
-  captureButton: { width: 80, height: 80, borderRadius: 40, borderWidth: 4, borderColor: '#FFF', justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent' },
-  captureInner: { width: 64, height: 64, borderRadius: 32 },
-  processingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 50 },
-  processingText: { color: '#FFF', marginTop: 15, fontSize: 18, fontWeight: 'bold' }
-});
+      loadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', zIndex: 999 },
+      loadingText: { color: '#FFF', marginTop: 20, fontSize: 16 }
+    });
