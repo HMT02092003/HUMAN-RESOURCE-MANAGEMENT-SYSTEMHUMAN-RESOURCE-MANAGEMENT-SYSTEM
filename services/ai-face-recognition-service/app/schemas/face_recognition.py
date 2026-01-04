@@ -10,19 +10,18 @@ class FaceEmbeddingBase(BaseModel):
     """Base face embedding schema"""
     user_id: int = Field(..., description="User ID")
     username: str = Field(..., description="Username", max_length=100)
+    pose_type: Optional[str] = Field("frontal", description="Pose type: frontal, left, right, up, down")
     confidence_score: Optional[int] = Field(0, description="Confidence score")
-    is_active: Optional[bool] = Field(True, description="Whether embedding is active")
 
 class FaceEmbeddingCreate(FaceEmbeddingBase):
     """Create face embedding schema"""
-    face_embedding: str = Field(..., description="Face embedding vector as JSON string")
-    image_path: Optional[str] = Field(None, description="Path to original image")
+    face_embedding: List[float] = Field(..., description="Face embedding vector as list of floats")
+    # image_path and is_active removed from schema to reduce stored metadata
 
 class FaceEmbeddingResponse(FaceEmbeddingBase):
     """Face embedding response schema"""
     id: int
-    face_embedding: str
-    image_path: Optional[str]
+    face_embedding: List[float]
     created_at: datetime
     updated_at: datetime
     
@@ -46,19 +45,18 @@ class AttendanceLogBase(BaseModel):
     user_id: int = Field(..., description="User ID")
     username: str = Field(..., description="Username", max_length=100)
     recognition_type: str = Field(..., description="Type of recognition")
-    confidence_score: int = Field(..., description="Confidence score")
+    confidence_score: float = Field(..., description="Confidence score")
     status: Optional[str] = Field("success", description="Recognition status")
 
 class AttendanceLogCreate(AttendanceLogBase):
     """Create attendance log schema"""
-    image_path: Optional[str] = Field(None, description="Path to captured image")
+    # image_path removed from schema
     face_location: Optional[dict] = Field(None, description="Face bounding box coordinates")
     notes: Optional[str] = Field(None, description="Additional notes")
 
 class AttendanceLogResponse(AttendanceLogBase):
     """Attendance log response schema"""
     id: int
-    image_path: Optional[str]
     face_location: Optional[dict]
     timestamp: datetime
     notes: Optional[str]

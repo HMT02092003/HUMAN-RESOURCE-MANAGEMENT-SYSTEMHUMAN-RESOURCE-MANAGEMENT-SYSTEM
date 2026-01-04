@@ -81,7 +81,7 @@ const ROUTE_CONFIG = [
   {
     path: '/api/ai',
     target: 'ai',
-    pathRewrite: { '^/api/ai': '/api/face-recognition' },
+    pathRewrite: { '^/api/ai': '/api' },  // Rewrite: /api/ai/v1/... -> /api/v1/...
     handleMultipart: true
   },
   {

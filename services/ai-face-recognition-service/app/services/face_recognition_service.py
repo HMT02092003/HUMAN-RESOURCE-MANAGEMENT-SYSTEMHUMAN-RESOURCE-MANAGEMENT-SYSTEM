@@ -7,6 +7,7 @@ Singleton pattern để load model 1 lần duy nhất
 import cv2
 import numpy as np
 import logging
+import os
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from insightface.app import FaceAnalysis
@@ -103,23 +104,16 @@ class FaceRecognizer:
     def _initialize_insightface(self):
         """Khởi tạo InsightFace model"""
         try:
-            # Xác định providers (GPU/CPU)
-            providers = self._get_providers()
-            
-            logger.info(f"📦 Loading InsightFace model: {self.model_name}")
-            logger.info(f"🔧 Providers: {providers}")
-            
-            # Khởi tạo FaceAnalysis
-            gpu_available = 'CUDAExecutionProvider' in providers
-            ctx_id = 0 if gpu_available else -1
-
+            # Khởi tạo FaceAnalysis (CPU-only)
+            logger.info(f"📦 Loading InsightFace model (CPU-only): {self.model_name}")
+            # Force CPU context
             self.app = FaceAnalysis(
                 name=self.model_name,
-                providers=providers
+                root=os.path.expanduser("~/.insightface")
             )
 
-            # Prepare model với detection size; use GPU ctx_id=0 when available
-            self.app.prepare(ctx_id=ctx_id, det_size=self.det_size)
+            # Always prepare with CPU ctx_id = -1
+            self.app.prepare(ctx_id=-1, det_size=self.det_size)
             
             logger.info("✅ FaceRecognizer initialized successfully!")
             logger.info(f"   Detection size: {self.det_size}")
@@ -134,14 +128,11 @@ class FaceRecognizer:
         """Xác định execution providers"""
         try:
             import onnxruntime as ort
+            # Force CPU-only to avoid GPU/CUDA usage in this deployment
             available = ort.get_available_providers()
-            
-            if 'CUDAExecutionProvider' in available:
-                logger.info("🚀 GPU (CUDA) available")
-                return ['CUDAExecutionProvider', 'CPUExecutionProvider']
-            else:
-                logger.info("💻 Using CPU")
-                return ['CPUExecutionProvider']
+            logger.info(f"ONNX available providers: {available}")
+            logger.info("💻 Forcing CPUExecutionProvider only")
+            return ['CPUExecutionProvider']
         except:
             return ['CPUExecutionProvider']
     
@@ -216,13 +207,16 @@ class FaceRecognizer:
             liveness_result = None
             if self.enable_liveness_check and not skip_liveness_check:
                 logger.info("🔍 Step 3: Liveness check...")
-                
-                # Crop face để check liveness
-                x1, y1, x2, y2 = bbox
-                face_crop = image[y1:y2, x1:x2]
-                
-                liveness_result = face_liveness_detector.check_liveness(face_crop)
-                
+
+                # IMPORTANT: pass the full image + bbox to liveness detector
+                # so the detector can expand the crop (e.g. 2.7x) and see
+                # contextual cues like screen edges or paper borders.
+                # Previously we cropped tightly here which hid those cues.
+                liveness_result = face_liveness_detector.check_liveness(
+                    face_image=image,
+                    bbox=bbox
+                )
+
                 if not liveness_result.is_real:
                     logger.warning(f"Liveness check failed: {liveness_result.message}")
                     return RecognitionResult(
@@ -231,7 +225,7 @@ class FaceRecognizer:
                         quality_result=quality_result,
                         liveness_result=liveness_result
                     )
-                
+
                 logger.info("✅ Liveness check passed")
             
             # === STEP 4: EXTRACT EMBEDDING ===

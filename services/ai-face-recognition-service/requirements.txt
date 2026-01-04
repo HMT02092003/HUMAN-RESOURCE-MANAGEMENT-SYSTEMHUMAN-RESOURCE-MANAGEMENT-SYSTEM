@@ -14,6 +14,7 @@ python-multipart==0.0.6
 sqlalchemy==2.0.23
 psycopg2-binary==2.9.9
 alembic==1.12.1
+pgvector
 
 # --- COMPUTER VISION (Core) ---
 opencv-python==4.8.1.78             # Chỉ cần OpenCV cho image processing
@@ -26,11 +27,8 @@ insightface>=0.7.3                  # Main library - bao gồm detection + recog
 # --- ONNX RUNTIME (Inference Engine) ---
 # CHỌN 1 TRONG 2 options dưới đây:
 
-# Option 1: GPU (CUDA) - Nếu có GPU NVIDIA
-onnxruntime-gpu>=1.16.0
-
-# Option 2: CPU only - Nếu không có GPU, comment dòng trên và uncomment dòng dưới
-# onnxruntime>=1.16.0
+# Use CPU-only ONNX Runtime by default on Windows / non-GPU setups
+onnxruntime>=1.16.0
 
 # --- HTTP CLIENT ---
 requests>=2.31.0                    # For service communication

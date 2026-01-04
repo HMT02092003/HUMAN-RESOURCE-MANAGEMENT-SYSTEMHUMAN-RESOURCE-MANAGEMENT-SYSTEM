@@ -61,17 +61,15 @@ export async function sendImageForRecognition(imageUri, meta = {}) {
   // Thêm recognition_type bắt buộc (mặc định là check_in)
   form.append('recognition_type', meta.recognition_type || 'check_in');
   
-  // Thêm validation_mode (mặc định là 'normal' cho chấm công bình thường)
-  // Sử dụng 'strict' khi cần kiểm tra chất lượng và liveness đầy đủ
-  form.append('validation_mode', meta.validation_mode || 'normal');
-  
   Object.entries(meta || {}).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && key !== 'recognition_type' && key !== 'validation_mode') {
+    if (value !== undefined && value !== null && key !== 'recognition_type') {
       form.append(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
     }
   });
 
-  const res = await fetch(`${base}/api/ai/recognize-face`, {
+  // Sử dụng endpoint multi-angle (tự động tìm vector khớp nhất trong 3 góc: CENTER/LEFT/RIGHT)
+  // Gateway sẽ rewrite: /api/ai/v1/multi-angle/recognize-face -> /api/v1/multi-angle/recognize-face
+  const res = await fetch(`${base}/api/ai/v1/multi-angle/recognize-face`, {
     method: 'POST',
     headers: {
       'Accept': 'application/json',

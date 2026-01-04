@@ -14,34 +14,37 @@ export default function AttendanceConfirmation({
   onConfirm 
 }) {
   const [isConfirming, setIsConfirming] = useState(false);
+  // Kiểm tra và xử lý dữ liệu nhận diện (đặt trước các hàm xử lý)
+  const user = recognitionData?.data?.user || recognitionData?.user || {};
+  const confidence = user?.confidence_score ?? recognitionData?.data?.confidence ?? 0;
+  const fullName = user?.fullName || user?.full_name || user?.username || 'Chưa xác định';
+  const isRecognitionSuccessful = Boolean(recognitionData?.success && user?.user_id);
+  const serverMessage = recognitionData?.message || recognitionData?.error || recognitionData?.data?.message || recognitionData?.data?.error || recognitionData?.details?.message || '';
 
   const handleConfirm = async () => {
     console.log('🔵 [Confirmation] handleConfirm called');
     console.log('🔵 [Confirmation] Recognition data:', JSON.stringify(recognitionData, null, 2));
-    
-    // Kiểm tra nếu không có dữ liệu nhận diện hoặc nhận diện thất bại
+
     if (!isRecognitionSuccessful) {
       console.log('❌ [Confirmation] Recognition not successful');
-      Alert.alert('Lỗi', 'Không thể chấm công do nhận diện không thành công hoặc độ tin cậy thấp');
+      Alert.alert('Lỗi', serverMessage || 'Không thể chấm công do nhận diện không thành công hoặc độ tin cậy thấp');
       return;
     }
 
     setIsConfirming(true);
     try {
-      // Kiểm tra recognition_log_id từ dữ liệu nhận diện
       const recognitionLogId = recognitionData?.data?.recognition_log_id;
       console.log('🔵 [Confirmation] Recognition Log ID:', recognitionLogId);
-      
+
       if (!recognitionLogId) {
         throw new Error('Không tìm thấy ID nhận diện. Vui lòng thử lại.');
       }
-      
-      // Get stored token (if any) and call attendance API
+
       let deviceToken = null;
       try {
         deviceToken = await AuthTokenManager.getAccessToken();
         console.log('🔵 [Confirmation] Token retrieved:', deviceToken ? 'Yes' : 'No');
-      } catch (e) { 
+      } catch (e) {
         console.log('⚠️ [Confirmation] Token retrieval failed:', e);
       }
 
@@ -56,32 +59,26 @@ export default function AttendanceConfirmation({
         location: null,
         token: deviceToken
       };
-      
+
       console.log('📤 [Confirmation] Calling submitAttendance with payload:', JSON.stringify(attendancePayload, null, 2));
 
-      // Gọi API xác nhận chấm công với recognition_log_id
       const result = await AttendanceAPI.submitAttendance(attendancePayload);
-      
       console.log('📥 [Confirmation] API response:', JSON.stringify(result, null, 2));
-      
+
       if (result.success) {
-        const successMessage = result.data ? 
+        const successMessage = result.data ?
           `Chấm công thành công!\nTên nhân viên: ${fullName}\nTài khoản: ${user.username}\nLoại: ${recognitionData?.data?.recognition_type === 'check_in' ? 'Vào làm' : 'Tan làm'}\nThời gian: ${new Date().toLocaleString('vi-VN')}` :
           `Chấm công thành công!\nTên nhân viên: ${fullName}\nTài khoản: ${user.username}\nThời gian: ${new Date().toLocaleString('vi-VN')}`;
-          
-        Alert.alert(
-          'Thành công', 
-          successMessage,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                if (onConfirm) onConfirm(result.data);
-                if (onReset) onReset();
-              }
+
+        Alert.alert('Thành công', successMessage, [
+          {
+            text: 'OK',
+            onPress: () => {
+              if (onConfirm) onConfirm(result.data);
+              if (onReset) onReset();
             }
-          ]
-        );
+          }
+        ]);
       } else {
         throw new Error(result.message || 'Không thể chấm công');
       }
@@ -116,15 +113,6 @@ export default function AttendanceConfirmation({
     if (conf >= 35) return 'Trung bình';
     return 'Thấp';
   };
-
-  // Kiểm tra và xử lý dữ liệu nhận diện
-  const user = recognitionData?.data?.user || recognitionData?.user || {};
-  const confidence = user.confidence_score || 0;
-  const fullName = user.fullName || user.full_name || user.username || 'Chưa xác định';
-  // Bỏ threshold - luôn chấp nhận kết quả có similarity cao nhất
-  const isRecognitionSuccessful = recognitionData?.success && user.user_id;
-  const recognitionStatus = isRecognitionSuccessful ? 'success' : 'failed';
-  
   console.log('Processing recognition data:', {
     success: recognitionData?.success,
     confidence: confidence,
@@ -191,24 +179,25 @@ export default function AttendanceConfirmation({
           </View>
 
           {/* Hiển thị warning nếu confidence thấp (35-50%) */}
-          {isRecognitionSuccessful && confidence < 50 && confidence >= 35 && (
-            <View style={styles.warningContainer}>
-              <Ionicons name="alert-circle" size={24} color="#FF9500" />
-              <Text style={styles.warningMessage}>
-                ⚠️ Độ tin cậy thấp ({confidence}%). Có thể do đeo khẩu trang hoặc ánh sáng kém. Vui lòng kiểm tra kỹ thông tin trước khi xác nhận.
-              </Text>
-            </View>
-          )}
-
-          {/* Hiển thị thông báo nếu nhận diện thất bại */}
-          {!isRecognitionSuccessful && (
-            <View style={styles.errorContainer}>
-              <Ionicons name="warning" size={24} color="#FF3B30" />
-              <Text style={styles.errorMessage}>
-                Nhận diện khuôn mặt không thành công. Người dùng không có trong hệ thống hoặc ảnh không rõ ràng.
-              </Text>
-            </View>
-          )}
+                  {/* Hiển thị thông tin từ server (ví dụ: Liveness failed, lỗi chất lượng, mô tả) */}
+                  {serverMessage ? (
+                    <View style={isRecognitionSuccessful ? styles.infoContainerSmall : styles.errorContainer}>
+                      <Ionicons name={isRecognitionSuccessful ? "information-circle" : "alert-circle"} size={20} color={isRecognitionSuccessful ? "#007AFF" : "#FF3B30"} />
+                      <Text style={[isRecognitionSuccessful ? styles.infoText : styles.errorMessage, { marginLeft: 8 }]}> 
+                        {serverMessage}
+                      </Text>
+                    </View>
+                  ) : (
+                    // Nếu không có server message, giữ cảnh báo confidence thấp như fallback
+                    isRecognitionSuccessful && confidence < 50 && confidence >= 35 && (
+                      <View style={styles.warningContainer}>
+                        <Ionicons name="alert-circle" size={24} color="#FF9500" />
+                        <Text style={styles.warningMessage}>
+                          ⚠️ Độ tin cậy thấp ({confidence}%). Có thể do đeo khẩu trang hoặc ánh sáng kém. Vui lòng kiểm tra kỹ thông tin trước khi xác nhận.
+                        </Text>
+                      </View>
+                    )
+                  )}
         </View>
 
         <View style={styles.buttonContainer}>

@@ -8,6 +8,7 @@ import * as FaceDetector from 'expo-face-detector';
 export class FaceValidationHelper {
   /**
    * Validate face using expo-face-detector (local, fast)
+   * Simplified version - only check essential criteria
    * @param {Object} face - Face object from expo-face-detector
    * @param {Object} imageSize - { width, height } of the image
    * @returns {Object} { isValid, message, details }
@@ -27,7 +28,7 @@ export class FaceValidationHelper {
       return validation;
     }
 
-    const { bounds, rollAngle, yawAngle, smilingProbability } = face;
+    const { bounds } = face;
     const { width: imgWidth, height: imgHeight } = imageSize;
 
     // Calculate face size percentage
@@ -38,11 +39,10 @@ export class FaceValidationHelper {
     const facePercent = (faceArea / imageArea) * 100;
 
     validation.details.facePercent = facePercent.toFixed(1);
-    validation.details.rollAngle = rollAngle?.toFixed(1);
-    validation.details.yawAngle = yawAngle?.toFixed(1);
 
-    // Validation Rule 1: Face Size (15-70% of image area)
-    if (facePercent < 15) {
+    // Validation Rule: Face Size (mobile-friendly: 10-85% of image area)
+    // Cho phép range rộng hơn để linh hoạt
+    if (facePercent < 10) {
       validation.isValid = false;
       validation.message = 'DI LẠI GẦN HƠN';
       validation.color = '#FF9500';
@@ -50,52 +50,11 @@ export class FaceValidationHelper {
       return validation;
     }
 
-    if (facePercent > 70) {
+    if (facePercent > 85) {
       validation.isValid = false;
       validation.message = 'LÙI RA XA HƠN';
       validation.color = '#FF9500';
       validation.details.reason = 'Face too large';
-      return validation;
-    }
-
-    // Validation Rule 2: Head Rotation (Roll - tilt head left/right)
-    if (rollAngle && Math.abs(rollAngle) > 25) {
-      validation.isValid = false;
-      validation.message = 'GIỮ ĐẦU THẲNG';
-      validation.color = '#FF9500';
-      validation.details.reason = 'Head tilted';
-      return validation;
-    }
-
-    // Validation Rule 3: Face Orientation (Yaw - turn head left/right)
-    if (yawAngle && Math.abs(yawAngle) > 30) {
-      validation.isValid = false;
-      validation.message = 'NHÌN THẲNG VÀO CAMERA';
-      validation.color = '#FF9500';
-      validation.details.reason = 'Face not frontal';
-      return validation;
-    }
-
-    // Validation Rule 4: Face Position (not too close to edges)
-    const centerX = bounds.origin.x + bounds.size.width / 2;
-    const centerY = bounds.origin.y + bounds.size.height / 2;
-    
-    const horizontalMargin = imgWidth * 0.15; // 15% margin
-    const verticalMargin = imgHeight * 0.15;
-
-    if (centerX < horizontalMargin || centerX > imgWidth - horizontalMargin) {
-      validation.isValid = false;
-      validation.message = 'GIỮ MẶT TRONG KHUNG';
-      validation.color = '#FF9500';
-      validation.details.reason = 'Face too close to edge';
-      return validation;
-    }
-
-    if (centerY < verticalMargin || centerY > imgHeight - verticalMargin) {
-      validation.isValid = false;
-      validation.message = 'GIỮ MẶT TRONG KHUNG';
-      validation.color = '#FF9500';
-      validation.details.reason = 'Face too close to top/bottom';
       return validation;
     }
 
@@ -105,7 +64,7 @@ export class FaceValidationHelper {
   }
 
   /**
-   * Validate multiple faces
+   * Validate multiple faces - Allow multiple but warn
    * @param {Array} faces - Array of face objects
    * @returns {Object} validation result
    */
@@ -119,12 +78,14 @@ export class FaceValidationHelper {
       };
     }
 
+    // Cho phép nhiều người nhưng sẽ lấy mặt lớn nhất
     if (faces.length > 1) {
       return {
-        isValid: false,
-        message: 'CHỈ ĐƯỢC CÓ 1 NGƯỜI',
+        isValid: true,
+        message: `PHÁT HIỆN ${faces.length} NGƯỜI - CHỌN MẶT LỚN NHẤT`,
         color: '#FF9500',
-        faceCount: faces.length
+        faceCount: faces.length,
+        warning: true
       };
     }
 
