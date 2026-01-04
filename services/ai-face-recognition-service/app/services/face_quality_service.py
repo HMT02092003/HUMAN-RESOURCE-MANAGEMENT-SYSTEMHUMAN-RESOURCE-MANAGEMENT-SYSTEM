@@ -9,6 +9,14 @@ import numpy as np
 import logging
 from typing import Dict, Tuple, Optional
 from dataclasses import dataclass
+from app.config.rate_config import (
+    BLUR_THRESHOLD,
+    BRIGHTNESS_MIN,
+    BRIGHTNESS_MAX,
+    MAX_YAW,
+    MAX_PITCH,
+    MAX_ROLL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,14 +41,13 @@ class FaceQualityChecker:
     _instance = None
     
     # Ngưỡng chất lượng (có thể điều chỉnh)
-    BLUR_THRESHOLD = 100.0          # Laplacian variance - càng cao càng sắc nét
-    BRIGHTNESS_MIN = 40             # Độ sáng tối thiểu (0-255)
-    BRIGHTNESS_MAX = 220            # Độ sáng tối đa (0-255)
-    
-    # Ngưỡng góc đầu (độ)
-    MAX_YAW = 30.0                  # Góc quay trái/phải tối đa
-    MAX_PITCH = 30.0                # Góc ngẩng/cúi tối đa
-    MAX_ROLL = 20.0                 # Góc nghiêng tối đa
+    # Use values from central config (rate_config)
+    BLUR_THRESHOLD = float(BLUR_THRESHOLD)
+    BRIGHTNESS_MIN = int(BRIGHTNESS_MIN)
+    BRIGHTNESS_MAX = int(BRIGHTNESS_MAX)
+    MAX_YAW = float(MAX_YAW)
+    MAX_PITCH = float(MAX_PITCH)
+    MAX_ROLL = float(MAX_ROLL)
     
     def __new__(cls):
         """Singleton pattern"""
@@ -73,6 +80,9 @@ class FaceQualityChecker:
         
         # 1. Kiểm tra độ mờ
         blur_score, is_sharp = self.check_blur(image)
+        # Ensure native Python types for JSON serialization
+        blur_score = float(blur_score)
+        is_sharp = bool(is_sharp)
         details['blur_score'] = blur_score
         details['is_sharp'] = is_sharp
         if not is_sharp:
@@ -80,6 +90,8 @@ class FaceQualityChecker:
         
         # 2. Kiểm tra độ sáng
         brightness, brightness_ok, brightness_msg = self.check_brightness(image)
+        brightness = float(brightness)
+        brightness_ok = bool(brightness_ok)
         details['brightness'] = brightness
         details['brightness_status'] = brightness_msg
         if not brightness_ok:
@@ -92,18 +104,20 @@ class FaceQualityChecker:
         head_pose_angles = None
         head_pose_ok = True
         if landmarks is not None and len(landmarks) == 5:
-            angles = self.check_head_pose(landmarks)
+            angles = self.check_head_pose(landmarks, image.shape)
+            # Convert to native floats
+            angles = {k: float(v) for k, v in angles.items()}
             head_pose_angles = angles
             details['head_pose'] = angles
-            
+
             # Kiểm tra từng góc
-            if abs(angles['yaw']) > self.MAX_YAW:
+            if abs(angles['yaw']) > float(self.MAX_YAW):
                 head_pose_ok = False
                 messages.append(f"Mặt quay ngang quá nhiều (yaw={angles['yaw']:.1f}°)")
-            if abs(angles['pitch']) > self.MAX_PITCH:
+            if abs(angles['pitch']) > float(self.MAX_PITCH):
                 head_pose_ok = False
                 messages.append(f"Mặt ngẩng/cúi quá nhiều (pitch={angles['pitch']:.1f}°)")
-            if abs(angles['roll']) > self.MAX_ROLL:
+            if abs(angles['roll']) > float(self.MAX_ROLL):
                 head_pose_ok = False
                 messages.append(f"Mặt nghiêng quá nhiều (roll={angles['roll']:.1f}°)")
         
@@ -114,7 +128,7 @@ class FaceQualityChecker:
             messages.append("✅ Chất lượng ảnh đạt chuẩn")
         
         return QualityResult(
-            is_valid=is_valid,
+            is_valid=bool(is_valid),
             blur_score=blur_score,
             brightness=brightness,
             head_pose_angles=head_pose_angles,
@@ -144,13 +158,12 @@ class FaceQualityChecker:
             # Tính variance - đo độ phân tán của các giá trị
             # Ảnh mờ: edges yếu -> variance thấp
             # Ảnh sắc nét: edges mạnh -> variance cao
-            variance = laplacian.var()
-            
-            is_sharp = variance >= self.BLUR_THRESHOLD
-            
+            variance = float(laplacian.var())
+            is_sharp = bool(variance >= float(self.BLUR_THRESHOLD))
+
             logger.debug(f"Blur check: variance={variance:.2f}, sharp={is_sharp}")
-            
-            return float(variance), is_sharp
+
+            return variance, is_sharp
             
         except Exception as e:
             logger.error(f"Error checking blur: {e}")
@@ -172,25 +185,25 @@ class FaceQualityChecker:
         try:
             # Chuyển sang grayscale
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            
+
             # Tính độ sáng trung bình
-            brightness = np.mean(gray)
-            
-            if brightness < self.BRIGHTNESS_MIN:
+            brightness = float(np.mean(gray))
+
+            if brightness < float(self.BRIGHTNESS_MIN):
                 logger.warning(f"Image too dark: {brightness:.1f}")
-                return float(brightness), False, "TOO_DARK"
-            elif brightness > self.BRIGHTNESS_MAX:
+                return brightness, False, "TOO_DARK"
+            elif brightness > float(self.BRIGHTNESS_MAX):
                 logger.warning(f"Image too bright: {brightness:.1f}")
-                return float(brightness), False, "TOO_BRIGHT"
+                return brightness, False, "TOO_BRIGHT"
             else:
                 logger.debug(f"Brightness OK: {brightness:.1f}")
-                return float(brightness), True, "OK"
+                return brightness, True, "OK"
                 
         except Exception as e:
             logger.error(f"Error checking brightness: {e}")
             return 0.0, False, "ERROR"
     
-    def check_head_pose(self, landmarks: np.ndarray) -> Dict[str, float]:
+    def check_head_pose(self, landmarks: np.ndarray, image_shape: Optional[Tuple[int,int]] = None) -> Dict[str, float]:
         """
         Kiểm tra góc nghiêng đầu dựa trên 5 điểm landmarks từ InsightFace
         
@@ -214,48 +227,116 @@ class FaceQualityChecker:
         # delegate to it. This function kept for callers expecting
         # `check_head_pose`.
         try:
-            return self.calculate_head_pose(landmarks)
+            return self.calculate_head_pose(landmarks, image_shape)
         except Exception as e:
             logger.error(f"Error in check_head_pose delegating to calculate_head_pose: {e}")
             return {'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
 
-    def calculate_head_pose(self, landmarks: np.ndarray) -> Dict[str, float]:
+    def calculate_head_pose(self, landmarks: np.ndarray, image_shape: Optional[Tuple[int,int]] = None) -> Dict[str, float]:
         """
         Tính toán Yaw, Pitch, Roll từ 5 điểm landmarks (InsightFace)
         0: left eye, 1: right eye, 2: nose, 3: left mouth, 4: right mouth
         """
         try:
-            left_eye = np.array(landmarks[0], dtype=np.float32)
-            right_eye = np.array(landmarks[1], dtype=np.float32)
-            nose = np.array(landmarks[2], dtype=np.float32)
-            left_mouth = np.array(landmarks[3], dtype=np.float32)
-            right_mouth = np.array(landmarks[4], dtype=np.float32)
+            # Use solvePnP for a robust head-pose estimation
+            # landmarks: 5 points: left eye, right eye, nose, left mouth, right mouth
+            image_points = np.array([
+                landmarks[0],  # left eye
+                landmarks[1],  # right eye
+                landmarks[2],  # nose
+                landmarks[3],  # left mouth
+                landmarks[4]   # right mouth
+            ], dtype=np.float64)
 
-            # 1. YAW (Quay trái/phải) - dựa vào độ lệch mũi so với tâm mắt
-            eye_dist = np.linalg.norm(right_eye - left_eye)
-            eye_center_x = (left_eye[0] + right_eye[0]) / 2.0
-            # Reduce sensitivity: use 70 instead of 90 multiplier to make yaw less aggressive
-            yaw = ((nose[0] - eye_center_x) / (eye_dist / 2.0)) * 70.0 if eye_dist > 0 else 0.0
+            # Define a simple 3D model of facial points (approximate, units arbitrary)
+            model_points = np.array([
+                [-30.0,  30.0, -30.0],  # left eye
+                [ 30.0,  30.0, -30.0],  # right eye
+                [  0.0,   0.0,   0.0],  # nose tip
+                [-25.0, -30.0, -30.0],  # left mouth
+                [ 25.0, -30.0, -30.0]   # right mouth
+            ], dtype=np.float64)
 
-            # 2. PITCH (Gật/Ngửa) - dựa trên tỉ lệ vị trí mũi giữa mắt và miệng
-            eye_center_y = (left_eye[1] + right_eye[1]) / 2.0
-            mouth_center_y = (left_mouth[1] + right_mouth[1]) / 2.0
-            face_height = mouth_center_y - eye_center_y
-            if face_height > 0:
-                nose_rel_y = (nose[1] - eye_center_y) / face_height
-                pitch = (nose_rel_y - 0.45) * 150.0
+            # Build camera matrix approximation using image size
+            if image_shape is None:
+                # default assume 640x480
+                h, w = 480, 640
             else:
-                pitch = 0.0
+                h, w = int(image_shape[0]), int(image_shape[1])
 
-            # 3. ROLL (Nghiêng đầu) - góc đường nối hai mắt
-            dY = right_eye[1] - left_eye[1]
-            dX = right_eye[0] - left_eye[0]
-            roll = np.degrees(np.arctan2(dY, dX))
+            focal_length = float(w)
+            center = (w / 2.0, h / 2.0)
+            camera_matrix = np.array([
+                [focal_length, 0, center[0]],
+                [0, focal_length, center[1]],
+                [0, 0, 1]
+            ], dtype=np.float64)
+
+            dist_coeffs = np.zeros((4, 1))  # assume no lens distortion
+
+            success, rotation_vector, translation_vector = cv2.solvePnP(
+                model_points,
+                image_points,
+                camera_matrix,
+                dist_coeffs,
+                flags=cv2.SOLVEPNP_ITERATIVE
+            )
+
+            if not success:
+                raise RuntimeError('solvePnP failed')
+
+            # Convert rotation vector to rotation matrix
+            rmat, _ = cv2.Rodrigues(rotation_vector)
+
+            # Convert rotation matrix to Euler angles
+            def rotationMatrixToEulerAngles(R):
+                sy = math.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
+                singular = sy < 1e-6
+                if not singular:
+                    x = math.atan2(R[2, 1], R[2, 2])
+                    y = math.atan2(-R[2, 0], sy)
+                    z = math.atan2(R[1, 0], R[0, 0])
+                else:
+                    x = math.atan2(-R[1, 2], R[1, 1])
+                    y = math.atan2(-R[2, 0], sy)
+                    z = 0
+                return np.degrees([y, x, z])  # yaw, pitch, roll
+
+            yaw, pitch, roll = rotationMatrixToEulerAngles(rmat)
 
             return {'yaw': float(yaw), 'pitch': float(pitch), 'roll': float(roll)}
+
         except Exception as e:
-            logger.error(f"Error pose calc: {e}")
-            return {'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
+            logger.error(f"Error pose calc (solvePnP fallback): {e}")
+            # Fallback to previous heuristic if solvePnP fails
+            try:
+                left_eye = np.array(landmarks[0], dtype=np.float32)
+                right_eye = np.array(landmarks[1], dtype=np.float32)
+                nose = np.array(landmarks[2], dtype=np.float32)
+                left_mouth = np.array(landmarks[3], dtype=np.float32)
+                right_mouth = np.array(landmarks[4], dtype=np.float32)
+
+                eye_dist = np.linalg.norm(right_eye - left_eye)
+                eye_center_x = (left_eye[0] + right_eye[0]) / 2.0
+                yaw = ((nose[0] - eye_center_x) / (eye_dist / 2.0)) * 70.0 if eye_dist > 0 else 0.0
+
+                eye_center_y = (left_eye[1] + right_eye[1]) / 2.0
+                mouth_center_y = (left_mouth[1] + right_mouth[1]) / 2.0
+                face_height = mouth_center_y - eye_center_y
+                if face_height > 0:
+                    nose_rel_y = (nose[1] - eye_center_y) / face_height
+                    pitch = (nose_rel_y - 0.45) * 150.0
+                else:
+                    pitch = 0.0
+
+                dY = right_eye[1] - left_eye[1]
+                dX = right_eye[0] - left_eye[0]
+                roll = np.degrees(np.arctan2(dY, dX))
+
+                return {'yaw': float(yaw), 'pitch': float(pitch), 'roll': float(roll)}
+            except Exception as e2:
+                logger.error(f"Fallback heuristic failed: {e2}")
+                return {'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
 
 
 # Singleton instance

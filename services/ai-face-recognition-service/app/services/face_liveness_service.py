@@ -34,7 +34,7 @@ class FaceLivenessDetector:
     _instance = None
     
     # Ngưỡng confidence
-    REAL_THRESHOLD = 0.5  # Nếu score > 0.5 => REAL, ngược lại => FAKE
+    REAL_THRESHOLD = 0.4  # Nếu score > 0.4 => REAL, ngược lại => FAKE
     
     # Kích thước input model
     INPUT_SIZE = (80, 80)  # Hoặc (224, 224) tùy model bạn dùng
@@ -61,14 +61,20 @@ class FaceLivenessDetector:
             
             # Tìm model path
             if model_path is None:
-                # Tìm trong thư mục dự án
+                # Candidate paths (project-relative and user ~/.insightface locations)
+                user_home = os.path.expanduser("~")
                 possible_paths = [
+                    # Preferred location used by our installer/docs
+                    os.path.join(user_home, ".insightface", "models", "anti_spoofing", "2.7_80x80_MiniFASNetV2.onnx"),
+                    # Some users put model directly in ~/.insightface/models/
+                    os.path.join(user_home, ".insightface", "models", "2.7_80x80_MiniFASNetV2.onnx"),
+                    # Project-relative fallbacks
                     "models/anti_spoofing/2.7_80x80_MiniFASNetV2.onnx",
                     "models/anti_spoofing/4_0_0_80x80_MiniFASNetV1SE.onnx",
                     "weight/anti_spoofing.onnx",
                     "../models/anti_spoofing.onnx"
                 ]
-                
+
                 for path in possible_paths:
                     if os.path.exists(path):
                         model_path = path
@@ -87,15 +93,38 @@ class FaceLivenessDetector:
         try:
             logger.info(f"Loading liveness model from: {model_path}")
             
-            # Tạo ONNX Runtime session
+            # Tạo ONNX Runtime session (CPU-only)
             self.session = ort.InferenceSession(
                 model_path,
-                providers=['CUDAExecutionProvider', 'CPUExecutionProvider']
+                providers=['CPUExecutionProvider']
             )
             
             # Lấy input/output names
-            self.input_name = self.session.get_inputs()[0].name
-            self.output_name = self.session.get_outputs()[0].name
+            model_inputs = self.session.get_inputs()
+            model_outputs = self.session.get_outputs()
+            if len(model_inputs) > 0:
+                self.input_name = model_inputs[0].name
+            else:
+                self.input_name = None
+            if len(model_outputs) > 0:
+                self.output_name = model_outputs[0].name
+            else:
+                self.output_name = None
+
+            # Determine model expected input size (H,W) if available
+            try:
+                inp_shape = model_inputs[0].shape  # e.g. [1, 3, H, W]
+                # Some shapes contain None for batch dim; pick last two dims
+                if inp_shape and len(inp_shape) >= 4:
+                    h = inp_shape[-2]
+                    w = inp_shape[-1]
+                    # If dims are integers, set the input size for resize
+                    if isinstance(h, int) and isinstance(w, int):
+                        # cv2.resize expects (width, height)
+                        self.INPUT_SIZE = (int(w), int(h))
+                        logger.info(f"Detected model input size: {self.INPUT_SIZE} (W,H)")
+            except Exception:
+                logger.debug("Could not determine model input shape, using default INPUT_SIZE")
             
             logger.info("✅ Liveness model loaded successfully")
             logger.info(f"   Input: {self.input_name}, Output: {self.output_name}")
@@ -130,35 +159,122 @@ class FaceLivenessDetector:
             )
         
         try:
-            # Crop face nếu có bbox
+            # Crop face nếu có bbox. Use scale factor 2.7 required by MiniFASNetV2.
+            scale = 2.7
             if bbox is not None:
                 x1, y1, x2, y2 = bbox
-                face_crop = face_image[y1:y2, x1:x2]
+                w = x2 - x1
+                h = y2 - y1
+                cx = x1 + w // 2
+                cy = y1 + h // 2
+
+                new_w = int(w * scale)
+                new_h = int(h * scale)
+                nx1 = int(cx - new_w // 2)
+                ny1 = int(cy - new_h // 2)
+                nx2 = nx1 + new_w
+                ny2 = ny1 + new_h
+
+                # Compute padding if out of bounds
+                pad_left = max(0, -nx1)
+                pad_top = max(0, -ny1)
+                pad_right = max(0, nx2 - face_image.shape[1])
+                pad_bottom = max(0, ny2 - face_image.shape[0])
+
+                # Clamp coords to image
+                cx1 = max(0, nx1)
+                cy1 = max(0, ny1)
+                cx2 = min(face_image.shape[1], nx2)
+                cy2 = min(face_image.shape[0], ny2)
+
+                face_crop = face_image[cy1:cy2, cx1:cx2]
+
+                # If padding needed, pad with black (constant) to avoid replicate artifacts
+                if pad_left or pad_top or pad_right or pad_bottom:
+                    face_crop = cv2.copyMakeBorder(
+                        face_crop,
+                        pad_top,
+                        pad_bottom,
+                        pad_left,
+                        pad_right,
+                        borderType=cv2.BORDER_CONSTANT,
+                        value=[0, 0, 0]
+                    )
             else:
-                face_crop = face_image
-            
-            # Preprocess ảnh
+                # If bbox not provided, treat face_image as crop and expand/pad by scale
+                h, w = face_image.shape[:2]
+                cx = w // 2
+                cy = h // 2
+                new_w = int(w * scale)
+                new_h = int(h * scale)
+                nx1 = int(cx - new_w // 2)
+                ny1 = int(cy - new_h // 2)
+                nx2 = nx1 + new_w
+                ny2 = ny1 + new_h
+
+                pad_left = max(0, -nx1)
+                pad_top = max(0, -ny1)
+                pad_right = max(0, nx2 - w)
+                pad_bottom = max(0, ny2 - h)
+
+                # pad original crop first (use black padding to avoid replicate stripes)
+                padded = cv2.copyMakeBorder(
+                    face_image,
+                    pad_top,
+                    pad_bottom,
+                    pad_left,
+                    pad_right,
+                    borderType=cv2.BORDER_CONSTANT,
+                    value=[0, 0, 0]
+                )
+                # then extract centered region
+                start_x = max(0, nx1 + pad_left)
+                start_y = max(0, ny1 + pad_top)
+                face_crop = padded[start_y:start_y + new_h, start_x:start_x + new_w]
+
+            # Preprocess ảnh (ensure RGB conversion and resize to model input)
             input_tensor = self._preprocess(face_crop)
             
-            # Inference
+            # Log input statistics for debugging
+            logger.debug(f"Input tensor shape: {input_tensor.shape}, mean: {input_tensor.mean():.3f}, std: {input_tensor.std():.3f}")
+            
+            # Inference - ensure fresh computation each time
+            # Force no caching by using new dict for inputs
             outputs = self.session.run(
                 [self.output_name],
-                {self.input_name: input_tensor}
+                {self.input_name: input_tensor.copy()}  # Use copy to avoid any state retention
             )
             
             # Parse output
             # Output shape thường là (1, 2) hoặc (1, 1)
-            # Tùy model có thể khác nhau
-            output = outputs[0][0]
-            
-            if len(output) == 2:
-                # 2-class output: [fake_score, real_score]
-                fake_score = float(output[0])
-                real_score = float(output[1])
-                confidence = real_score
+            # Tùy model có thể khác nhau. ONNX often returns logits -> convert to probabilities.
+            output = np.array(outputs[0][0], dtype=np.float32)
+            logger.debug(f"Raw liveness model output: {output}")
+
+            if output.size == 2:
+                # 2-class output: [fake_score, real_score] format
+                # Convert logits -> probabilities with softmax when needed
+                # If values are already probabilities (sum ~= 1 and in [0,1]) we keep them.
+                if (np.any(output < 0) or np.any(output > 1)) or (not np.isclose(np.sum(output), 1.0, rtol=1e-3)):
+                    ex = np.exp(output - np.max(output))
+                    probs = ex / ex.sum()
+                else:
+                    probs = output / np.sum(output)
+
+                # Model outputs [fake_prob, real_prob]
+                fake_prob = float(probs[0])  # Index 0 is FAKE
+                real_prob = float(probs[1])  # Index 1 is REAL
+                confidence = real_prob
+                logger.debug(f"Liveness probs (fake,real): {(fake_prob, real_prob)}")
             else:
-                # 1-class output: sigmoid(score)
-                confidence = float(output[0])
+                # 1-class output: often a logit that needs sigmoid, or already a probability
+                val = float(output[0])
+                if val < 0.0 or val > 1.0:
+                    # Apply sigmoid
+                    confidence = float(1.0 / (1.0 + np.exp(-val)))
+                else:
+                    confidence = val
+                logger.debug(f"Liveness single-output confidence: {confidence}")
             
             # Xác định REAL/FAKE
             is_real = confidence >= self.REAL_THRESHOLD
@@ -180,10 +296,10 @@ class FaceLivenessDetector:
             
         except Exception as e:
             logger.error(f"Error in liveness check: {e}")
-            # Trường hợp lỗi, mặc định cho qua để không block user
+            # Trường hợp lỗi, báo lỗi và trả về kết quả không hợp lệ
             return LivenessResult(
-                is_real=True,
-                confidence=0.5,
+                is_real=False,
+                confidence=0.0,
                 label="ERROR",
                 message=f"Lỗi kiểm tra liveness: {str(e)}"
             )
@@ -199,9 +315,13 @@ class FaceLivenessDetector:
             Tensor đã chuẩn hóa shape (1, 3, H, W)
         """
         # Resize về kích thước model yêu cầu
+        # If face_image is tiny, cv2.resize will upsample; ensure non-empty
+        if face_image.size == 0:
+            raise ValueError("Empty face image passed to liveness preprocess")
+
         resized = cv2.resize(face_image, self.INPUT_SIZE)
-        
-        # Convert BGR -> RGB
+
+        # Convert BGR -> RGB (model expects RGB)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         
         # Chuẩn hóa về [0, 1]

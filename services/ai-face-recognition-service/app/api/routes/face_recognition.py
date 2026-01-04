@@ -10,6 +10,7 @@ import numpy as np
 import base64
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Body
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -253,65 +254,95 @@ async def recognize_face(
         logger.info("=" * 50)
         
         # ============================================
-        # STAGE 1: QUALITY CHECK
+        # STAGE 1: QUALITY CHECK (using face_quality_service)
         # ============================================
         logger.info("📋 STAGE 1: Quality Check")
-        quality_checker = ImageQualityChecker()
-        quality_result = quality_checker.check_all(img)
-        
-        if not quality_result["overall_passed"]:
-            error_message = ImageQualityChecker.get_error_message(quality_result)
+
+        # Detect faces first to get landmarks
+        faces = face_recognizer.app.get(img)
+        if not faces or len(faces) == 0:
+            return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={
+                "success": False,
+                "error": "NO_FACE",
+                "message": "Không tìm thấy khuôn mặt. Vui lòng đưa mặt vào camera."
+            })
+
+        face = faces[0]
+        kps = face.kps if hasattr(face, 'kps') else None
+
+        # Use the existing face_quality_checker singleton
+        quality_result = face_quality_checker.check_all(img, landmarks=kps)
+
+        if not getattr(quality_result, 'is_valid', False):
+            # Build message and return details
+            error_message = "; ".join(quality_result.messages) if quality_result.messages else "POOR_QUALITY"
             logger.warning(f"❌ Quality check failed: {error_message}")
-            
-            # Determine specific error code
+
+            # Map common messages to error codes
             error_code = "POOR_QUALITY"
-            if not quality_result.get("blur", {}).get("passed"):
+            if quality_result.blur_score is not None and quality_result.blur_score < face_quality_checker.BLUR_THRESHOLD:
                 error_code = "BLURRY_IMAGE"
-            elif quality_result.get("brightness", {}).get("message") == "TOO_DARK":
+            elif quality_result.details.get('brightness_status') == "TOO_DARK":
                 error_code = "TOO_DARK"
-            elif quality_result.get("brightness", {}).get("message") == "TOO_BRIGHT":
+            elif quality_result.details.get('brightness_status') == "TOO_BRIGHT":
                 error_code = "TOO_BRIGHT"
-            
+
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                content={
+                content=jsonable_encoder({
                     "success": False,
                     "error": error_code,
                     "message": error_message,
                     "details": {
-                        "blur_score": quality_result.get("blur", {}).get("score"),
-                        "brightness": quality_result.get("brightness", {}).get("value"),
-                        "quality_score": quality_result.get("quality_score")
+                        "blur_score": float(quality_result.blur_score) if quality_result.blur_score is not None else None,
+                        "brightness": float(quality_result.brightness) if quality_result.brightness is not None else None,
+                        "head_pose": getattr(quality_result, 'head_pose_angles', None),
+                        "quality_details": quality_result.details
                     }
-                }
+                })
             )
-        
-        logger.info(f"✅ Quality check passed (score: {quality_result['quality_score']:.2%})")
-        
+
+        logger.info("✅ Quality check passed")
+
         # ============================================
-        # STAGE 2: LIVENESS & HEAD POSE CHECK
+        # STAGE 2: LIVENESS & HEAD POSE CHECK (using face_liveness_service)
         # ============================================
         logger.info("📋 STAGE 2: Liveness & Head Pose Check")
-        liveness_checker = LivenessChecker()
-        pose_result = liveness_checker.check_head_pose(img)
-        
-        if not pose_result["is_frontal"]:
-            logger.warning(f"❌ Head pose check failed: {pose_result['message']}")
+
+        # Build bbox as integers if available
+        bbox = None
+        if hasattr(face, 'bbox'):
+            try:
+                b = getattr(face, 'bbox')
+                x1, y1, x2, y2 = int(b[0]), int(b[1]), int(b[2]), int(b[3])
+                bbox = [x1, y1, x2, y2]
+            except Exception:
+                bbox = None
+
+        # Use singleton liveness detector
+        from app.services.face_liveness_service import face_liveness_detector
+        liv_result = face_liveness_detector.check_liveness(img, bbox=bbox)
+
+        if not liv_result.is_real:
+            logger.warning(f"❌ Liveness check failed: {liv_result.message}")
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 content={
                     "success": False,
-                    "error": "HEAD_POSE_INVALID",
-                    "message": pose_result["message"],
+                    "error": "LIVENESS_FAILED",
+                    "message": liv_result.message,
                     "details": {
-                        "angles": pose_result.get("angles"),
-                        "confidence": pose_result.get("confidence")
+                        "confidence": float(liv_result.confidence),
+                        "label": liv_result.label,
+                        "liveness_message": liv_result.message,
+                        "head_pose": getattr(quality_result, 'head_pose_angles', None),
+                        "quality_details": getattr(quality_result, 'details', None)
                     }
                 }
             )
-        
-        logger.info(f"✅ Head pose check passed (yaw: {pose_result['angles']['yaw']:.1f}°, pitch: {pose_result['angles']['pitch']:.1f}°)")
-        
+
+        logger.info(f"✅ Liveness passed (confidence={liv_result.confidence:.2%})")
+
         # ============================================
         # STAGE 3: FACE RECOGNITION
         # ============================================
@@ -325,8 +356,9 @@ async def recognize_face(
         if result.get("success"):
             result["validation"] = {
                 "mode": "strict",
-                "quality_score": quality_result["quality_score"],
-                "head_pose_confidence": pose_result["confidence"],
+                "quality_score": float(getattr(quality_result, 'blur_score', None)),
+                "liveness_confidence": float(getattr(liv_result, 'confidence', 0.0)),
+                "head_pose": getattr(quality_result, 'head_pose_angles', None),
                 "all_checks_passed": True
             }
             logger.info(f"✅ Recognition successful: {result.get('data', {}).get('user', {}).get('username', 'Unknown')}")
@@ -532,7 +564,6 @@ async def get_service_stats(db: Session = Depends(get_db)):
         
         # Count total embeddings
         total_embeddings = db.query(FaceEmbedding).count()
-        active_embeddings = db.query(FaceEmbedding).filter(FaceEmbedding.is_active == True).count()
         
         # Count total attendance logs
         total_logs = db.query(AttendanceLog).count()
@@ -546,9 +577,7 @@ async def get_service_stats(db: Session = Depends(get_db)):
                 "success": True,
                 "data": {
                     "embeddings": {
-                        "total": total_embeddings,
-                        "active": active_embeddings,
-                        "inactive": total_embeddings - active_embeddings
+                        "total": total_embeddings
                     },
                     "attendance_logs": {
                         "total": total_logs,

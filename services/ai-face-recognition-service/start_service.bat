@@ -10,7 +10,7 @@ call E:\Anaconda\Scripts\activate.bat QLNS
 REM 2. Chuyen thu muc lam viec ve noi chua file script nay
 pushd %~dp0
 
-echo [INFO] Dang chay server voi GPU...
+echo [INFO] Dang chay server voi CPU (forcing CPU-only)...
 
 REM 3. Chay file main.py (Luc nay da co du moi truong)
 python main.py

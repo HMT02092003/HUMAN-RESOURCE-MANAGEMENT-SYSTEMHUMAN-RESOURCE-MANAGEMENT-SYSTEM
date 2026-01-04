@@ -1,22 +1,22 @@
 import asyncio
 import logging
-
-from .face_recognition_service import face_recognizer
 import cv2
 import numpy as np
 import json
 import os
 import uuid
 import requests
+
+from .face_recognition_service import face_recognizer
 from app.core.config import settings
 from app.core.database import FaceEmbedding, AttendanceLog
 
 logger = logging.getLogger(__name__)
 
-
 class InsightFaceRecognitionService:
-    """Compatibility wrapper for older import path used by main.py.
-
+    """
+    Compatibility wrapper for older import path used by main.py.
+    
     The real implementation lives in `face_recognition_service.py` and the
     module creates a singleton `face_recognizer` on import. This wrapper
     exposes an async `initialize_models` method so existing startup code
@@ -25,151 +25,235 @@ class InsightFaceRecognitionService:
 
     @staticmethod
     async def initialize_models():
-        # The `face_recognizer` is initialized on import; yield control
-        # once to allow the event loop to proceed.
+        """Initialize models (already done on import of face_recognition_service)"""
         logger.info("InsightFaceRecognitionService: initialize_models called")
         await asyncio.sleep(0)
         return face_recognizer
 
     async def recognize_face(self, image_bytes: bytes, recognition_type: str, db, threshold: float = None):
-        """Decode image bytes, run recognition (fast/normal mode), compare against DB embeddings."""
+        """
+        Recognize face from image bytes and compare with DB embeddings.
+        
+        This method:
+        1. Decodes image
+        2. Detects and extracts face embedding
+        3. Loads all embeddings from DB (JSON format)
+        4. Compares using cosine similarity
+        5. Returns best match if above threshold
+        """
         try:
             if threshold is None:
-                threshold = float(settings.CONFIDENCE_THRESHOLD)
-
+                threshold = 0.6  # Default threshold
+            
             # Decode image
             nparr = np.frombuffer(image_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             if img is None:
-                return {"success": False, "error": "INVALID_IMAGE", "message": "Không thể đọc ảnh"}
+                return {
+                    "success": False,
+                    "error": "INVALID_IMAGE",
+                    "message": "Không thể đọc ảnh"
+                }
 
-            # Use face_recognizer to process (skip quality/liveness for normal mode)
+            # Process face
             result = face_recognizer.process_face(img, skip_quality_check=True, skip_liveness_check=True)
 
-            if not result.success:
-                return {"success": False, "error": "NO_FACE_DETECTED", "message": result.message}
-
-            # Have embedding
-            emb = np.array(result.face_data.embedding)
-
-            # Query DB for stored embeddings
-            stored = db.query(FaceEmbedding).filter(FaceEmbedding.is_active == True).all()
-            logger.info(f"🔍 Found {len(stored)} stored embeddings in database")
-
-            best = {"similarity": 0.0, "row": None}
-            for row in stored:
-                try:
-                    stored_emb = np.array(json.loads(row.face_embedding))
-                    cmp = face_recognizer.compare_faces(emb, stored_emb, threshold=threshold)
-                    similarity = cmp.get('similarity', 0.0)
-                    if similarity > best['similarity']:
-                        best = {"similarity": similarity, "row": row}
-                        logger.info(f"📊 New best match: user_id={row.user_id}, similarity={similarity:.4f}")
-                except Exception as e:
-                    logger.warning(f"⚠️ Failed to compare embedding for user_id={row.user_id}: {e}")
-                    continue
-            
-            logger.info(f"🎯 Best match: similarity={best['similarity']:.4f} (threshold check disabled)")
-
-            # Luôn trả về kết quả tốt nhất nếu có embeddings trong DB
-            if best['row'] and len(stored) > 0:
-                # Create attendance log với status dựa trên similarity
-                status = 'recognized' if best['similarity'] >= threshold else 'low_confidence'
-                
-                log = AttendanceLog(
-                    user_id=best['row'].user_id,
-                    username=best['row'].username,
-                    recognition_type=recognition_type,
-                    confidence_score=int(best['similarity'] * 100),
-                    image_path=None,
-                    face_location=result.face_data.bbox if result.face_data else None,
-                    status=status
-                )
-                db.add(log)
-                db.commit()
-                db.refresh(log)
-
-                logger.info(f"✅ Best match found: {best['row'].username} (confidence: {best['similarity']:.4f})")
-
+            if not result.success or not result.face_data:
                 return {
-                    "success": True,
-                    "data": {
-                        "user": {
-                            "user_id": best['row'].user_id,
-                            "username": best['row'].username,
-                            "full_name": best['row'].full_name
-                        },
-                        "confidence": best['similarity'],
-                        "recognition_log_id": log.id,
-                        "note": "low_confidence" if best['similarity'] < threshold else None
-                    }
+                    "success": False,
+                    "error": "NO_FACE_DETECTED",
+                    "message": result.message or "Không phát hiện khuôn mặt"
                 }
-            else:
-                # Không có embeddings trong DB
+
+            # Get embedding vector
+            emb = result.face_data.embedding
+            if emb is None:
+                return {
+                    "success": False,
+                    "error": "NO_EMBEDDING",
+                    "message": "Không thể trích xuất đặc trưng khuôn mặt"
+                }
+
+            # Load all active embeddings from DB
+            db_embeddings = db.query(FaceEmbedding).filter(
+                FaceEmbedding.face_type == 'MASTER'
+            ).all()
+
+            if not db_embeddings:
+                # No embeddings in DB
                 log = AttendanceLog(
                     user_id=0,
                     username='unknown',
                     recognition_type=recognition_type,
                     confidence_score=0,
-                    image_path=None,
-                    face_location=result.face_data.bbox if result.face_data else None,
+                    similarity_score=0.0,
+                    matched_by_type='NONE',
                     status='no_embeddings'
                 )
                 db.add(log)
                 db.commit()
                 db.refresh(log)
 
-                return {"success": False, "error": "NO_EMBEDDINGS", "message": "Chưa có dữ liệu khuôn mặt trong hệ thống", "recognition_log_id": log.id}
+                return {
+                    "success": False,
+                    "error": "NO_EMBEDDINGS",
+                    "message": "Chưa có dữ liệu khuôn mặt trong hệ thống",
+                    "recognition_log_id": log.id
+                }
+
+            # Compare with all embeddings (in-memory)
+            best_match = None
+            best_similarity = 0.0
+
+            for db_emb in db_embeddings:
+                try:
+                    # Parse JSON vector
+                    stored_vector = json.loads(db_emb.embedding_vector)
+                    stored_vector = np.array(stored_vector, dtype=np.float32)
+                    
+                    # Compute cosine similarity
+                    similarity = float(np.dot(emb, stored_vector) / (np.linalg.norm(emb) * np.linalg.norm(stored_vector)))
+                    
+                    if similarity > best_similarity:
+                        best_similarity = similarity
+                        best_match = db_emb
+                        
+                except Exception as e:
+                    logger.error(f"Error comparing with embedding {db_emb.id}: {e}")
+                    continue
+
+            # Check if best match passes threshold
+            if best_match and best_similarity >= threshold:
+                status = 'recognized'
+                
+                # Create attendance log
+                log = AttendanceLog(
+                    user_id=best_match.user_id,
+                    username=best_match.username,
+                    recognition_type=recognition_type,
+                    confidence_score=int(best_similarity * 100),
+                    similarity_score=best_similarity,
+                    matched_by_type='MASTER',
+                    status=status
+                )
+                db.add(log)
+                db.commit()
+                db.refresh(log)
+
+                logger.info(f"✅ Face recognized: {best_match.username} (similarity: {best_similarity:.4f})")
+
+                return {
+                    "success": True,
+                    "data": {
+                        "user": {
+                            "user_id": best_match.user_id,
+                            "username": best_match.username
+                        },
+                        "confidence": best_similarity,
+                        "similarity": best_similarity,
+                        "recognition_log_id": log.id
+                    }
+                }
+            else:
+                # No match or below threshold
+                log = AttendanceLog(
+                    user_id=0,
+                    username='unknown',
+                    recognition_type=recognition_type,
+                    confidence_score=int(best_similarity * 100) if best_match else 0,
+                    similarity_score=best_similarity if best_match else 0.0,
+                    matched_by_type='NONE',
+                    status='unrecognized'
+                )
+                db.add(log)
+                db.commit()
+                db.refresh(log)
+
+                return {
+                    "success": False,
+                    "error": "NOT_RECOGNIZED",
+                    "message": f"Không nhận diện được (điểm tương đồng: {best_similarity:.2f})",
+                    "recognition_log_id": log.id
+                }
 
         except Exception as e:
-            logger.error(f"Error in recognize_face wrapper: {e}", exc_info=True)
-            return {"success": False, "error": "INTERNAL_ERROR", "message": str(e)}
+            logger.error(f"Error in recognize_face: {e}", exc_info=True)
+            return {
+                "success": False,
+                "error": "INTERNAL_ERROR",
+                "message": str(e)
+            }
 
     async def register_face(self, image_bytes: bytes, user_id: int, username: str, db):
-        """Register a new face embedding for a user and save image to uploads."""
+        """
+        Register a new face embedding for a user.
+        
+        Note: This is legacy method. New code should use batch_registration API.
+        """
         try:
-            # Decode
+            # Decode image
             nparr = np.frombuffer(image_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             if img is None:
-                return {"success": False, "error": "INVALID_IMAGE", "message": "Không thể đọc ảnh"}
+                return {
+                    "success": False,
+                    "error": "INVALID_IMAGE",
+                    "message": "Không thể đọc ảnh"
+                }
 
-            # Process face with full checks
+            # Process face
             result = face_recognizer.process_face(img, skip_quality_check=False, skip_liveness_check=False)
 
             if not result.success or not result.face_data:
-                return {"success": False, "error": "NO_FACE_DETECTED", "message": result.message}
+                return {
+                    "success": False,
+                    "error": "NO_FACE_DETECTED",
+                    "message": result.message or "Không phát hiện khuôn mặt"
+                }
 
             emb = result.face_data.embedding
 
-            # Save image to uploads
+            # Save image to uploads (do not persist path to DB)
             upload_dir = settings.UPLOAD_DIR or './uploads'
             os.makedirs(upload_dir, exist_ok=True)
             filename = f"{user_id}_{uuid.uuid4().hex}.jpg"
-            path = os.path.join(upload_dir, filename)
-            cv2.imwrite(path, img)
+            _saved_path = os.path.join(upload_dir, filename)
+            cv2.imwrite(_saved_path, img)
 
-            # Store embedding as JSON
-            emb_json = json.dumps(emb)
+            # Convert embedding to JSON
+            emb_json = json.dumps(emb.tolist() if hasattr(emb, 'tolist') else list(map(float, emb)))
 
-            new = FaceEmbedding(
+            # Create new embedding record
+            new_embedding = FaceEmbedding(
                 user_id=user_id,
                 username=username,
-                full_name=None,
-                face_embedding=emb_json,
-                image_path=path,
-                confidence_score=int(result.face_data.confidence * 100) if result.face_data and hasattr(result.face_data, 'confidence') else 0,
-                is_active=True
+                embedding_vector=emb_json,
+                face_type='MASTER'
             )
-            db.add(new)
+            db.add(new_embedding)
             db.commit()
-            db.refresh(new)
+            db.refresh(new_embedding)
 
-            return {"success": True, "message": "Đăng ký khuôn mặt thành công", "data": {"embedding_id": new.id}}
+            logger.info(f"✅ Registered face for user {username} (embedding_id: {new_embedding.id})")
+
+            return {
+                "success": True,
+                "message": "Đăng ký khuôn mặt thành công",
+                "data": {
+                    "embedding_id": new_embedding.id,
+                    "user_id": user_id,
+                    "username": username
+                }
+            }
 
         except Exception as e:
-            logger.error(f"Error in register_face wrapper: {e}", exc_info=True)
-            return {"success": False, "error": "INTERNAL_ERROR", "message": str(e)}
+            logger.error(f"Error in register_face: {e}", exc_info=True)
+            db.rollback()
+            return {
+                "success": False,
+                "error": "INTERNAL_ERROR",
+                "message": str(e)
+            }
 
     def _send_to_attendance_service(self, user_match: dict, recognition_type: str, confidence_score: int):
         """Send attendance confirmation to API gateway (synchronous)."""
@@ -190,10 +274,16 @@ class InsightFaceRecognitionService:
             try:
                 return resp.json()
             except Exception:
-                return {"success": resp.status_code == 200, "status_code": resp.status_code}
+                return {
+                    "success": resp.status_code == 200,
+                    "status_code": resp.status_code
+                }
         except Exception as e:
             logger.error(f"Error sending to attendance service: {e}")
-            return {"success": False, "error": str(e)}
+            return {
+                "success": False,
+                "error": str(e)
+            }
 
 
 __all__ = ["InsightFaceRecognitionService"]
