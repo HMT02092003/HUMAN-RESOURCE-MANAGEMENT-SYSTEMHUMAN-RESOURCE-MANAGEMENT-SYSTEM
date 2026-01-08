@@ -162,7 +162,17 @@ async def recognize_face(
                         "message": "Không tìm thấy khuôn mặt. Vui lòng đưa mặt vào camera."
                     })
 
-                # Take the largest / first face
+                # Keep only the largest detected face (by bbox area)
+                if len(faces) > 1:
+                    try:
+                        faces = sorted(
+                            faces,
+                            key=lambda f: ((f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1])) if hasattr(f, 'bbox') else 0,
+                            reverse=True
+                        )
+                    except Exception:
+                        # Fallback: keep first if bbox structure unexpected
+                        pass
                 face = faces[0]
                 # landmarks: numpy array shape (5,2)
                 kps = face.kps
@@ -217,6 +227,16 @@ async def recognize_face(
                         "message": "Không tìm thấy khuôn mặt. Vui lòng đưa mặt vào camera."
                     })
 
+                # Keep only the largest detected face (by bbox area)
+                if len(faces) > 1:
+                    try:
+                        faces = sorted(
+                            faces,
+                            key=lambda f: ((f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1])) if hasattr(f, 'bbox') else 0,
+                            reverse=True
+                        )
+                    except Exception:
+                        pass
                 face = faces[0]
                 kps = face.kps
                 angles = face_quality_checker.check_head_pose(kps)
@@ -266,6 +286,16 @@ async def recognize_face(
                 "error": "NO_FACE",
                 "message": "Không tìm thấy khuôn mặt. Vui lòng đưa mặt vào camera."
             })
+        # Keep only the largest detected face (by bbox area)
+        if len(faces) > 1:
+            try:
+                faces = sorted(
+                    faces,
+                    key=lambda f: ((f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1])) if hasattr(f, 'bbox') else 0,
+                    reverse=True
+                )
+            except Exception:
+                pass
 
         face = faces[0]
         kps = face.kps if hasattr(face, 'kps') else None

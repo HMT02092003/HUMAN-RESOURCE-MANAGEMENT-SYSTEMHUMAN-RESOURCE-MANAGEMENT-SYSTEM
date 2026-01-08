@@ -162,7 +162,8 @@ class FaceLivenessDetector:
             # Crop face nếu có bbox. Use scale factor 2.7 required by MiniFASNetV2.
             scale = 2.7
             if bbox is not None:
-                x1, y1, x2, y2 = bbox
+                # Ensure bbox are ints
+                x1, y1, x2, y2 = list(map(int, bbox))
                 w = x2 - x1
                 h = y2 - y1
                 cx = x1 + w // 2
@@ -186,6 +187,9 @@ class FaceLivenessDetector:
                 cy1 = max(0, ny1)
                 cx2 = min(face_image.shape[1], nx2)
                 cy2 = min(face_image.shape[0], ny2)
+
+                logger.debug(f"Liveness crop coords pre-pad: nx1={nx1},ny1={ny1},nx2={nx2},ny2={ny2}")
+                logger.debug(f"Clamped crop coords: cx1={cx1},cy1={cy1},cx2={cx2},cy2={cy2}, pads={(pad_left,pad_top,pad_right,pad_bottom)}")
 
                 face_crop = face_image[cy1:cy2, cx1:cx2]
 
@@ -231,6 +235,11 @@ class FaceLivenessDetector:
                 start_x = max(0, nx1 + pad_left)
                 start_y = max(0, ny1 + pad_top)
                 face_crop = padded[start_y:start_y + new_h, start_x:start_x + new_w]
+
+            # Validate crop
+            if face_crop is None or face_crop.size == 0:
+                logger.warning("Liveness crop is empty. Returning FAKE result to be safe.")
+                return LivenessResult(is_real=False, confidence=0.0, label="FAKE", message="Empty crop for liveness check")
 
             # Preprocess ảnh (ensure RGB conversion and resize to model input)
             input_tensor = self._preprocess(face_crop)

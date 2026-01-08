@@ -170,16 +170,24 @@ class FaceRecognizer:
                     success=False,
                     message="Không phát hiện khuôn mặt trong ảnh"
                 )
-
-            # Nếu có nhiều face, chỉ lấy face LỚN NHẤT (gần camera nhất)
+            # Nếu có nhiều face, log thông tin và chọn face LỚN NHẤT (gần camera nhất)
             if len(faces) > 1:
-                logger.info(f"Multiple faces detected: {len(faces)}, selecting largest face")
+                logger.info(f"Multiple faces detected: {len(faces)}")
+                # Log each bbox and its computed area for debugging
+                try:
+                    face_areas = []
+                    for i, f in enumerate(faces):
+                        x1, y1, x2, y2 = f.bbox.astype(int).tolist()
+                        area = (x2 - x1) * (y2 - y1)
+                        face_areas.append((i, x1, y1, x2, y2, area, float(getattr(f, 'det_score', 0.0))))
+                        logger.debug(f"  Face[{i}] bbox={(x1,y1,x2,y2)} area={area} score={getattr(f,'det_score',0.0):.3f}")
+                    # Sort faces by area desc to be explicit
+                    faces = sorted(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]), reverse=True)
+                except Exception:
+                    logger.exception("Failed to compute face areas; falling back to max selection")
 
-            # Chọn khuôn mặt có diện tích bbox LỚN NHẤT
-            target_face = max(
-                faces,
-                key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1])
-            )
+            # Chọn mặt có diện tích lớn nhất (deterministic after sort)
+            target_face = faces[0]
 
             face = target_face
             bbox = face.bbox.astype(int).tolist()

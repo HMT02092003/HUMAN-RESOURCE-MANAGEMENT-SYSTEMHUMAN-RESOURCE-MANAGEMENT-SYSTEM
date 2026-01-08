@@ -14,6 +14,18 @@ import { Platform } from 'react-native';
 class APIConfig {
   constructor() {
     this._baseURL = null;
+    this.initialized = false;
+  }
+
+  /**
+   * Initialize API Config (for compatibility with code that checks initialization)
+   */
+  async initialize() {
+    if (this.initialized) return;
+    // Trigger URL resolution
+    this.getGatewayURL();
+    this.initialized = true;
+    console.log('[APIConfig] Initialized successfully');
   }
 
   /**
@@ -58,6 +70,24 @@ class APIConfig {
     return `${base}${path}`;
   }
 }
+
+/**
+ * API Endpoints - Centralized endpoint paths
+ */
+export const API_ENDPOINTS = {
+  // Face Recognition endpoints (via /api/ai gateway -> AI service /api/v1/...)
+  REGISTER_FACE: '/api/ai/v1/face/register-face',
+  RECOGNIZE_FACE: '/api/ai/v1/face/recognize-face',
+  VIDEO_REGISTER_MULTI: '/api/ai/v1/batch/register-face-video-multi',
+  
+  // Attendance endpoints
+  CHECK_IN: '/api/attendance/check-in',
+  CHECK_OUT: '/api/attendance/check-out',
+  
+  // Auth endpoints
+  LOGIN: '/api/auth/login',
+  REFRESH_TOKEN: '/api/auth/refresh'
+};
 
 const apiConfig = new APIConfig();
 export default apiConfig;
