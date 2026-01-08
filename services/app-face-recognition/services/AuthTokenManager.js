@@ -2,20 +2,10 @@ import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 import { jwtDecode } from "jwt-decode";
 import "core-js/stable/atob"; // Polyfill để giải mã base64 trên Android
+import apiConfig from '../config/apiConfig';
 
 const ACCESS_KEY = 'accessToken';
 const REFRESH_KEY = 'refreshToken';
-
-async function getBaseUrl() {
-  const hostUri = Constants.expoConfig?.hostUri || Constants.linkingUri || null;
-  if (hostUri) {
-    const withoutProtocol = String(hostUri).replace(/^\w+:\/\//, '');
-    const hostPart = withoutProtocol.split('/')[0];
-    const host = hostPart.split(':')[0];
-    if (host) return `http://${host}:4000`;
-  }
-  return 'http://127.0.0.1:4000';
-}
 
 export async function saveTokens(accessToken, refreshToken) {
   try {
@@ -69,7 +59,7 @@ export async function refreshAccessToken() {
     const refreshToken = await getRefreshToken();
     if (!refreshToken) return null;
     
-    const base = await getBaseUrl();
+    const base = apiConfig.getGatewayURL();
     const res = await fetch(`${base}/api/auth/refresh-token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -95,7 +85,7 @@ export async function refreshAccessToken() {
 
 export async function loginAndSave(username, password) {
   try {
-    const base = await getBaseUrl();
+    const base = apiConfig.getGatewayURL();
     const res = await fetch(`${base}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },

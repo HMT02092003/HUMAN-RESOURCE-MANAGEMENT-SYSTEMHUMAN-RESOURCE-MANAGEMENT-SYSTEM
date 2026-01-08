@@ -1,42 +1,9 @@
-import Constants from 'expo-constants';
 import AuthTokenManager from './AuthTokenManager';
-
-// Heuristic to get LAN base URL from Expo metadata (no extra libs)
-function extractHost(input) {
-  if (!input || typeof input !== 'string') return null;
-  // Examples: "192.168.1.4:19000", "exp://192.168.1.4:19000", "http://192.168.1.4:19000"
-  const withoutProtocol = input.replace(/^\w+:\/\//, '');
-  const hostPart = withoutProtocol.split('/')[0];
-  const host = hostPart.split(':')[0];
-  return host || null;
-}
-
-async function resolveGatewayBaseUrl() {
-  const candidates = [
-    Constants.expoConfig?.hostUri,
-    Constants.linkingUri,
-    Constants.manifest?.hostUri,
-    Constants.manifest?.debuggerHost,
-  ].filter(Boolean);
-
-  for (const cand of candidates) {
-    const host = extractHost(cand);
-    if (host) return `http://${host}:4000`;
-  }
-
-  return 'http://127.0.0.1:4000';
-}
-
-async function getBaseUrl() {
-  if (!getBaseUrl.cached) {
-    getBaseUrl.cached = await resolveGatewayBaseUrl();
-  }
-  return getBaseUrl.cached;
-}
+import apiConfig from '../config/apiConfig';
 
 export async function testConnection() {
   try {
-    const base = await getBaseUrl();
+    const base = apiConfig.getGatewayURL();
     const res = await fetch(`${base}/gateway-health`, { method: 'GET' });
     return res.ok;
   } catch {
@@ -46,11 +13,18 @@ export async function testConnection() {
 
 // Expose gateway base URL resolver for other modules (e.g., camera preview)
 export async function getGatewayBaseUrl() {
-  return await getBaseUrl();
+  return apiConfig.getGatewayURL();
 }
 
 export async function sendImageForRecognition(imageUri, meta = {}) {
-  const base = await getBaseUrl();
+  const base = apiConfig.getGatewayURL();
+  
+  // Get Auth Token
+  let token = await AuthTokenManager.getAccessToken();
+  if (!token) {
+    token = await AuthTokenManager.refreshAccessToken();
+  }
+
   const form = new FormData();
   form.append('image', {
     uri: imageUri,
@@ -67,16 +41,36 @@ export async function sendImageForRecognition(imageUri, meta = {}) {
     }
   });
 
+  const headers = {
+    'Accept': 'application/json',
+    // NOTE: Let fetch set boundary for multipart
+  };
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   // Sử dụng endpoint multi-angle (tự động tìm vector khớp nhất trong 3 góc: CENTER/LEFT/RIGHT)
   // Gateway sẽ rewrite: /api/ai/v1/multi-angle/recognize-face -> /api/v1/multi-angle/recognize-face
-  const res = await fetch(`${base}/api/ai/v1/multi-angle/recognize-face`, {
+  let res = await fetch(`${base}/api/ai/v1/multi-angle/recognize-face`, {
     method: 'POST',
-    headers: {
-      'Accept': 'application/json',
-      // NOTE: Let fetch set boundary for multipart
-    },
+    headers: headers,
     body: form,
   });
+
+  // Handle 401 - Retry once with refresh
+  if (res.status === 401) {
+    console.log('AttendanceAPI: 401 on recognition, refreshing token...');
+    const newToken = await AuthTokenManager.refreshAccessToken();
+    if (newToken) {
+      headers['Authorization'] = `Bearer ${newToken}`;
+      res = await fetch(`${base}/api/ai/v1/multi-angle/recognize-face`, {
+        method: 'POST',
+        headers: headers,
+        body: form,
+      });
+    }
+  }
 
   let data;
   try {
@@ -94,7 +88,7 @@ export async function sendImageForRecognition(imageUri, meta = {}) {
 
 export async function submitAttendance(payload) {
   try {
-    const base = await getBaseUrl();
+    const base = apiConfig.getGatewayURL();
     // Build headers with token (from payload.token or AuthTokenManager)
     let authToken = payload?.token || null;
     if (!authToken) {

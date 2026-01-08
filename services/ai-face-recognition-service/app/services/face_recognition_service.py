@@ -163,26 +163,29 @@ class FaceRecognizer:
             # === STEP 1: DETECT FACE ===
             logger.info("🔍 Step 1: Detecting face...")
             faces = self.app.get(image)
-            
+
             if len(faces) == 0:
                 logger.warning("No face detected")
                 return RecognitionResult(
                     success=False,
                     message="Không phát hiện khuôn mặt trong ảnh"
                 )
-            
+
             # Nếu có nhiều face, chỉ lấy face LỚN NHẤT (gần camera nhất)
             if len(faces) > 1:
                 logger.info(f"Multiple faces detected: {len(faces)}, selecting largest face")
-                # Sắp xếp theo diện tích bbox giảm dần
-                faces = sorted(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]), reverse=True)
-            
-            # Lấy face lớn nhất
-            face = faces[0]
+
+            # Chọn khuôn mặt có diện tích bbox LỚN NHẤT
+            target_face = max(
+                faces,
+                key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1])
+            )
+
+            face = target_face
             bbox = face.bbox.astype(int).tolist()
             landmarks = face.kps.astype(int).tolist()
-            
-            logger.info(f"✅ Face detected: bbox={bbox}, confidence={face.det_score:.3f}")
+
+            logger.info(f"✅ Face detected (selected largest): bbox={bbox}, confidence={face.det_score:.3f}")
             
             # === STEP 2: QUALITY CHECK ===
             quality_result = None
