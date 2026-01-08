@@ -1,4 +1,3 @@
-import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 
 interface AuthenticatedRequest extends Request {
@@ -6,66 +5,61 @@ interface AuthenticatedRequest extends Request {
   user?: any;
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1';
-
+/**
+ * Simplified authentication middleware for services behind API Gateway.
+ * This middleware trusts the x-user-data header injected by the gateway.
+ * For internal service-to-service calls, it allows the request to pass through.
+ */
 export const authenticateToken = (
   req: AuthenticatedRequest, 
   res: Response, 
   next: NextFunction
 ): void => {
-  // Try multiple places for access token: Authorization header, cookie 'token', or query param 'access_token'
-  let rawToken: any = req.headers['authorization'];
-
-  if (!rawToken) {
-    // Try cookie header crude parse (in case cookie-parser is not installed)
-    const cookieHeader = req.headers['cookie'] as string | undefined;
-    if (cookieHeader) {
-      const match = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('token='));
-      if (match) {
-        rawToken = match.replace(/^token=/, '');
-      }
+  // Trust Gateway-injected header (for external requests through gateway)
+  // Gateway sends Base64-encoded JSON to avoid HTTP header character issues
+  const gatewayUserData = req.headers['x-user-data'];
+  if (gatewayUserData) {
+    try {
+      const decoded = Buffer.from(gatewayUserData as string, 'base64').toString('utf8');
+      const user = JSON.parse(decoded);
+      req.auth = user;
+      req.user = user;
+      return next();
+    } catch (e) {
+      console.error('[Auth Middleware] Failed to parse x-user-data', e);
     }
   }
 
-  // Also accept access_token query param for scripted calls
-  if (!rawToken && (req.query && (req.query.access_token || req.query.token))) {
-    rawToken = String(req.query.access_token || req.query.token);
+  // For internal service-to-service calls, check if it's from trusted internal network
+  // Allow requests from localhost or internal IPs to pass through
+  const clientIp = req.ip || req.connection.remoteAddress;
+  if (clientIp === '127.0.0.1' || clientIp === '::1' || clientIp?.startsWith('::ffff:127.0.0.1')) {
+    console.log('[Auth Middleware] Internal service call detected, allowing request');
+    return next();
   }
 
-  if (!rawToken) {
-    console.warn('[salary-service] authenticateToken: No Authorization header or token cookie present on request to', req.method, req.originalUrl);
-    res.status(401).json({ success: false, message: 'No token provided' });
-    return;
-  }
+  console.warn('[Auth Middleware] Missing Gateway Authentication from:', clientIp);
+  res.status(401).json({ success: false, message: 'Unauthorized: Missing Gateway Authentication' });
+};
 
-  try {
-    const tokenValue = (typeof rawToken === 'string' && rawToken.startsWith('Bearer ')) ? rawToken.substring(7) : String(rawToken);
-    // Trim whitespace/newlines that sometimes appear when tokens are transported via shells
-    const cleanToken = tokenValue.trim();
-    const decoded: any = jwt.verify(cleanToken, JWT_SECRET);
-    
-    if (!decoded || typeof decoded !== 'object') {
-      res.status(401).json({ success: false, message: 'Invalid access token' });
-      return;
+/**
+ * Optional: Middleware that allows unauthenticated requests (for public endpoints)
+ */
+export const optionalAuth = (
+  req: AuthenticatedRequest, 
+  res: Response, 
+  next: NextFunction
+): void => {
+  const gatewayUserData = req.headers['x-user-data'];
+  if (gatewayUserData) {
+    try {
+      const decoded = Buffer.from(gatewayUserData as string, 'base64').toString('utf8');
+      const user = JSON.parse(decoded);
+      req.auth = user;
+      req.user = user;
+    } catch (e) {
+      console.error('[Optional Auth] Failed to parse x-user-data', e);
     }
-
-    const authData = {
-      id: typeof decoded.sub === 'number' ? decoded.sub : Number(decoded.sub),
-      username: decoded.username as string,
-      permissions: decoded.permissions as any[],
-      roleId: decoded.roleId as number
-    };
-
-    req.auth = authData;
-    req.user = authData;
-    next();
-  } catch (error: any) {
-    if (error && error.name === 'TokenExpiredError') {
-      console.warn('[salary-service] authenticateToken: Token expired for request to', req.method, req.originalUrl);
-      res.status(401).json({ success: false, message: 'Access token expired, please refresh' });
-      return;
-    }
-    console.warn('[salary-service] authenticateToken: Invalid token for request to', req.method, req.originalUrl, 'error:', error?.message || error);
-    res.status(401).json({ success: false, message: 'Unauthorized: Invalid token' });
   }
+  next();
 };

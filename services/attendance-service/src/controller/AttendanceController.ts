@@ -9,6 +9,7 @@ import MonthlySummaryModel from '@/Models/MonthlySummaryModel';
 import SalaryService from '@/services/SalaryService';
 import { MonthlyReportService } from '@/services/MonthlyReportService';
 import { getDecodedToken } from '@/utils/decode-token';
+import { getUserData } from '@/utils/getUserData';
 import TimeAttendanceModel from '@/Models/TimeAttendanceModel';
 import AttendanceCalculationService from '@/services/attendance/AttendanceCalculationService';
 import { getShiftForUserAndDate } from '@/services/attendance/ShiftHelper';
@@ -68,8 +69,9 @@ export const getDailyAttendanceForExport = async (req: Request, res: Response) =
     }
 
     // Check scope của người dùng để lấy danh sách user IDs có quyền xem
+    const userData = getUserData(req);
     const CheckScopeService = (await import('../services/CheckScopeService')).default;
-    const scopeResult = await CheckScopeService.checkUserScope('users', token);
+    const scopeResult = await CheckScopeService.checkUserScope('users', token, userData);
     
     if (!scopeResult.hasAccess) {
       return res.status(403).json({
@@ -240,7 +242,8 @@ export const getUserMonthlyFull = async (req: Request, res: Response) => {
       const businessTripDays = Number(db.businessTripDays || 0);
       const unauthorizedAbsenceDays = Number(db.unauthorizedAbsenceDays ?? Math.max(0, totalScheduledDays - (presentDays + approvedLeaveDays + businessTripDays)) );
 
-      const salary = await SalaryService.fetchSalary(parseInt(userId), token);
+      const userData = getUserData(req);
+      const salary = await SalaryService.fetchSalary(parseInt(userId), token, userData);
       const baseSalary = salary?.baseSalary ? Number(salary.baseSalary) : 0;
       const workingDaysInMonth = Number(db.totalScheduledDays || totalScheduledDays || 0);
       // Calculate penalty per day as daily salary (rounded to integer, no decimals)
@@ -275,7 +278,8 @@ export const getUserMonthlyFull = async (req: Request, res: Response) => {
     }
 
     // Fallback: delegate to existing service to compute on the fly
-    const payload = await AttendanceService.getUserMonthlyFull(parseInt(userId), monthStr, token);
+    const userData = getUserData(req);
+    const payload = await AttendanceService.getUserMonthlyFull(parseInt(userId), monthStr, token, userData);
 
     if (!payload) return res.status(404).json({ success: false, message: 'Không tìm thấy dữ liệu chấm công' });
     return res.status(200).json(payload);
@@ -314,7 +318,8 @@ export const recordAttendance = async (req: Request, res: Response) => {
 
     console.log('🎫 Token for attendance record:', token ? 'Found' : 'Not found');
 
-    const result = await AttendanceService.recordAttendance(userId, time, token);
+    const userData = getUserData(req);
+    const result = await AttendanceService.recordAttendance(userId, time, token, userData);
 
     res.json({
       success: true,
@@ -412,8 +417,9 @@ export const getMonthlySummariesForExport = async (req: Request, res: Response) 
     }
 
     // Check scope của người dùng
+    const userData = getUserData(req);
     const CheckScopeService = (await import('../services/CheckScopeService')).default;
-    const scopeResult = await CheckScopeService.checkUserScope('users', token);
+    const scopeResult = await CheckScopeService.checkUserScope('users', token, userData);
     
     if (!scopeResult.hasAccess) {
       return res.status(403).json({
@@ -618,7 +624,8 @@ export const calculateAndSaveMonthly = async (req: Request, res: Response) => {
     const { year, month } = req.query;
     if (!userId || !year || !month) return res.status(400).json({ success: false, message: 'userId, year and month are required' });
     const dateStr = `${String(year)}-${String(month).padStart(2,'0')}-01`;
-    await MonthlyReportService.calculateAndSaveMonthlyAttendance(Number(userId), dateStr);
+    const userData = getUserData(req);
+    await MonthlyReportService.calculateAndSaveMonthlyAttendance(Number(userId), dateStr, userData);
     return res.status(200).json({ success: true, message: 'Monthly attendance calculated and saved' });
   } catch (error: any) {
     console.error('Error in calculateAndSaveMonthly:', error);
@@ -663,6 +670,8 @@ export const bulkCalculateMonthly = async (req: Request, res: Response) => {
       errors: [] as any[]
     };
 
+    const userData = getUserData(req);
+
     // Process each user sequentially to avoid overwhelming the database
     for (let i = 0; i < userIds.length; i++) {
       const userId = Number(userIds[i]);
@@ -670,7 +679,7 @@ export const bulkCalculateMonthly = async (req: Request, res: Response) => {
       try {
         console.log(`\n   [${i + 1}/${userIds.length}] Processing user ${userId}...`);
         
-        const result = await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, dateStr);
+        const result = await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, dateStr, userData);
         
         if (result && result.success !== false) {
           results.success++;
@@ -854,9 +863,10 @@ export const updateForgotCheck = async (req: Request, res: Response) => {
     // ============================================
     // ✨ TÍNH TOÁN LẠI CÔNG CHO THÁNG
     // ============================================
+    const userData = getUserData(req);
     try {
       console.log(`🔄 [updateForgotCheck] Triggering monthly calculation...`);
-      const monthlyResult = await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, forgotDate);
+      const monthlyResult = await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, forgotDate, userData);
       console.log(`✅ [updateForgotCheck] Monthly calculation result:`, monthlyResult);
     } catch (monthlyErr: any) {
       console.error(`❌ [updateForgotCheck] Failed to update monthly summary:`, monthlyErr);
@@ -914,7 +924,7 @@ export const getTimeAttendancesController = async (req: Request, res: Response) 
     // Apply filters
     // Date filter
     if (req.query['date']) {
-      query = query.where('time_attendances.date', req.query['date']);
+      query = query.where('date', String(req.query['date']));
     }
     if (req.query['month']) {
       const monthStr = String(req.query['month']);
@@ -923,7 +933,7 @@ export const getTimeAttendancesController = async (req: Request, res: Response) 
     
     // Status filter
     if (req.query['status']) {
-      query = query.where('time_attendances.status', req.query['status']);
+      query = query.where('status', String(req.query['status']));
     }
 
     // UserId filter (for specific user)

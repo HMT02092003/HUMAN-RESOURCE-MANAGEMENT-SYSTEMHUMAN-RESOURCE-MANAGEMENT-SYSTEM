@@ -7,6 +7,7 @@ import AuthService from '../service/AuthService.js';
 import CheckScopeService from '../service/CheckScopeService.js';
 import { deleteFiles } from '../middleware/upload.js';
 import axios from 'axios';
+import { getUserData, getUserId } from '../utils/getUserData.js';
 
 // Extend dayjs với timezone plugin
 dayjs.extend(utc);
@@ -23,7 +24,7 @@ export class ApplicationController {
   static async create(req, res) {
     try {
       const { type, data } = req.body;
-      const userId = req.user?.id;
+      const userId = getUserId(req);
 
       if (!userId) {
         return res.status(401).json({
@@ -110,7 +111,7 @@ export class ApplicationController {
         // Column-specific search
         'userInfo.fullName': searchEmployeeName
       } = req.query;
-      const currentUserId = req.user?.id;
+      const currentUserId = getUserId(req);
 
       if (!currentUserId) {
         return res.status(401).json({
@@ -119,25 +120,44 @@ export class ApplicationController {
         });
       }
 
-      // Lấy token từ request để gọi sang Auth Service
+      // Lấy token từ request để gọi sang Auth Service; fallback to gateway x-user-data
       const token = req.cookies.token ||
         (req.headers.authorization && req.headers.authorization.split(' ')[1]);
 
-      if (!token) {
+      const userData = getUserData(req);
+
+      if (!token && !userData) {
         return res.status(401).json({
           success: false,
-          message: 'Access token required'
+          message: 'Access token or user data required'
         });
       }
 
       // Check scope quyền quản lý đơn từ từ Auth Service (use permission key)
       let allowedUserIds = [];
+      let scopeResult = null;
       try {
-        const scopeResult = await CheckScopeService.checkUserScope('manage_applications', token);
-        allowedUserIds = scopeResult.userIds || scopeResult.userIds || [];
+        scopeResult = await CheckScopeService.checkUserScope('manage_applications', token, userData);
+        allowedUserIds = scopeResult.userIds || [];
       } catch (err) {
         console.error('Error checking user scope from Auth Service:', err?.message || err);
         allowedUserIds = [];
+      }
+
+      // If auth service says no access or returned no users, return empty set
+      if (!scopeResult || !scopeResult.hasAccess || !allowedUserIds || allowedUserIds.length === 0) {
+        return res.json({
+          success: true,
+          data: [],
+          pagination: {
+            page: parseInt(page),
+            pageSize: parseInt(limit),
+            total: 0,
+            totalPages: 0
+          },
+          total: 0,
+          timestamp: dayjs().format()
+        });
       }
 
       // If searching by employee name, find matching users first
@@ -306,13 +326,13 @@ export class ApplicationController {
   static async getMyApplications(req, res) {
     try {
       console.log('🔍 getMyApplications called');
-      console.log('🔍 req.user:', req.user);
+      console.log('🔍 getUserData(req):', getUserData(req));
       console.log('🔍 req.query:', req.query);
       
       const { page = 1, pageSize = 10, status, userId: queryUserId, year, month } = req.query;
       
-      // Ưu tiên userId từ query (cho inter-service call), fallback về req.user.id
-      const userId = queryUserId ? parseInt(queryUserId) : req.user?.id;
+      // Ưu tiên userId từ query (cho inter-service call), fallback về getUserData(req).id
+      const userId = queryUserId ? parseInt(queryUserId) : getUserId(req);
 
       console.log('🔍 userId:', userId);
 
@@ -354,7 +374,7 @@ export class ApplicationController {
       }
 
       // Lấy thông tin user từ Auth Service
-      const usersInfo = await AuthService.getUsersByIds([userId]);
+      const usersInfo = await AuthService.getUsersByIds([userId], getUserData(req));
 
       // Lấy danh sách unique approvedBy IDs
       let uniqueApprovedIds = [];
@@ -364,7 +384,7 @@ export class ApplicationController {
 
       // Gọi Auth Service để lấy thông tin người duyệt
       const approvedUsersInfo = uniqueApprovedIds.length > 0
-        ? await AuthService.getUsersByIds(uniqueApprovedIds)
+        ? await AuthService.getUsersByIds(uniqueApprovedIds, getUserData(req))
         : [];
 
       let userInfo = {
@@ -456,7 +476,7 @@ export class ApplicationController {
         'approvedByInfo.fullName': searchApproverName
       } = req.query;
 
-      const userId = req.user?.id;
+      const userId = getUserId(req);
       if (!userId) {
         return res.status(401).json({ success: false, message: 'Người dùng không được xác thực' });
       }
@@ -561,7 +581,7 @@ export class ApplicationController {
           }
 
           const idsArray = Array.from(userIdsToResolve);
-          const usersInfo = idsArray.length > 0 ? await AuthService.getUsersByIds(idsArray) : [];
+          const usersInfo = idsArray.length > 0 ? await AuthService.getUsersByIds(idsArray, getUserData(req)) : [];
           const usersMap = {};
           usersInfo.forEach(u => { usersMap[u.id] = u; });
 
@@ -593,9 +613,9 @@ export class ApplicationController {
       }
 
       // Resolve current user info and approver info for the returned page
-      const usersInfo = await AuthService.getUsersByIds([userId]);
+      const usersInfo = await AuthService.getUsersByIds([userId], getUserData(req));
       const uniqueApprovedIds = [...new Set(applications.filter(app => app.approvedBy != null).map(app => app.approvedBy))];
-      const approvedUsersInfo = uniqueApprovedIds.length > 0 ? await AuthService.getUsersByIds(uniqueApprovedIds) : [];
+      const approvedUsersInfo = uniqueApprovedIds.length > 0 ? await AuthService.getUsersByIds(uniqueApprovedIds, getUserData(req)) : [];
 
       let userInfo = { id: userId, username: 'Unknown', fullName: 'Unknown User', email: '', identificationPhoto: null, department: null, chevron: null };
       if (usersInfo && usersInfo.length > 0) {
@@ -620,7 +640,7 @@ export class ApplicationController {
    */
   static async getAllMyApplicationsList(req, res) {
     try {
-      const userId = req.user?.id;
+      const userId = getUserId(req);
 
       if (!userId) {
         return res.status(401).json({
@@ -802,7 +822,7 @@ export class ApplicationController {
     try {
       // Chỉ lấy page và pageSize từ query parameters
       const { page = 1, pageSize = 10 } = req.query;
-      const currentUserId = req.user?.id;
+      const currentUserId = getUserId(req);
 
       if (!currentUserId) {
         return res.status(401).json({
@@ -811,25 +831,44 @@ export class ApplicationController {
         });
       }
 
-      // Lấy token từ request để gọi sang Auth Service
+      // Lấy token từ request để gọi sang Auth Service; fallback to gateway x-user-data
       const token = req.cookies.token ||
         (req.headers.authorization && req.headers.authorization.split(' ')[1]);
 
-      if (!token) {
+      const userData = getUserData(req);
+
+      if (!token && !userData) {
         return res.status(401).json({
           success: false,
-          message: 'Access token required'
+          message: 'Access token or user data required'
         });
       }
 
       // Check scope quyền quản lý đơn từ từ Auth Service (use permission key)
       let allowedUserIds = [];
+      let scopeResult = null;
       try {
-        const scopeResult = await CheckScopeService.checkUserScope('manage_applications', token);
+        scopeResult = await CheckScopeService.checkUserScope('manage_applications', token, userData);
         allowedUserIds = scopeResult.userIds || [];
       } catch (err) {
         console.error('Error checking user scope from Auth Service:', err?.message || err);
         allowedUserIds = [];
+      }
+
+      // If auth service says no access or returned no users, return empty set
+      if (!scopeResult || !scopeResult.hasAccess || !allowedUserIds || allowedUserIds.length === 0) {
+        return res.json({
+          success: true,
+          data: [],
+          pagination: {
+            page: parseInt(page),
+            pageSize: parseInt(pageSize),
+            total: 0,
+            totalPages: 0
+          },
+          total: 0,
+          timestamp: dayjs().format()
+        });
       }
 
       const pageNum = parseInt(page);
@@ -953,8 +992,8 @@ export class ApplicationController {
       });
 
       // Lấy thông tin user từ Auth Service
-      const usersInfo = await AuthService.getUsersByIds([application.userId]);
-      const approvedUsersInfo = application.approvedBy ? await AuthService.getUsersByIds([application.approvedBy]) : [];
+      const usersInfo = await AuthService.getUsersByIds([application.userId], getUserData(req));
+      const approvedUsersInfo = application.approvedBy ? await AuthService.getUsersByIds([application.approvedBy], getUserData(req)) : [];
 
       let userInfo = {
         id: application.userId,
@@ -1016,7 +1055,7 @@ export class ApplicationController {
     try {
       const { id } = req.params;
       const { data } = req.body;
-      const userId = req.user?.id;
+      const userId = getUserId(req);
 
       if (!userId) {
         return res.status(401).json({
@@ -1051,7 +1090,7 @@ export class ApplicationController {
   static async delete(req, res) {
     try {
       const { id } = req.params;
-      const userId = req.user?.id;
+      const userId = getUserId(req);
 
       if (!userId) {
         return res.status(401).json({
@@ -1084,7 +1123,7 @@ export class ApplicationController {
     try {
       const { id } = req.params;
       const { note } = req.body;
-      const approvedBy = req.user?.id;
+      const approvedBy = getUserId(req);
 
       if (!approvedBy) {
         return res.status(401).json({
@@ -1260,7 +1299,7 @@ export class ApplicationController {
   static async bulkApprove(req, res) {
     try {
       const { ids } = req.body;
-      const approvedBy = req.user?.id;
+      const approvedBy = getUserId(req);
 
       if (!approvedBy) {
         return res.status(401).json({
@@ -1325,7 +1364,7 @@ export class ApplicationController {
 
       const { id } = req.params;
       const { rejectionReason } = req.body;
-      const approvedBy = req.user?.id;
+      const approvedBy = getUserId(req);
 
       if (!approvedBy) {
         return res.status(401).json({
@@ -1361,7 +1400,7 @@ export class ApplicationController {
   static async getStats(req, res) {
     try {
       const { userId } = req.query;
-      const currentUserId = req.user?.id;
+      const currentUserId = getUserId(req);
 
       let targetUserId = null;
       if (userId) {
@@ -1417,9 +1456,9 @@ export class ApplicationController {
       });
 
       // Gọi Auth Service để lấy thông tin users
-      const usersInfo = await AuthService.getUsersByIds(uniqueUserIds);
+      const usersInfo = await AuthService.getUsersByIds(uniqueUserIds, getUserData(req));
       const approvedUsersInfo = uniqueApprovedIds.length > 0
-        ? await AuthService.getUsersByIds(uniqueApprovedIds)
+        ? await AuthService.getUsersByIds(uniqueApprovedIds, getUserData(req))
         : [];
 
       // Tạo map để dễ dàng lookup user info
@@ -1481,7 +1520,7 @@ export class ApplicationController {
   static async delete(req, res) {
     try {
       const { id } = req.params;
-      const userId = req.user?.id;
+      const userId = getUserId(req);
 
       if (!userId) {
         return res.status(401).json({
@@ -1533,7 +1572,7 @@ export class ApplicationController {
   static async bulkDelete(req, res) {
     try {
       const { ids } = req.body;
-      const userId = req.user?.id;
+      const userId = getUserId(req);
 
       if (!userId) {
         return res.status(401).json({

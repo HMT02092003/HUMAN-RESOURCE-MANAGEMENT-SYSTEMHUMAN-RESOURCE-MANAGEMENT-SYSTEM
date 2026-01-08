@@ -1,19 +1,20 @@
 import axios from 'axios';
 
-const EMPLOYEE_SERVICE_URL = process.env.EMPLOYEE_SERVICE_URL || 'http://localhost:4002';
+const EMPLOYEE_SERVICE_URL = process.env.EMPLOYEE_SERVICE_URL || 'http://127.0.0.1:4002';
 const API_GATEWAY_URL = `http://localhost:${process.env.API_GATEWAY_PORT || 4000}`;
 
 class EmployeeService {
   /**
    * Get department by ID
    */
-  static async getDepartmentById(departmentId: number, authToken?: string): Promise<any> {
+  static async getDepartmentById(departmentId: number, authToken?: string, userData?: any): Promise<any> {
     try {
       const headers: any = { 'Content-Type': 'application/json' };
       if (authToken) headers['Authorization'] = authToken;
+      if (userData) headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
 
       const response = await axios.get(
-        `${API_GATEWAY_URL}/api/employee/departments/${departmentId}`,
+        `${EMPLOYEE_SERVICE_URL}/api/departments/${departmentId}`,
         { headers }
       );
       return response.data?.data || response.data;
@@ -26,14 +27,15 @@ class EmployeeService {
   /**
    * Get chevron detail by ID
    */
-  static async getChevronDetail(chevronId: number, authToken?: string): Promise<any> {
+  static async getChevronDetail(chevronId: number, authToken?: string, userData?: any): Promise<any> {
     try {
       const headers: any = { 'Content-Type': 'application/json' };
       if (authToken) headers['Authorization'] = authToken;
+      if (userData) headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
 
       // ✨ Employee service uses POST /getChevronDetail with body { id }
       const response = await axios.post(
-        `${API_GATEWAY_URL}/api/employee/getChevronDetail`,
+        `${EMPLOYEE_SERVICE_URL}/api/getChevronDetail`,
         { id: chevronId },
         { headers }
       );
@@ -47,14 +49,15 @@ class EmployeeService {
   /**
    * Get contract type by ID
    */
-  static async getContractTypeById(contractTypeId: number, authToken?: string): Promise<any> {
+  static async getContractTypeById(contractTypeId: number, authToken?: string, userData?: any): Promise<any> {
     try {
       const headers: any = { 'Content-Type': 'application/json' };
       if (authToken) headers['Authorization'] = authToken;
+      if (userData) headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
 
       // ✨ Employee service uses /contractTypes/:id
       const response = await axios.get(
-        `${API_GATEWAY_URL}/api/employee/contractTypes/${contractTypeId}`,
+        `${EMPLOYEE_SERVICE_URL}/api/contractTypes/${contractTypeId}`,
         { headers }
       );
       return response.data?.data || response.data;
@@ -67,13 +70,14 @@ class EmployeeService {
   /**
    * Get contracts by user ID
    */
-  static async getContractsByUserId(userId: number, authToken?: string): Promise<any[]> {
+  static async getContractsByUserId(userId: number, authToken?: string, userData?: any): Promise<any[]> {
     try {
       const headers: any = { 'Content-Type': 'application/json' };
       if (authToken) headers['Authorization'] = authToken;
+      if (userData) headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
 
       const response = await axios.get(
-        `${API_GATEWAY_URL}/api/employee/contracts/user/${userId}`,
+        `${EMPLOYEE_SERVICE_URL}/api/contracts/user/${userId}`,
         { headers }
       );
       return response.data?.data || response.data || [];
@@ -86,20 +90,24 @@ class EmployeeService {
   /**
    * Create contract for user
    */
-  static async createContract(userId: number, contractData: any, authToken?: string): Promise<any> {
+  static async createContract(userId: number, contractData: any, authToken?: string, userData?: any): Promise<any> {
     try {
       const headers: any = { 'Content-Type': 'application/json' };
       if (authToken) headers['Authorization'] = authToken;
+      if (userData) headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
 
-      // ✨ Employee service uses POST /users/:userId/contracts
+      // Prefer direct employee service URL to avoid gateway routing issues in internal service-to-service calls
+      const target = EMPLOYEE_SERVICE_URL || API_GATEWAY_URL;
+
+      // Employee service expects POST /api/users/:userId/contracts (router mounted at /api)
       const response = await axios.post(
-        `${API_GATEWAY_URL}/api/employee/users/${userId}/contracts`,
+        `${target}/api/users/${userId}/contracts`,
         contractData,
         { headers }
       );
       return response.data;
     } catch (error: any) {
-      console.error(`❌ [EmployeeService] Failed to create contract for user ${userId}:`, error.message);
+      console.error(`❌ [EmployeeService] Failed to create contract for user ${userId}:`, error.response?.status, error.message);
       throw error;
     }
   }

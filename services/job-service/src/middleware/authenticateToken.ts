@@ -1,4 +1,3 @@
-import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 
 interface AuthenticatedRequest extends Request {
@@ -6,52 +5,61 @@ interface AuthenticatedRequest extends Request {
   user?: any;
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1';
-
+/**
+ * Simplified authentication middleware for services behind API Gateway.
+ * This middleware trusts the x-user-data header injected by the gateway.
+ * For internal service-to-service calls, it allows the request to pass through.
+ */
 export const authenticateToken = (
   req: AuthenticatedRequest, 
   res: Response, 
   next: NextFunction
 ): void => {
-  // Support both 'authorization' and 'Authorization' headers
-  const token = req.headers['authorization'] || req.headers['Authorization'] as string;
-  
-  console.log('🔐 [Job Auth] Authorization header:', token ? `Bearer ${token.substring(7, 20)}...` : 'NOT FOUND');
-  
-  if (!token) {
-    console.log('❌ [Job Auth] No token provided');
-    res.status(401).json({ success: false, message: 'No token provided' });
-    return;
+  // Trust Gateway-injected header (for external requests through gateway)
+  // Gateway sends Base64-encoded JSON to avoid HTTP header character issues
+  const gatewayUserData = req.headers['x-user-data'];
+  if (gatewayUserData) {
+    try {
+      const decoded = Buffer.from(gatewayUserData as string, 'base64').toString('utf8');
+      const user = JSON.parse(decoded);
+      req.auth = user;
+      req.user = user;
+      return next();
+    } catch (e) {
+      console.error('[Auth Middleware] Failed to parse x-user-data', e);
+    }
   }
 
-  try {
-    const tokenValue = token.startsWith('Bearer ') ? token.substring(7) : token;
-    console.log('🔐 [Job Auth] Verifying token...');
-    const decoded: any = jwt.verify(tokenValue, JWT_SECRET);
-    console.log('✅ [Job Auth] Token decoded:', { sub: decoded.sub, username: decoded.username });
-    
-    if (!decoded || typeof decoded !== 'object') {
-      console.log('❌ [Job Auth] Invalid token structure');
-      res.status(401).json({ success: false, message: 'Invalid access token' });
-      return;
-    }
-
-    const authData = {
-      id: typeof decoded.sub === 'number' ? decoded.sub : Number(decoded.sub),
-      username: decoded.username as string,
-      permissions: decoded.permissions as any[],
-      roleId: decoded.roleId as number
-    };
-
-    req.auth = authData;
-    req.user = authData;
-    next();
-  } catch (error: any) {
-    console.log('❌ [Job Auth] Error:', error.name, error.message);
-    if (error.name === 'TokenExpiredError') {
-      res.status(401).json({ success: false, message: 'Access token expired, please refresh' });
-      return;
-    }
-    res.status(401).json({ success: false, message: 'Unauthorized: Invalid token' });
+  // For internal service-to-service calls, check if it's from trusted internal network
+  // Allow requests from localhost or internal IPs to pass through
+  const clientIp = req.ip || req.connection.remoteAddress;
+  if (clientIp === '127.0.0.1' || clientIp === '::1' || clientIp?.startsWith('::ffff:127.0.0.1')) {
+    console.log('[Auth Middleware] Internal service call detected, allowing request');
+    return next();
   }
+
+  console.warn('[Auth Middleware] Missing Gateway Authentication from:', clientIp);
+  res.status(401).json({ success: false, message: 'Unauthorized: Missing Gateway Authentication' });
+};
+
+/**
+ * Optional: Middleware that allows unauthenticated requests (for public endpoints)
+ */
+export const optionalAuth = (
+  req: AuthenticatedRequest, 
+  res: Response, 
+  next: NextFunction
+): void => {
+  const gatewayUserData = req.headers['x-user-data'];
+  if (gatewayUserData) {
+    try {
+      const decoded = Buffer.from(gatewayUserData as string, 'base64').toString('utf8');
+      const user = JSON.parse(decoded);
+      req.auth = user;
+      req.user = user;
+    } catch (e) {
+      console.error('[Optional Auth] Failed to parse x-user-data', e);
+    }
+  }
+  next();
 };

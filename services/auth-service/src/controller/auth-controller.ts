@@ -78,10 +78,13 @@ export const registerHandler = async (req: Request, res: Response) => {
 export const loginHandler = async (req: Request, res: Response) => {
   try {
     console.log('loginHandler called, body:', req.body);
-    const { username, password } = req.body;
+    const { username, email, password } = req.body;
 
-    // Kiểm tra thông tin đăng nhập
-    const user = await UserModel.query().findOne({ username });
+    // Kiểm tra thông tin đăng nhập - support both username and email
+    const user = await UserModel.query().findOne({ 
+      ...(username && { username }), 
+      ...(email && { email }) 
+    });
     if (!user) {
       return res.status(400).json({ error: 'Tài khoản không tồn tại trong hệ thống' });
     }
@@ -422,37 +425,18 @@ export const resetPasswordController = async (req: Request, res: Response) => {
 };
 
 export const authenticateToken = (req: Request, res: Response, next: Function): void => {
-  const token =
-    req.cookies.token ||
-    (req.headers.authorization && req.headers.authorization.split(' ')[1]);
-
-  if (!token) {
-    res.status(401).json({ message: 'Access token required' });
-    return; // Không trả về giá trị, chỉ kết thúc hàm
+  // Optimized: Trust Gateway-injected header (Base64-encoded JSON)
+  const gatewayUserData = req.headers['x-user-data'];
+  if (gatewayUserData) {
+    try {
+      const decoded = Buffer.from(gatewayUserData as string, 'base64').toString('utf8');
+      const user = JSON.parse(decoded);
+      req.auth = user;
+      return next();
+    } catch (e) {
+      console.error('Failed to parse x-user-data', e);
+    }
   }
 
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    if (!decoded || typeof decoded !== 'object') {
-      res.status(401).json({ message: 'Invalid access token' });
-      return; // Không trả về giá trị
-    }
-
-    // Thêm thông tin user vào request
-    req.auth = {
-      id: typeof decoded.sub === 'number' ? decoded.sub : Number(decoded.sub),
-      username: decoded.username as string,
-      permissions: decoded.permissions as any[],
-      roleId: decoded.roleId as number
-    };
-
-    next(); // Gọi next() mà không trả về giá trị
-  } catch (error: any) {
-    if (error.name === 'TokenExpiredError') {
-      res.status(401).json({ message: 'Access token expired, please refresh' });
-      return; // Không trả về giá trị
-    }
-    res.status(403).json({ message: 'Forbidden: Invalid token' });
-    return; // Không trả về giá trị
-  }
+  res.status(401).json({ message: 'Unauthorized: Missing Gateway Authentication' });
 };

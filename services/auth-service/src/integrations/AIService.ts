@@ -8,15 +8,16 @@ class AIService {
   /**
    * Register face with AI service
    */
-  static async registerFace(formData: FormData, authToken?: string): Promise<any> {
+  static async registerFace(formData: FormData, authToken?: string, userData?: any): Promise<any> {
     try {
       const headers: any = {
         ...formData.getHeaders(),
       };
       if (authToken) headers['Authorization'] = authToken;
+      if (userData) headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
 
       const response = await axios.post(
-        `${API_GATEWAY_URL}/api/ai/register-face`,
+        `${AI_SERVICE_URL}/api/register-face`,
         formData,
         { headers, timeout: 30000 }
       );
@@ -30,15 +31,16 @@ class AIService {
   /**
    * Verify face with AI service
    */
-  static async verifyFace(formData: FormData, authToken?: string): Promise<any> {
+  static async verifyFace(formData: FormData, authToken?: string, userData?: any): Promise<any> {
     try {
       const headers: any = {
         ...formData.getHeaders(),
       };
       if (authToken) headers['Authorization'] = authToken;
+      if (userData) headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
 
       const response = await axios.post(
-        `${API_GATEWAY_URL}/api/ai/verify-face`,
+        `${AI_SERVICE_URL}/api/verify-face`,
         formData,
         { headers, timeout: 30000 }
       );

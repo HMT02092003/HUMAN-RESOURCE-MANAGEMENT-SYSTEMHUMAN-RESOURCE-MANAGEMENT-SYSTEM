@@ -14,10 +14,14 @@ export class SalaryService {
    * Fetch salary information from salary-service
    * This service now stores employee_salary_profiles with historical tracking
    */
-  static async fetchSalary(userId: number, token?: string): Promise<SalaryInfo | null> {
-    const apiGatewayUrl = `http://localhost:${API_GATEWAY_PORT}`;
+  static async fetchSalary(userId: number, token?: string, userData?: any): Promise<SalaryInfo | null> {
+    const apiGatewayUrl = `http://127.0.0.1:${API_GATEWAY_PORT}`;
     const headers: any = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (userData) {
+      headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+      headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
+    }
 
     // Try salary service via API Gateway first (primary source)
     try {
@@ -44,9 +48,17 @@ export class SalaryService {
     // Try direct salary service call (internal)
     try {
       console.log(`🔍 [SalaryService] Trying direct salary-service call for user ${userId}`);
+      const directHeaders: any = {};
+      if (userData) {
+        directHeaders['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+        directHeaders['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
+      }
       const resp = await axios.get(
-        `http://localhost:${SALARY_SERVICE_PORT}/api/users/${userId}/salary`,
-        { timeout: 4000 }
+        `http://127.0.0.1:${SALARY_SERVICE_PORT}/api/users/${userId}/salary`,
+        { 
+          headers: directHeaders,
+          timeout: 4000 
+        }
       );
       
       if (resp.data) {

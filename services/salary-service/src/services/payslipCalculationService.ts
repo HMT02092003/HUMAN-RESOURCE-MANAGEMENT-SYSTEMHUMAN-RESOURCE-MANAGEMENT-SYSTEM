@@ -3,8 +3,8 @@ import MonthlyPayslip from '../Model/MonthlyPayslip';
 import EmployeeSalaryProfile from '../Model/EmployeeSalaryProfile';
 import EmployeeSalaryProfileAllowance from '../Model/EmployeeSalaryProfileAllowance';
 import SettingsService from './SettingsService';
-
-const apiGateway = process.env.API_GATEWAY_URL || `http://localhost:${process.env.API_GATEWAY_PORT || 4000}`;
+import AttendanceService from '../integrations/AttendanceService';
+import AuthService from '../integrations/AuthService';
 
 export async function calculateAndInsertPayslipsForMonth(monthStr: string, options?: { authToken?: string }) {
   if (!monthStr || !/^\d{4}-\d{2}$/.test(monthStr)) {
@@ -14,21 +14,41 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
   const [year, month] = monthStr.split('-').map(Number);
 
   // Lấy dữ liệu attendance đã được duyệt (isApproved: true)
-  const axiosConfigAny: any = { params: { month: monthStr, isApproved: true, page: 0, pageSize: 10000 } };
-  if (options?.authToken) axiosConfigAny.headers = { Authorization: `Bearer ${options.authToken}` };
-  const resp = await axios.get(`${apiGateway}/api/attendance/monthly-attendance/by-month`, axiosConfigAny);
+  let resp: any;
+  try {
+    resp = await AttendanceService.getMonthlyAttendanceByMonth(year, month, options?.authToken);
+  } catch (err: any) {
+    console.error('[salary-service] Failed to fetch monthly attendance:', err?.response?.status || err.message, err?.response?.data || 'no response body');
+    throw new Error(`Failed to fetch monthly attendance: ${err?.response?.status || err.message}`);
+  }
 
-  if (!resp.data || !resp.data.data) {
-    return { 
-      success: false, 
-      inserted: 0, 
+  // Normalize response: AttendanceService may return multiple shapes
+  // Possible shapes:
+  // 1) axios response: { data: { success: true, data: { results: [...], total } } }
+  // 2) already-unwrapped: { results: [...], total }
+  // 3) array of records
+  let body: any = resp;
+  if (resp && resp.data) body = resp.data;
+
+  let payload: any;
+  if (body && body.data) {
+    payload = body.data; // case 1
+  } else if (body && body.results) {
+    payload = body; // case 2
+  } else if (Array.isArray(body)) {
+    payload = { results: body, total: body.length }; // case 3
+  }
+
+  if (!payload || (!Array.isArray(payload.results) && !Array.isArray(payload))) {
+    console.error('[salary-service] Unexpected attendance response shape:', JSON.stringify(body).slice(0, 2000));
+    return {
+      success: false,
+      inserted: 0,
       message: 'Không thể lấy dữ liệu chấm công',
       usersWithoutContracts: [],
       usersWithoutApprovedAttendance: []
     };
   }
-
-  const payload = resp.data.data;
   const records = Array.isArray(payload.results) ? payload.results : (Array.isArray(payload) ? payload : []);
   
   if (records.length === 0) {
@@ -88,17 +108,19 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
   
   const activeContractsMap = new Map();
   const usersWithoutContracts: string[] = [];
-  const EMPLOYEE_SERVICE_URL = process.env.EMPLOYEE_SERVICE_URL || 'http://localhost:4002/api';
+  const EMPLOYEE_SERVICE_URL = process.env.EMPLOYEE_SERVICE_URL || 'http://127.0.0.1:4002/api';
   
   console.log('[salary-service] Fetching active contracts for users:', newUserIds.length, 'on date:', checkDate);
   
   // Gọi sang employee-service để lấy hợp đồng đang hiệu lực
   await Promise.all(newUserIds.map(async (userId) => {
-    try {
+      try {
       const contractAxiosCfg: any = { params: { date: checkDate } };
       if (options?.authToken) contractAxiosCfg.headers = { Authorization: `Bearer ${options.authToken}` };
+      const contractUrl = `${EMPLOYEE_SERVICE_URL}/contracts/user/${userId}/active`;
+      console.log('[salary-service] Requesting contract:', contractUrl, 'with params:', contractAxiosCfg.params);
       const contractResp = await axios.get(
-        `${EMPLOYEE_SERVICE_URL}/contracts/user/${userId}/active`,
+        contractUrl,
         contractAxiosCfg
       );
       if (contractResp.data && contractResp.data.id) {
@@ -124,10 +146,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
   if (usersWithoutContracts.length > 0) {
     console.warn('[salary-service] Users without active contracts:', usersWithoutContracts);
     try {
-      const usersAxiosCfg: any = {};
-      if (options?.authToken) usersAxiosCfg.headers = { Authorization: `Bearer ${options.authToken}` };
-      const usersResp = await axios.post(`${apiGateway}/api/auth/users/bulk`, { userIds: usersWithoutContracts.map(id => Number(id)) }, usersAxiosCfg);
-      const usersList = (usersResp?.data?.data && Array.isArray(usersResp.data.data)) ? usersResp.data.data : [];
+      const usersList = await AuthService.getUsersByIds(usersWithoutContracts.map(id => Number(id)), options?.authToken);
 
       missingContractUsers = usersWithoutContracts.map(id => {
         const found = usersList.find((u: any) => String(u.id) === String(id));
@@ -158,10 +177,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
   if (missingProfileUserIds.length > 0) {
     console.warn('[salary-service] Missing salary profiles for userIds:', missingProfileUserIds);
     try {
-      const usersAxiosCfg2: any = {};
-      if (options?.authToken) usersAxiosCfg2.headers = { Authorization: `Bearer ${options.authToken}` };
-      const usersResp = await axios.post(`${apiGateway}/api/auth/users/bulk`, { userIds: missingProfileUserIds.map(id => Number(id)) }, usersAxiosCfg2);
-      const missingUsers = (usersResp?.data?.data && Array.isArray(usersResp.data.data)) ? usersResp.data.data : [];
+      const missingUsers = await AuthService.getUsersByIds(missingProfileUserIds.map(id => Number(id)), options?.authToken);
 
       // Build readable missing info: if auth-service returned details use them, otherwise fallback to id only
       missingProfileUsers = missingProfileUserIds.map(id => {
@@ -249,15 +265,9 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
     // Gọi sang attendance-service để lấy số công chuẩn
     let standardWorkingDays = 22; // Fallback default
     try {
-      const workingDaysCfg: any = { timeout: 5000 };
-      if (options?.authToken) workingDaysCfg.headers = { Authorization: `Bearer ${options.authToken}` };
-      const workingDaysResp = await axios.post(
-          `${apiGateway}/api/attendance/calculate-standard-working-days`,
-          { month: monthStr },
-          workingDaysCfg
-        );
-      if (workingDaysResp.data && workingDaysResp.data.standardWorkingDays) {
-        standardWorkingDays = Number(workingDaysResp.data.standardWorkingDays);
+      const workingDaysResp = await AttendanceService.calculateStandardWorkingDays(year, month, options?.authToken);
+      if (workingDaysResp && workingDaysResp.standardWorkingDays) {
+        standardWorkingDays = Number(workingDaysResp.standardWorkingDays);
         console.log(`✅ [salary-service] Số công chuẩn tháng ${monthStr}: ${standardWorkingDays}`);
       }
     } catch (err) {
@@ -374,10 +384,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
   try {
     const createdUserIds = [...new Set(createdRows.map(r => String(r.user_id)))].map(id => Number(id));
     if (createdUserIds.length > 0) {
-      const usersAxiosCfg3: any = {};
-      if (options?.authToken) usersAxiosCfg3.headers = { Authorization: `Bearer ${options.authToken}` };
-      const usersResp = await axios.post(`${apiGateway}/api/auth/users/bulk`, { userIds: createdUserIds }, usersAxiosCfg3);
-      const users = (usersResp?.data?.data && Array.isArray(usersResp.data.data)) ? usersResp.data.data : [];
+      const users = await AuthService.getUsersByIds(createdUserIds, options?.authToken);
       // attach user info to each created row
       createdRows.forEach(row => {
         const u = users.find((x: any) => String(x.id) === String(row.user_id));

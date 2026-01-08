@@ -14,6 +14,32 @@ const createOptimizedProxy = (target, pathRewrite = false, handleMultipart = fal
     pathRewrite: pathRewrite || undefined,
     
     onProxyReq: (proxyReq, req, res) => {
+      // Set auth headers FIRST before any body writes
+      try {
+        // Forward authorization header
+        const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+        if (authHeader) {
+          proxyReq.setHeader('Authorization', String(authHeader));
+        }
+        
+        // Forward x-user-data header (contains decoded JWT)
+        if (req.headers['x-user-data']) {
+          proxyReq.setHeader('x-user-data', String(req.headers['x-user-data']));
+        }
+        
+        // Forward x-user-id header
+        if (req.headers['x-user-id']) {
+          proxyReq.setHeader('x-user-id', String(req.headers['x-user-id']));
+        }
+        
+        // Forward x-user-role-id header
+        if (req.headers['x-user-role-id']) {
+          proxyReq.setHeader('x-user-role-id', String(req.headers['x-user-role-id']));
+        }
+      } catch (e) {
+        console.error('Error setting headers:', e);
+      }
+      
       // 🔥 LOG REQUEST QUA GATEWAY
       console.log('\n🌐🌐🌐 ===== API GATEWAY PROXY ===== 🌐🌐🌐');
       console.log('📍 Original URL:', req.originalUrl);
@@ -21,18 +47,9 @@ const createOptimizedProxy = (target, pathRewrite = false, handleMultipart = fal
       console.log('📍 Method:', req.method);
       console.log('📍 Path Rewrite:', pathRewrite);
       console.log('📍 Body:', JSON.stringify(req.body, null, 2));
+      console.log('📍 Headers x-user-data:', req.headers['x-user-data'] ? 'Present' : 'Missing');
+      console.log('📍 Headers x-user-id:', req.headers['x-user-id'] || 'N/A');
       console.log('🌐🌐🌐 ================================ 🌐🌐🌐\n');
-      
-      // Ensure Authorization header is explicitly forwarded to target services
-      // Some environments or manual body writes can cause headers to be lost, so set explicitly.
-      try {
-        const authHeader = req.headers['authorization'] || req.headers['Authorization'];
-        if (authHeader) {
-          proxyReq.setHeader('Authorization', String(authHeader));
-        }
-      } catch (e) {
-        // ignore header set errors
-      }
 
       const contentType = req.headers['content-type'] || '';
       

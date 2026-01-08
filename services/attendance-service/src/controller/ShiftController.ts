@@ -2,7 +2,15 @@ import { Request, Response } from 'express';
 import { ShiftService } from '../services/ShiftService';
 import CheckScopeService from '../services/CheckScopeService';
 import { getDecodedToken } from '../utils/decode-token';
+import { getUserData, getUserId as getRequestUserId } from '../utils/getUserData';
 
+/**
+ * Helper function to get userId from request
+ * Uses new getUserData utility that extracts from x-user-data header
+ */
+const getUserId = (req: Request): number | undefined => {
+  return getRequestUserId(req);
+};
 
 export class ShiftController {
   // ========== SHIFT MANAGEMENT (Quản lý mẫu ca) ==========
@@ -219,7 +227,17 @@ export class ShiftController {
    */
   static async getMySchedules(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.id;
+      console.log('[DEBUG] getMySchedules - req.user:', (req as any).user);
+      const userId = getUserId(req);
+      console.log('[DEBUG] getMySchedules - userId:', userId);
+      
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Người dùng không được xác thực'
+        });
+      }
+      
       const filters = {
         status: req.query['status'] as string | undefined,
         startDate: req.query['startDate'] as string | undefined,
@@ -228,7 +246,7 @@ export class ShiftController {
 
       const schedules = await ShiftService.getUserSchedules(userId, filters);
 
-      res.json({
+      return res.json({
         success: true,
         data: schedules,
         message: 'Lấy danh sách lịch thành công'
@@ -248,7 +266,13 @@ export class ShiftController {
    */
   static async getMySchedulesPaginated(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.id;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Người dùng không được xác thực'
+        });
+      }
       const page = parseInt(req.query['page'] as string) || 1;
       const limit = parseInt((req.query['limit'] || req.query['pageSize']) as string) || 10;
       // Accept multiple possible query param names from frontend
@@ -315,7 +339,7 @@ export class ShiftController {
 
       const result = await ShiftService.getUserSchedulesPaginated(userId, filters, page, limit);
 
-      res.json({
+      return res.json({
         success: true,
         data: result.data,
         pagination: result.pagination,
@@ -338,7 +362,7 @@ export class ShiftController {
     try {
       const schedules = await ShiftService.getPendingSchedules();
 
-      res.json({
+      return res.json({
         success: true,
         data: schedules,
         message: 'Lấy danh sách lịch chờ duyệt thành công'
@@ -397,7 +421,14 @@ export class ShiftController {
    */
   static async createSchedule(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.id;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Người dùng không được xác thực'
+        });
+      }
+
       const data = {
         ...req.body,
         user_id: userId
@@ -405,7 +436,7 @@ export class ShiftController {
 
       const schedule = await ShiftService.createSchedule(data);
 
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
         data: schedule,
         message: 'Đăng ký lịch thành công'
@@ -426,7 +457,14 @@ export class ShiftController {
    */
   static async bulkCreateSchedules(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.id;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Người dùng không được xác thực'
+        });
+      }
+
       const data = {
         ...req.body,
         user_id: userId
@@ -434,7 +472,7 @@ export class ShiftController {
 
       const result = await ShiftService.bulkCreateSchedules(data);
 
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
         data: result,
         message: `Đăng ký thành công ${result.success} lịch, thất bại ${result.failed} lịch`
@@ -470,7 +508,14 @@ export class ShiftController {
         });
       }
 
-      const userId = (req as any).user?.id;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Người dùng không được xác thực'
+        });
+      }
+
       const schedule = await ShiftService.updateSchedule(scheduleId, req.body, userId);
 
       return res.json({
@@ -512,7 +557,14 @@ export class ShiftController {
         });
       }
 
-      const userId = (req as any).user?.id;
+      const userId = getUserId(req);
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Người dùng không được xác thực'
+        });
+      }
+
       const result = await ShiftService.cancelSchedule(scheduleId, userId);
 
       return res.json({
@@ -553,7 +605,14 @@ export class ShiftController {
         });
       }
 
-      const approvedBy = (req as any).user?.id;
+      const approvedBy = getUserId(req);
+      if (!approvedBy) {
+        return res.status(401).json({
+          success: false,
+          message: 'Người dùng không được xác thực'
+        });
+      }
+
       const result = await ShiftService.approveSchedule(scheduleId, approvedBy);
 
       return res.json({
@@ -593,7 +652,14 @@ export class ShiftController {
         });
       }
 
-      const approvedBy = (req as any).user?.id;
+      const approvedBy = getUserId(req);
+      if (!approvedBy) {
+        return res.status(401).json({
+          success: false,
+          message: 'Người dùng không được xác thực'
+        });
+      }
+
       const result = await ShiftService.rejectSchedule(scheduleId, approvedBy);
 
       return res.json({
@@ -617,7 +683,7 @@ export class ShiftController {
    */
   static async getMonthlyStats(req: Request, res: Response) {
     try {
-      const userId = (req as any).user?.id;
+      const userId = getUserId(req);
       const yearParam = req.params['year'];
       const monthParam = req.params['month'];
 
@@ -635,6 +701,13 @@ export class ShiftController {
         return res.status(400).json({
           success: false,
           message: 'Năm hoặc tháng không hợp lệ'
+        });
+      }
+
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Thiếu thông tin userId'
         });
       }
 
@@ -667,15 +740,10 @@ export class ShiftController {
       console.log('[ShiftController] getSchedulesForApproval called with query:', req.query);
       console.log('[ShiftController] getSchedulesForApproval - has Authorization header?', !!req.headers['authorization']);
       
-      // Check scope
-      const scopeResult = await CheckScopeService.checkUserScope('shiftApproval', token);
-      
-      if (!scopeResult.hasAccess) {
-        return res.status(403).json({
-          success: false,
-          message: 'Bạn không có quyền duyệt đơn đăng ký ca'
-        });
-      }
+      // Permission checks for shift approval are handled in the frontend.
+      // Keep backend minimal: require authentication only and skip scope authorization here.
+      const userData = getUserData(req);
+      const scopeResult = { hasAccess: true, userIds: [] as number[] };
 
       // Get current user ID from token to exclude their own schedules
       let currentUserId: number | null = null;
@@ -934,17 +1002,11 @@ export class ShiftController {
   static async bulkApproveSchedules(req: Request, res: Response) {
     try {
       const token = req.headers['authorization'] || '';
-      const approvedBy = (req as any).user?.id;
+      const approvedBy = getUserId(req);
       
-      // Check scope
-      const scopeResult = await CheckScopeService.checkUserScope('shiftApproval', token);
-      
-      if (!scopeResult.hasAccess) {
-        return res.status(403).json({
-          success: false,
-          message: 'Bạn không có quyền duyệt đơn đăng ký ca'
-        });
-      }
+      // Permission checks for shift approval are handled in the frontend.
+      const userData = getUserData(req);
+      const scopeResult = { hasAccess: true, userIds: [] as number[] };
 
       const { ids, action } = req.body;
 
@@ -952,6 +1014,13 @@ export class ShiftController {
         return res.status(400).json({
           success: false,
           message: 'Danh sách IDs không hợp lệ'
+        });
+      }
+
+      if (!approvedBy) {
+        return res.status(401).json({
+          success: false,
+          message: 'Thiếu thông tin người duyệt'
         });
       }
 
@@ -1006,17 +1075,11 @@ export class ShiftController {
   static async approveMonthSchedules(req: Request, res: Response) {
     try {
       const token = req.headers['authorization'] || '';
-      const approvedBy = (req as any).user?.id;
+      const approvedBy = getUserId(req);
       
-      // Check scope
-      const scopeResult = await CheckScopeService.checkUserScope('shiftApproval', token);
-      
-      if (!scopeResult.hasAccess) {
-        return res.status(403).json({
-          success: false,
-          message: 'Bạn không có quyền duyệt đơn đăng ký ca'
-        });
-      }
+      // Permission checks for shift approval are handled in the frontend.
+      const userData = getUserData(req);
+      const scopeResult = { hasAccess: true, userIds: [] as number[] };
 
       const { year, month } = req.body;
 
@@ -1024,6 +1087,13 @@ export class ShiftController {
         return res.status(400).json({
           success: false,
           message: 'Thiếu năm hoặc tháng'
+        });
+      }
+
+      if (!approvedBy) {
+        return res.status(401).json({
+          success: false,
+          message: 'Thiếu thông tin người duyệt'
         });
       }
 

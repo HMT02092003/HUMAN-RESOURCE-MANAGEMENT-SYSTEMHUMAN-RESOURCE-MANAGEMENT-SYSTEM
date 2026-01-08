@@ -1,4 +1,3 @@
-import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 
 interface AuthenticatedRequest extends Request {
@@ -6,63 +5,61 @@ interface AuthenticatedRequest extends Request {
   user?: any;
 }
 
-const JWT_SECRET = process.env['JWT_SECRET'] || 'c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1';
-
+/**
+ * Simplified authentication middleware for services behind API Gateway.
+ * This middleware trusts the x-user-data header injected by the gateway.
+ * For internal service-to-service calls, it allows the request to pass through.
+ */
 export const authenticateToken = (
   req: AuthenticatedRequest, 
   res: Response, 
   next: NextFunction
 ): void => {
-  // Accept Authorization header or token stored in cookies (cookie name: token)
-  let token = (req.headers['authorization'] as string) || '';
-  // If not provided in header, try to read cookie header and extract common cookie keys
-  if (!token || String(token).trim() === '') {
-    const cookieHeader = req.headers['cookie'] as string | undefined;
-    if (cookieHeader) {
-      // Parse cookies like 'key1=val1; key2=val2'
-      const pairs = cookieHeader.split(';').map(s => s.trim());
-      for (const p of pairs) {
-        const [k, v] = p.split('=');
-        if (!k) continue;
-        const key = k.trim();
-        const val = (v || '').trim();
-        if (key === 'token' || key === 'accessToken' || key === 'auth_token') {
-          token = val;
-          break;
-        }
-      }
+  // Trust Gateway-injected header (for external requests through gateway)
+  // Gateway sends Base64-encoded JSON to avoid HTTP header character issues
+  const gatewayUserData = req.headers['x-user-data'];
+  if (gatewayUserData) {
+    try {
+      const decoded = Buffer.from(gatewayUserData as string, 'base64').toString('utf8');
+      const user = JSON.parse(decoded);
+      req.auth = user;
+      req.user = user;
+      return next();
+    } catch (e) {
+      console.error('[Auth Middleware] Failed to parse x-user-data', e);
     }
   }
 
-  if (!token) {
-    res.status(401).json({ success: false, message: 'No token provided' });
-    return;
+  // For internal service-to-service calls, check if it's from trusted internal network
+  // Allow requests from localhost or internal IPs to pass through
+  const clientIp = req.ip || req.connection.remoteAddress;
+  if (clientIp === '127.0.0.1' || clientIp === '::1' || clientIp?.startsWith('::ffff:127.0.0.1')) {
+    console.log('[Auth Middleware] Internal service call detected, allowing request');
+    return next();
   }
 
-  try {
-    const tokenValue = token.startsWith('Bearer ') ? token.substring(7) : token;
-    const decoded: any = jwt.verify(tokenValue, JWT_SECRET);
-    
-    if (!decoded || typeof decoded !== 'object') {
-      res.status(401).json({ success: false, message: 'Invalid access token' });
-      return;
-    }
+  console.warn('[Auth Middleware] Missing Gateway Authentication from:', clientIp);
+  res.status(401).json({ success: false, message: 'Unauthorized: Missing Gateway Authentication' });
+};
 
-    const authData = {
-      id: typeof decoded.sub === 'number' ? decoded.sub : Number(decoded.sub),
-      username: decoded.username as string,
-      permissions: decoded.permissions as any[],
-      roleId: decoded.roleId as number
-    };
-
-    req.auth = authData;
-    req.user = authData;
-    next();
-  } catch (error: any) {
-    if (error.name === 'TokenExpiredError') {
-      res.status(401).json({ success: false, message: 'Access token expired, please refresh' });
-      return;
+/**
+ * Optional: Middleware that allows unauthenticated requests (for public endpoints)
+ */
+export const optionalAuth = (
+  req: AuthenticatedRequest, 
+  res: Response, 
+  next: NextFunction
+): void => {
+  const gatewayUserData = req.headers['x-user-data'];
+  if (gatewayUserData) {
+    try {
+      const decoded = Buffer.from(gatewayUserData as string, 'base64').toString('utf8');
+      const user = JSON.parse(decoded);
+      req.auth = user;
+      req.user = user;
+    } catch (e) {
+      console.error('[Optional Auth] Failed to parse x-user-data', e);
     }
-    res.status(401).json({ success: false, message: 'Unauthorized: Invalid token' });
   }
+  next();
 };

@@ -50,19 +50,20 @@ export class AttendanceService {
     const sortOrder = (pager?.order || 'desc') as 'asc' | 'desc';
 
     // allMonths: treat as true by default when not provided by frontend
-    const allMonthsRaw = pager?.allMonths;
+    const allMonthsRaw = pager?.['allMonths'];
     const allMonths = allMonthsRaw === undefined ? true : (String(allMonthsRaw) === 'true' || String(allMonthsRaw) === '1' || allMonthsRaw === true);
     // If frontend explicitly requests NOT all months, enforce a month filter (use provided month or default to current month)
     if (!allMonths) {
-      if (!pager?.month) {
+      if (pager && !pager.month) {
         pager.month = new Date().toISOString().slice(0, 7); // default to current YYYY-MM
       }
     }
 
     try {
       const token = req.cookies?.token || (req.headers?.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
-      
-      if (!token) {
+      const rawXUser = req.headers?.['x-user-data'] || req.headers?.['x-user-data'.toLowerCase()];
+
+      if (!token && !rawXUser) {
         const err: any = new Error('Access token required');
         err.status = 401;
         throw err;
@@ -71,9 +72,16 @@ export class AttendanceService {
       const AUTH_SERVICE_URL = `http://${getLocalIpAddress()}:${process.env['AUTH_SERVICE_PORT'] || 4001}`;
 
       // Step 1: Get scope userIds from check-scope
-      const scopeResult = await axios.post(`${AUTH_SERVICE_URL}/api/users/check-scope`, 
+      // Forward gateway injected user-data header if present so auth-service accepts the call
+      const forwardedUserData = req.headers['x-user-data'] || req.headers['x-user-data'.toLowerCase()];
+      const scopeHeaders: any = { 'Content-Type': 'application/json' };
+      if (token) scopeHeaders['Authorization'] = `Bearer ${token}`;
+      if (forwardedUserData) scopeHeaders['x-user-data'] = forwardedUserData as string;
+
+      console.log('[AttendanceService] Calling Auth Service /api/users/check-scope with headers:', scopeHeaders);
+      const scopeResult = await axios.post(`${AUTH_SERVICE_URL}/api/users/check-scope`,
         { permissionKey },
-        { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, timeout: 5000 }
+        { headers: scopeHeaders, timeout: 5000 }
       );
 
       let allowedUserIds: number[] = scopeResult?.data?.userIds || [];
@@ -86,10 +94,20 @@ export class AttendanceService {
       // Step 2: Exclude current user
       let currentUserId: number | null = null;
       try {
-        const decoded: any = getDecodedToken(token);
-        if (decoded?.user?.id) currentUserId = Number(decoded.user.id);
+        if (token) {
+          const decoded: any = getDecodedToken(token);
+          if (decoded?.user?.id) currentUserId = Number(decoded.user.id);
+        } else if (rawXUser) {
+          try {
+            const decodedHeader = JSON.parse(Buffer.from(String(rawXUser), 'base64').toString('utf8'));
+            const maybeId = decodedHeader?.id ?? decodedHeader?.sub ?? decodedHeader?.user?.id;
+            if (maybeId != null) currentUserId = Number(maybeId);
+          } catch (e) {
+            // ignore
+          }
+        }
       } catch (dErr) {
-        logger.error('Failed to decode token', String((dErr as any)?.message || dErr));
+        logger.error('Failed to decode token/header', String((dErr as any)?.message || dErr));
       }
 
       if (currentUserId) {
@@ -103,9 +121,14 @@ export class AttendanceService {
       // Step 3: Fetch ALL user details for enrichment (needed for filtering/sorting)
       let usersById: Record<number, any> = {};
       try {
-        const usersResp = await axios.post(`${AUTH_SERVICE_URL}/api/users/bulk`, 
+        const bulkHeaders: any = { 'Content-Type': 'application/json' };
+        if (token) bulkHeaders['Authorization'] = `Bearer ${token}`;
+        if (forwardedUserData) bulkHeaders['x-user-data'] = forwardedUserData as string;
+
+        console.log('[AttendanceService] Calling Auth Service /api/users/bulk with headers:', bulkHeaders, 'userIdsCount=', allowedUserIds.length);
+        const usersResp = await axios.post(`${AUTH_SERVICE_URL}/api/users/bulk`,
           { userIds: allowedUserIds },
-          { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
+          { headers: bulkHeaders, timeout: 10000 }
         );
         const users = usersResp?.data?.data || usersResp?.data || [];
         for (const u of users) {
@@ -310,9 +333,9 @@ export class AttendanceService {
     }
   }
 
-  static async getUserMonthlyFull(userId: number, month: string, token?: string) {
+  static async getUserMonthlyFull(userId: number, month: string, token?: string, userData?: any) {
     try {
-      return await MonthlyReportService.buildMonthlyFull(userId, month, token);
+      return await MonthlyReportService.buildMonthlyFull(userId, month, token, userData);
     } catch (err) {
       logger.error('getUserMonthlyFull', err);
       return { success: false, message: 'Internal error' };
@@ -432,7 +455,7 @@ export class AttendanceService {
     }
   }
 
-  static async recordAttendance(userId: number, time: string, token?: string) {
-    return AttendanceRecordService.recordAttendance(userId, time, token);
+  static async recordAttendance(userId: number, time: string, token?: string, userData?: any) {
+    return AttendanceRecordService.recordAttendance(userId, time, token, userData);
   }
 }

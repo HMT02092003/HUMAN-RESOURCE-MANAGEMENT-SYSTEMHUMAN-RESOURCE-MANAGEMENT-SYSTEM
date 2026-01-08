@@ -1,8 +1,9 @@
 /**
- * Employee Service API Routes v2.0 - Optimized with Dynamic Registration
+ * Employee Service API Routes v2.0 - Gateway Authenticated
+ * All routes go through API Gateway which validates JWT and injects x-user-data header
+ * No authentication middleware needed at service level
  */
 import { Router, Request, Response } from 'express';
-import { authenticateToken } from '../src/middleware/authenticateToken';
 import {
   getAllChevrons,
   getAllChevronsList,
@@ -103,14 +104,10 @@ const registerRoutes = (groups: any[]) => {
     routes.forEach((route: any) => {
       const middlewares: any[] = [];
 
-      // Add authentication middleware if required
-      if (route.auth) {
-        middlewares.push(authenticateToken);
-      }
+      // No authentication middleware - Gateway handles all auth
+      // Gateway injects x-user-data header with decoded user info
 
-      // Register route handler with error handling. Avoid noisy per-request registration logs;
-      // instead we log registration once at startup below. The request-level logging is
-      // handled by the server's middleware which prints timestamp + method + URL.
+      // Register route handler with error handling
       middlewares.push(async (req: Request, res: Response) => {
         try {
           await route.handler(req, res);

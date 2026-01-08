@@ -10,6 +10,7 @@ import bcrypt from 'bcryptjs';
 import _ from "lodash";
 
 import { getDecodedToken } from "@/src/utils/decode-token";
+import { getUserData, getUserId } from "@/src/utils/getUserData";
 
 import os from 'os';
 import EmployeeService from "../integrations/EmployeeService";
@@ -116,7 +117,14 @@ const deleteOldIdentificationPhoto = (oldPhotoPath: string): void => {
  */
 export const getAllUsers = async (req: any, res: Response) => {
   try {
-    const { auth } = req as any;
+    const auth = getUserData(req);
+    if (!auth || !auth.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Người dùng không được xác thực"
+      });
+    }
+    
     const scope = "users";
     let inputs = { ...req.query, ...req.body };
 
@@ -135,40 +143,43 @@ export const getAllUsers = async (req: any, res: Response) => {
     const pageSize = parseInt(req.query.pageSize as string, 10) || 10;
 
     // Fetch users WITHOUT joins
-    let result: any = (await UserModel.query()
+    let baseQuery = UserModel.query()
       .select(project)
       .whereIn("users.id", userIds)
-      .whereNot("users.id", auth.id)
       .where("users.status", 1)
-      .withGraphJoined("[role]")
-      .page(page, pageSize)) as any;
+      .withGraphJoined("[role]");
+
+    if (auth && auth.id) {
+      baseQuery = baseQuery.whereNot("users.id", auth.id as any);
+    }
+
+    let result: any = (await baseQuery.skipUndefined().page(page, pageSize)) as any;
 
     // Lấy chi tiết department và chevron cho từng user (nếu có id)
     const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
-    const headers: any = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
+    const authToken = token ? `Bearer ${token}` : undefined;
+    const currentUserData = getUserData(req);
+    
     const usersWithDetails = await Promise.all(result.results.map(async (user: any) => {
       let department = null;
       let chevron = null;
-      // console.log("user", user);
+      
       try {
         if (user.departmentId) {
-          // console.log("user.departmentId", user.departmentId);
-          department = await EmployeeService.getDepartmentById(user.departmentId, headers['Authorization']);
+          department = await EmployeeService.getDepartmentById(user.departmentId, authToken, currentUserData);
         }
       } catch (e: any) {
         console.error(`Error fetching department ${user.departmentId}:`, e.message || 'Unknown error');
       }
+      
       try {
         if (user.chevronId) {
-          // console.log("user.chevronId", user.chevronId);
-          chevron = await EmployeeService.getChevronDetail(user.chevronId, headers['Authorization']);
+          chevron = await EmployeeService.getChevronDetail(user.chevronId, authToken, currentUserData);
         }
       } catch (e: any) {
         console.error(`Error fetching chevron ${user.chevronId}:`, e.message || 'Unknown error');
       }
+      
       return {
         ...user,
         department,
@@ -237,8 +248,12 @@ export const getAllUsersAll = async (req: any, res: Response) => {
     let query = UserModel.query()
       .select(['users.*'])
       .whereIn('users.id', userIds)
-      .whereNot('users.id', auth?.id)
       .where('users.status', 1);
+
+    if (auth && auth.id) {
+      query = query.whereNot('users.id', auth.id as any);
+    }
+    query = query.skipUndefined();
 
     // Apply global search (OR across multiple fields)
     if (search) {
@@ -318,22 +333,22 @@ export const getAllUsersAll = async (req: any, res: Response) => {
 
     // Enrich with department and chevron details
     const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
-    const headers: any = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const authToken = token ? `Bearer ${token}` : undefined;
+    const currentUserData = getUserData(req);
 
     const usersWithDetails = await Promise.all((result.results || []).map(async (user: any) => {
       let department = null;
       let chevron = null;
       try {
         if (user.departmentId) {
-          department = await EmployeeService.getDepartmentById(user.departmentId, headers['Authorization']);
+          department = await EmployeeService.getDepartmentById(user.departmentId, authToken, currentUserData);
         }
       } catch (e: any) {
         console.error(`Error fetching department ${user.departmentId}:`, e.message || 'Unknown error');
       }
       try {
         if (user.chevronId) {
-          chevron = await EmployeeService.getChevronDetail(user.chevronId, headers['Authorization']);
+          chevron = await EmployeeService.getChevronDetail(user.chevronId, authToken, currentUserData);
         }
       } catch (e: any) {
         console.error(`Error fetching chevron ${user.chevronId}:`, e.message || 'Unknown error');
@@ -378,22 +393,22 @@ export const getAllUsersAllForSelect = async (req: any, res: Response) => {
 
     // Enrich with department and chevron details (reuse same logic as paginated endpoint)
     const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
-    const headers: any = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const authToken = token ? `Bearer ${token}` : undefined;
+    const currentUserData = getUserData(req);
 
     const usersWithDetails = await Promise.all(users.map(async (user: any) => {
       let department = null;
       let chevron = null;
       try {
         if (user.departmentId) {
-          department = await EmployeeService.getDepartmentById(user.departmentId, headers['Authorization']);
+          department = await EmployeeService.getDepartmentById(user.departmentId, authToken, currentUserData);
         }
       } catch (e: any) {
         console.error(`Error fetching department ${user.departmentId}:`, e.message || 'Unknown error');
       }
       try {
         if (user.chevronId) {
-          chevron = await EmployeeService.getChevronDetail(user.chevronId, headers['Authorization']);
+          chevron = await EmployeeService.getChevronDetail(user.chevronId, authToken, currentUserData);
         }
       } catch (e: any) {
         console.error(`Error fetching chevron ${user.chevronId}:`, e.message || 'Unknown error');
@@ -419,7 +434,7 @@ export const getAllUsersAllForSelect = async (req: any, res: Response) => {
  */
 export const createUser = async (req: Request, res: Response) => {
   try {
-    const { auth } = req as any;
+    const auth = getUserData(req) || (req as any).auth;
     // Clone and normalize inputs to be tolerant with different frontend payload shapes
     const inputs: any = { ...req.body };
 
@@ -553,13 +568,11 @@ export const createUser = async (req: Request, res: Response) => {
 
     // Validate department and chevron using employee-service
     const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
-    const headers: any = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
+    const authToken = token ? `Bearer ${token}` : undefined;
+    const currentUserData = getUserData(req);
 
     try {
-      const department = await EmployeeService.getDepartmentById(params.departmentId, headers['Authorization']);
+      const department = await EmployeeService.getDepartmentById(params.departmentId, authToken, currentUserData);
       if (!department) {
         return res.status(400).json({ message: "Phòng ban không tồn tại!", code: 5008 });
       }
@@ -568,7 +581,7 @@ export const createUser = async (req: Request, res: Response) => {
     }
 
     try {
-      const chevron = await EmployeeService.getChevronDetail(params.chevronId, headers['Authorization']);
+      const chevron = await EmployeeService.getChevronDetail(params.chevronId, authToken, currentUserData);
       if (!chevron) {
         return res.status(400).json({ message: "Chức vụ không tồn tại!", code: 5007 });
       }
@@ -583,10 +596,15 @@ export const createUser = async (req: Request, res: Response) => {
     let { contract, ...userData } = params;
 
     // Add createdBy from auth ID
-    userData = {
-      ...userData,
-      createdBy: auth.id,
-    };
+    if (auth && auth.id) {
+      userData = {
+        ...userData,
+        createdBy: auth.id,
+      };
+    } else {
+      console.warn('⚠️ [CREATE USER] Missing auth ID for createdBy field');
+      // Optional: Set a fallback if appropriate, or leave null if DB allows
+    }
 
     console.log("User data:", userData);
 
@@ -676,7 +694,7 @@ export const createUser = async (req: Request, res: Response) => {
 
         // Verify contract type exists
         try {
-          const contractType = await EmployeeService.getContractTypeById(params.contract.contractTypeId, headers['Authorization']);
+          const contractType = await EmployeeService.getContractTypeById(params.contract.contractTypeId, authToken, currentUserData);
           if (!contractType) {
             throw new Error("Loại hợp đồng không tồn tại!");
           }
@@ -710,11 +728,11 @@ export const createUser = async (req: Request, res: Response) => {
         console.log('📝 Creating contract with params:', contractParams);
 
         // Call employee-service to create contract and salary
-        // Call employee-service to create contract and salary
-        const contractResponse = await EmployeeService.createContract(newUser.id, contractParams, headers['Authorization']);
+        const userDataForHeader = getUserData(req) || auth;
+        const contractResponse = await EmployeeService.createContract(newUser.id, contractParams, authToken, userDataForHeader);
 
         console.log('✅ Contract and salary created successfully');
-        createdContractId = contractResponse.data?.id || null;
+        createdContractId = contractResponse?.id || null;
       }
 
       // Success! Return the newly created user (without password)
@@ -866,10 +884,8 @@ export const getUserDetail = async (req: Request, res: Response) => {
 
     // Get department and chevron from employee-service
     const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
-    const headers: any = {};
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
+    const authToken = token ? `Bearer ${token}` : undefined;
+    const currentUserData = getUserData(req);
 
     let department = null;
     let chevron = null;
@@ -878,7 +894,7 @@ export const getUserDetail = async (req: Request, res: Response) => {
 
     try {
       if (result.departmentId) {
-        department = await EmployeeService.getDepartmentById(result.departmentId, headers['Authorization']);
+        department = await EmployeeService.getDepartmentById(result.departmentId, authToken, currentUserData);
       }
     } catch (e) {
       console.error('Error fetching department from gateway', e);
@@ -886,16 +902,15 @@ export const getUserDetail = async (req: Request, res: Response) => {
 
     try {
       if (result.chevronId) {
-        chevron = await EmployeeService.getChevronDetail(result.chevronId, headers['Authorization']);
+        chevron = await EmployeeService.getChevronDetail(result.chevronId, authToken, currentUserData);
       }
     } catch (e) {
       console.error('Error fetching chevron from gateway', e);
     }
 
     // Get contract info from employee-service
-    // Get contract info from employee-service
     try {
-      const contracts = await EmployeeService.getContractsByUserId(result.id, headers['Authorization']);
+      const contracts = await EmployeeService.getContractsByUserId(result.id, authToken, currentUserData);
       if (contracts && contracts.length > 0) {
 
         // Classify: upcoming if now < activeDay; effective if activeDay <= now <= endDate (or endDate null);
@@ -1192,7 +1207,7 @@ export const updateUser = async (req: Request, res: Response) => {
       updateData.email && updateData.email !== existingUser.email;
 
     if (usernameChanged || emailChanged) {
-      const query = UserModel.query().whereNot("id", id);
+      const query = UserModel.query().whereNot("id", id).skipUndefined();
 
       if (usernameChanged) {
         query.where(function () {
@@ -1524,8 +1539,8 @@ export const createContract = async (req: Request, res: Response) => {
     }
 
     console.log("Contract data:", contractData);
-
-    const result = await EmployeeService.createContract(inputs.id, contractData, headers['Authorization']);
+    const userDataForHeader = getUserData(req) || (req as any).auth;
+    const result = await EmployeeService.createContract(inputs.id, contractData, headers['Authorization'], userDataForHeader);
     return res.status(201).json(result);
   } catch (error) {
     console.error("Error creating contract:", error);
@@ -1585,17 +1600,31 @@ export const checkUserScope = async (req: Request, res: Response) => {
       });
     }
 
+    // Get auth from request (set by authenticateToken middleware)
+    const auth = getUserData(req);
+    const userId = getUserId(req);
+
+    // Accept requests where we can determine a user id from token/header
+    if (!auth && !userId) {
+      console.error('[checkUserScope] No auth data found in request');
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: User authentication required"
+      });
+    }
+
     // Sử dụng UserModel.checkScope với req (có token trong header/cookie)
     const userIds = await UserModel.checkScope(permissionKey, req);
 
     // Determine actual scope type based on the actualScopeValue from UserModel.checkScope
     let scope = "personal";
-    const { auth } = req as any;
 
     // Get the actual scope value that was used in UserModel.checkScope 
     let actualScopeValue = null;
     if (auth && auth.user && auth.user.scope && auth.user.scope[permissionKey]) {
       actualScopeValue = auth.user.scope[permissionKey];
+    } else if (auth && auth.scope && auth.scope[permissionKey]) {
+      actualScopeValue = auth.scope[permissionKey];
     } else {
       // Try to get from token in cookies or header
       const tokenFromCookie = req.cookies?.token ||

@@ -37,7 +37,8 @@ const CreateCv: React.FC = () => {
       // ignore
     }
 
-    UserService.getAllUsersAll()
+    // Request a large pageSize so the select contains all users in one call
+    UserService.getAllUsersAll({ page: 1, pageSize: 10000 })
       .then(resp => {
         const list = Array.isArray(resp) ? resp : (resp?.results || resp?.data || resp || []);
         if (mounted) setUsers(Array.isArray(list) ? list : []);

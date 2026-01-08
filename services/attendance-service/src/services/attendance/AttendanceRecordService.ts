@@ -11,7 +11,7 @@ import { getShiftForUserAndDate } from './ShiftHelper';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
-export async function recordAttendance(userId: number, time: string, token?: string): Promise<any> {
+export async function recordAttendance(userId: number, time: string, token?: string, userData?: any): Promise<any> {
   try {
     const date = dayjs(time).format('YYYY-MM-DD');
 
@@ -104,7 +104,7 @@ export async function recordAttendance(userId: number, time: string, token?: str
     // Recalculate and upsert monthly summary for this user/month
     try {
       console.log('🔄 Triggering monthly calculation', { userId, date });
-      const result = await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, date);
+      const result = await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, date, userData);
       console.log('✅ Monthly calculation finished', { success: result?.success || false });
     } catch (monthlyErr: any) {
       console.error(`❌ [attendance] Failed to update monthly summary:`, monthlyErr);

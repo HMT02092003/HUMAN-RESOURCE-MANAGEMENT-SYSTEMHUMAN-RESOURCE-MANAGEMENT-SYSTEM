@@ -3,6 +3,7 @@ import DepartmentModel from "@/src/Models/DepartmentModel";
 import UserModel from "@/src/Models/UserModel";
 import { validate, ValidationException } from "@/src/utils/validation-utility";
 import AuthService from "@/src/integrations/AuthService";
+import { getUserData } from "@/src/utils/getUserData";
 /**
  * Get all departments from the database
  */
@@ -265,6 +266,7 @@ export const updateDepartment = async (req: Request, res: Response) => {
     let nameExist = await DepartmentModel.query()
       .where("name", params.name)
       .whereNot("id", id)
+      .skipUndefined()
       .first();
 
     if (nameExist) {
@@ -318,7 +320,8 @@ export const deleteDepartment = async (req: Request, res: Response) => {
       headers.Authorization = authHeader;
     }
 
-    const users = await AuthService.getUsersByDepartment(params.id, headers.Authorization);
+    const userData = getUserData(req);
+    const users = await AuthService.getUsersByDepartment(params.id, headers.Authorization, userData);
     if (users && users.length > 0) {
       return res.status(400).json({ error: "Phòng ban đang được sử dụng, không thể xóa!" });
     }
@@ -377,7 +380,8 @@ export const deleteMultipleDepartments = async (req: Request, res: Response) => 
     }
 
     // Gửi departmentIds dưới dạng array thay vì string
-    const users = await AuthService.getUsersByDepartment(params.ids, headers.Authorization);
+    const userData = getUserData(req);
+    const users = await AuthService.getUsersByDepartment(params.ids, headers.Authorization, userData);
     if (users && users.length > 0) {
       return res.status(400).json({ error: "Phòng ban đang được sử dụng, không thể xóa!" });
     }

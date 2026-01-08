@@ -257,7 +257,7 @@ export const updateContractType = async (req: Request, res: Response) => {
         // Check if name is already taken by another contract type
         let nameExist = await ContractType.query()
             .where("name", params.name)
-            .whereNot("id", id)
+            .whereNot("id", id).skipUndefined()
             .first();
 
         if (nameExist) {

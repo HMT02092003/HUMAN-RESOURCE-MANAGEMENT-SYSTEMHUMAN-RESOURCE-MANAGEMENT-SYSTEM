@@ -12,6 +12,7 @@ import { getTextFromPdf } from '../services/pdfParser.ts';
 import { analyzeCvText } from '../services/geminiService.ts';
 import { validate, ValidationException } from '../ulitis/validation-utility.ts';
 import AuthService from '../integrations/AuthService.ts';
+import { getUserData } from '../utils/getUserData.ts';
 import { fileURLToPath } from 'url';
 
 const uploadDir = path.resolve(process.cwd(), 'uploads');
@@ -218,14 +219,15 @@ export const CvController = {
       const cookieToken = (req as any).cookies?.token;
       const tokenToSend = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : null);
 
-      if (!tokenToSend) {
-        console.warn('[listCvs] No token provided');
-        res.status(401).json({ success: false, message: 'Access token required' });
+      const userData = getUserData(req);
+      if (!tokenToSend && !userData) {
+        console.warn('[listCvs] No token or user data provided');
+        res.status(401).json({ success: false, message: 'Access token or user data required' });
         return;
       }
 
       // Check scope - auth-service trả về userIds đã filter theo scope
-      const scopeResult = await AuthService.checkUserScope('CV', tokenToSend);
+      const scopeResult = await AuthService.checkUserScope('CV', tokenToSend, userData as any);
       console.log('DEBUG - User scope result:', scopeResult);
 
       // Normalize userIds
@@ -277,7 +279,7 @@ export const CvController = {
       // If searching by user full name, filter allowedUserIds down by querying AuthService for those users and matching names
       if (fullNameFilter) {
         try {
-          const usersInfo = await AuthService.getUsersByIds(allowedUserIds, tokenToSend);
+          const usersInfo = await AuthService.getUsersByIds(allowedUserIds, tokenToSend, (req as any).user);
           const matching = (usersInfo || []).filter((u: any) => {
             const name = (u.fullName || '').toString().toLowerCase();
             return name.includes(fullNameFilter.toLowerCase());
@@ -308,7 +310,7 @@ export const CvController = {
 
       if (userIds.length > 0) {
         try {
-          const usersInfo = await AuthService.getUsersByIds(userIds, tokenToSend);
+          const usersInfo = await AuthService.getUsersByIds(userIds, tokenToSend, (req as any).user);
 
           const usersById = new Map(usersInfo.map((u: any) => [
             u.id,

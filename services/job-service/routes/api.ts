@@ -1,71 +1,75 @@
+/**
+ * Job Service API Routes - Gateway Authenticated
+ * All routes go through API Gateway which validates JWT and injects x-user-data header
+ * No authentication middleware needed at service level
+ */
 import { Router } from 'express';
-import { authenticateToken } from '../src/middleware/authenticateToken.js';
 import { CvController, upload } from '../src/controller/cv-controller.ts';
 import { ProjectController } from '../src/controller/project-controler.ts';
 
 const router = Router();
 
 // CV endpoints (register before generic job endpoints to avoid route conflicts)
-router.post('/cvs/upload', authenticateToken, upload.single('file') as any, CvController.uploadCv);
-router.get('/cvs', authenticateToken, CvController.listCvs);
-router.get('/cvs/:id/file', authenticateToken, CvController.serveCvFile);
-router.delete('/cvs/:id', authenticateToken, CvController.deleteCv);
-router.post('/cvs/bulk-delete', authenticateToken, CvController.bulkDeleteCvs);
+router.post('/cvs/upload', upload.single('file') as any, CvController.uploadCv);
+router.get('/cvs', CvController.listCvs);
+router.get('/cvs/:id/file', CvController.serveCvFile);
+router.delete('/cvs/:id', CvController.deleteCv);
+router.post('/cvs/bulk-delete', CvController.bulkDeleteCvs);
 
 // Task AI Analysis endpoints (chuyển từ /jobs sang /projects)
-router.post('/projects/analyze-task', authenticateToken, ProjectController.analyzeTask);
-router.post('/projects/find-candidates', authenticateToken, ProjectController.findCandidates);
-router.post('/projects/create-task-with-analysis', authenticateToken, ProjectController.createTaskWithAnalysis);
+router.post('/projects/analyze-task', ProjectController.analyzeTask);
+router.post('/projects/find-candidates', ProjectController.findCandidates);
+router.post('/projects/create-task-with-analysis', ProjectController.createTaskWithAnalysis);
 
 // User Tasks endpoints
-router.get('/projects/:project_id/users/:user_id/tasks', authenticateToken, ProjectController.getUserTasks);
+router.get('/projects/:project_id/users/:user_id/tasks', ProjectController.getUserTasks);
 
 // My Tasks endpoint - Lấy các task của user hiện tại (từ token)
-router.get('/tasks/my-tasks', authenticateToken, ProjectController.getMyTasks);
+router.get('/tasks/my-tasks', ProjectController.getMyTasks);
 
 // Task Management endpoints
-router.get('/projects/:project_id/tasks', authenticateToken, ProjectController.getProjectTasks);
-router.get('/projects/:project_id/tasks/statistics', authenticateToken, ProjectController.getProjectTaskStatistics);
-router.put('/projects/:project_id/tasks/:task_id/status', authenticateToken, ProjectController.updateTaskStatus);
-router.put('/projects/:project_id/tasks/:task_id', authenticateToken, ProjectController.updateTask);
-router.delete('/projects/:project_id/tasks/:task_id', authenticateToken, ProjectController.deleteTask);
+router.get('/projects/:project_id/tasks', ProjectController.getProjectTasks);
+router.get('/projects/:project_id/tasks/statistics', ProjectController.getProjectTaskStatistics);
+router.put('/projects/:project_id/tasks/:task_id/status', ProjectController.updateTaskStatus);
+router.put('/projects/:project_id/tasks/:task_id', ProjectController.updateTask);
+router.delete('/projects/:project_id/tasks/:task_id', ProjectController.deleteTask);
 
 // Project Tab endpoints
-router.get('/projects/:project_id/overview', authenticateToken, ProjectController.getProjectOverview);
-router.get('/projects/:project_id/members', authenticateToken, ProjectController.getProjectMembers);
-router.get('/projects/:project_id/timeline', authenticateToken, ProjectController.getProjectTimeline);
+router.get('/projects/:project_id/overview', ProjectController.getProjectOverview);
+router.get('/projects/:project_id/members', ProjectController.getProjectMembers);
+router.get('/projects/:project_id/timeline', ProjectController.getProjectTimeline);
 
 // Project Expenses endpoints
-router.get('/projects/:project_id/expenses', authenticateToken, ProjectController.getProjectExpenses);
-router.post('/projects/:project_id/expenses', authenticateToken, ProjectController.createExpense);
-router.put('/projects/:project_id/expenses/:expense_id', authenticateToken, ProjectController.updateExpense);
-router.delete('/projects/:project_id/expenses/:expense_id', authenticateToken, ProjectController.deleteExpense);
-router.post('/projects/:project_id/expenses/:expense_id/approve', authenticateToken, ProjectController.approveExpense);
-router.post('/projects/:project_id/expenses/:expense_id/reject', authenticateToken, ProjectController.rejectExpense);
+router.get('/projects/:project_id/expenses', ProjectController.getProjectExpenses);
+router.post('/projects/:project_id/expenses', ProjectController.createExpense);
+router.put('/projects/:project_id/expenses/:expense_id', ProjectController.updateExpense);
+router.delete('/projects/:project_id/expenses/:expense_id', ProjectController.deleteExpense);
+router.post('/projects/:project_id/expenses/:expense_id/approve', ProjectController.approveExpense);
+router.post('/projects/:project_id/expenses/:expense_id/reject', ProjectController.rejectExpense);
 
 // Task Approval endpoints
-router.post('/projects/:project_id/tasks/:task_id/approve', authenticateToken, ProjectController.approveTask);
-router.post('/projects/:project_id/tasks/:task_id/reject', authenticateToken, ProjectController.rejectTask);
+router.post('/projects/:project_id/tasks/:task_id/approve', ProjectController.approveTask);
+router.post('/projects/:project_id/tasks/:task_id/reject', ProjectController.rejectTask);
 
 // KPI endpoints - Quản lý KPI nhân viên
 // Lấy KPI tất cả users trong scope theo tháng/năm
-router.get('/kpi/users', authenticateToken, ProjectController.getAllUsersKpi);
+router.get('/kpi/users', ProjectController.getAllUsersKpi);
 // Lấy KPI summary của một user
-router.get('/kpi/users/:user_id/summary', authenticateToken, ProjectController.getUserKpiSummary);
+router.get('/kpi/users/:user_id/summary', ProjectController.getUserKpiSummary);
 // Lấy KPI chi tiết theo từng dự án của user
-router.get('/kpi/users/:user_id/projects', authenticateToken, ProjectController.getUserProjectKpiDetails);
+router.get('/kpi/users/:user_id/projects', ProjectController.getUserProjectKpiDetails);
 
 // Notification endpoints removed (notifications table not present)
 
 // Project CRUD endpoints
-router.post('/projects', authenticateToken, ProjectController.createProject);
-router.get('/projects', authenticateToken, ProjectController.getAllProjectsByScope);
-router.get('/projects/:id', authenticateToken, ProjectController.getProjectById);
-router.put('/projects/:id', authenticateToken, ProjectController.updateProject);
+router.post('/projects', ProjectController.createProject);
+router.get('/projects', ProjectController.getAllProjectsByScope);
+router.get('/projects/:id', ProjectController.getProjectById);
+router.put('/projects/:id', ProjectController.updateProject);
 // Support bulk delete via DELETE /projects with body { ids: [...] }
-router.delete('/projects', authenticateToken, ProjectController.deleteProject);
+router.delete('/projects', ProjectController.deleteProject);
 // Keep single-delete route (by id) for compatibility
-router.delete('/projects/:id', authenticateToken, ProjectController.deleteProject);
+router.delete('/projects/:id', ProjectController.deleteProject);
 
 
 export default router;

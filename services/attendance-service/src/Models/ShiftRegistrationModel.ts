@@ -170,7 +170,9 @@ export class ShiftRegistrationModel extends Model {
       .whereIn('status', [this.STATUS.PENDING, this.STATUS.APPROVED]);
 
     if (excludeId) {
-      query = query.whereNot('id', excludeId);
+      query = query.whereNot('id', excludeId).skipUndefined();
+    } else {
+      query = query.skipUndefined();
     }
 
     const existing = await query.first();

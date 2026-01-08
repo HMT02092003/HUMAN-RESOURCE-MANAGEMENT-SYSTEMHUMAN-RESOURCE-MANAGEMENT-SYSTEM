@@ -63,8 +63,8 @@ export function applyFilters(
     } else if (key.endsWith('To')) {
       const baseKey = key.replace('To', '');
       const dbFieldForDate = fieldMapping[baseKey] || baseKey;
-      // Thêm time cho end date để bao gồm cả ngày cuối
-      const endValue = value.includes(' ') ? value : `${value} 23:59:59`;
+      // Thêm time cho end date để bao gồm cả ngày cuối. Checks for space (YYYY-MM-DD HH:mm:ss) or T (ISO)
+      const endValue = (value.includes(' ') || value.includes('T')) ? value : `${value} 23:59:59`;
       query = query.where(dbFieldForDate, '<=', endValue);
     } else if (key.endsWith('Start')) {
       // Alternative format: xxxStart/xxxEnd
@@ -74,7 +74,7 @@ export function applyFilters(
     } else if (key.endsWith('End')) {
       const baseKey = key.replace('End', '');
       const dbFieldForDate = fieldMapping[baseKey] || baseKey;
-      const endValue = value.includes(' ') ? value : `${value} 23:59:59`;
+      const endValue = (value.includes(' ') || value.includes('T')) ? value : `${value} 23:59:59`;
       query = query.where(dbFieldForDate, '<=', endValue);
     } else {
       // Filter thông thường (exact match)

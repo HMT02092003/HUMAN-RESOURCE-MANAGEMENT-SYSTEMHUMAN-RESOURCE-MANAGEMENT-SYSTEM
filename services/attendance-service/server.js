@@ -8,6 +8,7 @@ dotenv.config();
 
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import attendanceRoutes from './routes/api';
 
 const app = express();
@@ -24,6 +25,7 @@ app.use(cors({
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(cookieParser());
 
 // Smart request logging (development only)
 app.use((req, res, next) => {

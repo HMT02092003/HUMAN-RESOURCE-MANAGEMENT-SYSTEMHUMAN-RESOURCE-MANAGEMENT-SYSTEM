@@ -3,6 +3,7 @@ import ContractModel from '@/src/Models/ContractModel';
 import ContractTypeModel from '@/src/Models/ContractTypeModel';
 import { validate, ValidationException } from '@/src/utils/validation-utility';
 import SalaryService from "@/src/integrations/SalaryService";
+import { getUserData } from "@/src/utils/getUserData";
 
 /**
  * Create a contract for a user with salary profile
@@ -93,7 +94,11 @@ export const createContract = async (req: Request, res: Response) => {
 
         console.log('Creating salary profile:', salaryPayload);
 
-        const salaryResponse = await SalaryService.createSalaryProfile(contract.id, salaryPayload);
+        // Pass auth token and user data to SalaryService
+        const authToken = req.headers.authorization;
+        const userData = getUserData(req);
+        
+        const salaryResponse = await SalaryService.createSalaryProfile(contract.id, salaryPayload, authToken, userData);
 
         console.log('Salary profile created successfully:', salaryResponse.data);
       } catch (salaryError: any) {

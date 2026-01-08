@@ -53,7 +53,7 @@ async function getUserStartDate(userId: number): Promise<string | null> {
  * Keeps logic isolated and easier to test. Reuses DB queries where possible.
  */
 export class MonthlyReportService {
-  static async buildMonthlyFull(userId: number, month: string, token?: string) {
+  static async buildMonthlyFull(userId: number, month: string, token?: string, userData?: any) {
     // Fetch OT rates from settings upfront
     const normalOtRate = await SettingsService.getOvertimeRateInUnits();
     const holidayOtRate = await SettingsService.getHolidayOvertimeRateInUnits();
@@ -65,7 +65,7 @@ export class MonthlyReportService {
     if (!summary) return null;
 
     // Fetch salary via SalaryService
-    const salary = await SalaryService.fetchSalary(userId, token);
+    const salary = await SalaryService.fetchSalary(userId, token, userData);
     const baseSalary = salary?.baseSalary ? parseFloat(salary.baseSalary.toString()) : 0;
 
     // Derive scheduled working days for this month from the attendance summary so
@@ -139,7 +139,7 @@ export class MonthlyReportService {
     let approvedAppsForMonth: any[] = [];
     try {
       const [y, mStr] = (month || '').split('-');
-      const appUrl = (process.env['APPLICATION_SERVICE_URL'] || 'http://localhost:4004') as string;
+      const appUrl = (process.env['APPLICATION_SERVICE_URL'] || 'http://127.0.0.1:4004') as string;
       const resp = await axios.get(`${appUrl}/api/applications/user/${userId}/approved`, {
         params: { year: parseInt(y || '0'), month: parseInt(mStr || '0') }
       });
@@ -224,7 +224,7 @@ export class MonthlyReportService {
 
     const weekdayNames = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
 
-    const buildDay = (record: any, normalOtRate: number, holidayOtRate: number) => {
+    const buildDay = (record: any, _normalOtRate: number, _holidayOtRate: number) => {
       const checkInDate = record.checkInTime ? new Date(record.checkInTime) : null;
       const lateMinutes = Number(record.lateMinutes ?? 0);
       const earlyDepartureMinutes = Number(record.earlyDepartureMinutes ?? 0);
@@ -243,7 +243,6 @@ export class MonthlyReportService {
        */
       const otWorkingUnit = Number(record.otWorkingUnit ?? 0); // ĐÃ bao gồm rate
       const overtimeHours = Number(record.overtimeHours ?? 0); // ✨ Số giờ OT thực tế
-      const isHolidayOT = Boolean(record.isHoliday || record.isPublicHoliday);
       // KHÔNG nhân rate nữa!
       const effectiveOtWorkingUnit = otWorkingUnit;
 
@@ -432,7 +431,10 @@ export class MonthlyReportService {
       overtimeHours: parseFloat((db.totalOvertimeHours ?? summary.totalOvertimeHours).toString()) || summary.totalOvertimeHours,
       totalLatePenalty: parseFloat((db.totalLatePenalty ?? totalLatePenalty).toString()) || totalLatePenalty,
       totalEarlyLeavePenalty: parseFloat((db.totalEarlyLeavePenalty ?? totalEarlyLeavePenalty).toString()) || totalEarlyLeavePenalty,
-      totalPenalty: parseFloat((db.totalPenalty ?? totalPenalty).toString()) || totalPenalty,
+      // Recalculate total penalty to ensure it includes authorized absence
+      totalPenalty: (parseFloat((db.totalLatePenalty ?? totalLatePenalty).toString()) || totalLatePenalty) + 
+                    (parseFloat((db.totalEarlyLeavePenalty ?? totalEarlyLeavePenalty).toString()) || totalEarlyLeavePenalty) +
+                    Math.round(parseFloat((db.totalUnauthorizedAbsencePenalty ?? totalUnauthorizedAbsencePenalty).toString()) || totalUnauthorizedAbsencePenalty),
       totalOvertimePay: summary.totalOvertimeSalary || 0, // totalOvertimeSalary removed from DB
       totalLateMinutes: parseFloat((db.totalLateMinutes ?? totalLateMinutes).toString()) || totalLateMinutes,
       totalEarlyLeaveMinutes: parseFloat((db.totalEarlyLeaveMinutes ?? totalEarlyLeaveMinutes).toString()) || totalEarlyLeaveMinutes,
@@ -524,7 +526,7 @@ export class MonthlyReportService {
    * Calculate aggregates for a given user and date (any date inside month) and upsert into monthly_attendances
    * ✨ CẬP NHẬT: Tính toán theo công thức mới của user
    */
-  static async calculateAndSaveMonthlyAttendance(userId: number, date: string) {
+  static async calculateAndSaveMonthlyAttendance(userId: number, date: string, userData?: any) {
     try {
       console.log(`\n📊 [attendance] Starting calculateAndSaveMonthlyAttendance for user ${userId}, date ${date}`);
 
@@ -580,7 +582,7 @@ export class MonthlyReportService {
       let approvedApplications: any[] = [];
       try {
         const [yearStr, monthStr] = m.split('-');
-        const appUrl = (process.env['APPLICATION_SERVICE_URL'] || 'http://localhost:4004') as string;
+        const appUrl = (process.env['APPLICATION_SERVICE_URL'] || 'http://127.0.0.1:4004') as string;
         const resp = await axios.get(`${appUrl}/api/applications/user/${userId}/approved`, {
           params: { year: parseInt(yearStr || '0'), month: parseInt(monthStr || '0') }
         });
@@ -933,7 +935,7 @@ export class MonthlyReportService {
        * ✅ TÍNH TIỀN PHẠT NGHỈ KHÔNG PHÉP
        * Công thức: (Lương cơ bản / Số ngày làm việc trong tháng) * Số ngày nghỉ không phép
        */
-      const salary = await SalaryService.fetchSalary(userId);
+      const salary = await SalaryService.fetchSalary(userId, undefined, userData);
       const baseSalary = salary?.baseSalary ? parseFloat(salary.baseSalary.toString()) : 0;
       const dailySalary = totalScheduledDays > 0 ? baseSalary / totalScheduledDays : 0;
       const totalUnauthorizedAbsencePenalty = Math.round(dailySalary * unauthorizedAbsenceDaysFinal);
@@ -1051,7 +1053,7 @@ export class MonthlyReportService {
         // Gọi sang auth-service để lấy thông tin users
         try {
           const response = await axios.post(
-            'http://localhost:4001/api/users/bulk',
+            'http://127.0.0.1:4001/api/users/bulk',
             { userIds },
             { headers: { 'Content-Type': 'application/json' }, timeout: 5000 }
           );
@@ -1067,7 +1069,7 @@ export class MonthlyReportService {
             if (departmentIds.length > 0) {
               try {
                 const deptPromises = departmentIds.map((deptId: any) =>
-                  axios.get(`http://localhost:4002/api/departments/${deptId}`)
+                  axios.get(`http://127.0.0.1:4002/api/departments/${deptId}`)
                     .then(r => r.data)
                     .catch(() => null)
                 );

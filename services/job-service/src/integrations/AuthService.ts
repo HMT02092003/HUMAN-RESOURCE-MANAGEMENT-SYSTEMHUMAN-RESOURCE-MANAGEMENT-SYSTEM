@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://localhost:4001';
-const API_GATEWAY_URL = `http://localhost:${process.env.API_GATEWAY_PORT || 4000}`;
+const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://127.0.0.1:4001';
+const API_GATEWAY_URL = `http://127.0.0.1:${process.env.API_GATEWAY_PORT || 4000}`;
 
 class AuthService {
   /**
@@ -10,7 +10,7 @@ class AuthService {
   static async checkAuth(token: string): Promise<any> {
     try {
       const response = await axios.get(
-        `${API_GATEWAY_URL}/api/auth/check-auth`,
+        `${AUTH_SERVICE_URL}/api/check-auth`,
         {
           headers: {
             'Authorization': token,
@@ -28,13 +28,17 @@ class AuthService {
   /**
    * Get user by ID
    */
-  static async getUserById(userId: number, authToken?: string): Promise<any> {
+  static async getUserById(userId: number, authToken?: string, userData?: any): Promise<any> {
     try {
       const headers: any = { 'Content-Type': 'application/json' };
       if (authToken) headers['Authorization'] = authToken;
+      if (userData) {
+        headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+        headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
+      }
 
       const response = await axios.get(
-        `${API_GATEWAY_URL}/api/auth/users/${userId}`,
+        `${AUTH_SERVICE_URL}/api/users/${userId}`,
         { headers }
       );
       return response.data?.data || response.data;
@@ -47,12 +51,16 @@ class AuthService {
   /**
    * Get multiple users by IDs (bulk fetch)
    */
-  static async getUsersByIds(userIds: number[], authToken?: string): Promise<any[]> {
+  static async getUsersByIds(userIds: number[], authToken?: string, userData?: any): Promise<any[]> {
     try {
       const headers: any = { 'Content-Type': 'application/json' };
       if (authToken) {
         // Normalize token format
         headers['Authorization'] = authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`;
+      }
+      if (userData) {
+        headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+        headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
       }
 
       const response = await axios.post(
@@ -84,7 +92,8 @@ class AuthService {
    */
   static async checkUserScope(
     permissionKey: string, 
-    token: string
+    token: string,
+    userData?: any
   ): Promise<{ hasAccess: boolean; userIds: number[]; scope: string }> {
     try {
       // Normalize token format
@@ -95,14 +104,23 @@ class AuthService {
 
       console.debug('[AuthService] Checking user scope', { permissionKey, tokenPresent: !!authHeader });
 
+      const headers: any = {
+        'Content-Type': 'application/json'
+      };
+
+      if (authHeader) {
+        headers['Authorization'] = authHeader;
+      }
+
+      if (userData) {
+        headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+      }
+
       const response = await axios.post(
         `${AUTH_SERVICE_URL}/api/users/check-scope`,
         { permissionKey },
         {
-          headers: {
-            ...(authHeader ? { Authorization: authHeader } : {}),
-            'Content-Type': 'application/json'
-          },
+          headers,
           timeout: 5000
         }
       );
@@ -146,7 +164,7 @@ class AuthService {
    * Get users in scope for KPI management
    * Returns list of users that the current user can view KPI for
    */
-  static async getUsersInScope(currentUserId: number, token: string): Promise<any[]> {
+  static async getUsersInScope(token: string, currentUserId: number, userData?: any): Promise<any[]> {
     try {
       // Normalize token format
       let authHeader = token || '';
@@ -161,6 +179,7 @@ class AuthService {
         {
           headers: {
             Authorization: authHeader,
+            ...(userData ? { 'x-user-data': Buffer.from(JSON.stringify(userData)).toString('base64') } : {}),
             'Content-Type': 'application/json'
           },
           timeout: 5000

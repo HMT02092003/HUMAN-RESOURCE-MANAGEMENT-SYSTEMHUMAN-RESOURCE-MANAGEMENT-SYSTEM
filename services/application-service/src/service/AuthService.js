@@ -1,32 +1,23 @@
 import axios from 'axios';
-import os from 'os';
 
 /**
  * Service để gọi API sang Auth Service
  */
 
-// Helper function để lấy IP address của máy local
-function getLocalIpAddress() {
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name]) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
-      }
-    }
-  }
-  return '127.0.0.1';
-}
-
-const AUTH_SERVICE_URL = `http://${getLocalIpAddress()}:${process.env.AUTH_SERVICE_PORT || 4001}`;
+const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://127.0.0.1:4001';
 
 class AuthService {
   /**
    * Lấy thông tin user từ Auth Service
    */
-  static async getUserInfo(userId) {
+  static async getUserInfo(userId, userData) {
     try {
-      const response = await axios.get(`${AUTH_SERVICE_URL}/api/users/${userId}`);
+      const headers = {};
+      if (userData) {
+        headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+        headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
+      }
+      const response = await axios.get(`${AUTH_SERVICE_URL}/api/users/${userId}`, { headers });
       return response.data;
     } catch (error) {
       console.error('Error fetching user info from Auth Service:', error.message);
@@ -37,9 +28,14 @@ class AuthService {
   /**
    * Lấy danh sách user theo phòng ban
    */
-  static async getUsersByDepartment(departmentId) {
+  static async getUsersByDepartment(departmentId, userData) {
     try {
-      const response = await axios.get(`${AUTH_SERVICE_URL}/api/users/department/${departmentId}`);
+      const headers = {};
+      if (userData) {
+        headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+        headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
+      }
+      const response = await axios.get(`${AUTH_SERVICE_URL}/api/users/department/${departmentId}`, { headers });
       return response.data;
     } catch (error) {
       console.error('Error fetching users by department:', error.message);
@@ -50,9 +46,14 @@ class AuthService {
   /**
    * Lấy danh sách user theo chức vụ (chevron)
    */
-  static async getUsersByChevron(chevronId) {
+  static async getUsersByChevron(chevronId, userData) {
     try {
-      const response = await axios.get(`${AUTH_SERVICE_URL}/api/users/chevron/${chevronId}`);
+      const headers = {};
+      if (userData) {
+        headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+        headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
+      }
+      const response = await axios.get(`${AUTH_SERVICE_URL}/api/users/chevron/${chevronId}`, { headers });
       return response.data;
     } catch (error) {
       console.error('Error fetching users by chevron:', error.message);
@@ -64,17 +65,21 @@ class AuthService {
    * Check scope của user thông qua Auth Service - sử dụng endpoint có sẵn
    * Gọi trực tiếp đến Auth Service để sử dụng UserModel.checkScope
    */
-  static async checkUserScope(permissionKey, token) {
+  static async checkUserScope(permissionKey, token, userData) {
     try {
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
+      if (userData) {
+        headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+        headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
+      }
+
       // Gọi sang Auth Service để check scope với token
       const response = await axios.post(`${AUTH_SERVICE_URL}/api/users/check-scope`, {
         permissionKey: permissionKey
-      }, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
+      }, { headers });
 
       if (response.data.success) {
         return {
@@ -95,15 +100,17 @@ class AuthService {
   /**
    * Lấy thông tin nhiều users theo array IDs
    */
-  static async getUsersByIds(userIds) {
+  static async getUsersByIds(userIds, userData) {
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (userData) {
+        headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+        headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
+      }
+
       const response = await axios.post(`${AUTH_SERVICE_URL}/api/users/bulk`, {
         userIds: userIds
-      }, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      }, { headers });
 
       if (response.data.success) {
         return response.data.data || [];

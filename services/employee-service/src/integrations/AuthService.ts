@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://localhost:4001';
-const API_GATEWAY_URL = `http://localhost:${process.env.API_GATEWAY_PORT || 4000}`;
+const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://127.0.0.1:4001';
+const API_GATEWAY_URL = `http://127.0.0.1:${process.env.API_GATEWAY_PORT || 4000}`;
 
 class AuthService {
   /**
@@ -10,7 +10,7 @@ class AuthService {
   static async checkAuth(token: string): Promise<any> {
     try {
       const response = await axios.get(
-        `${API_GATEWAY_URL}/api/auth/check-auth`,
+        `${AUTH_SERVICE_URL}/api/check-auth`,
         {
           headers: {
             'Authorization': token,
@@ -28,13 +28,17 @@ class AuthService {
   /**
    * Get user by ID
    */
-  static async getUserById(userId: number, authToken?: string): Promise<any> {
+  static async getUserById(userId: number, authToken?: string, userData?: any): Promise<any> {
     try {
       const headers: any = { 'Content-Type': 'application/json' };
       if (authToken) headers['Authorization'] = authToken;
+      if (userData) {
+        headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+        headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
+      }
 
       const response = await axios.get(
-        `${API_GATEWAY_URL}/api/auth/users/${userId}`,
+        `${AUTH_SERVICE_URL}/api/users/${userId}`,
         { headers }
       );
       return response.data?.data || response.data;
@@ -47,16 +51,20 @@ class AuthService {
   /**
    * Check user scope/permissions
    */
-  static async checkUserScope(token: string): Promise<{ allowedUserIds: number[] }> {
+  static async checkUserScope(token: string, userData?: any): Promise<{ allowedUserIds: number[] }> {
     try {
+      const headers: any = {
+        'Authorization': token,
+        'Content-Type': 'application/json'
+      };
+      if (userData) {
+        headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+        headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
+      }
+
       const response = await axios.get(
-        `${API_GATEWAY_URL}/api/auth/check-scope`,
-        {
-          headers: {
-            'Authorization': token,
-            'Content-Type': 'application/json'
-          }
-        }
+        `${AUTH_SERVICE_URL}/api/check-scope`,
+        { headers }
       );
       return response.data;
     } catch (error: any) {
@@ -69,10 +77,14 @@ class AuthService {
    * Get users by department id or list of department ids
    * Accepts either a single departmentId (number) or an array of ids
    */
-  static async getUsersByDepartment(departmentId: number | number[], authToken?: string): Promise<any[]> {
+  static async getUsersByDepartment(departmentId: number | number[], authToken?: string, userData?: any): Promise<any[]> {
     try {
       const headers: any = { 'Content-Type': 'application/json' };
       if (authToken) headers['Authorization'] = authToken;
+      if (userData) {
+        headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+        headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
+      }
 
       const params: any = {};
       if (Array.isArray(departmentId)) {
@@ -82,7 +94,7 @@ class AuthService {
         params.departmentId = departmentId;
       }
 
-      const response = await axios.get(`${API_GATEWAY_URL}/api/auth/users/by-department`, {
+      const response = await axios.get(`${AUTH_SERVICE_URL}/api/users/by-department`, {
         headers,
         params
       });

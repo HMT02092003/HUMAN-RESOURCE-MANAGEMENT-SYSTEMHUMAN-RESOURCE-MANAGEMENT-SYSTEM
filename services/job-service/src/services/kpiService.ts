@@ -294,16 +294,17 @@ export async function getAllUsersKpiInScope(
   currentUserId: number,
   month: number,
   year: number,
-  token: string
+  token: string,
+  userData?: any
 ): Promise<UserKpiSummary[]> {
   try {
     console.log(`\n[KPI] ==================== GET ALL USERS KPI IN SCOPE ====================`);
     console.log(`[KPI] Input params - currentUserId: ${currentUserId}, month: ${month}, year: ${year}`);
-    console.log(`[KPI] Token (first 50 chars):`, token.substring(0, 50));
+    console.log(`[KPI] Token (first 50 chars):`, token ? token.substring(0, 50) : '<no-token>');
     
     // Step 1: Check scope through auth service
     console.log(`[KPI] Step 1: Checking scope with permissionKey='kpiManagement'...`);
-    const scopeResult = await CheckScopeService.checkUserScope('kpiManagement', token);
+    const scopeResult = await CheckScopeService.checkUserScope('kpiManagement', token, userData);
     
     console.log(`[KPI] Scope check result:`, JSON.stringify({
       hasAccess: scopeResult.hasAccess,

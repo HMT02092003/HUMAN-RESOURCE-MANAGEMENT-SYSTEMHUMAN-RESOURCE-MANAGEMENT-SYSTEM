@@ -1,9 +1,9 @@
 /**
- * Attendance Service API Routes - Simplified & Clean
- * Chỉ giữ các API đang được sử dụng bởi frontend
+ * Attendance Service API Routes - Gateway Authenticated
+ * All routes go through API Gateway which validates JWT and injects x-user-data header
+ * No authentication middleware needed at service level
  */
 import { Router, Request, Response } from 'express';
-import { authenticateToken } from '../src/middleware/authenticateToken';
 import { 
   getAllMonthlyAttendance, 
   getUserMonthlyFull, 
@@ -50,63 +50,63 @@ const noCache = (_req: Request, res: Response, next: any) => {
 
 // API: Lấy toàn bộ thông tin chấm công tháng (monthly-full)
 // GET /api/user/:userId/monthly-full?year=2025&month=10
-router.get('/user/:userId/monthly-full', authenticateToken, async (req: Request, res: Response) => {
+router.get('/user/:userId/monthly-full', async (req: Request, res: Response) => {
   await getUserMonthlyFull(req, res);
 });
 
 // API: Lấy bảng công chi tiết theo ngày (cho xuất Excel) - SỬ DỤNG SCOPE
 // GET /api/attendance/daily-attendance-export?month=2025-12
-router.get('/daily-attendance-export', authenticateToken, async (req: Request, res: Response) => {
+router.get('/daily-attendance-export', async (req: Request, res: Response) => {
   await getDailyAttendanceForExport(req, res);
 });
 
 // API: Lấy TẤT CẢ bảng duyệt theo scope (cho xuất Excel) - KHÔNG PHÂN TRANG
 // GET /api/attendance/monthly-summaries-export?month=2025-12
-router.get('/monthly-summaries-export', authenticateToken, async (req: Request, res: Response) => {
+router.get('/monthly-summaries-export', async (req: Request, res: Response) => {
   await getMonthlySummariesForExport(req, res);
 });
 
 // API: Chấm công tự động (check-in/check-out)
 // POST /api/attendance/record (from gateway) -> /api/record (in service)
-router.post('/record', authenticateToken, async (req: Request, res: Response) => {
+router.post('/record', async (req: Request, res: Response) => {
   await recordAttendance(req, res);
 });
 
 // API: Cập nhật chấm công từ đơn quên check in/out
 // POST /api/attendance/update-forgot-check (from gateway) -> /api/update-forgot-check (in service)
-router.post('/update-forgot-check', authenticateToken, async (req: Request, res: Response) => {
+router.post('/update-forgot-check', async (req: Request, res: Response) => {
   await updateForgotCheck(req, res);
 });
 
 // Admin helper: calculate and upsert monthly_attendances for a user/month
-router.post('/admin/calculate-monthly/:userId', authenticateToken, async (req: Request, res: Response) => {
+router.post('/admin/calculate-monthly/:userId', async (req: Request, res: Response) => {
   await calculateAndSaveMonthly(req, res as any);
 });
 
 // Admin helper: bulk calculate monthly attendance for multiple users
-router.post('/admin/bulk-calculate-monthly', authenticateToken, async (req: Request, res: Response) => {
+router.post('/admin/bulk-calculate-monthly', async (req: Request, res: Response) => {
   await bulkCalculateMonthly(req, res as any);
 });
 
 
-router.get('/monthly-attendance', authenticateToken, async (req: Request, res: Response) => {
+router.get('/monthly-attendance', async (req: Request, res: Response) => {
   await getAllMonthlyAttendance(req, res);
 });
 
 // Fast endpoint: get monthly attendance rows filtered by month and approval flag
-router.get('/monthly-attendance/by-month', authenticateToken, (req: Request, res: Response, next) => {
+router.get('/monthly-attendance/by-month', (req: Request, res: Response, next) => {
   (async () => {
     const controller = await import('@/controller/AttendanceController');
     return controller.getMonthlyAttendanceByMonth(req, res);
   })().catch(next);
 });
 
-router.post('/approve-monthly', authenticateToken, async (req: Request, res: Response) => {
+router.post('/approve-monthly', async (req: Request, res: Response) => {
   await approveMonthlyAttendance(req, res);
 });
 
 // POST /api/attendance/approve-month - approve all attendances for a specific month (with scope)
-router.post('/approve-month', authenticateToken, async (req: Request, res: Response) => {
+router.post('/approve-month', async (req: Request, res: Response) => {
   await approveAllByMonth(req, res);
 });
 
@@ -157,11 +157,11 @@ const handleMonthlySummariesByScope = async (req: any, res: any) => {
 };
 
 router.route('/monthly-summaries-by-scope')
-  .get(authenticateToken, (req: any, res: any, next: any) => { handleMonthlySummariesByScope(req, res).catch(next); })
-  .post(authenticateToken, (req: any, res: any, next: any) => { handleMonthlySummariesByScope(req, res).catch(next); });
+  .get((req: any, res: any, next: any) => { handleMonthlySummariesByScope(req, res).catch(next); })
+  .post((req: any, res: any, next: any) => { handleMonthlySummariesByScope(req, res).catch(next); });
 
 // GET /api/attendance/time-attendances - Lấy danh sách chấm công chi tiết từng ngày
-router.get('/time-attendances', authenticateToken, async (req: Request, res: Response) => {
+router.get('/time-attendances', async (req: Request, res: Response) => {
   await getTimeAttendancesController(req, res);
 });
 
@@ -170,22 +170,22 @@ router.get('/time-attendances', authenticateToken, async (req: Request, res: Res
 // ===================================
 
 // GET /api/settings - Lấy tất cả settings
-router.get('/settings', authenticateToken, async (req: Request, res: Response) => {
+router.get('/settings', async (req: Request, res: Response) => {
   await getSettings(req, res);
 });
 
 // POST /api/settings - Cập nhật settings
-router.post('/settings', authenticateToken, async (req: Request, res: Response) => {
+router.post('/settings', async (req: Request, res: Response) => {
   await updateSettings(req, res);
 });
 
 // POST /api/settings/key - Cập nhật single setting
-router.post('/settings/key', authenticateToken, async (req: Request, res: Response) => {
+router.post('/settings/key', async (req: Request, res: Response) => {
   await updateSettingByKey(req, res as any);
 });
 
 // GET /api/settings/:key - Lấy setting theo key
-router.get('/settings/:key', authenticateToken, async (req: Request, res: Response) => {
+router.get('/settings/:key', async (req: Request, res: Response) => {
   await getSettingByKey(req, res);
 });
 
@@ -193,12 +193,12 @@ router.get('/settings/:key', authenticateToken, async (req: Request, res: Respon
 // CONVENIENCE ROUTES - Setting shortcuts
 // ===================================
 
-router.post('/settings/working-hours', authenticateToken, async (req: Request, res: Response) => {
+router.post('/settings/working-hours', async (req: Request, res: Response) => {
   req.body = { key: 'WorkingHours', value: req.body.value };
   await updateSettingByKey(req, res as any);
 });
 
-router.post('/settings/lunch-break', authenticateToken, async (req: Request, res: Response) => {
+router.post('/settings/lunch-break', async (req: Request, res: Response) => {
   req.body = { key: 'LunchBreak', value: req.body.value };
   await updateSettingByKey(req, res as any);
 });
@@ -233,39 +233,39 @@ router.post('/settings/working-days', async (req: Request, res: Response) => {
 // ===================================
 
 // Shift Templates (Mẫu ca)
-router.get('/shifts/paginated', authenticateToken, wrap(ShiftController.getAllShiftsPaginated)); // Must be before /shifts/:id
-router.get('/shifts', authenticateToken, wrap(ShiftController.getAllShifts));
-router.get('/shifts/:id', authenticateToken, wrap(ShiftController.getShiftById));
-router.post('/shifts', authenticateToken, wrap(ShiftController.createShift));
-router.put('/shifts/:id', authenticateToken, wrap(ShiftController.updateShift));
-router.delete('/shifts/:id', authenticateToken, wrap(ShiftController.deleteShift));
-router.post('/shifts/bulk-delete', authenticateToken, wrap(ShiftController.bulkDeleteShifts));
+router.get('/shifts/paginated', wrap(ShiftController.getAllShiftsPaginated)); // Must be before /shifts/:id
+router.get('/shifts', wrap(ShiftController.getAllShifts));
+router.get('/shifts/:id', wrap(ShiftController.getShiftById));
+router.post('/shifts', wrap(ShiftController.createShift));
+router.put('/shifts/:id', wrap(ShiftController.updateShift));
+router.delete('/shifts/:id', wrap(ShiftController.deleteShift));
+router.post('/shifts/bulk-delete', wrap(ShiftController.bulkDeleteShifts));
 
 // Employee Schedules (Lịch đăng ký ca) - Apply noCache middleware to prevent 304 responses
-router.get('/schedules/my', noCache, authenticateToken, wrap(ShiftController.getMySchedules));
-router.get('/schedules/my/paginated', noCache, authenticateToken, wrap(ShiftController.getMySchedulesPaginated));
-router.get('/schedules/pending', noCache, authenticateToken, wrap(ShiftController.getPendingSchedules));
-router.get('/schedules/stats/:year/:month', noCache, authenticateToken, wrap(ShiftController.getMonthlyStats));
+router.get('/schedules/my', noCache, wrap(ShiftController.getMySchedules));
+router.get('/schedules/my/paginated', noCache, wrap(ShiftController.getMySchedulesPaginated));
+router.get('/schedules/pending', noCache, wrap(ShiftController.getPendingSchedules));
+router.get('/schedules/stats/:year/:month', noCache, wrap(ShiftController.getMonthlyStats));
 // Schedule Approval Management (static routes) should be defined before '/schedules/:id' to avoid
 // Express treating 'approval' as a dynamic :id parameter.
-router.get('/schedules/approval', noCache, authenticateToken, wrap(ShiftController.getSchedulesForApproval));
-router.post('/schedules/approve', noCache, authenticateToken, wrap(ShiftController.bulkApproveSchedules));
-router.post('/schedules/approve-month', noCache, authenticateToken, wrap(ShiftController.approveMonthSchedules));
-router.post('/schedules/delete', noCache, authenticateToken, wrap(ShiftController.bulkDeleteSchedules));
+router.get('/schedules/approval', noCache, wrap(ShiftController.getSchedulesForApproval));
+router.post('/schedules/approve', noCache, wrap(ShiftController.bulkApproveSchedules));
+router.post('/schedules/approve-month', noCache, wrap(ShiftController.approveMonthSchedules));
+router.post('/schedules/delete', noCache, wrap(ShiftController.bulkDeleteSchedules));
 
 // Dynamic schedule route (by id)
-router.get('/schedules/:id', noCache, authenticateToken, wrap(ShiftController.getScheduleById));
-router.post('/schedules', noCache, authenticateToken, wrap(ShiftController.createSchedule));
-router.post('/schedules/bulk', noCache, authenticateToken, wrap(ShiftController.bulkCreateSchedules));
-router.put('/schedules/:id', noCache, authenticateToken, wrap(ShiftController.updateSchedule));
-router.delete('/schedules/:id', noCache, authenticateToken, wrap(ShiftController.cancelSchedule));
-router.post('/schedules/:id/approve', noCache, authenticateToken, wrap(ShiftController.approveSchedule));
-router.post('/schedules/:id/reject', noCache, authenticateToken, wrap(ShiftController.rejectSchedule));
+router.get('/schedules/:id', noCache, wrap(ShiftController.getScheduleById));
+router.post('/schedules', noCache, wrap(ShiftController.createSchedule));
+router.post('/schedules/bulk', noCache, wrap(ShiftController.bulkCreateSchedules));
+router.put('/schedules/:id', noCache, wrap(ShiftController.updateSchedule));
+router.delete('/schedules/:id', noCache, wrap(ShiftController.cancelSchedule));
+router.post('/schedules/:id/approve', noCache, wrap(ShiftController.approveSchedule));
+router.post('/schedules/:id/reject', noCache, wrap(ShiftController.rejectSchedule));
 
 // ===================================
 // HOLIDAYS ROUTES
 // ===================================
-router.get('/holidays', authenticateToken, async (req: Request, res: Response) => {
+router.get('/holidays', async (req: Request, res: Response) => {
   await getHolidays(req, res);
 });
 

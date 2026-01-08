@@ -198,7 +198,7 @@ export const updateChevron = async (req: Request, res: Response) => {
     // Check if name is already taken by another chevron
     let nameExist = await ChevronModel.query()
       .where("name", params.name)
-      .whereNot("id", id)
+      .whereNot("id", id).skipUndefined()
       .first();
 
     console.log("Name exist:", nameExist);

@@ -28,7 +28,7 @@ const ShiftApprovalManagement: React.FC = () => {
     useEffect(() => {
         const fetchAllData = async () => {
             try {
-                const response: any = await shiftService.getSchedulesForApproval({ page: 1, pageSize: 10000 });
+                const response: any = await shiftService.getSchedulesForApproval({ page: 1, limit: 10000 });
                 // Normalize response similar to useServerSideTable
                 let payload: any;
                 if (Array.isArray(response)) {
@@ -67,12 +67,6 @@ const ShiftApprovalManagement: React.FC = () => {
 
     // Excel columns configuration
     const excelColumns: ExcelColumn[] = [
-        {
-            title: 'STT',
-            dataIndex: 'id',
-            width: 10,
-            render: (_: any, __: any, index: number) => index + 1
-        },
         {
             title: 'Nhân viên',
             dataIndex: ['user', 'fullName'],
@@ -145,7 +139,8 @@ const ShiftApprovalManagement: React.FC = () => {
 
     const handleReject = async (id: number) => {
         try {
-            await shiftService.rejectShiftRegistration(id);
+            // pass empty notes when none provided
+            await shiftService.rejectShiftRegistration(id, '');
             message.success('Từ chối đơn đăng ký thành công');
             setRefreshTrigger(prev => prev + 1);
             try { window.dispatchEvent(new CustomEvent('shifts:updated', { detail: { ids: [id] } })); } catch (e) {}
@@ -178,9 +173,10 @@ const ShiftApprovalManagement: React.FC = () => {
             return;
         }
 
-        try {
-            await shiftService.bulkRejectSchedules(selectedRowKeys as number[]);
-            message.success(`Đã từ chối ${selectedRowKeys.length} đơn đăng ký`);
+            try {
+                // backend exposes bulkApproveSchedules with action flag
+                await shiftService.bulkApproveSchedules(selectedRowKeys as number[], 'reject');
+                message.success(`Đã từ chối ${selectedRowKeys.length} đơn đăng ký`);
             setSelectedRowKeys([]);
             setSelectedRows([]);
             setRefreshTrigger(prev => prev + 1);
@@ -426,8 +422,7 @@ const ShiftApprovalManagement: React.FC = () => {
                     )}
                 </Space>
             </div>
-
-            {/* Table */}
+{/* Table */}
             <ServerSideTable
                 columns={columns}
                 fetchData={shiftService.getSchedulesForApproval}
@@ -438,24 +433,26 @@ const ShiftApprovalManagement: React.FC = () => {
                     setSelectedRows(rows as any[]);
                 }}
                 getCheckboxProps={(record: any) => ({ disabled: record.status !== 'pending', name: record.id })}
-                defaultPageSize={20}
+                defaultPageSize={10}
                 scroll={{ x: 'auto' }}
                 bordered
                 refreshTrigger={refreshTrigger}
-                emptyText={
-                    <Empty
-                        image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        description={
-                            <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                                <div style={{ fontSize: '60px', marginBottom: '16px' }}>📋</div>
-                                <Title level={4} type="secondary" style={{ marginBottom: '8px' }}>
-                                    Không có đơn đăng ký ca nào cần duyệt
-                                </Title>
-                                <Text type="secondary">Các đơn đăng ký chờ duyệt sẽ hiển thị ở đây</Text>
-                            </div>
-                        }
-                    />
-                }
+                locale={{
+                    emptyText: (
+                        <Empty
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description={
+                                <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                                    <div style={{ fontSize: '60px', marginBottom: '16px' }}>📋</div>
+                                    <Title level={4} type="secondary" style={{ marginBottom: '8px' }}>
+                                        Không có đơn đăng ký ca nào cần duyệt
+                                    </Title>
+                                    <Text type="secondary">Các đơn đăng ký chờ duyệt sẽ hiển thị ở đây</Text>
+                                </div>
+                            }
+                        />
+                    )
+                }}
             />
         </div>
     );

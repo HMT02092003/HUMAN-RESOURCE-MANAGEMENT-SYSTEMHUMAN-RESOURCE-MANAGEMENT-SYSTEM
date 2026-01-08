@@ -4,7 +4,7 @@ import axios from 'axios';
  * Service để check scope quyền thông qua Auth Service
  */
 
-const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://localhost:4001';
+const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://127.0.0.1:4001';
 
 class CheckScopeService {
   /**
@@ -15,7 +15,8 @@ class CheckScopeService {
    */
   static async checkUserScope(
     permissionKey: string, 
-    token: string
+    token: string,
+    userData?: any
   ): Promise<{ hasAccess: boolean; userIds: number[]; scope: string }> {
     try {
       const url = `${AUTH_SERVICE_URL}/api/users/check-scope`;
@@ -26,19 +27,25 @@ class CheckScopeService {
         authHeader = `Bearer ${authHeader}`;
       }
 
-      console.log(`\n[CheckScopeService] ========== CHECK USER SCOPE ==========`);
+      console.log(`[CheckScopeService] \n[CheckScopeService] ========== CHECK USER SCOPE ==========`);
       console.log(`[CheckScopeService] Permission Key: ${permissionKey}`);
       console.log(`[CheckScopeService] Token (first 50 chars): ${token.substring(0, 50)}`);
       console.log(`[CheckScopeService] Target URL: ${url}`);
+
+      const headers: any = {
+        'Content-Type': 'application/json'
+      };
+      if (authHeader) headers['Authorization'] = authHeader;
+      if (userData) {
+        headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+        headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
+      }
 
       const response = await axios.post(
         url,
         { permissionKey },
         {
-          headers: {
-            ...(authHeader ? { Authorization: authHeader } : {}),
-            'Content-Type': 'application/json'
-          },
+          headers,
           timeout: 5000
         }
       );

@@ -174,6 +174,7 @@ const registerRoutes = (routes: any[]) => {
     const middlewares: any[] = [];
 
     // Add authentication middleware if required
+    // Gateway injects x-user-data header with decoded user info
     if (route.auth) {
       middlewares.push(authenticateToken);
     }

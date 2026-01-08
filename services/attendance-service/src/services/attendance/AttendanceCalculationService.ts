@@ -262,7 +262,7 @@ export class AttendanceCalculationService {
       try {
         const headers: any = { 'Content-Type': 'application/json' };
         if (token) headers['Authorization'] = `Bearer ${token}`;
-        const appResp = await axios.get(`${process.env['APPLICATION_SERVICE_URL'] || 'http://localhost:4004'}/api/applications/user/${userId}/approved`, { params: { year: parseInt(year || ''), month: parseInt(monthNum || '') }, headers });
+        const appResp = await axios.get(`${process.env['APPLICATION_SERVICE_URL'] || 'http://127.0.0.1:4004'}/api/applications/user/${userId}/approved`, { params: { year: parseInt(year || ''), month: parseInt(monthNum || '') }, headers });
         approvedApplications.push(...(appResp.data.data || []));
       } catch (e) {
         // ignore
@@ -417,7 +417,7 @@ export class AttendanceCalculationService {
     // Keep minimal logs here: call + result or error.
     console.log('getApprovedOvertimeApplication called', { userId, date });
     try {
-      const serviceUrl = process.env['APPLICATION_SERVICE_URL'] || 'http://localhost:4004';
+      const serviceUrl = process.env['APPLICATION_SERVICE_URL'] || 'http://127.0.0.1:4004';
       const year = dayjs(date).year();
       const month = dayjs(date).month() + 1;
       const apiUrl = `${serviceUrl}/api/applications/user/${userId}/approved`;

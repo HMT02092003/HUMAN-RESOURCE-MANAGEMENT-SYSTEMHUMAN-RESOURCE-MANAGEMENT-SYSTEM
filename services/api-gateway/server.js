@@ -13,8 +13,10 @@ dotenv.config({ path: configEnvPath, override: false });
 // Import sau khi đã load env 
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { getServices, ROUTE_CONFIG } from './config/services.js';
 import { createOptimizedProxy, requestLogger } from './middleware/proxy.js';
+import { gatewayAuth } from './middleware/auth.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -87,6 +89,10 @@ app.use(requestLogger);
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(cookieParser());
+
+// Gateway Authentication Middleware
+app.use(gatewayAuth);
 
 // Tự động tạo proxy routes từ config
 ROUTE_CONFIG.forEach(route => {

@@ -214,7 +214,7 @@ export class ApplicationModel extends Model {
     return query
       .orderBy('created_at', 'desc')
       .modify((builder) => {
-        if (userId) builder.whereNot("userId", userId);
+        if (userId) builder.whereNot("userId", userId).skipUndefined();
       })
       .offset(offset)
       .limit(limit);
@@ -242,7 +242,9 @@ export class ApplicationModel extends Model {
 
     // Loại bỏ đơn của chính mình (giống logic trong getAllApplicationsPaginated)
     if (userId) {
-      query = query.whereNot('userId', userId);
+      query = query.whereNot('userId', userId).skipUndefined();
+    } else {
+      query = query.skipUndefined();
     }
 
     if (startDate && endDate) {
@@ -659,7 +661,9 @@ export class ApplicationModel extends Model {
       'approvedByInfo': 'approvedBy',
       // Allow sorting by creator's full name key if frontend uses userInfo.fullName
       'userInfo.fullName': 'userId',
-      'userInfo': 'userId'
+      'userInfo': 'userId',
+      'userInfo.department.name': 'userId',
+      'userInfo.department': 'userId'
     };
 
     // Build base query
@@ -672,7 +676,7 @@ export class ApplicationModel extends Model {
 
     // Loại bỏ đơn của chính mình
     if (userId) {
-      query = query.whereNot('userId', userId);
+      query = query.whereNot('userId', userId).skipUndefined();
     }
 
     // Sử dụng query-builder cho filters thông thường
@@ -721,7 +725,7 @@ export class ApplicationModel extends Model {
 
     // Loại bỏ đơn của chính mình
     if (userId) {
-      query = query.whereNot('userId', userId);
+      query = query.whereNot('userId', userId).skipUndefined();
     }
 
     // Sử dụng query-builder cho filters
@@ -766,7 +770,9 @@ export class ApplicationModel extends Model {
       , 'approvedByInfo.fullName': 'approvedBy',
       'approvedByInfo': 'approvedBy',
       'userInfo.fullName': 'userId',
-      'userInfo': 'userId'
+      'userInfo': 'userId',
+      'userInfo.department.name': 'userId',
+      'userInfo.department': 'userId'
     };
 
     // Searchable fields

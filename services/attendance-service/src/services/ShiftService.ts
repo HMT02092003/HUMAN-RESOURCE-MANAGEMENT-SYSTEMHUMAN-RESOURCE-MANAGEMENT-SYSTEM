@@ -1,6 +1,6 @@
 import { ShiftModel } from '../Models/ShiftModel';
 import { EmployeeScheduleModel } from '../Models/EmployeeScheduleModel';
-import { applySearch, applyFilters, applySorting, applyPagination, executeQuery } from '../utils/query-builder';
+import { applySearch, applyFilters, applySorting, applyPagination } from '../utils/query-builder';
 
 export class ShiftService {
   // ========== SHIFT MANAGEMENT (Quản lý mẫu ca) ==========
@@ -74,7 +74,8 @@ export class ShiftService {
     }
 
     // Apply sorting
-    query = applySorting(query, String(params.sort || config.defaultSort.field), String(params.order || config.defaultSort.order), config.fieldMapping, config.defaultSort);
+    const sortOrder = (params.order || config.defaultSort.order) as 'asc' | 'desc';
+    query = applySorting(query, String(params.sort || config.defaultSort.field), sortOrder, config.fieldMapping, config.defaultSort as { field: string; order: 'asc' | 'desc' });
 
     // Count total
     const countQuery = query.clone().clearOrder();
@@ -439,7 +440,7 @@ export class ShiftService {
           .where('user_id', userId)
           .where('date', newDate)
           .whereIn('status', ['pending', 'approved'])
-          .whereNot('id', id)
+          .whereNot('id', id).skipUndefined()
           .first();
 
         if (duplicate) {
@@ -593,7 +594,7 @@ export class ShiftService {
 
     // Exclude current user's own schedules from approval list
     if (currentUserId) {
-      query = query.whereNot('employee_schedules.user_id', currentUserId);
+      query = query.whereNot('employee_schedules.user_id', currentUserId).skipUndefined();
     }
 
     // User filter
@@ -633,7 +634,7 @@ export class ShiftService {
     // Apply sorting using query-builder
     // IMPORTANT: Only sort by fields that exist in the database
     // User-related fields (user_fullName, user_department_name, user_chevron_name) will be sorted in-memory by controller
-    const userRelatedSortFields = ['user_fullName', 'user_department_name', 'user_chevron_name', 'employeeName', 'fullName', 'department_name', 'chevron_name'];
+    const userRelatedSortFields = ['user_fullName', 'user_department_name', 'user_chevron_name', 'employeeName', 'fullName', 'department_name', 'chevron_name', 'searchDepartment'];
     const shouldSortInDB = filters.sortField && !userRelatedSortFields.includes(filters.sortField);
     
     if (shouldSortInDB) {
