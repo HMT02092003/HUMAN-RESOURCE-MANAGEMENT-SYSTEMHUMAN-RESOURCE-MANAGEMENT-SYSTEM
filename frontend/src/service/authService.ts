@@ -10,6 +10,14 @@ interface LoginCredentials {
 interface ResetPasswordData {
   token: string;
   newPassword: string;
+  confirmPassword: string;
+}
+
+interface ResetPasswordWithOTPData {
+  username: string;
+  otp: string;
+  newPassword: string;
+  confirmPassword: string;
 }
 
 class AuthService {
@@ -45,19 +53,39 @@ class AuthService {
   }
 
   // Request password reset
-  async requestPasswordReset(email: string) {
+  async requestPasswordReset(username: string) {
     try {
-      const response = await api.post(`/api/forgot-password`, { email });
+      const response = await api.post(`/api/auth/forgot-password`, { username });
       return response.data;
     } catch (error: any) {
       throw error;
     }
   }
 
-  // Reset password
-  async resetPassword(data: ResetPasswordData) {
+  // Verify reset token
+  async verifyResetToken(token: string) {
     try {
-      const response = await api.post(`/api/reset-password`, data);
+      const response = await api.get(`/api/auth/verify-reset-token/${token}`);
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  }
+
+  // Verify OTP code
+  async verifyOTP(username: string, otp: string) {
+    try {
+      const response = await api.post(`/api/auth/verify-otp`, { username, otp });
+      return response.data;
+    } catch (error: any) {
+      throw error;
+    }
+  }
+
+  // Reset password (supports both token and OTP flows)
+  async resetPassword(data: ResetPasswordData | ResetPasswordWithOTPData) {
+    try {
+      const response = await api.post(`/api/auth/reset-password`, data);
       return response.data;
     } catch (error: any) {
       throw error;

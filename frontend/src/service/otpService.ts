@@ -5,8 +5,8 @@ import jwt from 'jsonwebtoken';
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
-    user: 'toanhoangmanh55@gmail.com',
-    pass: 'hqzh kcyz csbr ppcq' // thay bằng App Password của bạn
+    user: process.env.SMTP_USER || process.env.NEXT_PUBLIC_SMTP_USER,
+    pass: process.env.SMTP_PASS || process.env.NEXT_PUBLIC_SMTP_PASS,
   }
 });
 
@@ -28,8 +28,37 @@ export const otpService = {
     // Tạo token
     const token = otpService.generateToken(email);
 
+    // Build reset link. Prefer explicit NEXT_PUBLIC_FRONTEND_URL or NEXT_PUBLIC_APP_URL.
+    const configured = process.env.NEXT_PUBLIC_FRONTEND_URL || process.env.NEXT_PUBLIC_APP_URL || '';
+    let frontendUrl = '';
+
+    if (configured && !/localhost|127\.0\.0\.1/.test(configured)) {
+      frontendUrl = configured.replace(/\/$/, '');
+    } else {
+      // Try to detect LAN IPv4 address and use NEXT_PUBLIC_API_BASE_URL or default 3000
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const os = require('os');
+        const nets = os.networkInterfaces();
+        const port = process.env.NEXT_PUBLIC_API_BASE_URL || '3000';
+        for (const name of Object.keys(nets)) {
+          for (const net of nets[name] as any) {
+            if (net.family === 'IPv4' && !net.internal) {
+              frontendUrl = `http://${net.address}:${port}`;
+              break;
+            }
+          }
+          if (frontendUrl) break;
+        }
+      } catch (err) {
+        // fallback
+      }
+    }
+
+    if (!frontendUrl) frontendUrl = `http://localhost:${process.env.NEXT_PUBLIC_API_BASE_URL || '3000'}`;
+
     // Tạo form gửi mail
-    const resetLink = `http://localhost:4000/forgotPassword/reChangePassword?token=${token}`;
+    const resetLink = `${frontendUrl}/forgotPassword/reChangePassword?token=${token}`;
     
     const mailOptions = {
       from: '"Website Bán Thiết Bị Điện Tử" <toanhoangmanh55@gmail.com>', // Thay bằng email của bạn

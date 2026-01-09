@@ -13,6 +13,7 @@ import {
   authenticateToken,
   changePassword,
 } from '@/src/controller/auth-controller';
+import ForgotPasswordController from '@/src/controller/ForgotPasswordController';
 import {
   getAllRoles,
   createRole,
@@ -91,8 +92,10 @@ const upload = createUploadMiddleware();
 const authRoutes = [
   { method: 'post', path: '/login', handler: loginHandler, auth: false },
   { method: 'post', path: '/refresh-token', handler: refreshToken, auth: false },
-  { method: 'post', path: '/forgot-password', handler: sendOTPController, auth: false },
-  { method: 'post', path: '/reset-password', handler: resetPasswordController, auth: false },
+  { method: 'post', path: '/forgot-password', handler: ForgotPasswordController.requestPasswordReset.bind(ForgotPasswordController), auth: false },
+  { method: 'post', path: '/verify-otp', handler: ForgotPasswordController.verifyOTP.bind(ForgotPasswordController), auth: false },
+  { method: 'get', path: '/verify-reset-token/:token', handler: ForgotPasswordController.verifyResetToken.bind(ForgotPasswordController), auth: false },
+  { method: 'post', path: '/reset-password', handler: ForgotPasswordController.resetPassword.bind(ForgotPasswordController), auth: false },
   { method: 'post', path: '/change-password', handler: changePassword, auth: true },
   {
     method: 'get', path: '/check-auth', handler: (req: Request, res: Response) => {

@@ -241,6 +241,26 @@
   overflow: hidden;
 }
 
+/* Make secondary button visually match the primary login button when used alongside it */
+.login-button.secondary {
+  background: #ffffff !important;
+  color: #0b0b0b !important;
+  border: 1px solid rgba(9, 30, 66, 0.08) !important;
+  box-shadow: 0 6px 18px rgba(9, 30, 66, 0.06) !important;
+}
+
+.login-button.secondary::before {
+  /* remove shimmer for secondary */
+  display: none;
+}
+
+.login-button.secondary:hover {
+  background: #ffffff !important;
+  color: #0b0b0b !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 10px 28px rgba(24, 144, 255, 0.08) !important;
+}
+
 .login-button::before {
   content: '';
   position: absolute;

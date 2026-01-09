@@ -47,8 +47,10 @@ const createOptimizedProxy = (target, pathRewrite = false, handleMultipart = fal
       console.log('📍 Method:', req.method);
       console.log('📍 Path Rewrite:', pathRewrite);
       console.log('📍 Body:', JSON.stringify(req.body, null, 2));
-      console.log('📍 Headers x-user-data:', req.headers['x-user-data'] ? 'Present' : 'Missing');
+      console.log('📍 Headers Authorization:', req.headers['authorization'] ? 'Present (Bearer token)' : 'Missing');
+      console.log('📍 Headers x-user-data:', req.headers['x-user-data'] ? 'Present (length: ' + req.headers['x-user-data'].length + ')' : 'Missing');
       console.log('📍 Headers x-user-id:', req.headers['x-user-id'] || 'N/A');
+      console.log('📍 Cookie token:', req.cookies?.token ? 'Present' : 'Missing');
       console.log('🌐🌐🌐 ================================ 🌐🌐🌐\n');
 
       const contentType = req.headers['content-type'] || '';

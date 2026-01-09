@@ -43,6 +43,8 @@ export const gatewayAuth = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, secret);
     
+    console.log('✅ Gateway JWT verified. User:', decoded.sub || decoded.id);
+    
     // Inject user data into headers
     // Use Base64 encoding to avoid invalid characters in HTTP headers
     // Services will need to decode: Buffer.from(header, 'base64').toString('utf8')
@@ -65,7 +67,13 @@ export const gatewayAuth = (req, res, next) => {
     console.log(`🔐 Gateway Auth: User ${decoded.sub} (Role: ${decoded.roleId}) authenticated.`);
 
   } catch (err) {
-    console.warn(`⚠️ Gateway Auth Failed: ${err.message}`);
+    console.error('⚠️ ========================================');
+    console.error('⚠️ GATEWAY AUTH FAILED');
+    console.error(`⚠️ Error: ${err.message}`);
+    console.error(`⚠️ Error Name: ${err.name}`);
+    console.error(`⚠️ Token (first 20 chars): ${token ? token.substring(0, 20) + '...' : 'N/A'}`);
+    console.error(`⚠️ JWT_SECRET configured: ${secret ? 'YES (length: ' + secret.length + ')' : 'NO'}`);
+    console.error('⚠️ ========================================');
     // We do NOT block the request here. We let it pass.
     // Downstream services will see missing x-user-headers and treat it as unauthenticated.
     // Unless we want to enforce auth at gateway for specific routes?

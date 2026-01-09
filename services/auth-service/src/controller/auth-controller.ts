@@ -231,11 +231,18 @@ export const changePassword = async (req: Request, res: Response) => {
   const { password } = req.body;
   const { auth } = req; // Từ middleware
 
-  if (!auth?.id) return res.status(401).json({ message: 'Unauthorized' });
+  console.log('🔑 changePassword handler - auth object:', JSON.stringify(auth, null, 2));
+  
+  // Extract user ID from auth (support multiple structures)
+  const userId = auth?.id || auth?.sub || (auth as any)?.user?.id;
+  
+  console.log('🔑 Extracted userId:', userId);
+  
+  if (!userId) return res.status(401).json({ message: 'Unauthorized: User ID not found in token' });
   if (!password) return res.status(400).json({ message: 'New password is required' });
 
   try {
-    const user = await UserModel.query().findById(auth.id);
+    const user = await UserModel.query().findById(userId);
     if (!user) return res.status(404).json({ message: "User doesn't exist" });
 
     // Hash mật khẩu mới
@@ -244,7 +251,7 @@ export const changePassword = async (req: Request, res: Response) => {
 
     // Cập nhật mật khẩu
     const updatedUser = await UserModel.query()
-      .findById(auth.id)
+      .findById(userId)
       .patch({
         password: hash,
       } as any)
@@ -254,11 +261,13 @@ export const changePassword = async (req: Request, res: Response) => {
     // Trả về thông tin người dùng đã cập nhật, không kèm mật khẩu
     if (updatedUser) {
       const { password: _, ...userWithoutPassword } = updatedUser;
+      console.log('✅ Password changed successfully for user:', userId);
       return res.json(userWithoutPassword);
     }
 
     return res.status(500).json({ message: 'Failed to update user' });
   } catch (error: any) {
+    console.error('❌ Error in changePassword:', error);
     return res.status(500).json({ message: error.message });
   }
 };
@@ -425,18 +434,71 @@ export const resetPasswordController = async (req: Request, res: Response) => {
 };
 
 export const authenticateToken = (req: Request, res: Response, next: Function): void => {
-  // Optimized: Trust Gateway-injected header (Base64-encoded JSON)
+  console.log('\n🔐 ===== AUTHENTICATE TOKEN MIDDLEWARE ===== 🔐');
+  console.log('📍 URL:', req.url);
+  console.log('📍 Method:', req.method);
+  console.log('📍 Headers x-user-data:', req.headers['x-user-data'] ? 'Present (length: ' + (req.headers['x-user-data'] as string).length + ')' : 'Missing');
+  console.log('📍 Headers Authorization:', req.headers['authorization'] ? 'Present' : 'Missing');
+  console.log('📍 Cookies token:', (req as any).cookies?.token ? 'Present' : 'Missing');
+  
+  // 1) Prefer Gateway-injected header (Base64-encoded JSON)
   const gatewayUserData = req.headers['x-user-data'];
   if (gatewayUserData) {
     try {
       const decoded = Buffer.from(gatewayUserData as string, 'base64').toString('utf8');
       const user = JSON.parse(decoded);
       req.auth = user;
+      console.log('✅ Auth via Gateway x-user-data. User ID:', user.sub || user.id);
+      console.log('🔐 ============================================ 🔐\n');
       return next();
     } catch (e) {
-      console.error('Failed to parse x-user-data', e);
+      console.error('❌ Failed to parse x-user-data', e);
     }
   }
 
-  res.status(401).json({ message: 'Unauthorized: Missing Gateway Authentication' });
+  // 2) Fallback: accept token from cookie or Authorization header
+  try {
+    const header = (req.headers.authorization as string) || '';
+    const bearerToken = header.startsWith('Bearer ') ? header.split(' ')[1] : undefined;
+    const cookieToken = (req as any).cookies?.token;
+    const token = bearerToken || cookieToken;
+
+    if (!token) {
+      console.error('❌ No token found (no gateway header, no bearer, no cookie)');
+      console.log('🔐 ============================================ 🔐\n');
+      return res.status(401).json({ message: 'Unauthorized: Missing token or Gateway Authentication' });
+    }
+
+    console.log('🔑 Attempting to verify token (fallback mode)...');
+    const decoded: any = jwt.verify(token, JWT_SECRET);
+
+    if (!decoded || typeof decoded !== 'object') {
+      console.error('❌ Token decoded but invalid structure');
+      console.log('🔐 ============================================ 🔐\n');
+      return res.status(401).json({ message: 'Unauthorized: Invalid token' });
+    }
+
+    // Populate req.auth in a compatible shape
+    const userId = typeof decoded.sub === 'number' ? decoded.sub : Number(decoded.sub || decoded.id);
+    const userPayload = (decoded as any).user || {};
+
+    req.auth = {
+      id: userId,
+      username: userPayload.username || decoded.username || null,
+      permissions: userPayload.permissions || {},
+      roleId: userPayload.roleId || null,
+    } as any;
+
+    console.log('✅ Auth via Bearer/Cookie token. User ID:', userId);
+    console.log('🔐 ============================================ 🔐\n');
+    return next();
+  } catch (err: any) {
+    console.error('❌ authenticateToken error:', err?.message || err);
+    console.error('❌ Error name:', err?.name);
+    console.log('🔐 ============================================ 🔐\n');
+    if (err && err.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Unauthorized: Token expired' });
+    }
+    return res.status(401).json({ message: 'Unauthorized: Invalid token' });
+  }
 };
