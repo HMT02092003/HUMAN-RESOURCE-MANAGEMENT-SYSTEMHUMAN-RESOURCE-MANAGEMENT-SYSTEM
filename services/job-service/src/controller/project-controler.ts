@@ -23,6 +23,8 @@ import { assessWorkload } from '../services/geminiService.ts';
 import { analyzeTaskTimeline, validateTaskDependencies } from '../services/geminiService.ts';
 import * as kpiService from '../services/kpiService.ts';
 import { getUserData, getUserId } from '../utils/getUserData.js';
+import { notifyProjectMembers } from '../integrations/NotificationService.ts';
+import { notifyProjectMembers } from '../integrations/NotificationService.ts';
 
 
 SkillModel.knex(knex);
@@ -1189,14 +1191,19 @@ export class ProjectController {
      */
     static createTaskWithAnalysis: RequestHandler = async (req: Request, res: Response): Promise<void> => {
         try {
-            // Token already verified by authenticateToken middleware
-            const decodedToken = getUserData(req) || getUserData(req);
-            const userId = decodedToken?.user_id || decodedToken?.id;
+            // Token already verified by authenticateToken middleware OR gateway
+            const userId = getUserId(req);
 
-            if (!userId) {
-                res.status(401).json({ error: 'Unauthorized - User ID not found in token' });
+            if (!userId || isNaN(userId)) {
+                console.error('[createTaskWithAnalysis] Failed to extract userId. userId:', userId);
+                console.error('[createTaskWithAnalysis] getUserData result:', getUserData(req));
+                console.error('[createTaskWithAnalysis] Headers x-user-data:', req.headers['x-user-data'] ? 'present' : 'missing');
+                console.error('[createTaskWithAnalysis] Headers x-user-id:', req.headers['x-user-id']);
+                res.status(401).json({ error: 'Unauthorized - User ID not found or invalid in request' });
                 return;
             }
+            
+            console.log(`[createTaskWithAnalysis] userId=${userId}`);
 
             // Normalize required_skills: convert object to array if needed (before validation)
             if (req.body.required_skills && !Array.isArray(req.body.required_skills)) {
@@ -1462,6 +1469,73 @@ export class ProjectController {
 
                 console.log(`[Project Controller] Task created successfully: ${task.task_id}`);
 
+                // 🔔 Gửi thông báo cho tất cả thành viên trong dự án
+                if (task.project_id) {
+                    // Get creator name
+                    let creatorName = 'Một thành viên';
+                    try {
+                        const headerAuth = (req.headers.authorization as string) || null;
+                        const cookieToken = (req as any).cookies?.token;
+                        const authHeader = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : null);
+                        if (authHeader && userId) {
+                            const creatorUsers = await AuthService.getUsersByIds([userId], authHeader, getUserData(req));
+                            if (creatorUsers && creatorUsers.length > 0) {
+                                creatorName = creatorUsers[0].fullName || creatorUsers[0].full_name || creatorName;
+                            }
+                        }
+                    } catch (err) {
+                        console.error('[Task Create] Failed to fetch creator name:', err);
+                    }
+                    
+                    // Get assignee name if assigned
+                    let assigneeText = '';
+                    if (payload.assigned_to_user_id) {
+                        try {
+                            const headerAuth = (req.headers.authorization as string) || null;
+                            const cookieToken = (req as any).cookies?.token;
+                            const authHeader = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : null);
+                            if (authHeader) {
+                                const assigneeUsers = await AuthService.getUsersByIds([payload.assigned_to_user_id], authHeader, getUserData(req));
+                                if (assigneeUsers && assigneeUsers.length > 0) {
+                                    assigneeText = ` và giao cho ${assigneeUsers[0].fullName || assigneeUsers[0].full_name || `User ${payload.assigned_to_user_id}`}`;
+                                }
+                            }
+                        } catch (err) {
+                            console.error('[Task Create] Failed to fetch assignee name:', err);
+                            assigneeText = ` và giao cho User ${payload.assigned_to_user_id}`;
+                        }
+                    }
+                    
+                    const priorityText: Record<string, string> = {
+                        'low': 'Độ ưu tiên thấp',
+                        'medium': 'Độ ưu tiên trung bình',
+                        'high': 'Độ ưu tiên cao',
+                        'urgent': 'Khẩn cấp'
+                    };
+                    const priority = priorityText[task.priority || 'medium'] || task.priority;
+                    const dueDate = task.due_date ? `Deadline: ${dayjs(task.due_date).format('DD/MM/YYYY')}` : '';
+                    
+                    notifyProjectMembers(
+                        task.project_id,
+                        userId, // Exclude người tạo task
+                        {
+                            title: `🆕 Task mới: ${task.title}`,
+                            content: `Task "​${task.title}"​ đã được tạo bởi ${creatorName}${assigneeText}. ${priority}${dueDate ? '. ' + dueDate : ''}`,
+                            type: 'TASK_CREATED',
+                            data: {
+                                task_id: task.task_id,
+                                task_title: task.title,
+                                assignee_id: payload.assigned_to_user_id,
+                                priority: task.priority,
+                                due_date: task.due_date,
+                                creator_name: creatorName
+                            }
+                        },
+                        // Forward incoming headers so notification-service can associate user context if needed
+                        req.headers as any
+                    ).catch(err => console.error('[Task Create] Notification failed:', err));
+                }
+
                 res.status(201).json({
                     success: true,
                     task: {
@@ -1669,8 +1743,17 @@ export class ProjectController {
             }
 
             const userId = getUserId(req);
+            
+            if (!userId || isNaN(userId)) {
+                console.error('[updateTaskStatus] Invalid userId:', { userId, userData: getUserData(req) });
+                res.status(401).json({ 
+                    error: 'Unauthorized', 
+                    message: 'User ID not found or invalid in request' 
+                });
+                return;
+            }
 
-            console.log(`[Project Controller] Updating task ${task_id} status to ${status}`);
+            console.log(`[Project Controller] Updating task ${task_id} status to ${status}, userId=${userId}`);
 
             // Check if task exists and belongs to the project
             const task = await TaskModel.query()
@@ -1811,7 +1894,58 @@ export class ProjectController {
                 }
             } as any);
 
-            // Notification logic removed: notifications table absent in DB
+            // 🔔 Gửi thông báo cho tất cả thành viên trong dự án
+            const statusText: Record<string, string> = {
+                'todo': '⚪ Chưa bắt đầu',
+                'in_progress': '🔵 Đang thực hiện',
+                'pending_approval': '🟡 Chờ duyệt',
+                'done': '✅ Hoàn thành'
+            };
+            
+            const statusEmoji: Record<string, string> = {
+                'todo': '⚪',
+                'in_progress': '🔵',
+                'pending_approval': '🟡',
+                'done': '✅'
+            };
+            
+            const oldStatusText = statusText[currentStatus] || currentStatus;
+            const newStatusText = statusText[status] || status;
+            
+            // Get updater name
+            let updaterName = 'Một thành viên';
+            try {
+                const headerAuth = (req.headers.authorization as string) || null;
+                const cookieToken = (req as any).cookies?.token;
+                const authHeader = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : null);
+                if (authHeader && userId) {
+                    const updaterUsers = await AuthService.getUsersByIds([userId], authHeader, getUserData(req));
+                    if (updaterUsers && updaterUsers.length > 0) {
+                        updaterName = updaterUsers[0].fullName || updaterUsers[0].full_name || updaterName;
+                    }
+                }
+            } catch (err) {
+                console.error('[Task Status Update] Failed to fetch updater name:', err);
+            }
+            
+            notifyProjectMembers(
+                Number(project_id),
+                userId, // Exclude người cập nhật
+                {
+                    title: `${statusEmoji[status] || '🔄'} Cập nhật trạng thái: ${task.title}`,
+                    content: `Task "​${task.title}"​ chuyển từ ${oldStatusText} → ${newStatusText} bởi ${updaterName}`,
+                    type: 'TASK_STATUS_UPDATED',
+                    data: {
+                        task_id: task.task_id,
+                        task_title: task.title,
+                        old_status: currentStatus,
+                        new_status: status,
+                        updated_by: userId,
+                        updater_name: updaterName
+                    }
+                },
+                req.headers as any
+            ).catch(err => console.error('[Task Status Update] Notification failed:', err));
 
             // If status is done (approved), save KPI record
             if (status === 'done') {
@@ -2361,6 +2495,52 @@ export class ProjectController {
                 event_time: dayjs().toISOString(),
                 metadata: { task_id: updatedTask.task_id }
             } as any);
+
+            // 🔔 Gửi thông báo cho tất cả thành viên trong dự án
+            const changedFields: string[] = [];
+            if (payload.title !== undefined) changedFields.push('tiêu đề');
+            if (payload.description !== undefined) changedFields.push('mô tả');
+            if (payload.assignee_id !== undefined) changedFields.push('người thực hiện');
+            if (payload.priority !== undefined) changedFields.push('độ ưu tiên');
+            if (payload.due_date !== undefined) changedFields.push('deadline');
+            
+            const changedText = changedFields.length > 0 
+                ? `: ${changedFields.join(', ')}`
+                : '';
+            
+            // Get updater name
+            let updaterName = 'Một thành viên';
+            try {
+                const headerAuth = (req.headers.authorization as string) || null;
+                const cookieToken = (req as any).cookies?.token;
+                const authHeader = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : null);
+                if (authHeader && userId) {
+                    const updaterUsers = await AuthService.getUsersByIds([userId], authHeader, getUserData(req));
+                    if (updaterUsers && updaterUsers.length > 0) {
+                        updaterName = updaterUsers[0].fullName || updaterUsers[0].full_name || updaterName;
+                    }
+                }
+            } catch (err) {
+                console.error('[Task Update] Failed to fetch updater name:', err);
+            }
+            
+            notifyProjectMembers(
+                Number(project_id),
+                userId, // Exclude người cập nhật
+                {
+                    title: `✏️ Cập nhật task: ${updatedTask.title}`,
+                    content: `Task "​${updatedTask.title}"​ đã cập nhật${changedText} bởi ${updaterName}`,
+                    type: 'TASK_UPDATED',
+                    data: {
+                        task_id: updatedTask.task_id,
+                        task_title: updatedTask.title,
+                        changed_fields: changedFields,
+                        updated_by: userId,
+                        updater_name: updaterName
+                    }
+                },
+                req.headers as any
+            ).catch(err => console.error('[Task Update] Notification failed:', err));
 
             res.status(200).json({
                 success: true,

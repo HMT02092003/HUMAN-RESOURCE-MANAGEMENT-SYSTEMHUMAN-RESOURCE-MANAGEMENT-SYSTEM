@@ -508,7 +508,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
             case 'projects':
                 router.push('/projects');
                 break;
-            case 'kpi-management':
+            case 'kpiManagement':
                 router.push('/kpi-management');
                 break;
             default:

@@ -11,6 +11,7 @@ const getServices = () => ({
   attendance: process.env.ATTENDANCE_SERVICE_URL,
   application: process.env.APPLICATION_SERVICE_URL,
   ai: process.env.AI_FACE_RECOGNITION_SERVICE_URL,
+  notification: process.env.NOTIFICATION_SERVICE_URL,
 });
 
 // Route configuration - định nghĩa các route và service tương ứng
@@ -83,6 +84,13 @@ const ROUTE_CONFIG = [
     target: 'ai',
     pathRewrite: { '^/api/ai': '/api' },  // Rewrite: /api/ai/v1/... -> /api/v1/...
     handleMultipart: true
+  },
+  // Notification service - Realtime + Push
+  {
+    path: '/api/notifications',
+    target: 'notification',
+    pathRewrite: { '^/api/notifications': '/api' },
+    ws: true  // Enable WebSocket support for Socket.io
   },
   {
     path: '/applications',

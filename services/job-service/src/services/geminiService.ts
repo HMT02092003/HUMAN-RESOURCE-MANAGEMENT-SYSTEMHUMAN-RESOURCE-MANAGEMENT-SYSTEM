@@ -5,7 +5,19 @@ import SkillModel from '../Models/SkillModel.ts';
 
 dayjs.extend(isBetween);
 
-const MODEL_NAME = 'gemini-2.5-flash';
+// Model cascade from strongest to weakest
+const MODEL_CASCADE = [
+  'gemini-2.5-flash',      // Strongest - try first
+  'gemini-3-flash',        // Second choice
+  'gemini-robotics-er-1.5-preview', // Third
+  'gemma-3-12b',           // Fallback options
+  'gemma-3-1b',
+  'gemma-3-27b',
+  'gemma-3-2b',
+  'gemma-3-4b'
+];
+
+const MODEL_NAME = MODEL_CASCADE[0]; // Default to strongest
 const apiKey = process.env.GEMINI_API_KEY;
 
 if (!apiKey) {
@@ -18,6 +30,69 @@ function ensureGeminiAvailable() {
   if (!client) {
     throw new Error('Gemini API key chưa được cấu hình. Vui lòng kiểm tra biến môi trường GEMINI_API_KEY.');
   }
+}
+
+/**
+ * Helper function to call Gemini with model cascading
+ * Tries models from strongest to weakest when rate limit is hit
+ */
+async function generateContentWithCascade(prompt: string): Promise<string> {
+  ensureGeminiAvailable();
+  
+  let lastError: any = null;
+  
+  for (let i = 0; i < MODEL_CASCADE.length; i++) {
+    const modelName = MODEL_CASCADE[i];
+    
+    try {
+      console.log(`[Gemini] Trying model: ${modelName} (${i + 1}/${MODEL_CASCADE.length})`);
+      
+      const response = await client!.models.generateContent({
+        model: modelName,
+        contents: prompt
+      });
+      
+      const text = response && typeof response.text === 'string' ? response.text : '';
+      
+      if (!text || text.trim().length === 0) {
+        throw new Error('Empty response from model');
+      }
+      
+      console.log(`✅ [Gemini] Success with model: ${modelName}`);
+      return text;
+      
+    } catch (error: any) {
+      lastError = error;
+      const errorMsg = error?.message || String(error);
+      
+      // Check if it's a rate limit error
+      const isRateLimitError = 
+        errorMsg.includes('429') ||
+        errorMsg.includes('rate limit') ||
+        errorMsg.includes('quota') ||
+        errorMsg.includes('RESOURCE_EXHAUSTED');
+      
+      if (isRateLimitError) {
+        console.warn(`⚠️ [Gemini] Rate limit hit for model: ${modelName}`);
+        
+        // If not the last model, try next one
+        if (i < MODEL_CASCADE.length - 1) {
+          console.log(`🔄 [Gemini] Cascading to next model...`);
+          continue;
+        }
+      }
+      
+      // For non-rate-limit errors, throw immediately
+      if (!isRateLimitError) {
+        console.error(`❌ [Gemini] Error with model ${modelName}:`, errorMsg);
+        throw error;
+      }
+    }
+  }
+  
+  // If we get here, all models failed with rate limit
+  console.error('❌ [Gemini] All models exhausted due to rate limits');
+  throw new Error(`All Gemini models are rate limited. Last error: ${lastError?.message || 'Unknown'}`);
 }
 
 /**
@@ -122,12 +197,7 @@ CV TEXT:
 ${cvText}`;
 
   try {
-    const response = await client!.models.generateContent({
-      model: MODEL_NAME,
-      contents: prompt
-    });
-
-    const raw = response && typeof response.text === 'string' ? response.text : '';
+    const raw = await generateContentWithCascade(prompt);
     const parsed = parseGeminiJSON(raw);
 
     if (parsed && Array.isArray(parsed.skills)) {
@@ -226,12 +296,7 @@ Phân tích và trả về JSON:
 }`;
 
   try {
-    const response = await client!.models.generateContent({
-      model: MODEL_NAME,
-      contents: prompt
-    });
-
-    const raw = response && typeof response.text === 'string' ? response.text : '';
+    const raw = await generateContentWithCascade(prompt);
     const parsed = parseGeminiJSON(raw);
 
     if (!parsed.difficulty_level || !parsed.estimated_days || !Array.isArray(parsed.required_skills)) {
@@ -375,12 +440,7 @@ Trả về JSON:
 }`;
 
   try {
-    const response = await client!.models.generateContent({
-      model: MODEL_NAME,
-      contents: prompt
-    });
-
-    const raw = response && typeof response.text === 'string' ? response.text : '';
+    const raw = await generateContentWithCascade(prompt);
     const parsed = parseGeminiJSON(raw);
 
     return {
@@ -518,12 +578,7 @@ Trả về JSON:
 }`;
 
   try {
-    const response = await client!.models.generateContent({
-      model: MODEL_NAME,
-      contents: prompt
-    });
-
-    const raw = response && typeof response.text === 'string' ? response.text : '';
+    const raw = await generateContentWithCascade(prompt);
     const parsed = parseGeminiJSON(raw);
 
     return {

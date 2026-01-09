@@ -189,20 +189,23 @@ export const getUserProjectKpiDetails = (userId: string, params?: { month?: numb
 };
 
 // Notification APIs
+// Note: Notification service is proxied at /api/notifications (not /jobs)
+const NOTIFICATION_PREFIX = '/api/notifications';
+
 export const getNotifications = (params?: { is_read?: boolean; limit?: number; offset?: number }) => {
-  return api.get(`${JOB_SERVICE_PREFIX}/notifications`, { params });
+  return api.get(NOTIFICATION_PREFIX, { params });
 };
 
 export const getUnreadNotificationCount = () => {
-  return api.get(`${JOB_SERVICE_PREFIX}/notifications/unread-count`);
+  return api.get(`${NOTIFICATION_PREFIX}/unread-count`);
 };
 
 export const markNotificationAsRead = (notificationId: number) => {
-  return api.put(`${JOB_SERVICE_PREFIX}/notifications/${notificationId}/read`);
+  return api.patch(`${NOTIFICATION_PREFIX}/${notificationId}/read`);
 };
 
 export const markAllNotificationsAsRead = () => {
-  return api.put(`${JOB_SERVICE_PREFIX}/notifications/mark-all-read`);
+  return api.patch(`${NOTIFICATION_PREFIX}/read-all`);
 };
 
 export default {

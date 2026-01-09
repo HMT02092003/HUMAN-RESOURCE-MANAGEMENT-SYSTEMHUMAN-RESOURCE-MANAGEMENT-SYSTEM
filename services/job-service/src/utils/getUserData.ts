@@ -23,11 +23,19 @@ export function getUserData(req: Request): any | null {
 
 /**
  * Get user ID from request (tries multiple sources)
+ * Returns a valid number or undefined (never NaN)
  */
 export function getUserId(req: Request): number | undefined {
   const userData = getUserData(req);
   if (!userData) return undefined;
   
   // Try different possible locations of user ID
-  return userData.sub || userData.user?.id || userData.id;
+  const rawId = userData.sub || userData.userId || userData.user_id || userData.user?.id || userData.id;
+  
+  // Convert to number and validate
+  if (rawId === null || rawId === undefined) return undefined;
+  const numId = Number(rawId);
+  
+  // Return undefined if conversion results in NaN or invalid number
+  return (!isNaN(numId) && isFinite(numId)) ? numId : undefined;
 }

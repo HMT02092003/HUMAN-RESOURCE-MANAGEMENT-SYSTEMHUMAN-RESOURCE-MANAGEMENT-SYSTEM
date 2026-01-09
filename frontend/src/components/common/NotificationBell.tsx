@@ -21,7 +21,7 @@ interface Notification {
   task_id?: string;
   notification_type: string;
   title: string;
-  message?: string;
+  content?: string;  // Changed from 'message' to 'content' to match backend
   is_read: boolean;
   read_at?: string;
   priority: 'low' | 'normal' | 'high' | 'urgent';
@@ -47,16 +47,34 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ userId }) => {
   useEffect(() => {
     if (!userId) return;
 
-    const apiGatewayUrl = process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:4000';
-    const socketConnection = io(apiGatewayUrl, {
+    // Connect directly to notification-service (Socket.io doesn't proxy well through gateway)
+    const notificationServiceUrl = process.env.NEXT_PUBLIC_NOTIFICATION_SERVICE_URL || 'http://localhost:4009';
+    
+    // Get token from cookie or localStorage
+    const token = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('token='))
+      ?.split('=')[1] || localStorage.getItem('token');
+
+    if (!token) {
+      console.warn('⚠️ No token found for Socket.io authentication');
+      return;
+    }
+
+    const socketConnection = io(notificationServiceUrl, {
       path: '/socket.io/',
       transports: ['websocket', 'polling'],
+      auth: {
+        token: token
+      }
     });
 
     socketConnection.on('connect', () => {
-      console.log('✅ Socket connected:', socketConnection.id);
-      // Authenticate user
-      socketConnection.emit('authenticate', userId);
+      console.log('✅ Socket connected to notification-service:', socketConnection.id);
+    });
+
+    socketConnection.on('connect_error', (error) => {
+      console.error('❌ Socket connection error:', error.message);
     });
 
     socketConnection.on('disconnect', () => {
@@ -72,7 +90,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ userId }) => {
       // Show browser notification if permitted
       if (Notification.permission === 'granted') {
         new Notification(data.title, {
-          body: data.message || '',
+          body: data.content || '',
           icon: '/logo/logo.png',
         });
       }
@@ -103,8 +121,8 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ userId }) => {
         jobService.getUnreadNotificationCount()
       ]);
 
-      setNotifications(notifRes.data.data || []);
-      setUnreadCount(countRes.data.data.count || 0);
+      setNotifications(notifRes.data.data?.notifications || []);
+      setUnreadCount(countRes.data.data?.unread_count || 0);
     } catch (error) {
       console.error('Failed to load notifications:', error);
     } finally {
@@ -219,7 +237,8 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ userId }) => {
           <List
             dataSource={notifications}
             renderItem={(item) => {
-              const typeInfo = getNotificationTypeInfo(item.notification_type);
+              // Remove emoji and text after colon from title for cleaner display
+              const cleanTitle = item.title.replace(/^[\u{1F300}-\u{1F9FF}]\s*/u, '').split(':')[0].trim();
 
               return (
                 <List.Item
@@ -233,40 +252,36 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ userId }) => {
                   onClick={() => handleNotificationClick(item)}
                 >
                   <div style={{ width: '100%' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                      <div>
-                        <Tag color={typeInfo.color} style={{ fontSize: 11, marginRight: 8 }}>
-                          {typeInfo.label}
-                        </Tag>
-                        <Text strong style={{ fontSize: 13 }}>{item.title}</Text>
-                      </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                      <Text strong style={{ fontSize: 14, lineHeight: '20px', flex: 1 }}>
+                        {cleanTitle}
+                      </Text>
                       {!item.is_read && (
                         <Button
                           type="text"
                           size="small"
                           icon={<CheckOutlined />}
                           onClick={(e) => handleMarkAsRead(item.notification_id, e)}
+                          style={{ marginLeft: 8 }}
                         />
                       )}
                     </div>
 
-                    {item.message && (
+                    {item.content && (
                       <Text
                         type="secondary"
                         style={{
-                          fontSize: 12,
+                          fontSize: 13,
                           display: 'block',
                           marginTop: 4,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
+                          lineHeight: '18px'
                         }}
                       >
-                        {item.message}
+                        {item.content}
                       </Text>
                     )}
 
-                    <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
+                    <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 6 }}>
                       {dayjs(item.created_at).fromNow()}
                     </Text>
                   </div>

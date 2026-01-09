@@ -5,13 +5,15 @@ import { createProxyMiddleware } from 'http-proxy-middleware';
  * @param {string} target - URL đích của service
  * @param {object|false} pathRewrite - Cấu hình rewrite path
  * @param {boolean} handleMultipart - Có xử lý multipart data không
+ * @param {boolean} ws - Enable WebSocket support (cho Socket.io)
  * @returns {Function} Express middleware
  */
-const createOptimizedProxy = (target, pathRewrite = false, handleMultipart = false) => {
+const createOptimizedProxy = (target, pathRewrite = false, handleMultipart = false, ws = false) => {
   return createProxyMiddleware({
     target,
     changeOrigin: true,
     pathRewrite: pathRewrite || undefined,
+    ws: ws || false, // Enable WebSocket proxying
     
     onProxyReq: (proxyReq, req, res) => {
       // Set auth headers FIRST before any body writes

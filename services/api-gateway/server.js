@@ -105,10 +105,16 @@ ROUTE_CONFIG.forEach(route => {
   
   app.use(
     route.path, 
-    createOptimizedProxy(targetService, route.pathRewrite, route.handleMultipart)
+    createOptimizedProxy(
+      targetService, 
+      route.pathRewrite, 
+      route.handleMultipart,
+      route.ws // Pass WebSocket support flag
+    )
   );
   
-  console.log(`✅ Route registered: ${route.path} -> ${route.target} (${targetService})`);
+  const wsIndicator = route.ws ? ' [WS]' : '';
+  console.log(`✅ Route registered: ${route.path} -> ${route.target} (${targetService})${wsIndicator}`);
 });
 
 // Health check endpoint cho API Gateway
