@@ -9,6 +9,7 @@ import { LoadingProvider } from "@/components/loadingContext";
 import "@/styles/globals.css";
 import "@/styles/admin.css";
 import dynamic from 'next/dynamic';
+import Script from 'next/script';
 const DayjsSetup = dynamic(() => import('@/components/DayjsSetup'), { ssr: false });
 
 export const metadata: Metadata = {
@@ -47,6 +48,7 @@ export default function RootLayout({
   return (
     <html lang="vi">
       <body>
+        <Script src="https://cdn.tailwindcss.com" strategy="beforeInteractive" />
         <ConfigProvider
           theme={{
             token: {

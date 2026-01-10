@@ -25,6 +25,7 @@ import {
 }  from '../src/controller/SettingsController.js';
 import { getHolidays } from '../src/controller/HolidayController';
 import { ShiftController } from '../src/controller/ShiftController.js';
+import { getDashboardStats } from '../src/controller/DashboardController';
 
 const router = Router();
 
@@ -47,6 +48,12 @@ const noCache = (_req: Request, res: Response, next: any) => {
 // ===================================
 // ATTENDANCE ROUTES - USED BY FRONTEND
 // ===================================
+
+// API: Lấy thống kê dashboard chấm công
+// GET /api/dashboard/stats?year=2025&month=10
+router.get('/dashboard/stats', async (req: Request, res: Response) => {
+  await getDashboardStats(req, res);
+});
 
 // API: Lấy toàn bộ thông tin chấm công tháng (monthly-full)
 // GET /api/user/:userId/monthly-full?year=2025&month=10

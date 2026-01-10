@@ -1,25 +1,15 @@
 "use client";
 
-import React from 'react'
-import Home from "../../components/home/index"
-import MainLayout from "@/components/main-layout"
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-const HomePage = () => {
-  const breadcrumbItems = [
-    { title: 'Trang chủ', href: '/home' },
-    { title: 'Dashboard', href: '/home' }
-  ];
+export default function HomePage() {
+  const router = useRouter();
 
-  const pageName = "Dashboard";
-  const pageDes = "Tổng quan hệ thống quản lý nhân sự";
+  useEffect(() => {
+    // Redirect to dashboard silently
+    router.replace("/dashboard");
+  }, [router]);
 
-  return (
-    <>
-      <MainLayout breadcrumbItems={breadcrumbItems} pageName={pageName} pageDes={pageDes}>
-        <Home />
-      </MainLayout>
-    </>
-  )
+  return null;
 }
-
-export default HomePage

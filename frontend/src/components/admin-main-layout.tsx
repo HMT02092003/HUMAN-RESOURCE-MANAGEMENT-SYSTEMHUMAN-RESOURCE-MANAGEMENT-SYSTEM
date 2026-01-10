@@ -620,8 +620,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
 
     return (
         <Layout style={{ minHeight: '100vh' }}>
-            <LoadingProgress>
-                <Sider
+            <Sider
                     width={220}
                     style={{
                         backgroundColor: "white",
@@ -765,18 +764,20 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                             </div>
                         </div>
 
-                        <div
-                            style={{
-                                padding: isMobile ? 16 : 24,
-                                background: colorBgContainer,
-                                borderRadius: borderRadiusLG,
-                                margin: isMobile ? "0" : "0 24px",
-                                maxWidth: isMobile ? "100%" : "none",
-                                width: isMobile ? "100%" : "auto"
-                            }}
-                        >
-                            {children}
-                        </div>
+                        <LoadingProgress>
+                            <div
+                                style={{
+                                    padding: isMobile ? 16 : 24,
+                                    background: colorBgContainer,
+                                    borderRadius: borderRadiusLG,
+                                    margin: isMobile ? "0" : "0 24px",
+                                    maxWidth: isMobile ? "100%" : "none",
+                                    width: isMobile ? "100%" : "auto"
+                                }}
+                            >
+                                {children}
+                            </div>
+                        </LoadingProgress>
                     </Content>
 
                     <Footer style={{ textAlign: 'center' }}>
@@ -798,7 +799,6 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                         onClick={() => setCollapsed(true)}
                     />
                 )}
-            </LoadingProgress>
 
             <Modal
                 title="Thông tin tài khoản"

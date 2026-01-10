@@ -17,6 +17,7 @@ import cookieParser from 'cookie-parser';
 import { getServices, ROUTE_CONFIG } from './config/services.js';
 import { createOptimizedProxy, requestLogger } from './middleware/proxy.js';
 import { gatewayAuth } from './middleware/auth.js';
+import dashboardRoutes from './routes/dashboard.js';
 
 const app = express();
 const httpServer = createServer(app);
@@ -93,6 +94,9 @@ app.use(cookieParser());
 
 // Gateway Authentication Middleware
 app.use(gatewayAuth);
+
+// Dashboard aggregation routes (before proxy routes)
+app.use('/api/dashboard', dashboardRoutes);
 
 // Tự động tạo proxy routes từ config
 ROUTE_CONFIG.forEach(route => {

@@ -5,6 +5,7 @@
  */
 import express from 'express';
 import { ApplicationController } from '../src/controller/application-controller.js';
+import { getDashboardStats } from '../src/controller/dashboard-controller.js';
 import { uploadEvidence, processAndSaveFiles } from '../src/middleware/upload.js';
 
 const router = express.Router();
@@ -12,6 +13,10 @@ const router = express.Router();
 // ===================================
 // APPLICATION ROUTES
 // ===================================
+
+// Lấy thống kê dashboard đơn từ
+// GET /api/dashboard/stats?year=2025&month=10
+router.get('/dashboard/stats', getDashboardStats);
 
 // Tạo đơn từ mới (với upload)
 router.post('/applications',

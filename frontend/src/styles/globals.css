@@ -51,12 +51,13 @@ a {
   background: #a8a8a8;
 }
 
-/* Loading spinner */
+/* Loading spinner (content-only) */
 .loading-spinner {
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
+  height: 200px; /* limited height so it only occupies content area */
+  width: 100%;
 }
 
 /* Responsive utilities */
