@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 import ApplicationService, { FORGOT_CHECK_TYPE_LABELS } from '../../services/ApplicationService';
+import DetailViewScreen from '../../components/DetailViewScreen';
 
 const FORGOT_CHECK_TYPES = [
     { value: 'check-in', label: 'Quên check in' },
@@ -23,6 +24,7 @@ const FORGOT_CHECK_TYPES = [
 const ForgotCheckApplicationScreen = ({ navigation, route }) => {
     const { mode = 'create', applicationId, applicationData } = route.params || {};
     const isEditMode = mode === 'edit';
+    const isViewMode = mode === 'view';
 
     // Form state
     const [forgotDate, setForgotDate] = useState(new Date());
@@ -38,18 +40,30 @@ const ForgotCheckApplicationScreen = ({ navigation, route }) => {
     // UI state
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [applicationFullData, setApplicationFullData] = useState(null);
 
     useEffect(() => {
-        if (isEditMode && applicationId) {
+        console.log('🔄 [ForgotCheckApp] Mode:', mode, 'ApplicationId:', applicationId);
+        if ((isEditMode || isViewMode) && applicationId) {
+            console.log('📥 [ForgotCheckApp] Loading data for edit/view');
             loadApplicationData();
+        } else if (!isEditMode && !isViewMode) {
+            // Reset form to defaults when in create mode
+            console.log('🆕 [ForgotCheckApp] CREATE MODE - Resetting form to defaults');
+            setApplicationFullData(null);
+            setForgotDate(new Date());
+            setForgotTime(new Date());
+            setForgotType('check-in');
+            setReason('');
         }
-    }, [isEditMode, applicationId]);
+    }, [isEditMode, isViewMode, applicationId]);
 
     const loadApplicationData = async () => {
         setLoading(true);
         try {
             const response = await ApplicationService.getApplicationById(applicationId);
             const data = response?.data || response;
+            setApplicationFullData(data);
             const formData = data?.data || data;
             
             if (formData) {
@@ -147,6 +161,82 @@ const ForgotCheckApplicationScreen = ({ navigation, route }) => {
                 <ActivityIndicator size="large" color="#1890ff" />
                 <Text style={styles.loadingText}>Đang tải...</Text>
             </View>
+        );
+    }
+
+    // View mode - Display read-only detail view
+    if (isViewMode && applicationFullData) {
+        const appData = applicationFullData.data || {};
+        const STATUS_LABELS = { 0: 'Chờ duyệt', 1: 'Đã duyệt', 2: 'Từ chối' };
+        const STATUS_COLORS = { 0: '#fa8c16', 1: '#52c41a', 2: '#ff4d4f' };
+
+        const sections = [
+            {
+                title: 'Thông tin quên chấm công',
+                icon: 'alarm',
+                fields: [
+                    { 
+                        label: 'Loại', 
+                        value: FORGOT_CHECK_TYPES.find(t => t.value === appData.forgotType)?.label || 'N/A',
+                        icon: 'tag-outline' 
+                    },
+                    { label: 'Ngày quên', value: appData.forgotDate, type: 'date', icon: 'calendar' },
+                    { label: 'Giờ quên chấm', value: appData.forgotTime, icon: 'clock-time-three-outline' },
+                    { label: 'Lý do', value: appData.reason || 'N/A', icon: 'text' }
+                ]
+            },
+            {
+                title: 'Trạng thái & Phê duyệt',
+                icon: 'information-outline',
+                fields: [
+                    {
+                        label: 'Trạng thái',
+                        value: STATUS_LABELS[applicationFullData.status] || 'N/A',
+                        type: 'chip',
+                        chipStyle: { backgroundColor: STATUS_COLORS[applicationFullData.status] + '20' },
+                        chipTextStyle: { color: STATUS_COLORS[applicationFullData.status], fontWeight: '600' },
+                        icon: 'checkbox-marked-circle-outline'
+                    },
+                    ...(applicationFullData.approvedByInfo ? [{
+                        label: 'Người duyệt',
+                        value: applicationFullData.approvedByInfo.fullName,
+                        icon: 'account-check'
+                    }] : []),
+                    ...(applicationFullData.approvedDate ? [{
+                        label: 'Ngày duyệt',
+                        value: applicationFullData.approvedDate,
+                        type: 'datetime',
+                        icon: 'calendar-check'
+                    }] : []),
+                    ...(appData.rejectReason ? [{
+                        label: 'Lý do từ chối',
+                        value: appData.rejectReason,
+                        icon: 'close-circle-outline',
+                        valueStyle: { color: '#ff4d4f' }
+                    }] : []),
+                    { label: 'Ngày tạo', value: applicationFullData.created_at, type: 'datetime', icon: 'calendar-plus' }
+                ]
+            }
+        ];
+
+        const actions = [
+            ...(applicationFullData.status === 0 ? [{
+                label: 'Chỉnh sửa đơn',
+                icon: 'pencil',
+                color: '#1890ff',
+                mode: 'contained',
+                onPress: () => navigation.replace('ForgotCheckApplication', { mode: 'edit', applicationId })
+            }] : [])
+        ];
+
+        return (
+            <DetailViewScreen
+                title="Chi tiết đơn quên chấm công"
+                sections={sections}
+                actions={actions}
+                loading={loading}
+                onBack={() => navigation.goBack()}
+            />
         );
     }
 

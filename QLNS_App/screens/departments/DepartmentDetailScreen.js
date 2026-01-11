@@ -46,7 +46,7 @@ const DepartmentDetailScreen = ({ route, navigation }) => {
   };
 
   const handleEdit = () => {
-    navigation.navigate('DepartmentEdit', { departmentId });
+    navigation.navigate('DepartmentForm', { mode: 'edit', departmentId });
   };
 
   const handleDelete = () => {

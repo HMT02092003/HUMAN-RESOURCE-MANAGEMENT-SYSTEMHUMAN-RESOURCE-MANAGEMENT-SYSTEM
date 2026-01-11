@@ -7,7 +7,7 @@ import {
   Platform,
   Dimensions,
   Image,
-  ImageBackground, // Import ImageBackground
+  ImageBackground,
 } from 'react-native';
 import {
   TextInput,
@@ -18,6 +18,8 @@ import {
   useTheme,
   Provider as PaperProvider,
   DefaultTheme,
+  Surface,
+  ActivityIndicator,
 } from 'react-native-paper';
 import { StatusBar } from 'expo-status-bar';
 import { useAuth } from '../../services/AuthContext';
@@ -79,7 +81,9 @@ function LoginScreenContent({ navigation }) {
       // Không cần navigate thủ công - AuthContext sẽ tự động chuyển màn hình
     } catch (err) {
       console.error('❌ [LoginScreen] Login failed:', err);
-      setError(err.message || 'Đăng nhập thất bại');
+      // Prefer server message when available
+      const message = err?.message || err?.response?.data?.error || err?.response?.data?.message || 'Đăng nhập thất bại';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -89,12 +93,7 @@ function LoginScreenContent({ navigation }) {
     <>
       <StatusBar style="dark" />
       {/* Use ImageBackground for the full screen */}
-      <ImageBackground
-        // Use a small inline data-URI placeholder so webpack won't fail when the asset file is missing.
-        // This is a transparent 1x1 PNG; it will scale to the background area.
-        source={{ uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAJ/6y2gAAAAASUVORK5CYII=' }}
-        style={styles.backgroundImage}
-      >
+      <ImageBackground source={{ uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAJ/6y2gAAAAASUVORK5CYII=' }} style={styles.backgroundImage}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardView}
@@ -104,100 +103,88 @@ function LoginScreenContent({ navigation }) {
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Logo */}
-            <View style={styles.logoContainer}>
-              <Image
-                // Inline placeholder logo (transparent 1x1 PNG). Replace with a real logo file under
-                // `QLNS_App/assets/logo.png` later if you have the original image.
-                source={{ uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAJ/6y2gAAAAASUVORK5CYII=' }}
-                style={styles.logo}
-                resizeMode="contain"
-              />
-            </View>
+            <Surface style={styles.card} elevation={6}>
+              {/* Title */}
+              <Title style={styles.title}>Đăng nhập</Title>
 
-            {/* Title */}
-            <Title style={styles.title}>Đăng nhập</Title>
+              {/* Subtitle */}
+              <Paragraph style={styles.subtitle}>Vui lòng đăng nhập vào tài khoản của bạn</Paragraph>
 
-            {/* Subtitle */}
-            <Paragraph style={styles.subtitle}>
-              Vui lòng đăng nhập vào tài khoản của bạn
-            </Paragraph>
+              {/* Error Message */}
+              {error ? (
+                <HelperText type="error" visible={true} style={styles.errorText}>
+                  {error}
+                </HelperText>
+              ) : null}
 
-            {/* Error Message */}
-            {error ? (
-              <HelperText type="error" visible={true} style={styles.errorText}>
-                {error}
-              </HelperText>
-            ) : null}
-
-            {/* Username Input */}
-            <TextInput
-              label="Tên đăng nhập"
-              value={username}
-              onChangeText={(text) => {
-                setUsername(text);
-                setError('');
-              }}
-              mode="outlined"
-              left={<TextInput.Icon icon="account" />}
-              style={styles.input}
-              outlineColor="transparent" // Remove outline color for a cleaner look
-              activeOutlineColor={paperTheme.colors.primary}
-              disabled={loading}
-              autoCapitalize="none"
-              autoCorrect={false}
-              error={!!error && !username}
-            />
-
-            {/* Password Input */}
-            <TextInput
-              label="Mật khẩu"
-              value={password}
-              onChangeText={(text) => {
-                setPassword(text);
-                setError('');
-              }}
-              mode="outlined"
-              left={<TextInput.Icon icon="lock" />}
-              right={
-                <TextInput.Icon
-                  icon={showPassword ? 'eye-off' : 'eye'}
-                  onPress={() => setShowPassword(!showPassword)}
+              {/* Inputs container */}
+              <View style={{ width: '100%' }}>
+                {/* Username Input */}
+                <TextInput
+                  label="Tên đăng nhập"
+                  value={username}
+                  onChangeText={(text) => {
+                    setUsername(text);
+                    setError('');
+                  }}
+                  mode="outlined"
+                  left={<TextInput.Icon icon="account" />}
+                  style={styles.input}
+                  outlineColor="transparent"
+                  activeOutlineColor={paperTheme.colors.primary}
+                  disabled={loading}
+                  autoCapitalize="none"
+                  autoCorrect={false}
                 />
-              }
-              secureTextEntry={!showPassword}
-              style={styles.input}
-              outlineColor="transparent" // Remove outline color for a cleaner look
-              activeOutlineColor={paperTheme.colors.primary}
-              disabled={loading}
-              autoCapitalize="none"
-              error={!!error && !password}
-            />
 
-            {/* Login Button */}
-            <Button
-              mode="contained"
-              onPress={handleLogin}
-              loading={loading}
-              disabled={loading}
-              style={styles.loginButton}
-              contentStyle={styles.loginButtonContent}
-              labelStyle={styles.loginButtonLabel}
-              buttonColor={paperTheme.colors.primary}
-            >
-              {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
-            </Button>
+                {/* Password Input */}
+                <TextInput
+                  label="Mật khẩu"
+                  value={password}
+                  onChangeText={(text) => {
+                    setPassword(text);
+                    setError('');
+                  }}
+                  mode="outlined"
+                  left={<TextInput.Icon icon="lock" />}
+                  right={
+                    <TextInput.Icon
+                      icon={showPassword ? 'eye-off' : 'eye'}
+                      onPress={() => setShowPassword(!showPassword)}
+                    />
+                  }
+                  secureTextEntry={!showPassword}
+                  style={styles.input}
+                  outlineColor="transparent"
+                  activeOutlineColor={paperTheme.colors.primary}
+                  disabled={loading}
+                  autoCapitalize="none"
+                />
 
-            {/* Forgot Password Link */}
-            <Button
-              mode="text"
-              onPress={() => navigation.navigate('ForgotPassword')}
-              disabled={loading}
-              style={styles.forgotButton}
-              labelStyle={styles.forgotButtonLabel}
-            >
-              Quên mật khẩu?
-            </Button>
+                <Button
+                  mode="contained"
+                  onPress={handleLogin}
+                  loading={loading}
+                  disabled={loading}
+                  style={styles.loginButton}
+                  contentStyle={styles.loginButtonContent}
+                  labelStyle={styles.loginButtonLabel}
+                  buttonColor={paperTheme.colors.primary}
+                >
+                  {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
+                </Button>
+
+                <Button
+                  mode="text"
+                  onPress={() => navigation.navigate('ForgotPassword')}
+                  disabled={loading}
+                  style={styles.forgotButton}
+                  labelStyle={styles.forgotButtonLabel}
+                >
+                  Quên mật khẩu?
+                </Button>
+              </View>
+            </Surface>
           </ScrollView>
         </KeyboardAvoidingView>
       </ImageBackground>
@@ -253,12 +240,12 @@ const styles = StyleSheet.create({
     }),
   },
   logo: {
-    width: 280, // Slightly smaller logo to fit better
-    height: 190,
-    marginBottom: 0,
+    width: 180,
+    height: 80,
+    marginBottom: 8,
   },
   title: {
-    fontSize: 30, // Slightly smaller font size for the title
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#003366',
     marginBottom: 10, // Adjusted margin
@@ -266,23 +253,30 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   subtitle: {
-    fontSize: 16, // Adjusted font size for subtitle
+    fontSize: 14,
     color: '#336699',
-    marginBottom: 30, // Adjusted margin
+    marginBottom: 16,
     textAlign: 'center',
   },
   errorText: {
     fontSize: 14,
-    marginBottom: 20,
+    marginBottom: 12,
     textAlign: 'center',
     width: '100%',
-    backgroundColor: 'rgba(231, 76, 60, 0.1)',
+    backgroundColor: 'rgba(231, 76, 60, 0.06)',
     padding: 8,
     borderRadius: 8,
   },
+  card: {
+    width: '100%',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 28,
+    alignItems: 'stretch',
+  },
   input: {
     width: '100%',
-    marginBottom: 20,
+    marginBottom: 16,
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     fontSize: 16,
@@ -304,13 +298,13 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     width: '100%',
-    marginTop: 25, // Adjusted top margin
-    borderRadius: 15,
-    height: 50, // Adjusted height for the button
+    marginTop: 18, // Adjusted top margin
+    borderRadius: 28,
+    height: 52,
     justifyContent: 'center',
     ...Platform.select({
       web: {
-        boxShadow: '0 6px 18px rgba(0,119,190,0.16)',
+        boxShadow: '0 8px 26px rgba(0,119,190,0.18)',
       },
       ios: {
         shadowColor: '#0077BE',

@@ -88,7 +88,8 @@ class AuthTokenManager {
   // Login và lưu tokens - GIỐNG WEB
   static async loginAndSave(username, password) {
     console.log('🔐 [AUTH] Attempting login for:', username);
-    console.log('🔐 [AUTH] API URL:', `${API_BASE_URL}/auth/login`);
+    console.log('🔐 [AUTH] Base URL:', API_BASE_URL);
+    console.log('🔐 [AUTH] Full login URL:', `${API_BASE_URL}/auth/login`);
     
     try {
       // Call API giống hệt web

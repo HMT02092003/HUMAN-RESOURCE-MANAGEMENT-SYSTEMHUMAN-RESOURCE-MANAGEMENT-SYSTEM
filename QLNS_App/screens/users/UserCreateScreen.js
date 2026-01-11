@@ -15,6 +15,15 @@ const UserCreateScreen = ({ navigation }) => {
   const [chevrons, setChevrons] = useState([]);
   const [contractTypes, setContractTypes] = useState([]);
 
+  const toArray = (resp) => {
+    if (!resp) return [];
+    if (Array.isArray(resp)) return resp;
+    if (Array.isArray(resp.data)) return resp.data;
+    if (Array.isArray(resp.results)) return resp.results;
+    if (resp.data && Array.isArray(resp.data?.data)) return resp.data.data;
+    return [];
+  };
+
   useEffect(() => {
     loadDropdowns();
   }, []);
@@ -34,29 +43,33 @@ const UserCreateScreen = ({ navigation }) => {
       
       // Xử lý kết quả - chỉ set data nếu thành công
       if (results[0].status === 'fulfilled') {
-        setRoles(results[0].value || []);
-        console.log('✅ [UserCreateScreen] Roles loaded:', results[0].value?.length || 0);
+        const arr = toArray(results[0].value);
+        setRoles(arr);
+        console.log('✅ [UserCreateScreen] Roles loaded:', arr.length || 0);
       } else {
         console.error('❌ [UserCreateScreen] Roles failed:', results[0].reason);
       }
       
       if (results[1].status === 'fulfilled') {
-        setDepartments(results[1].value || []);
-        console.log('✅ [UserCreateScreen] Departments loaded:', results[1].value?.length || 0);
+        const arr = toArray(results[1].value);
+        setDepartments(arr);
+        console.log('✅ [UserCreateScreen] Departments loaded:', arr.length || 0);
       } else {
         console.error('❌ [UserCreateScreen] Departments failed:', results[1].reason);
       }
       
       if (results[2].status === 'fulfilled') {
-        setChevrons(results[2].value || []);
-        console.log('✅ [UserCreateScreen] Chevrons loaded:', results[2].value?.length || 0);
+        const arr = toArray(results[2].value);
+        setChevrons(arr);
+        console.log('✅ [UserCreateScreen] Chevrons loaded:', arr.length || 0);
       } else {
         console.error('❌ [UserCreateScreen] Chevrons failed:', results[2].reason);
       }
       
       if (results[3].status === 'fulfilled') {
-        setContractTypes(results[3].value || []);
-        console.log('✅ [UserCreateScreen] ContractTypes loaded:', results[3].value?.length || 0);
+        const arr = toArray(results[3].value);
+        setContractTypes(arr);
+        console.log('✅ [UserCreateScreen] ContractTypes loaded:', arr.length || 0);
       } else {
         console.error('❌ [UserCreateScreen] ContractTypes failed:', results[3].reason);
         setContractTypes([]);

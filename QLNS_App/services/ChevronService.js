@@ -1,12 +1,11 @@
 import apiService from './apiService';
 
 export const ChevronService = {
-    getAllChevrons: async () => {
+    getAllChevrons: async (params) => {
         try {
-            console.log('👔 [ChevronService] Fetching all chevrons...');
-            // For mobile app the API base includes '/api', so call without leading '/api'
-            const response = await apiService.get('/employee/all/chevrons');
-            console.log('✅ [ChevronService] Got chevrons:', response.data?.length || 0);
+            console.log('👔 [ChevronService] Fetching chevrons with params:', params);
+            const response = await apiService.get('/employee/chevrons', { params });
+            console.log('✅ [ChevronService] Got chevrons:', response.data);
             return response.data;
         } catch (error) {
             console.error('❌ [ChevronService] Error fetching chevrons:', error);

@@ -380,5 +380,12 @@ export default {
   getPriorityLabel,
   formatCurrency,
   formatDate,
-  getInitials
+  getInitials,
+  // KPI APIs
+  getAllUsersKpi: (params = {}) => {
+    return jobApi.get('/jobs/kpi/users', { params });
+  },
+  getUserProjectKpiDetails: (userId, params = {}) => {
+    return jobApi.get(`/jobs/kpi/users/${userId}/projects`, { params });
+  },
 };

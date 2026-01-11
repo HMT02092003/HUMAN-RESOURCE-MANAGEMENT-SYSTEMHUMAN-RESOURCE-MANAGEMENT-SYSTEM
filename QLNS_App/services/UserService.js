@@ -1,55 +1,70 @@
 import apiService from './apiService'; // ✅ SỬ DỤNG apiService TẬP TRUNG
+import AuthTokenManager from './AuthTokenManager';
 
 class UserService {
-  // Lấy danh sách users với pagination
+  // Lấy danh sách users với pagination và filters (giống web FE)
   static async getAllUsers(params = { page: 1, pageSize: 10 }) {
     try {
       console.log('👥 [UserService] Getting users with params:', params);
-      // ✅ BỎ /api vì base URL đã có /api rồi
-      const response = await apiService.get('/auth/users', {
+      
+      const config = {
         params: {
-          page: params.page,
-          pageSize: params.pageSize,
+          ...params,
           _t: Date.now() // Cache buster
         }
-      });
-      console.log('✅ [UserService] Got users:', response.data.total, 'total');
+      };
+
+      // ✅ GỌI /auth/users/all GIỐNG NHƯ WEB FE
+      const response = await apiService.get('/auth/users/all', config);
+      console.log('✅ [UserService] Got users:', response.data?.total || response.data?.length, 'total');
       return response.data; // { results: [...], total: N }
     } catch (error) {
-      console.error('❌ [UserService] Error fetching users:', error);
+      console.error('❌ [UserService] Error fetching users:', error.response?.data || error.message || error);
       throw error;
     }
   }
 
-  // Lấy tất cả users (không phân trang) - dùng cho search/filter
-  static async getAllUsersAll() {
+  // Lấy tất cả users (không phân trang) - dùng cho select/dropdown
+  static async getAllUsersAll(params = {}) {
     try {
-      console.log('👥 [UserService] Getting all users (no pagination)');
-      const response = await apiService.get('/auth/users/all');
-      console.log('✅ [UserService] Got all users:', response.data.length);
-      return response.data;
+      console.log('👥 [UserService] Getting all users for select');
+      
+      const config = {
+        params: {
+          ...params,
+          pageSize: 10000, // Large page size for "all"
+          _t: Date.now()
+        }
+      };
+
+      const response = await apiService.get('/auth/users/all', config);
+      const results = response.data?.results || response.data || [];
+      console.log('✅ [UserService] Got all users:', results.length);
+      return results;
     } catch (error) {
-      console.error('❌ [UserService] Error fetching all users:', error);
+      console.error('❌ [UserService] Error fetching all users:', error.response?.data || error.message || error);
       throw error;
     }
   }
 
-  // Tìm kiếm users theo keyword (tên, sđt, email)
+  // Tìm kiếm users - sử dụng search param trong /auth/users/all giống web FE
   static async searchUsers(keyword = '', params = { page: 1, pageSize: 10 }) {
     try {
       console.log('🔍 [UserService] Searching users with keyword:', keyword);
-      const response = await apiService.get('/auth/users/search', {
+      
+      const config = {
         params: {
-          keyword,
-          page: params.page,
-          pageSize: params.pageSize,
-          _t: Date.now() // Cache buster
+          ...params,
+          search: keyword, // ✅ Dùng "search" param giống web FE
+          _t: Date.now()
         }
-      });
-      console.log('✅ [UserService] Search results:', response.data.total, 'total');
+      };
+
+      const response = await apiService.get('/auth/users/all', config);
+      console.log('✅ [UserService] Search results:', response.data?.total || response.data?.length, 'total');
       return response.data; // { results: [...], total: N }
     } catch (error) {
-      console.error('❌ [UserService] Error searching users:', error);
+      console.error('❌ [UserService] Error searching users:', error.response?.data || error.message || error);
       throw error;
     }
   }
@@ -58,11 +73,12 @@ class UserService {
   static async getUserById(id) {
     try {
       console.log('👤 [UserService] Getting user by ID:', id);
+      
       const response = await apiService.get(`/auth/users/${id}`);
       console.log('✅ [UserService] Got user:', response.data.username);
       return response.data;
     } catch (error) {
-      console.error('❌ [UserService] Error fetching user:', error);
+      console.error('❌ [UserService] Error fetching user:', error.response?.data || error.message || error);
       throw error;
     }
   }

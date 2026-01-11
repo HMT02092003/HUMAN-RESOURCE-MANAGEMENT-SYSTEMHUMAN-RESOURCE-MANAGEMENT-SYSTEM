@@ -74,12 +74,24 @@ const AttendanceApprovalScreen = ({ navigation }) => {
         }
       });
 
-      if (response.data?.success) {
-        setData(response.data.data?.results || []);
-        console.log('✅ [App] Loaded', response.data.data?.results?.length, 'records');
-      } else {
-        setData([]);
+      // Support multiple response shapes:
+      // 1) { success: true, data: { results: [...] } }
+      // 2) { success: true, results: [...] }
+      // 3) { results: [...] } (no success flag)
+      const resp = response.data || {};
+      console.log('📊 [App] API response shape:', Object.keys(resp));
+
+      let items = [];
+      if (resp.success && resp.data) {
+        items = Array.isArray(resp.data.results) ? resp.data.results : (Array.isArray(resp.data) ? resp.data : []);
+      } else if (Array.isArray(resp.results)) {
+        items = resp.results;
+      } else if (Array.isArray(resp)) {
+        items = resp;
       }
+
+      setData(items || []);
+      console.log('✅ [App] Loaded', (items || []).length, 'records');
     } catch (error) {
       console.error('❌ [App] Error fetching monthly summaries:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách duyệt chấm công');
@@ -104,7 +116,7 @@ const AttendanceApprovalScreen = ({ navigation }) => {
   const handleApprove = async (record) => {
     Alert.alert(
       'Xác nhận duyệt',
-      `Bạn có chắc chắn muốn duyệt bảng chấm công tháng ${formatMonth(record.month)} của ${record.user?.firstName || ''} ${record.user?.lastName || ''}?`,
+      `Bạn có chắc chắn muốn duyệt bảng chấm công tháng ${formatMonth(record.month)} của ${record.user?.fullName || `${record.user?.firstName || ''} ${record.user?.lastName || ''}`.trim()}?`,
       [
         { text: 'Hủy', style: 'cancel' },
         {
@@ -160,7 +172,7 @@ const AttendanceApprovalScreen = ({ navigation }) => {
 
   // ==================== RENDER ITEM ====================
   const renderItem = ({ item }) => {
-    const userName = `${item.user?.firstName || ''} ${item.user?.lastName || ''}`.trim() || item.user?.username || '—';
+    const userName = (item.user?.fullName && item.user.fullName.trim()) || `${item.user?.firstName || ''} ${item.user?.lastName || ''}`.trim() || item.user?.username || '—';
     const department = item.user?.department?.name || 'Chưa xác định';
 
     return (
@@ -372,13 +384,13 @@ const AttendanceApprovalScreen = ({ navigation }) => {
                   <MaterialCommunityIcons name="account" size={18} color="#1890ff" />
                   <Text style={styles.infoLabel}>Họ tên:</Text>
                   <Text style={styles.infoValue}>
-                    {`${selectedRecord.user?.firstName || ''} ${selectedRecord.user?.lastName || ''}`.trim() || '—'}
+                    {selectedRecord.user?.fullName || `${selectedRecord.user?.firstName || ''} ${selectedRecord.user?.lastName || ''}`.trim() || '—'}
                   </Text>
                 </View>
                 <View style={styles.infoRow}>
                   <MaterialCommunityIcons name="badge-account" size={18} color="#1890ff" />
                   <Text style={styles.infoLabel}>Username:</Text>
-                  <Text style={styles.infoValue}>{selectedRecord.user?.username || '—'}</Text>
+                  <Text style={styles.infoValue}>{selectedRecord.user?.username || selectedRecord.user?.email || '—'}</Text>
                 </View>
                 <View style={styles.infoRow}>
                   <MaterialCommunityIcons name="office-building" size={18} color="#1890ff" />

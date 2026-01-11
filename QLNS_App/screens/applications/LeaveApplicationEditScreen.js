@@ -14,7 +14,6 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 import ApplicationService from '../../services/ApplicationService';
-import DetailViewScreen from '../../components/DetailViewScreen';
 
 const LEAVE_TYPES = [
     { value: 'leave', label: 'Nghỉ phép (có lương)' },
@@ -22,10 +21,8 @@ const LEAVE_TYPES = [
     { value: 'sick', label: 'Nghỉ ốm' },
 ];
 
-const LeaveApplicationScreen = ({ navigation, route }) => {
-    const { mode = 'create', applicationId, applicationData } = route.params || {};
-    const isEditMode = mode === 'edit';
-    const isViewMode = mode === 'view';
+const LeaveApplicationEditScreen = ({ navigation, route }) => {
+    const { applicationId } = route.params || {};
 
     // Form state
     const [leaveType, setLeaveType] = useState('leave');
@@ -38,27 +35,26 @@ const LeaveApplicationScreen = ({ navigation, route }) => {
     const [showEndPicker, setShowEndPicker] = useState(false);
     
     // UI state
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [showLeaveTypeModal, setShowLeaveTypeModal] = useState(false);
-    const [applicationFullData, setApplicationFullData] = useState(null);
 
-    // Load data if edit/view mode
+    // Load dữ liệu đơn từ khi vào màn edit
     useEffect(() => {
-        if ((isEditMode || isViewMode) && applicationId) {
+        if (applicationId) {
             loadApplicationData();
         }
-    }, [isEditMode, isViewMode, applicationId]);
+    }, [applicationId]);
 
     const loadApplicationData = async () => {
         setLoading(true);
         try {
+            console.log('📥 Loading application data for editing:', applicationId);
             const response = await ApplicationService.getApplicationById(applicationId);
             const data = response?.data || response;
-            setApplicationFullData(data);
             const formData = data?.data || data;
             
-            console.log('📥 Loaded application data:', formData);
+            console.log('✅ Loaded application data:', formData);
             
             if (formData) {
                 setLeaveType(formData.leaveType || 'leave');
@@ -72,8 +68,10 @@ const LeaveApplicationScreen = ({ navigation, route }) => {
                 }
             }
         } catch (error) {
-            console.error('Error loading application:', error);
-            Alert.alert('Lỗi', 'Không thể tải thông tin đơn từ');
+            console.error('❌ Error loading application:', error);
+            Alert.alert('Lỗi', 'Không thể tải thông tin đơn từ', [
+                { text: 'OK', onPress: () => navigation.goBack() }
+            ]);
         } finally {
             setLoading(false);
         }
@@ -90,10 +88,9 @@ const LeaveApplicationScreen = ({ navigation, route }) => {
     };
 
     const handleStartDateChange = (event, selectedDate) => {
-        setShowStartPicker(false);
+        setShowStartPicker(Platform.OS === 'ios');
         if (selectedDate) {
             setStartDate(selectedDate);
-            // Nếu ngày bắt đầu > ngày kết thúc, tự động update
             if (selectedDate > endDate) {
                 setEndDate(selectedDate);
             }
@@ -101,57 +98,54 @@ const LeaveApplicationScreen = ({ navigation, route }) => {
     };
 
     const handleEndDateChange = (event, selectedDate) => {
-        setShowEndPicker(false);
+        setShowEndPicker(Platform.OS === 'ios');
         if (selectedDate) {
-            if (selectedDate < startDate) {
-                Alert.alert('Lỗi', 'Ngày kết thúc phải sau ngày bắt đầu');
-                return;
-            }
             setEndDate(selectedDate);
         }
     };
 
-    const validateForm = () => {
-        if (!reason.trim()) {
-            Alert.alert('Lỗi', 'Vui lòng nhập lý do nghỉ phép');
-            return false;
-        }
-        if (endDate < startDate) {
-            Alert.alert('Lỗi', 'Ngày kết thúc phải sau ngày bắt đầu');
-            return false;
-        }
-        return true;
-    };
-
     const handleSubmit = async () => {
-        if (!validateForm()) return;
-        
-        setSubmitting(true);
+        // Validation
+        if (!reason.trim()) {
+            Alert.alert('Thông báo', 'Vui lòng nhập lý do xin nghỉ');
+            return;
+        }
+
+        if (startDate > endDate) {
+            Alert.alert('Thông báo', 'Ngày kết thúc phải sau ngày bắt đầu');
+            return;
+        }
+
         try {
+            setSubmitting(true);
+
             const payload = {
-                type: 'leave',
                 data: {
                     leaveType,
-                    startDate: startDate.toISOString(),
-                    endDate: endDate.toISOString(),
-                    reason: reason.trim(),
-                },
+                    startDate: dayjs(startDate).format('YYYY-MM-DD'),
+                    endDate: dayjs(endDate).format('YYYY-MM-DD'),
+                    reason: reason.trim()
+                }
             };
 
-            if (isEditMode) {
-                await ApplicationService.updateApplication(applicationId, { data: payload.data });
-                Alert.alert('Thành công', 'Đã cập nhật đơn nghỉ phép', [
-                    { text: 'OK', onPress: () => navigation.goBack() }
-                ]);
-            } else {
-                await ApplicationService.createApplication(payload);
-                Alert.alert('Thành công', 'Đã tạo đơn nghỉ phép', [
-                    { text: 'OK', onPress: () => navigation.goBack() }
-                ]);
-            }
+            console.log('📤 Updating leave application:', applicationId, payload);
+
+            await ApplicationService.updateApplication(applicationId, payload);
+
+            Alert.alert(
+                'Thành công',
+                'Đơn nghỉ phép đã được cập nhật',
+                [
+                    {
+                        text: 'OK',
+                        onPress: () => navigation.goBack()
+                    }
+                ]
+            );
         } catch (error) {
-            console.error('Error submitting application:', error);
-            Alert.alert('Lỗi', error.response?.data?.message || 'Không thể lưu đơn từ');
+            console.error('❌ Error updating leave application:', error);
+            const errorMessage = error.response?.data?.message || error.message || 'Không thể cập nhật đơn nghỉ phép';
+            Alert.alert('Lỗi', errorMessage);
         } finally {
             setSubmitting(false);
         }
@@ -161,115 +155,8 @@ const LeaveApplicationScreen = ({ navigation, route }) => {
         return (
             <View style={styles.centerContainer}>
                 <ActivityIndicator size="large" color="#1890ff" />
-                <Text style={styles.loadingText}>Đang tải...</Text>
+                <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
             </View>
-        );
-    }
-
-    // View mode - Display read-only detail view
-    if (isViewMode && applicationFullData) {
-        const appData = applicationFullData.data || {};
-        const STATUS_LABELS = {
-            0: 'Chờ duyệt',
-            1: 'Đã duyệt',
-            2: 'Từ chối'
-        };
-        const STATUS_COLORS = {
-            0: '#fa8c16',
-            1: '#52c41a',
-            2: '#ff4d4f'
-        };
-
-        const sections = [
-            {
-                title: 'Thông tin đơn nghỉ phép',
-                icon: 'file-document-outline',
-                fields: [
-                    {
-                        label: 'Loại nghỉ',
-                        value: LEAVE_TYPES.find(t => t.value === appData.leaveType)?.label || 'N/A',
-                        icon: 'tag-outline'
-                    },
-                    {
-                        label: 'Từ ngày',
-                        value: appData.startDate,
-                        type: 'date',
-                        icon: 'calendar-start'
-                    },
-                    {
-                        label: 'Đến ngày',
-                        value: appData.endDate,
-                        type: 'date',
-                        icon: 'calendar-end'
-                    },
-                    {
-                        label: 'Số ngày nghỉ',
-                        value: `${calculateDays()} ngày`,
-                        icon: 'calendar-clock'
-                    },
-                    {
-                        label: 'Lý do',
-                        value: appData.reason || 'N/A',
-                        icon: 'text'
-                    }
-                ]
-            },
-            {
-                title: 'Trạng thái',
-                icon: 'information-outline',
-                fields: [
-                    {
-                        label: 'Trạng thái',
-                        value: STATUS_LABELS[applicationFullData.status] || 'N/A',
-                        type: 'chip',
-                        chipStyle: { backgroundColor: STATUS_COLORS[applicationFullData.status] + '20' },
-                        chipTextStyle: { color: STATUS_COLORS[applicationFullData.status] },
-                        icon: 'checkbox-marked-circle-outline'
-                    },
-                    ...(applicationFullData.approvedByInfo ? [{
-                        label: 'Người duyệt',
-                        value: applicationFullData.approvedByInfo.fullName,
-                        icon: 'account-check'
-                    }] : []),
-                    ...(applicationFullData.approvedDate ? [{
-                        label: 'Ngày duyệt',
-                        value: applicationFullData.approvedDate,
-                        type: 'datetime',
-                        icon: 'calendar-check'
-                    }] : []),
-                    ...(applicationFullData.data?.rejectReason ? [{
-                        label: 'Lý do từ chối',
-                        value: applicationFullData.data.rejectReason,
-                        icon: 'close-circle-outline',
-                        valueStyle: { color: '#ff4d4f' }
-                    }] : []),
-                    {
-                        label: 'Ngày tạo',
-                        value: applicationFullData.created_at,
-                        type: 'datetime',
-                        icon: 'calendar-plus'
-                    }
-                ]
-            }
-        ];
-
-        const actions = [
-            ...(applicationFullData.status === 0 ? [{
-                label: 'Chỉnh sửa',
-                icon: 'pencil',
-                color: '#1890ff',
-                onPress: () => navigation.replace('LeaveApplication', { mode: 'edit', applicationId })
-            }] : [])
-        ];
-
-        return (
-            <DetailViewScreen
-                title="Chi tiết đơn nghỉ phép"
-                sections={sections}
-                actions={actions}
-                loading={loading}
-                onBack={() => navigation.goBack()}
-            />
         );
     }
 
@@ -283,9 +170,7 @@ const LeaveApplicationScreen = ({ navigation, route }) => {
                 >
                     <Ionicons name="arrow-back" size={24} color="#262626" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>
-                    {isEditMode ? 'Chỉnh sửa đơn nghỉ phép' : 'Tạo đơn nghỉ phép'}
-                </Text>
+                <Text style={styles.headerTitle}>Chỉnh sửa đơn nghỉ phép</Text>
                 <View style={styles.placeholder} />
             </View>
 
@@ -374,10 +259,8 @@ const LeaveApplicationScreen = ({ navigation, route }) => {
                         <ActivityIndicator size="small" color="#fff" />
                     ) : (
                         <>
-                            <Ionicons name="send" size={18} color="#fff" />
-                            <Text style={styles.submitButtonText}>
-                                {isEditMode ? 'Cập nhật' : 'Gửi đơn'}
-                            </Text>
+                            <Ionicons name="checkmark" size={18} color="#fff" />
+                            <Text style={styles.submitButtonText}>Cập nhật</Text>
                         </>
                     )}
                 </TouchableOpacity>
@@ -390,7 +273,7 @@ const LeaveApplicationScreen = ({ navigation, route }) => {
                     mode="date"
                     display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                     onChange={handleStartDateChange}
-                    minimumDate={new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)} // 3 ngày trước
+                    minimumDate={new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)}
                 />
             )}
             {showEndPicker && (
@@ -502,13 +385,12 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         backgroundColor: '#fff',
         borderRadius: 8,
+        padding: 12,
         borderWidth: 1,
         borderColor: '#d9d9d9',
-        paddingHorizontal: 14,
-        paddingVertical: 12,
     },
     selectText: {
-        fontSize: 15,
+        fontSize: 14,
         color: '#262626',
     },
     dateBox: {
@@ -516,16 +398,15 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: '#fff',
         borderRadius: 8,
+        padding: 12,
         borderWidth: 1,
         borderColor: '#d9d9d9',
-        paddingHorizontal: 14,
-        paddingVertical: 12,
     },
     dateIcon: {
-        marginRight: 10,
+        marginRight: 12,
     },
     dateText: {
-        fontSize: 15,
+        fontSize: 14,
         color: '#262626',
     },
     daysInfo: {
@@ -533,41 +414,42 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         backgroundColor: '#e6f7ff',
-        borderRadius: 8,
         padding: 12,
+        borderRadius: 8,
         marginBottom: 20,
     },
     daysLabel: {
         fontSize: 14,
-        color: '#1890ff',
+        color: '#0050b3',
+        fontWeight: '500',
     },
     daysValue: {
         fontSize: 16,
-        fontWeight: '700',
-        color: '#1890ff',
+        color: '#0050b3',
+        fontWeight: '600',
     },
     textArea: {
         backgroundColor: '#fff',
         borderRadius: 8,
+        padding: 12,
         borderWidth: 1,
         borderColor: '#d9d9d9',
-        paddingHorizontal: 14,
-        paddingVertical: 12,
-        fontSize: 15,
         minHeight: 100,
+        fontSize: 14,
+        color: '#262626',
     },
     guideBox: {
         flexDirection: 'row',
-        backgroundColor: '#f0f5ff',
-        borderRadius: 8,
+        backgroundColor: '#e6f7ff',
         padding: 12,
-        marginTop: 10,
+        borderRadius: 8,
+        marginBottom: 16,
     },
     guideText: {
         flex: 1,
-        marginLeft: 10,
         fontSize: 13,
-        color: '#1890ff',
+        color: '#0050b3',
+        marginLeft: 8,
         lineHeight: 20,
     },
     footer: {
@@ -576,40 +458,40 @@ const styles = StyleSheet.create({
         backgroundColor: '#fff',
         borderTopWidth: 1,
         borderTopColor: '#f0f0f0',
+        gap: 12,
     },
     cancelButton: {
         flex: 1,
-        paddingVertical: 12,
-        alignItems: 'center',
-        marginRight: 10,
+        padding: 14,
         borderRadius: 8,
         borderWidth: 1,
         borderColor: '#d9d9d9',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     cancelButtonText: {
         fontSize: 15,
-        fontWeight: '600',
+        fontWeight: '500',
         color: '#595959',
     },
     submitButton: {
-        flex: 2,
+        flex: 1,
+        padding: 14,
+        borderRadius: 8,
+        backgroundColor: '#1890ff',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 12,
-        borderRadius: 8,
-        backgroundColor: '#1890ff',
-    },
-    disabledButton: {
-        opacity: 0.7,
+        gap: 8,
     },
     submitButtonText: {
         fontSize: 15,
-        fontWeight: '600',
+        fontWeight: '500',
         color: '#fff',
-        marginLeft: 8,
     },
-    // Modal styles
+    disabledButton: {
+        backgroundColor: '#91d5ff',
+    },
     modalOverlay: {
         position: 'absolute',
         top: 0,
@@ -619,21 +501,19 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
         alignItems: 'center',
-        padding: 20,
     },
     modalContent: {
-        width: '100%',
         backgroundColor: '#fff',
         borderRadius: 12,
-        overflow: 'hidden',
+        padding: 16,
+        width: '85%',
+        maxHeight: '70%',
     },
     modalHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
+        marginBottom: 16,
     },
     modalTitle: {
         fontSize: 16,
@@ -642,23 +522,23 @@ const styles = StyleSheet.create({
     },
     modalOption: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 16,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
+        justifyContent: 'space-between',
+        padding: 14,
+        borderRadius: 8,
+        marginBottom: 8,
     },
     modalOptionActive: {
         backgroundColor: '#e6f7ff',
     },
     modalOptionText: {
-        fontSize: 15,
-        color: '#262626',
+        fontSize: 14,
+        color: '#595959',
     },
     modalOptionTextActive: {
         color: '#1890ff',
-        fontWeight: '600',
+        fontWeight: '500',
     },
 });
 
-export default LeaveApplicationScreen;
+export default LeaveApplicationEditScreen;

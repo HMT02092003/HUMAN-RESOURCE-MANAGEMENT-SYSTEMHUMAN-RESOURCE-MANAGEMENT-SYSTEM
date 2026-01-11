@@ -1,15 +1,12 @@
 import apiService from './apiService';
 
 export const ContractTypeService = {
-    getAllContractTypes: async () => {
+    getAllContractTypes: async (params) => {
         try {
-            console.log('📜 [ContractTypeService] Fetching all contract types...');
-            const response = await apiService.get('/employee/contractTypes');
-            console.log('📜 [ContractTypeService] Response:', JSON.stringify(response.data, null, 2));
-            // Handle both response formats: { data: [...] } or [...]
-            const result = response.data?.data || response.data || [];
-            console.log('📜 [ContractTypeService] Extracted', Array.isArray(result) ? result.length : 0, 'contract types');
-            return result;
+            console.log('📜 [ContractTypeService] Fetching contract types with params:', params);
+            const response = await apiService.get('/employee/contractTypes', { params });
+            console.log('📜 [ContractTypeService] Response:', response.data);
+            return response.data;
         } catch (error) {
             console.error('❌ [ContractTypeService] Error fetching contract types:', error.response?.status, error.response?.data || error.message);
             throw error;

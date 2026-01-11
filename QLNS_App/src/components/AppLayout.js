@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Modal, FlatList } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { useNavigation, DrawerActions, useNavigationState, CommonActions } from '@react-navigation/native';
-import { Avatar, Divider, useTheme, MD3LightTheme, Provider as PaperProvider, Surface, ActivityIndicator, List, Portal, Dialog, Button, Paragraph } from 'react-native-paper';
+import { Avatar, Divider, useTheme, MD3LightTheme, Provider as PaperProvider, Surface, ActivityIndicator, List, Portal, Dialog, Button, Paragraph, Badge, Chip } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AuthTokenManager from '../../services/AuthTokenManager';
 import { useAuth } from '../../services/AuthContext';
 import { decodePermissions } from '../utils/decodePermission';
+import NotificationService from '../../services/NotificationService';
 
 const { width } = Dimensions.get('window');
 const isTablet = width >= 768;
@@ -31,6 +32,9 @@ import ProjectListScreen from '../../screens/projects/ProjectListScreen';
 import ProjectDetailScreen from '../../screens/projects/ProjectDetailScreen';
 import ProjectFormScreen from '../../screens/projects/ProjectFormScreen';
 import ProfileScreen from '../../screens/profile/ProfileScreen';
+import KpiListScreen from '../../screens/kpi/KpiListScreen';
+import KpiDetailScreen from '../../screens/kpi/KpiDetailScreen';
+import NotificationListScreen from '../../screens/notifications/NotificationListScreen';
 
 // Stack Navigators
 import DepartmentNavigator from '../navigation/DepartmentNavigator';
@@ -54,6 +58,7 @@ const backNavigationMap = {
   'UserCreate': 'Quản lý người dùng',
   'UserEdit': 'Quản lý người dùng',
   'Profile': 'Dashboard',
+  'Chi tiết KPI': 'Quản lý KPI',
 };
 
 // Header Buttons Components - Isolated to avoid Reanimated conflicts
@@ -84,6 +89,184 @@ const HeaderMenuButton = ({ navigation }) => (
     <MaterialCommunityIcons name="menu" size={24} color="#ffffff" />
   </TouchableOpacity>
 );
+
+const NotificationBellButton = () => {
+  const navigation = useNavigation();
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+  const [showPopup, setShowPopup] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadUnreadCount();
+    const interval = setInterval(loadUnreadCount, 30000); // Refresh every 30s
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadUnreadCount = async () => {
+    try {
+      const response = await NotificationService.getUnreadCount();
+      setUnreadCount(response.data?.data?.unread_count || 0);
+    } catch (error) {
+      console.error('Failed to load unread count:', error);
+    }
+  };
+
+  const loadNotifications = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const response = await NotificationService.getNotifications({ limit: 10, offset: 0 });
+      const data = response.data?.data?.notifications || response.data?.data || [];
+      setNotifications(data);
+    } catch (error) {
+      console.error('Failed to load notifications:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBellPress = () => {
+    setShowPopup(true);
+    loadNotifications();
+  };
+
+  const handleMarkAsRead = async (notif) => {
+    if (notif.is_read) return;
+    try {
+      await NotificationService.markAsRead(notif.notification_id);
+      setNotifications(prev => 
+        prev.map(n => n.notification_id === notif.notification_id ? { ...n, is_read: true } : n)
+      );
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Failed to mark as read:', error);
+    }
+  };
+
+  const handleViewAll = () => {
+    setShowPopup(false);
+    navigation.navigate('Thông báo');
+  };
+
+  const getPriorityColor = (priority) => {
+    switch (priority) {
+      case 'urgent': return '#ff4d4f';
+      case 'high': return '#fa8c16';
+      case 'normal': return '#1890ff';
+      case 'low': return '#52c41a';
+      default: return '#1890ff';
+    }
+  };
+
+  const formatTimeAgo = (dateStr) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'Vừa xong';
+    if (diffMins < 60) return `${diffMins}p`;
+    if (diffHours < 24) return `${diffHours}h`;
+    return `${diffDays}d`;
+  };
+
+  const renderNotificationItem = ({ item }) => (
+    <TouchableOpacity
+      style={[styles.notifItem, !item.is_read && styles.notifItemUnread]}
+      onPress={() => handleMarkAsRead(item)}
+    >
+      <View style={styles.notifIcon}>
+        <MaterialCommunityIcons 
+          name="bell" 
+          size={20} 
+          color={getPriorityColor(item.priority)} 
+        />
+      </View>
+      <View style={styles.notifContent}>
+        <Text style={styles.notifTitle} numberOfLines={2}>
+          {item.title}
+        </Text>
+        {item.content && (
+          <Text style={styles.notifBody} numberOfLines={2}>
+            {item.content}
+          </Text>
+        )}
+        <Text style={styles.notifTime}>{formatTimeAgo(item.created_at)}</Text>
+      </View>
+      {!item.is_read && <Badge size={8} style={styles.notifBadge} />}
+    </TouchableOpacity>
+  );
+
+  return (
+    <>
+      <TouchableOpacity
+        onPress={handleBellPress}
+        style={{ paddingHorizontal: 16, paddingVertical: 8, position: 'relative' }}
+        activeOpacity={0.7}
+      >
+        <MaterialCommunityIcons name="bell" size={24} color="#ffffff" />
+        {unreadCount > 0 && (
+          <Badge
+            size={18}
+            style={styles.bellBadge}
+          >
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </Badge>
+        )}
+      </TouchableOpacity>
+
+      <Modal
+        visible={showPopup}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowPopup(false)}
+      >
+        <TouchableOpacity
+          style={styles.notifModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowPopup(false)}
+        >
+          <View style={styles.notifPopup}>
+            <View style={styles.notifHeader}>
+              <Text style={styles.notifHeaderTitle}>Thông báo</Text>
+              {unreadCount > 0 && (
+                <Badge size={20} style={styles.headerBadge}>
+                  {unreadCount}
+                </Badge>
+              )}
+            </View>
+            <Divider />
+            {loading ? (
+              <View style={styles.notifLoading}>
+                <ActivityIndicator size="small" color="#1890ff" />
+              </View>
+            ) : notifications.length === 0 ? (
+              <View style={styles.notifEmpty}>
+                <MaterialCommunityIcons name="bell-off-outline" size={48} color="#d9d9d9" />
+                <Text style={styles.notifEmptyText}>Chưa có thông báo</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={notifications}
+                renderItem={renderNotificationItem}
+                keyExtractor={(item) => String(item.notification_id)}
+                style={styles.notifList}
+                showsVerticalScrollIndicator={false}
+              />
+            )}
+            <Divider />
+            <TouchableOpacity style={styles.viewAllButton} onPress={handleViewAll}>
+              <Text style={styles.viewAllText}>Xem tất cả</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+    </>
+  );
+};
 
 const AppTheme = {
   ...MD3LightTheme,
@@ -161,8 +344,10 @@ const BASE_MENU_ITEMS = [
     children: [
       { key: 'projects', label: 'Dự án', icon: 'folder-multiple', route: 'Dự án' },
       { key: 'cv', label: 'Hồ sơ/CV', icon: 'file-account', route: 'Hồ sơ/CV' },
+      { key: 'kpi', label: 'Quản lý KPI', icon: 'chart-line', route: 'Quản lý KPI' },
     ]
   },
+  { key: 'notifications', label: 'Thông báo', icon: 'bell', route: 'Thông báo' },
   { key: 'settings', label: 'Cài đặt hệ thống', icon: 'cog', route: 'Cài đặt hệ thống', permission: 'settings' },
 ];
 
@@ -476,6 +661,10 @@ const AppLayout = () => {
             // Check if this is a hidden screen (detail/form screens)
             const isHiddenScreen = ['UserDetail', 'UserForm', 'UserCreate', 'UserEdit', 'Profile', 'Tạo phụ cấp', 'Sửa phụ cấp', 'Chi tiết dự án', 'Tạo dự án', 'Sửa dự án'].includes(route.name);
 
+            // Check if this is a hidden screen (detail/form screens)
+            const allHiddenScreens = ['UserDetail', 'UserForm', 'UserCreate', 'UserEdit', 'Profile', 'Tạo phụ cấp', 'Sửa phụ cấp', 'Chi tiết dự án', 'Tạo dự án', 'Sửa dự án', 'Chi tiết KPI'];
+            const isActuallyHidden = allHiddenScreens.includes(route.name);
+
             return {
               drawerType: isTablet ? 'permanent' : 'front',
               drawerStyle: {
@@ -492,10 +681,10 @@ const AppLayout = () => {
                 fontSize: 18,
               },
               // Use back button for hidden screens, menu button for main screens
-              headerLeft: isHiddenScreen
+              headerLeft: isActuallyHidden
                 ? () => <HeaderBackButton navigation={navigation} routeName={route.name} />
                 : () => <HeaderMenuButton navigation={navigation} />,
-              headerRight: null,
+              headerRight: () => <NotificationBellButton />,
               swipeEnabled: !isTablet,
               overlayColor: 'rgba(0, 0, 0, 0.5)',
               animationEnabled: true,
@@ -531,6 +720,9 @@ const AppLayout = () => {
           <Drawer.Screen name="Chi tiết dự án" component={ProjectDetailScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Chi tiết dự án' }} />
           <Drawer.Screen name="Tạo dự án" component={ProjectFormScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Tạo dự án' }} />
           <Drawer.Screen name="Sửa dự án" component={ProjectFormScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Sửa dự án' }} />
+          <Drawer.Screen name="Quản lý KPI" component={KpiListScreen} />
+          <Drawer.Screen name="Chi tiết KPI" component={KpiDetailScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Chi tiết KPI' }} />
+          <Drawer.Screen name="Thông báo" component={NotificationListScreen} />
           <Drawer.Screen name="Cài đặt hệ thống" component={SettingsScreen} />
           <Drawer.Screen name="Profile" component={ProfileScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Hồ sơ cá nhân' }} />
         </Drawer.Navigator>
@@ -569,6 +761,114 @@ const styles = StyleSheet.create({
   logoutText: { fontSize: 14, fontWeight: '600', color: AppTheme.colors.error, marginLeft: 16 },
   iconWrapper: { width: 36, alignItems: 'center', justifyContent: 'center' },
   menuItemNested: { paddingLeft: 20 },
+  bellBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 10,
+    backgroundColor: '#ff4d4f',
+  },
+  notifModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-start',
+    paddingTop: 60,
+    paddingHorizontal: 8,
+  },
+  notifPopup: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    maxHeight: 500,
+    width: '100%',
+    maxWidth: 400,
+    alignSelf: 'flex-end',
+    marginRight: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  notifHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  notifHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#262626',
+  },
+  headerBadge: {
+    backgroundColor: '#ff4d4f',
+  },
+  notifLoading: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  notifEmpty: {
+    paddingVertical: 60,
+    alignItems: 'center',
+  },
+  notifEmptyText: {
+    fontSize: 14,
+    color: '#8c8c8c',
+    marginTop: 12,
+  },
+  notifList: {
+    maxHeight: 380,
+  },
+  notifItem: {
+    flexDirection: 'row',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    alignItems: 'flex-start',
+  },
+  notifItemUnread: {
+    backgroundColor: '#f0f8ff',
+  },
+  notifIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  notifContent: {
+    flex: 1,
+  },
+  notifTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#262626',
+    marginBottom: 4,
+  },
+  notifBody: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 4,
+  },
+  notifTime: {
+    fontSize: 12,
+    color: '#8c8c8c',
+  },
+  notifBadge: {
+    backgroundColor: '#1890ff',
+    marginLeft: 8,
+  },
+  viewAllButton: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  viewAllText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1890ff',
+  },
 });
 
 export default AppLayout;

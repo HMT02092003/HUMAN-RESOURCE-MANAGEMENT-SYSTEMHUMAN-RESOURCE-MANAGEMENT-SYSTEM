@@ -528,3 +528,15 @@ AxiosError: Request failed with status code 401
     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
     at async Function.getMonthlySummariesByScope (E:\DO_AN_TOT_NGHIEP\HUMAN-RESOURCE-MANAGEMENT-SYSTEMHUMAN-RESOURCE-MANAGEMENT-SYSTEM\services\attendance-service\src\services\AttendanceService.ts:82:27)
     at async Module.getMonthlySummariesByScopeController (E:\DO_AN_TOT_NGHIEP\HUMAN-RESOURCE-MANAGEMENT-SYSTEMHUMAN-RESOURCE-MANAGEMENT-SYSTEM\services\attendance-service\src\controller\AttendanceController.ts:532:20)
+
+=== CATCH in getMonthlySummariesByScope (2026-01-11T06:19:56.428Z) ===
+AxiosError: Request failed with status code 401
+    at settle (file:///E:/DO_AN_TOT_NGHIEP/HUMAN-RESOURCE-MANAGEMENT-SYSTEMHUMAN-RESOURCE-MANAGEMENT-SYSTEM/node_modules/axios/lib/core/settle.js:19:12)
+    at IncomingMessage.handleStreamEnd (file:///E:/DO_AN_TOT_NGHIEP/HUMAN-RESOURCE-MANAGEMENT-SYSTEMHUMAN-RESOURCE-MANAGEMENT-SYSTEM/node_modules/axios/lib/adapters/http.js:599:11)
+    at IncomingMessage.emit (node:events:536:35)
+    at endReadableNT (node:internal/streams/readable:1698:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:82:21)
+    at Axios.request (file:///E:/DO_AN_TOT_NGHIEP/HUMAN-RESOURCE-MANAGEMENT-SYSTEMHUMAN-RESOURCE-MANAGEMENT-SYSTEM/node_modules/axios/lib/core/Axios.js:45:41)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async Function.getMonthlySummariesByScope (E:\DO_AN_TOT_NGHIEP\HUMAN-RESOURCE-MANAGEMENT-SYSTEMHUMAN-RESOURCE-MANAGEMENT-SYSTEM\services\attendance-service\src\services\AttendanceService.ts:82:27)
+    at async Module.getMonthlySummariesByScopeController (E:\DO_AN_TOT_NGHIEP\HUMAN-RESOURCE-MANAGEMENT-SYSTEMHUMAN-RESOURCE-MANAGEMENT-SYSTEM\services\attendance-service\src\controller\AttendanceController.ts:532:20)

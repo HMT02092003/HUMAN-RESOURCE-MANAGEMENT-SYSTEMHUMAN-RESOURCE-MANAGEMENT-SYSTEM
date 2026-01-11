@@ -21,13 +21,14 @@ export class ShiftService {
 
     const config = {
       // fields that can be searched with the generic `search` param
-      searchFields: ['name', 'start_time', 'end_time', 'description'],
+      searchFields: ['name', 'shift_name', 'start_time', 'end_time', 'description'],
       // allowed filter fields (will be picked from query params)
       filterFields: ['working_unit', 'created_at', 'created_atFrom', 'created_atTo'],
       // map frontend field names to DB columns when necessary
       fieldMapping: {
         working_unit: 'working_unit',
-        created_at: 'created_at'
+        created_at: 'created_at',
+        shift_name: 'name'  // map shift_name to name for compatibility
       },
       defaultSort: { field: 'created_at', order: 'desc' }
     };
@@ -38,6 +39,9 @@ export class ShiftService {
     // Per-column partial searches (ILIKE)
     if (params.name) {
       query = applySearch(query, String(params.name), ['name'], 'name');
+    }
+    if (params.shift_name) {
+      query = applySearch(query, String(params.shift_name), ['name'], 'shift_name');
     }
     if (params.description) {
       query = applySearch(query, String(params.description), ['description'], 'description');

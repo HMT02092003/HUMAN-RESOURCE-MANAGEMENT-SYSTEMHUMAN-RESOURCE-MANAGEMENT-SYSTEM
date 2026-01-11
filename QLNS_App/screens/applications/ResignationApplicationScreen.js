@@ -17,6 +17,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 import ApplicationService from '../../services/ApplicationService';
 import UserService from '../../services/UserService';
+import DetailViewScreen from '../../components/DetailViewScreen';
 
 const RESIGNATION_REASONS = [
     { value: 'personal', label: 'Lý do cá nhân' },
@@ -31,6 +32,7 @@ const RESIGNATION_REASONS = [
 const ResignationApplicationScreen = ({ navigation, route }) => {
     const { mode = 'create', applicationId, applicationData } = route.params || {};
     const isEditMode = mode === 'edit';
+    const isViewMode = mode === 'view';
 
     // Form state
     const [lastWorkingDate, setLastWorkingDate] = useState(
@@ -52,13 +54,25 @@ const ResignationApplicationScreen = ({ navigation, route }) => {
     // UI state
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [applicationFullData, setApplicationFullData] = useState(null);
 
     useEffect(() => {
+        console.log('🔄 [ResignationApp] Mode:', mode, 'ApplicationId:', applicationId);
         loadEmployees();
-        if (isEditMode && applicationId) {
+        if ((isEditMode || isViewMode) && applicationId) {
+            console.log('📥 [ResignationApp] Loading data for edit/view');
             loadApplicationData();
+        } else if (!isEditMode && !isViewMode) {
+            // Reset form to defaults when in create mode
+            console.log('🆕 [ResignationApp] CREATE MODE - Resetting form to defaults');
+            setApplicationFullData(null);
+            setLastWorkingDate(dayjs().add(30, 'day').toDate());
+            setResignationReason('');
+            setReasonDetail('');
+            setHandoverTo(null);
+            setHandoverNotes('');
         }
-    }, [isEditMode, applicationId]);
+    }, [isEditMode, isViewMode, applicationId]);
 
     const loadEmployees = async () => {
         try {
@@ -75,6 +89,7 @@ const ResignationApplicationScreen = ({ navigation, route }) => {
         try {
             const response = await ApplicationService.getApplicationById(applicationId);
             const data = response?.data || response;
+            setApplicationFullData(data);
             const formData = data?.data || data;
             
             if (formData) {
@@ -184,6 +199,93 @@ const ResignationApplicationScreen = ({ navigation, route }) => {
                 <ActivityIndicator size="large" color="#1890ff" />
                 <Text style={styles.loadingText}>Đang tải...</Text>
             </View>
+        );
+    }
+
+    // View mode - Display read-only detail view
+    if (isViewMode && applicationFullData) {
+        const appData = applicationFullData.data || {};
+        const STATUS_LABELS = { 0: 'Chờ duyệt', 1: 'Đã duyệt', 2: 'Từ chối' };
+        const STATUS_COLORS = { 0: '#fa8c16', 1: '#52c41a', 2: '#ff4d4f' };
+
+        const sections = [
+            {
+                title: 'Thông tin thôi việc',
+                icon: 'exit-run',
+                fields: [
+                    { label: 'Ngày làm việc cuối', value: appData.lastWorkingDate, type: 'date', icon: 'calendar-end' },
+                    {
+                        label: 'Lý do thôi việc',
+                        value: RESIGNATION_REASONS.find(r => r.value === appData.resignationReason)?.label || appData.resignationReason || 'N/A',
+                        icon: 'tag-outline'
+                    },
+                    { label: 'Chi tiết', value: appData.reasonDetail || 'N/A', icon: 'text' }
+                ]
+            },
+            {
+                title: 'Bàn giao công việc',
+                icon: 'account-switch',
+                fields: [
+                    {
+                        label: 'Người nhận bàn giao',
+                        value: appData.handoverToName || handoverTo?.fullName || 'Chưa xác định',
+                        icon: 'account-arrow-right'
+                    },
+                    { label: 'Ghi chú bàn giao', value: appData.handoverNotes || 'Không có', icon: 'note-text' }
+                ]
+            },
+            {
+                title: 'Trạng thái & Phê duyệt',
+                icon: 'information-outline',
+                fields: [
+                    {
+                        label: 'Trạng thái',
+                        value: STATUS_LABELS[applicationFullData.status] || 'N/A',
+                        type: 'chip',
+                        chipStyle: { backgroundColor: STATUS_COLORS[applicationFullData.status] + '20' },
+                        chipTextStyle: { color: STATUS_COLORS[applicationFullData.status], fontWeight: '600' },
+                        icon: 'checkbox-marked-circle-outline'
+                    },
+                    ...(applicationFullData.approvedByInfo ? [{
+                        label: 'Người duyệt',
+                        value: applicationFullData.approvedByInfo.fullName,
+                        icon: 'account-check'
+                    }] : []),
+                    ...(applicationFullData.approvedDate ? [{
+                        label: 'Ngày duyệt',
+                        value: applicationFullData.approvedDate,
+                        type: 'datetime',
+                        icon: 'calendar-check'
+                    }] : []),
+                    ...(appData.rejectReason ? [{
+                        label: 'Lý do từ chối',
+                        value: appData.rejectReason,
+                        icon: 'close-circle-outline',
+                        valueStyle: { color: '#ff4d4f' }
+                    }] : []),
+                    { label: 'Ngày tạo', value: applicationFullData.created_at, type: 'datetime', icon: 'calendar-plus' }
+                ]
+            }
+        ];
+
+        const actions = [
+            ...(applicationFullData.status === 0 ? [{
+                label: 'Chỉnh sửa đơn',
+                icon: 'pencil',
+                color: '#1890ff',
+                mode: 'contained',
+                onPress: () => navigation.replace('ResignationApplication', { mode: 'edit', applicationId })
+            }] : [])
+        ];
+
+        return (
+            <DetailViewScreen
+                title="Chi tiết đơn thôi việc"
+                sections={sections}
+                actions={actions}
+                loading={loading}
+                onBack={() => navigation.goBack()}
+            />
         );
     }
 

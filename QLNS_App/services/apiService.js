@@ -93,6 +93,9 @@ const createApiInstance = () => {
       if (accessToken) {
         config.headers.Authorization = `Bearer ${accessToken}`;
         console.log('🔑 [API] Token attached, length:', accessToken.length);
+        // Debug: Log first/last few chars of token
+        const preview = accessToken.substring(0, 20) + '...' + accessToken.substring(accessToken.length - 20);
+        console.log('🔑 [API] Token preview:', preview);
       } else {
         console.warn('⚠️ [API] No token found - request may fail if protected');
       }

@@ -17,7 +17,7 @@ const APPLICATION_TYPES = [
         icon: 'calendar-outline',
         emoji: '🏖️',
         color: '#1890ff',
-        screen: 'LeaveApplication',
+        screen: 'LeaveApplicationCreate',
     },
     {
         type: 'forgot-check',
@@ -26,7 +26,7 @@ const APPLICATION_TYPES = [
         icon: 'alarm-outline',
         emoji: '📝',
         color: '#eb2f96',
-        screen: 'ForgotCheckApplication',
+        screen: 'ForgotCheckApplicationCreate',
     },
     {
         type: 'overtime',
@@ -35,7 +35,7 @@ const APPLICATION_TYPES = [
         icon: 'time-outline',
         emoji: '⏱️',
         color: '#fa8c16',
-        screen: 'OvertimeApplication',
+        screen: 'OvertimeApplicationCreate',
     },
     {
         type: 'business-trip',
@@ -44,7 +44,7 @@ const APPLICATION_TYPES = [
         icon: 'airplane-outline',
         emoji: '✈️',
         color: '#722ed1',
-        screen: 'BusinessTripApplication',
+        screen: 'BusinessTripApplicationCreate',
     },
     {
         type: 'resignation',
@@ -53,13 +53,13 @@ const APPLICATION_TYPES = [
         icon: 'exit-outline',
         emoji: '👋',
         color: '#f5222d',
-        screen: 'ResignationApplication',
+        screen: 'ResignationApplicationCreate',
     },
 ];
 
 const SelectApplicationTypeScreen = ({ navigation }) => {
     const handleSelectType = (item) => {
-        navigation.navigate(item.screen, { mode: 'create' });
+        navigation.navigate(item.screen);
     };
 
     return (

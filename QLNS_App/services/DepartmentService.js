@@ -1,13 +1,13 @@
 import apiService from './apiService';
 
 class DepartmentService {
-  // Get all departments
-  static async getAllDepartments() {
+  // Get all departments with pagination support
+  static async getAllDepartments(params) {
     try {
-      console.log('🏢 [DepartmentService] Fetching all departments');
-      const response = await apiService.get('/employee/departments');
-      console.log('✅ [DepartmentService] Got departments:', response.data?.data?.length || 0);
-      return response.data.data || response.data;
+      console.log('🏢 [DepartmentService] Fetching departments with params:', params);
+      const response = await apiService.get('/employee/departments', { params });
+      console.log('✅ [DepartmentService] Got departments:', response.data);
+      return response.data;
     } catch (error) {
       console.error('❌ [DepartmentService] Error:', error);
       throw error;

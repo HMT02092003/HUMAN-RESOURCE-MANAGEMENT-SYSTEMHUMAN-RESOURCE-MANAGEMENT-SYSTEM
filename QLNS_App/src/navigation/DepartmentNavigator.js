@@ -4,6 +4,7 @@ import DepartmentListScreen from '../../screens/departments/DepartmentListScreen
 import DepartmentCreateScreen from '../../screens/departments/DepartmentCreateScreen';
 import DepartmentEditScreen from '../../screens/departments/DepartmentEditScreen';
 import DepartmentDetailScreen from '../../screens/departments/DepartmentDetailScreen';
+import DepartmentFormScreen from '../../screens/departments/DepartmentFormScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -45,6 +46,11 @@ const DepartmentNavigator = () => {
                 name="DepartmentDetail"
                 component={DepartmentDetailScreen}
                 options={{ headerShown: false }} // Detail screen has its own custom header
+            />
+            <Stack.Screen
+                name="DepartmentForm"
+                component={DepartmentFormScreen}
+                options={{ headerShown: false }} // Form screen has its own custom header
             />
         </Stack.Navigator>
     );

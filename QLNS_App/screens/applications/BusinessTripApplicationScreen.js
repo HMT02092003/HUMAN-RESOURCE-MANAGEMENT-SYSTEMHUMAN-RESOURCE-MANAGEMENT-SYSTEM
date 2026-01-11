@@ -14,10 +14,12 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 import ApplicationService from '../../services/ApplicationService';
+import DetailViewScreen from '../../components/DetailViewScreen';
 
 const BusinessTripApplicationScreen = ({ navigation, route }) => {
     const { mode = 'create', applicationId, applicationData } = route.params || {};
     const isEditMode = mode === 'edit';
+    const isViewMode = mode === 'view';
 
     // Form state
     const [startDate, setStartDate] = useState(new Date());
@@ -33,18 +35,31 @@ const BusinessTripApplicationScreen = ({ navigation, route }) => {
     // UI state
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [applicationFullData, setApplicationFullData] = useState(null);
 
     useEffect(() => {
-        if (isEditMode && applicationId) {
+        console.log('🔄 [BusinessTripApp] Mode:', mode, 'ApplicationId:', applicationId);
+        if ((isEditMode || isViewMode) && applicationId) {
+            console.log('📥 [BusinessTripApp] Loading data for edit/view');
             loadApplicationData();
+        } else if (!isEditMode && !isViewMode) {
+            // Reset form to defaults when in create mode
+            console.log('🆕 [BusinessTripApp] CREATE MODE - Resetting form to defaults');
+            setApplicationFullData(null);
+            setStartDate(new Date());
+            setEndDate(new Date());
+            setDestination('');
+            setPurpose('');
+            setEstimatedCost('');
         }
-    }, [isEditMode, applicationId]);
+    }, [isEditMode, isViewMode, applicationId]);
 
     const loadApplicationData = async () => {
         setLoading(true);
         try {
             const response = await ApplicationService.getApplicationById(applicationId);
             const data = response?.data || response;
+            setApplicationFullData(data);
             const formData = data?.data || data;
             
             if (formData) {
@@ -153,6 +168,85 @@ const BusinessTripApplicationScreen = ({ navigation, route }) => {
                 <ActivityIndicator size="large" color="#1890ff" />
                 <Text style={styles.loadingText}>Đang tải...</Text>
             </View>
+        );
+    }
+
+    // View mode - Display read-only detail view
+    if (isViewMode && applicationFullData) {
+        const appData = applicationFullData.data || {};
+        const STATUS_LABELS = { 0: 'Chờ duyệt', 1: 'Đã duyệt', 2: 'Từ chối' };
+        const STATUS_COLORS = { 0: '#fa8c16', 1: '#52c41a', 2: '#ff4d4f' };
+
+        const sections = [
+            {
+                title: 'Thông tin công tác',
+                icon: 'airplane',
+                fields: [
+                    { label: 'Từ ngày', value: appData.startDate, type: 'date', icon: 'calendar-start' },
+                    { label: 'Đến ngày', value: appData.endDate, type: 'date', icon: 'calendar-end' },
+                    { label: 'Số ngày', value: `${calculateDays()} ngày`, icon: 'calendar-clock' },
+                    { label: 'Địa điểm', value: appData.destination || 'N/A', icon: 'map-marker' },
+                    { label: 'Mục đích', value: appData.purpose || 'N/A', icon: 'text' },
+                    { 
+                        label: 'Chi phí dự kiến', 
+                        value: appData.estimatedCost || 0, 
+                        type: 'currency', 
+                        icon: 'cash' 
+                    }
+                ]
+            },
+            {
+                title: 'Trạng thái & Phê duyệt',
+                icon: 'information-outline',
+                fields: [
+                    {
+                        label: 'Trạng thái',
+                        value: STATUS_LABELS[applicationFullData.status] || 'N/A',
+                        type: 'chip',
+                        chipStyle: { backgroundColor: STATUS_COLORS[applicationFullData.status] + '20' },
+                        chipTextStyle: { color: STATUS_COLORS[applicationFullData.status], fontWeight: '600' },
+                        icon: 'checkbox-marked-circle-outline'
+                    },
+                    ...(applicationFullData.approvedByInfo ? [{
+                        label: 'Người duyệt',
+                        value: applicationFullData.approvedByInfo.fullName,
+                        icon: 'account-check'
+                    }] : []),
+                    ...(applicationFullData.approvedDate ? [{
+                        label: 'Ngày duyệt',
+                        value: applicationFullData.approvedDate,
+                        type: 'datetime',
+                        icon: 'calendar-check'
+                    }] : []),
+                    ...(appData.rejectReason ? [{
+                        label: 'Lý do từ chối',
+                        value: appData.rejectReason,
+                        icon: 'close-circle-outline',
+                        valueStyle: { color: '#ff4d4f' }
+                    }] : []),
+                    { label: 'Ngày tạo', value: applicationFullData.created_at, type: 'datetime', icon: 'calendar-plus' }
+                ]
+            }
+        ];
+
+        const actions = [
+            ...(applicationFullData.status === 0 ? [{
+                label: 'Chỉnh sửa đơn',
+                icon: 'pencil',
+                color: '#1890ff',
+                mode: 'contained',
+                onPress: () => navigation.replace('BusinessTripApplication', { mode: 'edit', applicationId })
+            }] : [])
+        ];
+
+        return (
+            <DetailViewScreen
+                title="Chi tiết đơn công tác"
+                sections={sections}
+                actions={actions}
+                loading={loading}
+                onBack={() => navigation.goBack()}
+            />
         );
     }
 

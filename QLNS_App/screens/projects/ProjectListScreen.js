@@ -1,32 +1,22 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
-  RefreshControl,
-  TextInput,
   Alert,
-  Dimensions,
 } from 'react-native';
 import {
   Surface,
   Chip,
   FAB,
-  Button,
-  ActivityIndicator,
   Avatar,
   ProgressBar,
-  Menu,
-  Divider,
-  Checkbox,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import JobService from '../../services/JobService';
-
-const { width } = Dimensions.get('window');
+import CardListWithInfiniteScroll from '../../components/CardListWithInfiniteScroll';
 
 const statusColors = {
   planning: '#1890ff',
@@ -46,58 +36,28 @@ const statusLabels = {
 
 const ProjectListScreen = () => {
   const navigation = useNavigation();
-  const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState(null);
-  const [filterMenuVisible, setFilterMenuVisible] = useState(false);
-  const [selectedProjects, setSelectedProjects] = useState([]);
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [page, setPage] = useState(0);
-  const [total, setTotal] = useState(0);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const pageSize = 10;
 
-  useFocusEffect(
-    useCallback(() => {
-      loadProjects(0, true);
-    }, [])
-  );
-
-  const loadProjects = async (pageNum = 0, isRefresh = false) => {
-    if (isRefresh) {
-      setLoading(true);
-    } else {
-      setLoadingMore(true);
-    }
-
+  // Adapter for CardListWithInfiniteScroll.fetchData
+  const fetchData = async (params = {}) => {
     try {
-      const response = await JobService.getAllProjectByScope({ 
-        page: pageNum, 
-        pageSize 
-      });
-      
-      const payload = response?.data ?? response;
-      let items = [];
-      let totalCount = 0;
-
-      if (Array.isArray(payload)) {
-        items = payload;
-        totalCount = payload.length;
-      } else if (payload?.results || payload?.data) {
-        items = payload.results ?? payload.data;
-        totalCount = payload.total ?? items.length;
-      } else if (payload?.items) {
-        items = payload.items;
-        totalCount = payload.total ?? items.length;
+      console.log('[ProjectListScreen] fetchData params:', params);
+      // CardList sends 1-based page; backend expects 0-based
+      const apiParams = { ...params };
+      if (apiParams.page && apiParams.page >= 1) {
+        apiParams.page = Math.max(0, apiParams.page - 1);
       }
 
-      // Map data
-      const mapped = (items || []).map((p) => {
+      const resp = await JobService.getAllProjectByScope(apiParams);
+      const payload = resp?.data ?? resp;
+      const dataItems = payload?.data?.results ?? payload?.results ?? payload?.data ?? payload?.items ?? (Array.isArray(payload) ? payload : []);
+      const total = payload?.data?.total ?? payload?.total ?? (Array.isArray(dataItems) ? dataItems.length : 0);
+
+      console.log('[ProjectListScreen] Got items:', dataItems?.length, 'total:', total);
+
+      // Map items to normalized shape
+      const mapped = (dataItems || []).map((p) => {
         const rawManager = p.manager_id ?? p.manager;
         let manager = { id: null, name: '', avatar: null };
-        
         if (rawManager) {
           if (typeof rawManager === 'object') {
             manager.id = rawManager.id ?? null;
@@ -123,8 +83,6 @@ const ProjectListScreen = () => {
           name: p.name,
           description: p.description,
           status: p.status,
-          startDate: p.start_date ?? p.startDate,
-          endDate: p.end_date ?? p.endDate,
           progress: Number(p.progress) || 0,
           budget: p.budget ? Number(p.budget) : 0,
           spent: p.spent ? Number(p.spent) : 0,
@@ -134,87 +92,16 @@ const ProjectListScreen = () => {
         };
       });
 
-      if (isRefresh || pageNum === 0) {
-        setProjects(mapped);
-      } else {
-        setProjects(prev => [...prev, ...mapped]);
-      }
-      
-      setTotal(totalCount);
-      setPage(pageNum);
+      return { results: mapped, total };
     } catch (error) {
-      console.error('Error loading projects:', error);
-      Alert.alert('Lỗi', 'Không thể tải danh sách dự án');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-      setLoadingMore(false);
-    }
-  };
-
-  const handleRefresh = () => {
-    setRefreshing(true);
-    setSelectedProjects([]);
-    setIsSelectionMode(false);
-    loadProjects(0, true);
-  };
-
-  const handleLoadMore = () => {
-    if (!loadingMore && projects.length < total) {
-      loadProjects(page + 1, false);
-    }
-  };
-
-  const handleSearch = (text) => {
-    setSearchQuery(text);
-  };
-
-  const filteredProjects = projects.filter(project => {
-    const matchesSearch = project.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      project.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = !filterStatus || project.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  });
-
-  const toggleSelection = (projectId) => {
-    setSelectedProjects(prev => {
-      if (prev.includes(projectId)) {
-        const newSelection = prev.filter(id => id !== projectId);
-        if (newSelection.length === 0) setIsSelectionMode(false);
-        return newSelection;
+      console.error('[ProjectListScreen] fetchData error:', error);
+      const status = error?.response?.status;
+      const serverMsg = error?.response?.data?.message || error?.response?.data?.error || error?.message;
+      if (status === 403 || (serverMsg && serverMsg.toString().toLowerCase().includes('forbidden'))) {
+        Alert.alert('Không có quyền', 'Bạn không có quyền truy cập phần quản lý dự án. Vui lòng liên hệ quản trị viên.');
       }
-      return [...prev, projectId];
-    });
-  };
-
-  const handleLongPress = (projectId) => {
-    setIsSelectionMode(true);
-    setSelectedProjects([projectId]);
-  };
-
-  const handleDeleteSelected = () => {
-    Alert.alert(
-      'Xác nhận xóa',
-      `Bạn có chắc muốn xóa ${selectedProjects.length} dự án đã chọn?`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Xóa',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await JobService.deleteProject(selectedProjects);
-              setSelectedProjects([]);
-              setIsSelectionMode(false);
-              loadProjects(0, true);
-              Alert.alert('Thành công', 'Đã xóa dự án');
-            } catch (error) {
-              Alert.alert('Lỗi', 'Không thể xóa dự án');
-            }
-          }
-        }
-      ]
-    );
+      throw error;
+    }
   };
 
   const handleViewDetail = (project) => {
@@ -243,258 +130,125 @@ const ProjectListScreen = () => {
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
 
-  const renderProjectCard = ({ item }) => {
-    const isSelected = selectedProjects.includes(item.id);
+  const renderCard = (item) => {
     const statusColor = statusColors[item.status] || '#1890ff';
     const statusLabel = statusLabels[item.status] || item.status;
 
     return (
-      <TouchableOpacity
-        onPress={() => isSelectionMode && toggleSelection(item.id)}
-        onLongPress={() => handleLongPress(item.id)}
-        activeOpacity={isSelectionMode ? 0.7 : 1}
-      >
-        <Surface style={[styles.projectCard, isSelected && styles.projectCardSelected]} elevation={2}>
-          {isSelectionMode && (
-            <View style={styles.checkboxContainer}>
-              <Checkbox
-                status={isSelected ? 'checked' : 'unchecked'}
-                onPress={() => toggleSelection(item.id)}
-                color="#1890ff"
-              />
-            </View>
-          )}
-          
-          <View style={styles.cardHeader}>
-            <View style={styles.projectInfo}>
-              <Text style={styles.projectId}>{item.id}</Text>
-              <Text style={styles.projectName} numberOfLines={1}>{item.name}</Text>
-            </View>
-            <Chip
-              style={[styles.statusChip, { backgroundColor: statusColor + '20' }]}
-              textStyle={{ color: statusColor, fontSize: 11 }}
-            >
-              {statusLabel}
-            </Chip>
+      <Surface style={styles.projectCard} elevation={2}>
+        <View style={styles.cardHeader}>
+          <View style={styles.projectInfo}>
+            <Text style={styles.projectId}>#{item.id}</Text>
+            <Text style={styles.projectName} numberOfLines={2}>{item.name}</Text>
           </View>
-
-          {item.description && (
-            <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
-          )}
-
-          {/* Progress */}
-          <View style={styles.progressSection}>
-            <View style={styles.progressHeader}>
-              <Text style={styles.progressLabel}>Tiến độ</Text>
-              <Text style={[styles.progressValue, { color: statusColor }]}>{item.progress}%</Text>
-            </View>
-            <ProgressBar 
-              progress={item.progress / 100} 
-              color={statusColor} 
-              style={styles.progressBar}
-            />
-          </View>
-
-          {/* Manager & Members */}
-          <View style={styles.teamSection}>
-            <View style={styles.managerInfo}>
-              <MaterialCommunityIcons name="account-tie" size={16} color="#666" />
-              <Text style={styles.managerName} numberOfLines={1}>
-                {item.manager?.name || 'Chưa có'}
-              </Text>
-            </View>
-            
-            {item.members?.length > 0 && (
-              <View style={styles.membersInfo}>
-                <View style={styles.avatarGroup}>
-                  {item.members.slice(0, 3).map((member, index) => (
-                    <Avatar.Text
-                      key={member.id || index}
-                      size={24}
-                      label={getInitials(member.name)}
-                      style={[styles.memberAvatar, { marginLeft: index > 0 ? -8 : 0 }]}
-                    />
-                  ))}
-                  {item.members.length > 3 && (
-                    <View style={[styles.memberAvatar, styles.memberCountBadge, { marginLeft: -8 }]}>
-                      <Text style={styles.memberCountText}>+{item.members.length - 3}</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            )}
-          </View>
-
-          {/* Budget & Customer */}
-          <View style={styles.detailsSection}>
-            {item.budget > 0 && (
-              <View style={styles.detailItem}>
-                <MaterialCommunityIcons name="cash" size={14} color="#52c41a" />
-                <Text style={styles.detailText}>{formatCurrency(item.budget)}</Text>
-              </View>
-            )}
-            {item.customer && (
-              <View style={styles.detailItem}>
-                <MaterialCommunityIcons name="account-circle" size={14} color="#1890ff" />
-                <Text style={styles.detailText} numberOfLines={1}>{item.customer}</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Actions */}
-          {!isSelectionMode && (
-            <View style={styles.cardActions}>
-              <TouchableOpacity 
-                style={styles.actionButton} 
-                onPress={() => handleViewDetail(item)}
-              >
-                <MaterialCommunityIcons name="eye" size={18} color="#1890ff" />
-                <Text style={[styles.actionText, { color: '#1890ff' }]}>Xem</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.actionButton} 
-                onPress={() => handleEdit(item)}
-              >
-                <MaterialCommunityIcons name="pencil" size={18} color="#faad14" />
-                <Text style={[styles.actionText, { color: '#faad14' }]}>Sửa</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </Surface>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderHeader = () => (
-    <View style={styles.header}>
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <MaterialCommunityIcons name="magnify" size={20} color="#8c8c8c" />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Tìm kiếm dự án..."
-          value={searchQuery}
-          onChangeText={handleSearch}
-          placeholderTextColor="#8c8c8c"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <MaterialCommunityIcons name="close-circle" size={18} color="#8c8c8c" />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Filter Chips */}
-      <View style={styles.filterContainer}>
-        <Menu
-          visible={filterMenuVisible}
-          onDismiss={() => setFilterMenuVisible(false)}
-          anchor={
-            <Chip
-              icon="filter-variant"
-              onPress={() => setFilterMenuVisible(true)}
-              style={styles.filterChip}
-            >
-              {filterStatus ? statusLabels[filterStatus] : 'Tất cả'}
-            </Chip>
-          }
-        >
-          <Menu.Item 
-            onPress={() => { setFilterStatus(null); setFilterMenuVisible(false); }} 
-            title="Tất cả" 
-          />
-          <Divider />
-          {Object.keys(statusLabels).map(status => (
-            <Menu.Item
-              key={status}
-              onPress={() => { setFilterStatus(status); setFilterMenuVisible(false); }}
-              title={statusLabels[status]}
-              leadingIcon={() => (
-                <View style={[styles.statusDot, { backgroundColor: statusColors[status] }]} />
-              )}
-            />
-          ))}
-        </Menu>
-
-        <Text style={styles.resultCount}>
-          {filteredProjects.length} dự án
-        </Text>
-      </View>
-
-      {/* Selection Mode Actions */}
-      {isSelectionMode && selectedProjects.length > 0 && (
-        <View style={styles.selectionActions}>
-          <Button
-            mode="outlined"
-            onPress={() => {
-              setSelectedProjects([]);
-              setIsSelectionMode(false);
-            }}
-            style={styles.cancelButton}
+          <Chip
+            style={[styles.statusChip, { backgroundColor: statusColor + '20' }]}
+            textStyle={{ color: statusColor, fontSize: 11 }}
           >
-            Hủy
-          </Button>
-          <Button
-            mode="contained"
-            buttonColor="#ff4d4f"
-            onPress={handleDeleteSelected}
-            icon="delete"
-          >
-            Xóa ({selectedProjects.length})
-          </Button>
+            {statusLabel}
+          </Chip>
         </View>
-      )}
-    </View>
-  );
 
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <MaterialCommunityIcons name="folder-open-outline" size={64} color="#d9d9d9" />
-      <Text style={styles.emptyText}>Chưa có dự án nào</Text>
-      <Button mode="contained" onPress={handleCreate} style={styles.createButton}>
-        Tạo dự án mới
-      </Button>
-    </View>
-  );
+        {item.description && (
+          <Text style={styles.description} numberOfLines={2}>{item.description}</Text>
+        )}
 
-  const renderFooter = () => {
-    if (!loadingMore) return null;
-    return (
-      <View style={styles.loadingMore}>
-        <ActivityIndicator size="small" color="#1890ff" />
-      </View>
+        {/* Progress */}
+        <View style={styles.progressSection}>
+          <View style={styles.progressHeader}>
+            <Text style={styles.progressLabel}>Tiến độ</Text>
+            <Text style={[styles.progressValue, { color: statusColor }]}>{item.progress}%</Text>
+          </View>
+          <ProgressBar 
+            progress={item.progress / 100} 
+            color={statusColor} 
+            style={styles.progressBar}
+          />
+        </View>
+
+        {/* Manager & Members */}
+        <View style={styles.teamSection}>
+          <View style={styles.managerInfo}>
+            <MaterialCommunityIcons name="account-tie" size={16} color="#666" />
+            <Text style={styles.managerName} numberOfLines={1}>
+              {item.manager?.name || 'Chưa có'}
+            </Text>
+          </View>
+          
+          {item.members?.length > 0 && (
+            <View style={styles.membersInfo}>
+              <View style={styles.avatarGroup}>
+                {item.members.slice(0, 3).map((member, index) => (
+                  <Avatar.Text
+                    key={member.id || index}
+                    size={24}
+                    label={getInitials(member.name)}
+                    style={[styles.memberAvatar, { marginLeft: index > 0 ? -8 : 0 }]}
+                  />
+                ))}
+                {item.members.length > 3 && (
+                  <View style={[styles.memberAvatar, styles.memberCountBadge, { marginLeft: -8 }]}>
+                    <Text style={styles.memberCountText}>+{item.members.length - 3}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* Budget & Customer */}
+        <View style={styles.detailsSection}>
+          {item.budget > 0 && (
+            <View style={styles.detailItem}>
+              <MaterialCommunityIcons name="cash" size={14} color="#52c41a" />
+              <Text style={styles.detailText}>{formatCurrency(item.budget)}</Text>
+            </View>
+          )}
+          {item.customer && (
+            <View style={styles.detailItem}>
+              <MaterialCommunityIcons name="account-circle" size={14} color="#1890ff" />
+              <Text style={styles.detailText} numberOfLines={1}>{item.customer}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Actions */}
+        <View style={styles.cardActions}>
+          <TouchableOpacity 
+            style={styles.actionButton} 
+            onPress={() => handleViewDetail(item)}
+          >
+            <MaterialCommunityIcons name="eye" size={18} color="#1890ff" />
+            <Text style={[styles.actionText, { color: '#1890ff' }]}>Xem</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.actionButton} 
+            onPress={() => handleEdit(item)}
+          >
+            <MaterialCommunityIcons name="pencil" size={18} color="#faad14" />
+            <Text style={[styles.actionText, { color: '#faad14' }]}>Sửa</Text>
+          </TouchableOpacity>
+        </View>
+      </Surface>
     );
   };
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#1890ff" />
-        <Text style={styles.loadingText}>Đang tải dự án...</Text>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
-      <FlatList
-        data={filteredProjects}
-        renderItem={renderProjectCard}
-        keyExtractor={(item) => item.id}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={renderEmpty}
-        ListFooterComponent={renderFooter}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={['#1890ff']}
-          />
-        }
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.5}
-        showsVerticalScrollIndicator={false}
+      <CardListWithInfiniteScroll
+        fetchData={fetchData}
+        renderCard={renderCard}
+        searchPlaceholder="Tìm kiếm dự án..."
+        filters={[
+          { 
+            key: 'status', 
+            label: 'Trạng thái', 
+            options: Object.keys(statusLabels).map(k => ({ value: k, label: statusLabels[k] })) 
+          }
+        ]}
+        onItemPress={(item) => handleViewDetail(item)}
+        pageSize={10}
+        emptyMessage="Chưa có dự án nào"
       />
 
       <FAB
@@ -512,87 +266,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f7fa',
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f5f7fa',
-  },
-  loadingText: {
-    marginTop: 12,
-    color: '#8c8c8c',
-    fontSize: 14,
-  },
-  header: {
-    padding: 16,
-    paddingBottom: 8,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    height: 44,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e8e8e8',
-  },
-  searchInput: {
-    flex: 1,
-    marginLeft: 8,
-    fontSize: 14,
-    color: '#262626',
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  filterChip: {
-    backgroundColor: '#fff',
-  },
-  statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  resultCount: {
-    fontSize: 13,
-    color: '#8c8c8c',
-  },
-  selectionActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: '#e8e8e8',
-  },
-  cancelButton: {
-    borderColor: '#d9d9d9',
-  },
-  listContent: {
-    paddingBottom: 100,
-  },
   projectCard: {
     marginHorizontal: 16,
     marginBottom: 12,
     padding: 16,
     borderRadius: 12,
     backgroundColor: '#fff',
-  },
-  projectCardSelected: {
-    borderWidth: 2,
-    borderColor: '#1890ff',
-  },
-  checkboxContainer: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    zIndex: 1,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -723,28 +402,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 64,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#8c8c8c',
-    marginTop: 16,
-    marginBottom: 24,
-  },
-  createButton: {
-    backgroundColor: '#1890ff',
-  },
-  loadingMore: {
-    paddingVertical: 16,
-    alignItems: 'center',
-  },
   fab: {
     position: 'absolute',
-    right: 16,
-    bottom: 16,
+    margin: 16,
+    right: 0,
+    bottom: 0,
     backgroundColor: '#1890ff',
   },
 });

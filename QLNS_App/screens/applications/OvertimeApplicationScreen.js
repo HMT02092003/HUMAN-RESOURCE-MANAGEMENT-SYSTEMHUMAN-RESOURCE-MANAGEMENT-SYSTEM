@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 import ApplicationService from '../../services/ApplicationService';
+import DetailViewScreen from '../../components/DetailViewScreen';
 
 const OVERTIME_HOURS_OPTIONS = [
     { value: 2, label: '2 giờ' },
@@ -24,6 +25,7 @@ const OVERTIME_HOURS_OPTIONS = [
 const OvertimeApplicationScreen = ({ navigation, route }) => {
     const { mode = 'create', applicationId, applicationData } = route.params || {};
     const isEditMode = mode === 'edit';
+    const isViewMode = mode === 'view';
 
     // Form state
     const [overtimeDate, setOvertimeDate] = useState(new Date());
@@ -39,18 +41,30 @@ const OvertimeApplicationScreen = ({ navigation, route }) => {
     // UI state
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    const [applicationFullData, setApplicationFullData] = useState(null);
 
     useEffect(() => {
-        if (isEditMode && applicationId) {
+        console.log('🔄 [OvertimeApp] Mode:', mode, 'ApplicationId:', applicationId);
+        if ((isEditMode || isViewMode) && applicationId) {
+            console.log('📥 [OvertimeApp] Loading data for edit/view');
             loadApplicationData();
+        } else if (!isEditMode && !isViewMode) {
+            // Reset form to defaults when in create mode
+            console.log('🆕 [OvertimeApp] CREATE MODE - Resetting form to defaults');
+            setApplicationFullData(null);
+            setOvertimeDate(new Date());
+            setStartTime(new Date());
+            setOvertimeHours(2);
+            setReason('');
         }
-    }, [isEditMode, applicationId]);
+    }, [isEditMode, isViewMode, applicationId]);
 
     const loadApplicationData = async () => {
         setLoading(true);
         try {
             const response = await ApplicationService.getApplicationById(applicationId);
             const data = response?.data || response;
+            setApplicationFullData(data);
             const formData = data?.data || data;
             
             if (formData) {
@@ -145,6 +159,79 @@ const OvertimeApplicationScreen = ({ navigation, route }) => {
                 <ActivityIndicator size="large" color="#1890ff" />
                 <Text style={styles.loadingText}>Đang tải...</Text>
             </View>
+        );
+    }
+
+    // View mode - Display read-only detail view
+    if (isViewMode && applicationFullData) {
+        const appData = applicationFullData.data || {};
+        const STATUS_LABELS = { 0: 'Chờ duyệt', 1: 'Đã duyệt', 2: 'Từ chối' };
+        const STATUS_COLORS = { 0: '#fa8c16', 1: '#52c41a', 2: '#ff4d4f' };
+
+        const sections = [
+            {
+                title: 'Thông tin làm thêm giờ',
+                icon: 'clock-plus-outline',
+                fields: [
+                    { label: 'Ngày làm thêm', value: appData.overtimeDate, type: 'date', icon: 'calendar' },
+                    { label: 'Giờ bắt đầu', value: appData.startTime, icon: 'clock-time-three-outline' },
+                    { label: 'Số giờ làm thêm', value: `${appData.overtimeHours || 0} giờ`, icon: 'timer-outline' },
+                    { label: 'Giờ kết thúc (dự kiến)', value: calculateEndTime(), icon: 'clock-end' },
+                    { label: 'Lý do', value: appData.reason || 'N/A', icon: 'text' }
+                ]
+            },
+            {
+                title: 'Trạng thái & Phê duyệt',
+                icon: 'information-outline',
+                fields: [
+                    {
+                        label: 'Trạng thái',
+                        value: STATUS_LABELS[applicationFullData.status] || 'N/A',
+                        type: 'chip',
+                        chipStyle: { backgroundColor: STATUS_COLORS[applicationFullData.status] + '20' },
+                        chipTextStyle: { color: STATUS_COLORS[applicationFullData.status], fontWeight: '600' },
+                        icon: 'checkbox-marked-circle-outline'
+                    },
+                    ...(applicationFullData.approvedByInfo ? [{
+                        label: 'Người duyệt',
+                        value: applicationFullData.approvedByInfo.fullName,
+                        icon: 'account-check'
+                    }] : []),
+                    ...(applicationFullData.approvedDate ? [{
+                        label: 'Ngày duyệt',
+                        value: applicationFullData.approvedDate,
+                        type: 'datetime',
+                        icon: 'calendar-check'
+                    }] : []),
+                    ...(appData.rejectReason ? [{
+                        label: 'Lý do từ chối',
+                        value: appData.rejectReason,
+                        icon: 'close-circle-outline',
+                        valueStyle: { color: '#ff4d4f' }
+                    }] : []),
+                    { label: 'Ngày tạo', value: applicationFullData.created_at, type: 'datetime', icon: 'calendar-plus' }
+                ]
+            }
+        ];
+
+        const actions = [
+            ...(applicationFullData.status === 0 ? [{
+                label: 'Chỉnh sửa đơn',
+                icon: 'pencil',
+                color: '#1890ff',
+                mode: 'contained',
+                onPress: () => navigation.replace('OvertimeApplication', { mode: 'edit', applicationId })
+            }] : [])
+        ];
+
+        return (
+            <DetailViewScreen
+                title="Chi tiết đơn làm thêm giờ"
+                sections={sections}
+                actions={actions}
+                loading={loading}
+                onBack={() => navigation.goBack()}
+            />
         );
     }
 

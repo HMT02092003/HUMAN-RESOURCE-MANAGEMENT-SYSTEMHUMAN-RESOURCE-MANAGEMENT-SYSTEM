@@ -238,17 +238,23 @@ export class ShiftController {
         });
       }
       
-      const filters = {
+      // Accept generic `search` or specific shift_name param for backward compatibility
+      const filters: any = {
         status: req.query['status'] as string | undefined,
         startDate: req.query['startDate'] as string | undefined,
-        endDate: req.query['endDate'] as string | undefined
+        endDate: req.query['endDate'] as string | undefined,
+        // support search (generic) -> treat as shift name search by default
+        searchShiftName: (req.query['search'] as string) || (req.query['shift_name'] as string) || (req.query['searchShiftName'] as string) || undefined,
+        searchNotes: (req.query['searchNotes'] as string) || (req.query['notes'] as string) || undefined,
       };
 
-      const schedules = await ShiftService.getUserSchedules(userId, filters);
+      // Use paginated service internally so server-side search (ILIKE) is honored consistently
+      const result = await ShiftService.getUserSchedulesPaginated(userId, filters, 1, 1000);
 
       return res.json({
         success: true,
-        data: schedules,
+        data: result.data,
+        pagination: result.pagination,
         message: 'Lấy danh sách lịch thành công'
       });
     } catch (error: any) {
@@ -279,7 +285,7 @@ export class ShiftController {
       const rawStatus = req.query['status'] as string | undefined;
       const rawStartDate = (req.query['startDate'] || req.query['dateFrom'] || req.query['date_from']) as string | undefined;
       const rawEndDate = (req.query['endDate'] || req.query['dateTo'] || req.query['date_to']) as string | undefined;
-      const rawSearchShiftName = (req.query['searchShiftName'] || req.query['shift_name'] || req.query['searchShift'] ) as string | undefined;
+      const rawSearchShiftName = (req.query['searchShiftName'] || req.query['shift_name'] || req.query['searchShift'] || req.query['search']) as string | undefined;
       const rawSearchNotes = (req.query['searchNotes'] || req.query['notes'] || req.query['searchNotesText']) as string | undefined;
       const rawCreatedAtFrom = (req.query['createdAtFrom'] || req.query['createdAtStart'] || req.query['created_at_from']) as string | undefined;
       const rawCreatedAtTo = (req.query['createdAtTo'] || req.query['createdAtEnd'] || req.query['created_at_to']) as string | undefined;
@@ -938,10 +944,18 @@ export class ShiftController {
       const userMap = new Map(users.map((u: any) => [u.id, u]));
 
       // Enrich data with user info
-      let enrichedData = result.data.map((schedule: any) => ({
-        ...schedule,
-        user: userMap.get(schedule.user_id) || null
-      }));
+      let enrichedData = result.data.map((schedule: any) => {
+        const user = userMap.get(schedule.user_id) || null;
+        return {
+          ...schedule,
+          user,
+          // Add flat fields for mobile app compatibility
+          user_fullname: user?.fullName || user?.full_name || user?.username || null,
+          user_fullName: user?.fullName || user?.full_name || user?.username || null,
+          user_department_name: user?.department?.name || user?.Department?.name || null,
+          user_chevron_name: user?.chevron?.name || user?.Chevron?.name || null
+        };
+      });
 
       // Handle sorting for user-related fields
       // Map frontend field names to backend expected names
