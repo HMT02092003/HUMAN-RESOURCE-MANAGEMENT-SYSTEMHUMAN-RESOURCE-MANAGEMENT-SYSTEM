@@ -9,7 +9,7 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import attendanceRoutes from './routes/api';
+import attendanceRoutes from './routes/api.ts';
 
 const app = express();
 const PORT = process.env.PORT || 4003;

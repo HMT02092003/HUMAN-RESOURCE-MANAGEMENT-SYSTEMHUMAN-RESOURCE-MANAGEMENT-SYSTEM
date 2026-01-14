@@ -8,7 +8,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import path from 'path';
 import fs from 'fs';
-import authRoutes from './routes/api';
+import authRoutes from './routes/api.ts';
 
 const app = express();
 const PORT = process.env.PORT || 4001;

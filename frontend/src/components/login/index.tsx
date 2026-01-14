@@ -1,146 +1,100 @@
 "use client";
 
-import * as React from "react";
-import { Button, Col, Input, Row, Typography, Form, message } from "antd";
-import { UserOutlined, LockOutlined, EyeInvisibleOutlined, EyeOutlined } from "@ant-design/icons";
-import NextLink from "next/link";
-import "@/styles/login.css";
-import { useRouter } from "next/navigation";
-import { authService } from "@/service/authService";
+import React, { useState } from 'react';
+import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
+import NextLink from 'next/link';
+import { UserOutlined, LockOutlined, LoadingOutlined, EyeInvisibleOutlined, EyeOutlined } from '@ant-design/icons';
+import { message } from 'antd';
+import '@/styles/login.css';
+import { authService } from '@/service/authService';
 
-const { Title, Text } = Typography;
+const ThreeBackground = dynamic(() => import('@/components/ui/ThreeBackground'), {
+  ssr: false,
+});
 
 const Login = () => {
-  const [form] = Form.useForm();
   const router = useRouter();
-  const [loading, setLoading] = React.useState(false);
+  const [loading, setLoading] = useState(false);
+  const [showPass, setShowPass] = useState(false);
+  const [formData, setFormData] = useState({ username: '', password: '' });
 
-  const onFinish = async (values: any) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
     try {
-      await authService.login(values);
-      message.success("Đăng nhập thành công");
-      router.push("/home");
-    } catch (err: any) {
-      message.error(err?.response?.data?.error || 'Đăng nhập thất bại');
+      await authService.login({ username: formData.username, password: formData.password });
+      message.success('Đăng nhập thành công');
+      router.push('/home');
+    } catch (error) {
+      message.error('Sai tài khoản hoặc mật khẩu');
     } finally {
       setLoading(false);
     }
   };
 
-  React.useEffect(() => {
-    document.body.style.margin = "0";
-  }, []);
-
   return (
-    <div className="login-container">
-      <div className="login-background">
-        <div className="floating-shapes">
-          <div className="shape shape-1"></div>
-          <div className="shape shape-2"></div>
-          <div className="shape shape-3"></div>
-          <div className="shape shape-4"></div>
+    <div className="auth-container">
+      <ThreeBackground />
+
+      <div className="auth-card">
+        <div className="auth-header">
+          <h1 className="auth-title">Xin chào!</h1>
+          <p className="auth-subtitle">Nhập thông tin để truy cập hệ thống quản trị</p>
         </div>
-      </div>
-      
-      <Row style={{ height: "100vh", width: "100%" }} gutter={0}>
-        <Col xs={0} sm={0} md={12} lg={14} className="login-illustration">
-          <div className="illustration-content">
-            <div className="welcome-text">
-              <h1 className="welcome-title">Chào mừng trở lại!</h1>
-              <p className="welcome-subtitle">
-                Hệ thống quản lý nhân sự hiện đại và thông minh
-              </p>
-            </div>
-            <div className="illustration-wrapper">
-              <img
-                src="/logo/undraw_in_the_office_re_jtgc.svg"
-                alt="HR Management Illustration"
-                className="illustration-image"
+
+        <form onSubmit={handleSubmit}>
+          <div className="custom-form-item">
+            <label className="custom-label">Tài khoản</label>
+            <div className="input-wrapper">
+              <UserOutlined className="input-icon-left" />
+              <input
+                type="text"
+                className="custom-input"
+                placeholder="Nhập tên đăng nhập"
+                value={formData.username}
+                onChange={e => setFormData({...formData, username: e.target.value})}
+                required
               />
             </div>
           </div>
-        </Col>
 
-        <Col xs={24} sm={24} md={12} lg={10} className="login-form-section">
-          <div className="login-card">
-            <div className="form-content">
-              <div className="login-header">
-                <div className="login-logo">
-                  <img src="/logo/logo.png" alt="NEXTHR Logo" />
-                </div>
-                <Title level={2} className="login-title">Đăng nhập</Title>
-                <Text className="login-subtitle">
-                  Vui lòng đăng nhập vào tài khoản của bạn
-                </Text>
-              </div>
-              
-              <Form
-                form={form}
-                onFinish={onFinish}
-                layout="vertical"
-                size="large"
-                className="login-form"
+          <div className="custom-form-item">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <label className="custom-label">Mật khẩu</label>
+                <NextLink href="/forgotPassword" className="link-forgot">Quên mật khẩu?</NextLink>
+            </div>
+            
+            <div className="input-wrapper">
+              <LockOutlined className="input-icon-left" />
+              <input
+                type={showPass ? "text" : "password"}
+                className="custom-input"
+                placeholder="••••••••"
+                value={formData.password}
+                onChange={e => setFormData({...formData, password: e.target.value})}
+                required
+              />
+              <div
+                style={{ position: 'absolute', right: '16px', cursor: 'pointer', color: '#94a3b8' }}
+                onClick={() => setShowPass(!showPass)}
               >
-                <div className="form-fields">
-                  <Form.Item
-                    name="username"
-                    rules={[
-                      { required: true, message: 'Vui lòng nhập tên đăng nhập!' },
-                      { min: 3, message: 'Tên đăng nhập phải có ít nhất 3 ký tự!' }
-                    ]}
-                  >
-                    <Input
-                      prefix={<UserOutlined className="input-icon" />}
-                      placeholder="Tên đăng nhập"
-                      className="input-field"
-                      autoComplete="username"
-                    />
-                  </Form.Item>
-
-                  <Form.Item
-                    name="password"
-                    rules={[
-                      { required: true, message: 'Vui lòng nhập mật khẩu!' },
-                      { min: 6, message: 'Mật khẩu phải có ít nhất 6 ký tự!' }
-                    ]}
-                  >
-                    <Input.Password
-                      prefix={<LockOutlined className="input-icon" />}
-                      placeholder="Mật khẩu"
-                      className="input-field"
-                      autoComplete="current-password"
-                      iconRender={(visible) => (
-                        visible ? <EyeOutlined /> : <EyeInvisibleOutlined />
-                      )}
-                    />
-                  </Form.Item>
-                </div>
-
-                <Form.Item style={{ marginBottom: 0 }}>
-                  <Button
-                    type="primary"
-                    htmlType="submit"
-                    loading={loading}
-                    block
-                    className="login-button"
-                  >
-                    <span className="button-text">
-                      {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
-                    </span>
-                  </Button>
-                </Form.Item>
-              </Form>
-
-              <div className="forgot-password-section">
-                <NextLink href="/forgotPassword" className="forgot-password-link">
-                  Quên mật khẩu?
-                </NextLink>
+                {showPass ? <EyeInvisibleOutlined /> : <EyeOutlined />}
               </div>
             </div>
           </div>
-        </Col>
-      </Row>
+
+          <button
+            type="submit"
+            className={`btn-primary ${loading ? 'btn-loading' : ''}`}
+            disabled={loading}
+          >
+            {loading ? <LoadingOutlined style={{ marginRight: 8 }} /> : 'Đăng nhập'}
+          </button>
+        </form>
+        
+        <div className="auth-footer">© 2025 HRM System</div>
+      </div>
     </div>
   );
 };

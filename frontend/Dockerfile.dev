@@ -1,0 +1,27 @@
+# ============================================
+# Dockerfile.dev - Frontend Development Mode
+# ============================================
+# This Dockerfile is optimized for development
+# with hot reload and live code changes
+# Using YARN for package management
+# ============================================
+
+FROM node:20-alpine
+
+# Install yarn v1 (classic)
+RUN corepack enable && corepack prepare yarn@1 --activate
+
+WORKDIR /app
+
+# Install dependencies first (for Docker layer caching)
+COPY package.json yarn.lock* ./
+RUN yarn install
+
+# Copy all source code
+COPY . .
+
+# Expose Next.js dev server port
+EXPOSE 3000
+
+# Run in development mode with hot reload
+CMD ["yarn", "dev"]

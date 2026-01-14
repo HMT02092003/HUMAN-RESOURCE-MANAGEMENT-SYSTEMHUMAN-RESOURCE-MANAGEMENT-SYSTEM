@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",
+    "axios": "^1.6.0",
     "cors": "^2.8.5",
     "dayjs": "^1.11.13",
     "dotenv": "^16.5.0",
@@ -19,10 +20,10 @@
     "multer": "^2.0.2",
     "objection": "^3.1.5",
     "pg": "^8.13.1",
-    "sharp": "^0.34.4"
+    "sharp": "^0.34.4",
+    "tsx": "^4.19.2"
   },
   "devDependencies": {
-    "nodemon": "^3.1.7",
-    "tsx": "^4.19.2"
+    "nodemon": "^3.1.7"
   }
 }

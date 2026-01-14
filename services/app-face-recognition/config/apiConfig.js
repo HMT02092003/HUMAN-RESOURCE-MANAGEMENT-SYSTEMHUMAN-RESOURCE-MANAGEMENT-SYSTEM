@@ -1,14 +1,13 @@
 /**
  * API Configuration - Centralized API URLs
  * 
- * Uses Expo Constants to determine the host machine's IP address.
- * This works for:
- * - Physical devices (LAN IP)
- * - Android Emulator (10.0.2.2 via logic or hostUri)
- * - iOS Simulator (localhost)
+ * Sử dụng biến môi trường EXPO_PUBLIC_API_GATEWAY_URL từ file .env
+ * 
+ * ⚠️ Lưu ý:
+ * - Khi IP thay đổi: Sửa file .env trong thư mục services/app-face-recognition
+ * - Khi deploy production: Thay IP bằng domain trong .env
  */
 
-import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
 class APIConfig {
@@ -18,46 +17,35 @@ class APIConfig {
   }
 
   /**
-   * Initialize API Config (for compatibility with code that checks initialization)
+   * Initialize API Config
    */
   async initialize() {
     if (this.initialized) return;
-    // Trigger URL resolution
     this.getGatewayURL();
     this.initialized = true;
     console.log('[APIConfig] Initialized successfully');
   }
 
   /**
-   * Resolve the Gateway Base URL dynamically
+   * Get Gateway Base URL from environment variable
    */
   getGatewayURL() {
     if (this._baseURL) return this._baseURL;
 
-    // 1. Try to get from Expo Host URI (most reliable for LAN development)
-    const hostUri = Constants.expoConfig?.hostUri || Constants.manifest?.hostUri;
+    const envUrl = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
     
-    // Log for debugging
-    console.log('[APIConfig] Resolving Host URI:', hostUri);
-
-    if (hostUri) {
-      const host = hostUri.split(':')[0];
-      // Note: We use port 4000 for the Gateway
-      this._baseURL = `http://${host}:4000`;
-      console.log('[APIConfig] Resolved Gateway URL from Expo:', this._baseURL);
-      return this._baseURL;
+    if (!envUrl) {
+      console.error('[APIConfig] ERROR: EXPO_PUBLIC_API_GATEWAY_URL not found in .env!');
+      console.error('[APIConfig] Please check your .env file in services/app-face-recognition folder');
+      throw new Error('Missing EXPO_PUBLIC_API_GATEWAY_URL in .env file');
     }
 
-    // 2. Android Emulator Fallback (standard IP)
-    if (Platform.OS === 'android' && !Constants.isDevice) {
-        this._baseURL = 'http://10.0.2.2:4000';
-        console.log('[APIConfig] Resolved Android Emulator Gateway:', this._baseURL);
-        return this._baseURL;
-    }
-
-    // 3. IOS Simulator / General Fallback
-    this._baseURL = 'http://127.0.0.1:4000';
-    console.log('[APIConfig] Fallback to localhost:', this._baseURL);
+    // Remove /api suffix if present to get base URL
+    this._baseURL = envUrl.replace(/\/api$/, '');
+    
+    console.log('[APIConfig] Gateway URL from .env:', this._baseURL);
+    console.log('[APIConfig] Platform:', Platform.OS);
+    
     return this._baseURL;
   }
 

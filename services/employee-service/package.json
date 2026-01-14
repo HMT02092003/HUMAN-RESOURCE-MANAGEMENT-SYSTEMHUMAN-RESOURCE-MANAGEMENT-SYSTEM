@@ -11,16 +11,18 @@
     "seed": "knex seed:run"
   },
   "dependencies": {
+    "axios": "^1.6.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
     "jsonwebtoken": "^9.0.2",
     "knex": "^3.1.0",
-    "pg": "^8.13.1"
+    "objection": "^3.1.5",
+    "pg": "^8.13.1",
+    "tsx": "^4.7.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.7",
-    "tsx": "^4.7.0",
     "@types/node": "^20.5.0",
     "typescript": "^5.1.6"
   },

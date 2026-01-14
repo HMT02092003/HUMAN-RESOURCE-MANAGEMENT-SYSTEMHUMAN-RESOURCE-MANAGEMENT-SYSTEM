@@ -4,7 +4,7 @@ import express from 'express';
 import cors from 'cors';
 // ensure DB connection is initialized and Objection Model is bound before loading routes/controllers
 import './src/lib/Databases/Connection.ts';
-import routes from './router/api.js';
+import routes from './routes/api.ts';
 
 const app = express();
 const PORT = process.env.PORT || 4005;

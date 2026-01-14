@@ -1,0 +1,46 @@
+# Node.js
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+.npm/
+.yarn/
+
+# Environment files (sẽ dùng từ docker-compose)
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Test
+coverage/
+.nyc_output/
+test/
+*.test.js
+*.spec.js
+
+# Documentation
+*.md
+docs/
+
+# Build artifacts
+dist/
+build/

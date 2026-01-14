@@ -1,3 +1,191 @@
+/* src/styles/login.css */
+
+:root {
+  --primary-color: #0ea5e9;
+  --primary-hover: #0284c7;
+  --bg-overlay: rgba(255, 255, 255, 0.7);
+  --text-main: #334155;
+  --text-secondary: #64748b;
+  --border-color: rgba(255, 255, 255, 0.6);
+  --shadow-card: 0 10px 40px rgba(14, 165, 233, 0.1);
+}
+
+.auth-container {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Canvas sẽ tự quyết định màu nền */
+}
+
+.auth-card {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 420px;
+  padding: 40px;
+  
+  /* GLASSMORPHISM - Phiên bản "Ultra Clean" */
+  background: rgba(255, 255, 255, 0.55); /* Trong hơn */
+  backdrop-filter: blur(20px); /* Mờ mạnh hơn để xóa chi tiết background phía sau chữ */
+  -webkit-backdrop-filter: blur(20px);
+  
+  /* Viền siêu mỏng tạo cảm giác tinh tế */
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 24px;
+  
+  /* Bóng đổ nhẹ nhưng lan tỏa */
+  box-shadow: 
+    0 10px 40px -10px rgba(0, 0, 0, 0.05),
+    inset 0 0 20px rgba(255, 255, 255, 0.5); /* Inner shadow tạo độ dày */
+
+  animation: floatUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes floatUp {
+  from { opacity: 0; transform: translateY(40px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes slideUpFade {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.auth-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.auth-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+
+.auth-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.custom-form-item {
+  margin-bottom: 20px;
+}
+
+.custom-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+
+.input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-icon-left {
+  position: absolute;
+  left: 16px;
+  color: #94a3b8;
+  z-index: 2;
+  font-size: 18px;
+}
+
+.custom-input {
+  width: 100%;
+  height: 50px;
+  padding: 0 16px 0 48px;
+  font-size: 15px;
+  border: 1px solid rgba(203, 213, 225, 0.6);
+  background-color: rgba(255, 255, 255, 0.7); /* Input cũng hơi trong suốt */
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  color: var(--text-main);
+  outline: none;
+}
+
+.custom-input:focus {
+  background-color: #fff;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15); /* Shadow xanh khi focus */
+}
+
+.btn-primary {
+  width: 100%;
+  height: 50px;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10px;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(14, 165, 233, 0.3);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-loading {
+  opacity: 0.8;
+  pointer-events: none;
+  cursor: wait;
+}
+
+.link-forgot {
+  font-size: 13px;
+  color: var(--primary-color);
+  text-decoration: none;
+  font-weight: 500;
+  float: right;
+  margin-bottom: 8px;
+}
+
+.link-forgot:hover {
+  text-decoration: underline;
+}
+
+.auth-footer {
+  text-align: center;
+  margin-top: 24px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.link-back {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.3s;
+}
+
+.link-back:hover {
+  color: var(--primary-color);
+}
 /* Modern Login Design */
 .login-container {
   min-height: 100vh;

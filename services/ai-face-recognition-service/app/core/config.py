@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # Database Configuration
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
-        "postgresql://postgres:123456@localhost:5432/ai_face_recognition"
+        "postgresql://postgres:123456@localhost:5433/ai_face_recognition"
     )
     
     # AI Model Configuration

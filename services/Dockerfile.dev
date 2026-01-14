@@ -1,0 +1,27 @@
+# ============================================
+# Dockerfile.dev - Service Development Mode
+# ============================================
+# Generic Dockerfile for Node.js services
+# with hot reload using nodemon
+# Using YARN for package management
+# ============================================
+
+FROM node:20-alpine
+
+# Install yarn v1 (classic)
+RUN corepack enable && corepack prepare yarn@1 --activate
+
+WORKDIR /app
+
+# Install dependencies
+COPY package.json yarn.lock* ./
+RUN yarn install --frozen-lockfile || yarn install
+
+# Copy source code
+COPY . .
+
+# Expose service port (will be overridden by docker-compose)
+EXPOSE 4000
+
+# Run in dev mode (assumes "dev" script uses nodemon)
+CMD ["yarn", "dev"]

@@ -1,0 +1,498 @@
+version: '3.8'
+
+# ============================================================================
+# HUMAN RESOURCE MANAGEMENT SYSTEM - MICROSERVICES ARCHITECTURE
+# ============================================================================
+# Docker Compose configuration for complete microservices deployment
+# Includes: 9 services + PostgreSQL + RabbitMQ
+# Total RAM usage: ~6-7GB (suitable for 16GB machine)
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # DATABASE LAYER - PostgreSQL with pgvector extension
+  # ==========================================================================
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: hrms-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: postgres
+    ports:
+      - "5433:5432"  # Host:Container - Avoid conflict with local PostgreSQL on 5432
+    volumes:
+      # Persistent data storage
+      - postgres-data:/var/lib/postgresql/data
+      # Auto-initialize databases from dump files
+      - ./db_data:/docker-entrypoint-initdb.d
+    networks:
+      - hrms-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # ==========================================================================
+  # MESSAGE BROKER - RabbitMQ for async communication
+  # ==========================================================================
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: hrms-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+      RABBITMQ_DEFAULT_VHOST: /
+    ports:
+      - "5672:5672"   # AMQP protocol
+      - "15672:15672" # Management UI (http://localhost:15672)
+    networks:
+      - hrms-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # ==========================================================================
+  # SERVICE LAYER - Backend Microservices
+  # ==========================================================================
+  
+  # --------------------------------------------------------------------------
+  # Frontend - Next.js Application (Port 3000) - Development Mode
+  # --------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: hrms-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Bind mount for hot reload
+      - ./frontend:/app
+      # Preserve node_modules from container
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_HOST=${API_GATEWAY_URL:-http://192.168.1.4:4000}
+    depends_on:
+      - api-gateway
+    networks:
+      - hrms-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # --------------------------------------------------------------------------
+  # API Gateway - Entry point for all client requests (Port 4000)
+  # --------------------------------------------------------------------------
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: hrms-api-gateway
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    volumes:
+      # Hot reload support
+      - ./services/api-gateway:/app
+      - /app/node_modules
+    environment:
+      - PORT=4000
+      - NODE_ENV=production
+      # Service discovery URLs
+      - AUTH_SERVICE_URL=http://auth-service:4001
+      - EMPLOYEE_SERVICE_URL=http://employee-service:4002
+      - ATTENDANCE_SERVICE_URL=http://attendance-service:4003
+      - APPLICATION_SERVICE_URL=http://application-service:4004
+      - AI_FACE_RECOGNITION_SERVICE_URL=http://ai-face-recognition-service:4006
+      - SALARY_SERVICE_URL=http://salary-service:4007
+      - JOB_SERVICE_URL=http://job-service:4008
+      - NOTIFICATION_SERVICE_URL=http://notification-service:4009
+      # Security
+      - JWT_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
+      - JWT_REFRESH_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
+      # Rate limiting
+      - RATE_LIMIT_WINDOW_MS=900000
+      - RATE_LIMIT_MAX_REQUESTS=100
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - hrms-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # --------------------------------------------------------------------------
+  # Auth Service - Authentication & Authorization (Port 4001)
+  # --------------------------------------------------------------------------
+  auth-service:
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    container_name: hrms-auth-service
+    restart: unless-stopped
+    volumes:
+      # Hot reload support
+      - ./services/auth-service:/app
+      - /app/node_modules
+    environment:
+      - PORT=4001
+      - NODE_ENV=production
+      # Database
+      - DB_TYPE=pg
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=123456
+      - DB_DATABASE=auth_service
+      # JWT
+      - JWT_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
+      - JWT_REFRESH_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
+      - JWT_EXPIRES_IN=1h
+      - JWT_REFRESH_EXPIRES_IN=7d
+      # Email
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=465
+      - SMTP_USER=hrm.system.notification@gmail.com
+      - SMTP_PASS=asjixznjtslztrbz
+      - EMAIL_FROM=HRMS System <hrm.system.notification@gmail.com>
+      # Frontend
+      - FRONTEND_URL=http://localhost:3000
+      - FRONTEND_PORT=5000
+      - BCRYPT_ROUNDS=12
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hrms-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # --------------------------------------------------------------------------
+  # Employee Service - Employee management (Port 4002)
+  # --------------------------------------------------------------------------
+  employee-service:
+    build:
+      context: ./services/employee-service
+      dockerfile: Dockerfile
+    container_name: hrms-employee-service
+    restart: unless-stopped
+    volumes:
+      # Hot reload support
+      - ./services/employee-service:/app
+      - /app/node_modules
+    environment:
+      - PORT=4002
+      - NODE_ENV=production
+      # Database
+      - DB_TYPE=pg
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=123456
+      - DB_DATABASE=employee_service
+      # JWT
+      - JWT_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
+      - SECRET_KEY=app_secret_key_123456
+      - SECRET_KEY_ADMIN=admin_secret_key_789101
+      - JWT_SMS_KEY=sms_jwt_key_112233
+      - JWT_REFRESH_TIME=86400
+      - JWT_EXPIRE_ADMIN=86400
+      - JWT_EXPIRE_VERIFY_EMAIL=300
+      # Service URLs
+      - AUTH_SERVICE_URL=http://auth-service:4001
+      - NEXT_PUBLIC_API_HOST=4000
+      - PREFIXADMIN=admin
+      - TIMEOUT_DELETE_FILE=6000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - hrms-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # --------------------------------------------------------------------------
+  # Attendance Service - Time tracking & attendance (Port 4003)
+  # --------------------------------------------------------------------------
+  attendance-service:
+    build:
+      context: ./services/attendance-service
+      dockerfile: Dockerfile
+    container_name: hrms-attendance-service
+    restart: unless-stopped
+    volumes:
+      # Hot reload support
+      - ./services/attendance-service:/app
+      - /app/node_modules
+    environment:
+      - PORT=4003
+      - NODE_ENV=production
+      # Database
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=123456
+      - DB_DATABASE=attendance_service
+      # Service URLs
+      - AUTH_SERVICE_URL=http://auth-service:4001
+      - LOG_LEVEL=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hrms-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # --------------------------------------------------------------------------
+  # Application Service - Job applications management (Port 4004)
+  # --------------------------------------------------------------------------
+  application-service:
+    build:
+      context: ./services/application-service
+      dockerfile: Dockerfile
+    container_name: hrms-application-service
+    restart: unless-stopped
+    environment:
+      - PORT=4004
+      - NODE_ENV=production
+      # Database
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=123456
+      - DB_DATABASE=application_service
+    volumes:
+      # Persistent upload storage
+      - application-uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hrms-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # --------------------------------------------------------------------------
+  # AI Face Recognition Service - Face detection & recognition (Port 4006)
+  # --------------------------------------------------------------------------
+  ai-face-recognition-service:
+    build:
+      context: ./services/ai-face-recognition-service
+      dockerfile: Dockerfile
+    container_name: hrms-ai-face-service
+    restart: unless-stopped
+    environment:
+      - PORT=4006
+      - DEBUG=False
+      # Database - Corrected to match postgres container
+      - DATABASE_URL=postgresql://postgres:123456@postgres:5432/ai_face_recognition
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=123456
+      - DB_NAME=ai_face_recognition
+      # AI Model settings
+      - MODEL_NAME=buffalo_l
+      - FACE_CONFIDENCE_THRESHOLD=0.6
+      - RECOGNITION_THRESHOLD=0.4
+    volumes:
+      # Model cache and uploads
+      - ai-models:/app/models
+      - ai-uploads:/app/uploads
+      # Hot reload for Python (optional, but helpful for dev)
+      - ./services/ai-face-recognition-service/app:/app/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hrms-network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+
+  # --------------------------------------------------------------------------
+  # Salary Service - Payroll management (Port 4007)
+  # --------------------------------------------------------------------------
+  salary-service:
+    build:
+      context: ./services/salary-service
+      dockerfile: Dockerfile
+    container_name: hrms-salary-service
+    restart: unless-stopped
+    volumes:
+      # Hot reload support
+      - ./services/salary-service:/app
+      - /app/node_modules
+    environment:
+      - PORT=4007
+      - NODE_ENV=production
+      # Database
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=123456
+      - DB_DATABASE=salary_service
+      # Service URLs
+      - EMPLOYEE_SERVICE_URL=http://employee-service:4002/api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      employee-service:
+        condition: service_started
+    networks:
+      - hrms-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # --------------------------------------------------------------------------
+  # Job Service - Job postings & AI matching (Port 4008)
+  # --------------------------------------------------------------------------
+  job-service:
+    build:
+      context: ./services/job-service
+      dockerfile: Dockerfile
+    container_name: hrms-job-service
+    restart: unless-stopped
+    volumes:
+      # Hot reload support
+      - ./services/job-service:/app
+      - /app/node_modules
+    environment:
+      - PORT=4008
+      - NODE_ENV=production
+      # Database
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=123456
+      - DB_DATABASE=job_service
+      # Google AI
+      - GEMINI_API_KEY=AIzaSyCeh70fu4cI3TSopffKjtX4V2hKI8y8rd0
+      # Service URLs
+      - AUTH_SERVICE_URL=http://auth-service:4001
+      - NOTIFICATION_SERVICE_URL=http://notification-service:4009
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hrms-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  # --------------------------------------------------------------------------
+  # Notification Service - Real-time notifications (Port 4009)
+  # --------------------------------------------------------------------------
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    container_name: hrms-notification-service
+    restart: unless-stopped
+    volumes:
+      # Hot reload support
+      - ./services/notification-service:/app
+      - /app/node_modules
+    environment:
+      - PORT=4009
+      - NODE_ENV=production
+      # Database
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=123456
+      - DB_DATABASE=notification_service
+      # JWT
+      - JWT_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - hrms-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+# ============================================================================
+# NETWORKS - Internal communication
+# ============================================================================
+networks:
+  hrms-network:
+    driver: bridge
+    name: hrms-microservices-network
+
+# ============================================================================
+# VOLUMES - Persistent data storage
+# ============================================================================
+volumes:
+  postgres-data:
+    name: hrms-postgres-data
+  application-uploads:
+    name: hrms-application-uploads
+  ai-models:
+    name: hrms-ai-models
+  ai-uploads:
+    name: hrms-ai-uploads

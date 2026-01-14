@@ -1,3 +1,4 @@
+
 /**
  * Salary Service API Routes - Gateway Authenticated
  * All routes go through API Gateway which validates JWT and injects x-user-data header
