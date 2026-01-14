@@ -94,3 +94,9 @@ QLNS_App/.env.*
 # Build output
 QLNS_App/build/
 QLNS_App/dist/
+
+# =========================
+# Database dumps
+# Ignore all files under db_data except keep the init script
+db_data/*
+!db_data/init-dump.sh
