@@ -14,8 +14,9 @@ dotenv.config({ path: configEnvPath, override: false });
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import { getServices, ROUTE_CONFIG } from './config/services.js';
+import { getServices, getServicesFallback, ROUTE_CONFIG } from './config/services.js';
 import { createOptimizedProxy, requestLogger } from './middleware/proxy.js';
+import { createResilientProxy } from './middleware/resilient-proxy.js';
 import { gatewayAuth } from './middleware/auth.js';
 import dashboardRoutes from './routes/dashboard.js';
 
@@ -31,6 +32,7 @@ const io = new SocketIOServer(httpServer, {
 
 const PORT = process.env.PORT || 4000;
 const SERVICES = getServices(); // Lấy services từ env vars
+const SERVICES_FALLBACK = getServicesFallback(); // Lấy fallback URLs
 
 // Store connected users: { userId: socketId }
 const connectedUsers = new Map();
@@ -98,27 +100,32 @@ app.use(gatewayAuth);
 // Dashboard aggregation routes (before proxy routes)
 app.use('/api/dashboard', dashboardRoutes);
 
-// Tự động tạo proxy routes từ config
+// Tự động tạo proxy routes từ config với fallback support
 ROUTE_CONFIG.forEach(route => {
   const targetService = SERVICES[route.target];
+  const fallbackService = SERVICES_FALLBACK[route.target];
   
   if (!targetService) {
     console.error(`❌ Service '${route.target}' not found for route '${route.path}'`);
     return;
   }
   
+  // Always use createOptimizedProxy (now with fallback support built-in)
   app.use(
     route.path, 
     createOptimizedProxy(
-      targetService, 
+      targetService,
+      fallbackService,  // Pass fallback URL
       route.pathRewrite, 
       route.handleMultipart,
-      route.ws // Pass WebSocket support flag
+      route.ws
     )
   );
   
   const wsIndicator = route.ws ? ' [WS]' : '';
-  console.log(`✅ Route registered: ${route.path} -> ${route.target} (${targetService})${wsIndicator}`);
+  const multipartIndicator = route.handleMultipart ? ' [Multipart]' : '';
+  const fallbackIndicator = fallbackService ? ` (fallback: ${fallbackService})` : '';
+  console.log(`✅ Route registered: ${route.path} -> ${route.target} (${targetService})${wsIndicator}${multipartIndicator}${fallbackIndicator}`);
 });
 
 // Health check endpoint cho API Gateway

@@ -107,14 +107,22 @@ class ForgotPasswordController {
       });
 
       // Send OTP email
-      await emailService.sendPasswordResetOTP({
+      const emailSent = await emailService.sendPasswordResetOTP({
         email: user.email,
         username: user.username,
         fullName: (user as any).fullName || user.username,
         otp,
       });
 
-      console.log(`🔐 Password reset OTP sent for user: ${username}`);
+      console.log(`🔐 Password reset OTP generated for user: ${username}`);
+
+      if (!emailSent) {
+        console.warn(`⚠️  Email service unavailable. OTP: ${otp} (logged for manual delivery)`);
+        return res.status(503).json({
+          success: false,
+          message: 'Dịch vụ gửi email tạm thời không khả dụng. Vui lòng liên hệ quản trị viên để được hỗ trợ.',
+        });
+      }
 
       return res.status(200).json({
         success: true,

@@ -42,31 +42,9 @@ class EmailService {
       },
     });
 
-    // Verify connection on startup and surface helpful guidance
-    this.verifyConnection();
-  }
-
-  /**
-   * Verify SMTP connection
-   */
-  private async verifyConnection() {
-    try {
-      await this.transporter.verify();
-      console.log('✅ Email service ready');
-    } catch (error) {
-      console.error('❌ Email service connection failed:');
-      console.error(error);
-
-      // Provide actionable guidance for common Gmail auth issues
-      // If error is auth-related, remind about App Passwords / 2FA
-      // (Don't log secrets).
-      // Typical resolution: enable 2FA for the account and create an App Password,
-      // then set SMTP_USER and SMTP_PASS in services/auth-service/.env.
-      if ((error as any)?.code === 'EAUTH' || /BadCredentials|Username and Password not accepted/i.test(String(error))) {
-        console.error('→ SMTP authentication failed. If you use Gmail, ensure the account has 2-step verification enabled and create an App Password (see https://support.google.com/mail/?p=BadCredentials).');
-        console.error('→ Set the app password into services/auth-service/.env as SMTP_PASS and SMTP_USER accordingly.');
-      }
-    }
+    // Don't verify connection on startup - only check when actually sending email
+    // This allows the service to start even if email credentials are invalid
+    console.log('📧 Email service initialized (connection will be verified on first use)');
   }
 
   /**
@@ -336,8 +314,8 @@ Hệ thống HRMS
       console.log(`✅ Password reset email sent to ${email}. MessageId: ${info.messageId}`);
       return true;
     } catch (error) {
-      console.error('❌ Failed to send password reset email:', error);
-      throw new Error('Không thể gửi email. Vui lòng thử lại sau.');
+      console.warn('⚠️  Failed to send password reset email (email service unavailable):', error);
+      return false;
     }
   }
 
@@ -502,8 +480,8 @@ Hệ thống HRMS
       console.log(`✅ Password reset OTP sent to ${email}. MessageId: ${info.messageId}`);
       return true;
     } catch (error) {
-      console.error('❌ Failed to send password reset OTP:', error);
-      throw new Error('Không thể gửi email. Vui lòng thử lại sau.');
+      console.warn('⚠️  Failed to send password reset OTP (email service unavailable):', error);
+      return false;
     }
   }
 
@@ -549,7 +527,7 @@ Hệ thống HRMS
 
       console.log(`✅ Password changed confirmation sent to ${email}`);
     } catch (error) {
-      console.error('❌ Failed to send confirmation email:', error);
+      console.warn('⚠️  Failed to send confirmation email (email service unavailable):', error);
       // Don't throw error, just log it
     }
   }

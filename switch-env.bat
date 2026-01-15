@@ -10,7 +10,7 @@ REM ============================================================================
 
 setlocal enabledelayedexpansion
 
-set SERVICES=auth-service employee-service attendance-service salary-service application-service job-service notification-service
+set SERVICES=auth-service employee-service attendance-service salary-service application-service job-service notification-service ai-face-recognition-service
 
 if "%1"=="" (
     echo [ERROR] No environment specified!

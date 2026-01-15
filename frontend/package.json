@@ -19,7 +19,7 @@
     "@react-three/drei": "9.92.0",
     "@react-three/fiber": "8.15.0",
     "@types/three": "^0.182.0",
-    "antd": "^5.27.0",
+    "antd": "5.26.0",
     "axios": "^1.7.7",
     "chart.js": "^4.5.1",
     "class-variance-authority": "^0.7.1",

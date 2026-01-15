@@ -12,6 +12,7 @@ declare module 'express' {
   interface Request {
     auth?: {
       id: number;
+      sub?: number;
       username: string;
       permissions?: any[];
       roleId: number;
@@ -433,7 +434,7 @@ export const resetPasswordController = async (req: Request, res: Response) => {
   }
 };
 
-export const authenticateToken = (req: Request, res: Response, next: Function): void => {
+export const authenticateToken = (req: Request, res: Response, next: Function): void | Response => {
   console.log('\n🔐 ===== AUTHENTICATE TOKEN MIDDLEWARE ===== 🔐');
   console.log('📍 URL:', req.url);
   console.log('📍 Method:', req.method);

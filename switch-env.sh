@@ -25,6 +25,7 @@ SERVICES=(
     "application-service"
     "job-service"
     "notification-service"
+    "ai-face-recognition-service"
 )
 
 # Function to print colored messages

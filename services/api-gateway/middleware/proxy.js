@@ -1,19 +1,29 @@
 import { createProxyMiddleware } from 'http-proxy-middleware';
 
 /**
- * Tạo proxy middleware với cấu hình tối ưu
+ * Tạo proxy middleware với cấu hình tối ưu và fallback support
  * @param {string} target - URL đích của service
+ * @param {string} fallbackTarget - URL fallback nếu primary fail
  * @param {object|false} pathRewrite - Cấu hình rewrite path
  * @param {boolean} handleMultipart - Có xử lý multipart data không
  * @param {boolean} ws - Enable WebSocket support (cho Socket.io)
  * @returns {Function} Express middleware
  */
-const createOptimizedProxy = (target, pathRewrite = false, handleMultipart = false, ws = false) => {
-  return createProxyMiddleware({
-    target,
+const createOptimizedProxy = (target, fallbackTarget = null, pathRewrite = false, handleMultipart = false, ws = false) => {
+  // Track which target to use
+  let currentTarget = target;
+  let hasSwitchedToFallback = false;
+
+  const proxyMiddleware = createProxyMiddleware({
+    target: currentTarget,
     changeOrigin: true,
     pathRewrite: pathRewrite || undefined,
     ws: ws || false, // Enable WebSocket proxying
+    
+    // Dynamically resolve target on each request
+    router: (req) => {
+      return currentTarget;
+    },
     
     onProxyReq: (proxyReq, req, res) => {
       // Set auth headers FIRST before any body writes
@@ -89,6 +99,18 @@ const createOptimizedProxy = (target, pathRewrite = false, handleMultipart = fal
     
     onError: (err, req, res) => {
       console.error(`❌ Proxy error for ${req.url}:`, err && err.message ? err.message : err);
+      
+      // Try fallback if available and not already tried
+      if (fallbackTarget && !hasSwitchedToFallback && err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT') {
+        console.warn(`⚠️  Primary target ${currentTarget} failed. Switching to fallback: ${fallbackTarget}`);
+        currentTarget = fallbackTarget;
+        hasSwitchedToFallback = true;
+        
+        // Retry the request with fallback target
+        // Re-invoke the proxy middleware
+        return proxyMiddleware(req, res);
+      }
+      
       // Ensure CORS headers so browser gets the JSON error
       const origin = req && req.headers ? req.headers.origin || '*' : '*';
       try {
@@ -108,6 +130,8 @@ const createOptimizedProxy = (target, pathRewrite = false, handleMultipart = fal
       });
     }
   });
+  
+  return proxyMiddleware;
 };
 
 /**

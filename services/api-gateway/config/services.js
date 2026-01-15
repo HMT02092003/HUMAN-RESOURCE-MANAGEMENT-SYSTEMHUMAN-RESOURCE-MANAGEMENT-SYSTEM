@@ -14,6 +14,18 @@ const getServices = () => ({
   notification: process.env.NOTIFICATION_SERVICE_URL,
 });
 
+// Hàm để lấy fallback URLs từ environment variables
+const getServicesFallback = () => ({
+  auth: process.env.AUTH_SERVICE_URL_FALLBACK,
+  salary: process.env.SALARY_SERVICE_URL_FALLBACK,
+  employee: process.env.EMPLOYEE_SERVICE_URL_FALLBACK,
+  job: process.env.JOB_SERVICE_URL_FALLBACK,
+  attendance: process.env.ATTENDANCE_SERVICE_URL_FALLBACK,
+  application: process.env.APPLICATION_SERVICE_URL_FALLBACK,
+  ai: process.env.AI_FACE_RECOGNITION_SERVICE_URL_FALLBACK,
+  notification: process.env.NOTIFICATION_SERVICE_URL_FALLBACK,
+});
+
 // Route configuration - định nghĩa các route và service tương ứng
 const ROUTE_CONFIG = [
   {
@@ -104,4 +116,4 @@ const ROUTE_CONFIG = [
   }
 ];
 
-export { getServices, ROUTE_CONFIG };
+export { getServices, getServicesFallback, ROUTE_CONFIG };
