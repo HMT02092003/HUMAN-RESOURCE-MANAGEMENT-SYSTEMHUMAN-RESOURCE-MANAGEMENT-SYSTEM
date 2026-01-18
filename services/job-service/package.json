@@ -6,12 +6,16 @@
   "scripts": {
     "dev": "nodemon --watch . --ext ts,json --exec tsx server.ts",
     "start": "tsx server.ts",
+    "worker": "tsx worker.ts",
+    "worker:multi": "concurrently \"yarn worker\" \"yarn worker\" \"yarn worker\"",
     "type-check": "tsc --project tsconfig.json --noEmit",
     "migrate": "knex migrate:latest",
     "seed": "knex seed:run"
   },
   "dependencies": {
     "@google/genai": "^1.28.0",
+    "amqplib": "^0.10.9",
+    "axios": "^1.6.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dayjs": "^1.11.13",
@@ -24,7 +28,6 @@
     "objection": "^3.1.5",
     "pdf-parse": "^2.4.5",
     "pg": "^8.13.1",
-    "axios": "^1.6.0",
     "tsx": "^4.19.2"
   },
   "devDependencies": {

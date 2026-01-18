@@ -43,32 +43,25 @@ services:
           memory: 512M
 
   # ==========================================================================
-  # MESSAGE BROKER - RabbitMQ for async communication
+  # MESSAGE BROKER - Using CloudAMQP (cloud-hosted RabbitMQ)
   # ==========================================================================
-  rabbitmq:
-    image: rabbitmq:3.12-management-alpine
-    container_name: hrms-rabbitmq
-    restart: unless-stopped
-    environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: admin123
-      RABBITMQ_DEFAULT_VHOST: /
-    ports:
-      - "5672:5672"   # AMQP protocol
-      - "15672:15672" # Management UI (http://localhost:15672)
-    networks:
-      - hrms-network
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 256M
+  # RabbitMQ container disabled - using CloudAMQP service instead
+  # Configure CLOUDAMQP_URL in service .env files
+  # Fallback: Services auto-switch to synchronous processing if CloudAMQP unavailable
+  # ==========================================================================
+  
+  # rabbitmq:
+  #   image: rabbitmq:3.12-management-alpine
+  #   container_name: hrms-rabbitmq
+  #   restart: unless-stopped
+  #   environment:
+  #     RABBITMQ_DEFAULT_USER: admin
+  #     RABBITMQ_DEFAULT_PASS: admin123
+  #   ports:
+  #     - "5672:5672"
+  #     - "15672:15672"
+  #   networks:
+  #     - hrms-network
 
   # ==========================================================================
   # SERVICE LAYER - Backend Microservices
@@ -140,8 +133,6 @@ services:
       - RATE_LIMIT_MAX_REQUESTS=100
     depends_on:
       postgres:
-        condition: service_healthy
-      rabbitmq:
         condition: service_healthy
     networks:
       - hrms-network
@@ -414,20 +405,8 @@ services:
       # Hot reload support
       - ./services/job-service:/app
       - /app/node_modules
-    environment:
-      - PORT=4008
-      - NODE_ENV=production
-      # Database
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=123456
-      - DB_DATABASE=job_service
-      # Google AI
-      - GEMINI_API_KEY=AIzaSyCeh70fu4cI3TSopffKjtX4V2hKI8y8rd0
-      # Service URLs
-      - AUTH_SERVICE_URL=http://auth-service:4001
-      - NOTIFICATION_SERVICE_URL=http://notification-service:4009
+    env_file:
+      - ./services/job-service/.env.docker
     depends_on:
       postgres:
         condition: service_healthy
@@ -475,6 +454,83 @@ services:
           memory: 256M
         reservations:
           memory: 128M
+
+  # --------------------------------------------------------------------------
+  # CV Analysis Worker - Process CV uploads with AI (Background)
+  # Deploy 3 replicas for parallel processing with Round-Robin
+  # --------------------------------------------------------------------------
+  cv-worker:
+    build:
+      context: ./services/job-service
+      dockerfile: Dockerfile
+    # Remove container_name to allow multiple instances
+    restart: unless-stopped
+    command: ["yarn", "worker"]
+    volumes:
+      - ./services/job-service:/app
+      - /app/node_modules
+    env_file:
+      - ./services/job-service/.env.docker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      job-service:
+        condition: service_started
+    networks:
+      - hrms-network
+    deploy:
+      mode: replicated
+      replicas: 3
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # --------------------------------------------------------------------------
+  # Salary Calculation Worker - Process payroll calculations (Background)
+  # Deploy 3 replicas for parallel processing with Round-Robin
+  # --------------------------------------------------------------------------
+  salary-worker:
+    build:
+      context: ./services/salary-service
+      dockerfile: Dockerfile
+    # Remove container_name to allow multiple instances
+    restart: unless-stopped
+    command: ["yarn", "worker"]
+    volumes:
+      - ./services/salary-service:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=production
+      # Database
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=123456
+      - DB_DATABASE=salary_service
+      # Service URLs
+      - EMPLOYEE_SERVICE_URL=http://employee-service:4002/api
+      - ATTENDANCE_SERVICE_URL=http://attendance-service:4003/api
+      - NOTIFICATION_SERVICE_URL=http://notification-service:4009
+      - AI_SERVICE_URL=http://ai-face-recognition-service:4006/api
+      # CloudAMQP
+      - CLOUDAMQP_URL=amqps://bsifozyk:FXI3aDroM384hUPxUJ4w3CZYg42ZFvGo@rabbit.lmq.cloudamqp.com/bsifozyk
+    depends_on:
+      postgres:
+        condition: service_healthy
+      salary-service:
+        condition: service_started
+    networks:
+      - hrms-network
+    deploy:
+      mode: replicated
+      replicas: 3
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
 
 # ============================================================================
 # NETWORKS - Internal communication

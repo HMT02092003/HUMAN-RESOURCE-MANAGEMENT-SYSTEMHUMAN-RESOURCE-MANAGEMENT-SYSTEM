@@ -96,12 +96,12 @@ router.post('/admin/bulk-calculate-monthly', async (req: Request, res: Response)
 });
 
 
-router.get('/monthly-attendance', async (req: Request, res: Response) => {
+router.get('/attendance/monthly-attendance', async (req: Request, res: Response) => {
   await getAllMonthlyAttendance(req, res);
 });
 
 // Fast endpoint: get monthly attendance rows filtered by month and approval flag
-router.get('/monthly-attendance/by-month', (req: Request, res: Response, next) => {
+router.get('/attendance/monthly-attendance/by-month', (req: Request, res: Response, next) => {
   (async () => {
     const controller = await import('@/controller/AttendanceController');
     return controller.getMonthlyAttendanceByMonth(req, res);

@@ -5,12 +5,23 @@
  */
 import { Router } from 'express';
 import { CvController, upload } from '../src/controller/cv-controller.ts';
+import { uploadCvAsync } from '../src/controller/cv-controller-async.ts';
 import { ProjectController } from '../src/controller/project-controler.ts';
+import multer from 'multer';
 
 const router = Router();
 
-// CV endpoints (register before generic job endpoints to avoid route conflicts)
+// Configure multer for async CV upload
+const memoryStorage = multer.memoryStorage();
+const uploadMiddleware = multer({ storage: memoryStorage });
+
+// ========== CV ENDPOINTS ==========
+// Async CV upload với RabbitMQ (Recommended)
+router.post('/cvs/upload-async', uploadMiddleware.single('file') as any, uploadCvAsync);
+
+// Sync CV upload (Legacy)
 router.post('/cvs/upload', upload.single('file') as any, CvController.uploadCv);
+
 router.get('/cvs', CvController.listCvs);
 router.get('/cvs/:id/file', CvController.serveCvFile);
 router.delete('/cvs/:id', CvController.deleteCv);

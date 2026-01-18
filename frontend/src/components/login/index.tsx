@@ -11,6 +11,7 @@ import { authService } from '@/service/authService';
 
 const ThreeBackground = dynamic(() => import('@/components/ui/ThreeBackground'), {
   ssr: false,
+  loading: () => <div style={{ position: 'fixed', inset: 0, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }} />
 });
 
 const Login = () => {

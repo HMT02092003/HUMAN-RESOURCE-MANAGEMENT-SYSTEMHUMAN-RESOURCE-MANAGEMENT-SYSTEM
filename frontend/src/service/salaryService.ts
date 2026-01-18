@@ -165,5 +165,72 @@ export default {
   // Update bank and tax info for a user
   updateBankTaxInfo(userId: number | string, payload: any) {
     return api.put(`/api/salary/users/${userId}/bank-tax-info`, payload).then(r => r.data);
+  },
+
+  // ========== ASYNC METHODS (RabbitMQ Background Processing) ==========
+  
+  /**
+   * Tính lương async cho 1 user
+   * Trả về ngay 202, xử lý background, thông báo qua Socket
+   */
+  async calculatePayslipAsync(userId: number, year: number, month: number) {
+    try {
+      const response = await api.post(`/api/salary/payslips/calculate-async/${userId}`, {}, {
+        params: { year, month }
+      });
+      return {
+        success: response.data?.success ?? true,
+        data: response.data?.data,
+        message: response.data?.message
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        data: null,
+        message: err?.response?.data?.message || err.message
+      };
+    }
+  },
+
+  /**
+   * Tính lương bulk async cho nhiều user
+   * Body: { year, month, userIds: [] }
+   * userIds rỗng = tính cho tất cả users có attendance approved
+   */
+  async calculateBulkAsync(payload: { year: number; month: number; userIds?: number[] }) {
+    try {
+      const response = await api.post('/api/salary/payslips/calculate-bulk-async', payload);
+      return {
+        success: response.data?.success ?? true,
+        data: response.data?.data,
+        message: response.data?.message
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        data: null,
+        message: err?.response?.data?.message || err.message
+      };
+    }
+  },
+
+  /**
+   * Kiểm tra trạng thái tính lương
+   */
+  async getPayslipStatus(payslipId: number | string) {
+    try {
+      const response = await api.get(`/api/salary/payslips/status/${payslipId}`);
+      return {
+        success: response.data?.success ?? true,
+        data: response.data?.data,
+        message: response.data?.message
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        data: null,
+        message: err?.response?.data?.message || err.message
+      };
+    }
   }
 };

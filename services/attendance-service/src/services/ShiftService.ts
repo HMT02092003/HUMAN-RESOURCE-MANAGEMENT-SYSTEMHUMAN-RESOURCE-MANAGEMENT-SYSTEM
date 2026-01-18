@@ -488,40 +488,18 @@ export class ShiftService {
    * Duyệt lịch
    */
   static async approveSchedule(id: number, approvedBy: number) {
-    const schedule = await this.getScheduleById(id);
-
-    if (schedule.status !== 'pending') {
-      throw new Error('Chỉ có thể duyệt lịch đang chờ duyệt');
-    }
-
-    await EmployeeScheduleModel.query()
-      .patchAndFetchById(id, {
-        status: 'approved',
-        approved_by: approvedBy,
-        approved_at: new Date().toISOString()
-      });
-    
-    return { success: true, message: 'Đã duyệt lịch đăng ký' };
+    // Delegate single approve to bulk logic for consistent behaviour and fewer code paths
+    const resp = await this.bulkApproveSchedules([id], approvedBy);
+    return { success: true, approved: resp.approved, message: resp.message };
   }
 
   /**
    * Từ chối lịch
    */
   static async rejectSchedule(id: number, approvedBy: number) {
-    const schedule = await this.getScheduleById(id);
-
-    if (schedule.status !== 'pending') {
-      throw new Error('Chỉ có thể từ chối lịch đang chờ duyệt');
-    }
-
-    await EmployeeScheduleModel.query()
-      .patchAndFetchById(id, {
-        status: 'rejected',
-        approved_by: approvedBy,
-        approved_at: new Date().toISOString()
-      });
-    
-    return { success: true, message: 'Đã từ chối lịch đăng ký' };
+    // Delegate single reject to bulk logic
+    const resp = await this.bulkRejectSchedules([id], approvedBy);
+    return { success: true, rejected: resp.rejected, message: resp.message };
   }
 
   /**

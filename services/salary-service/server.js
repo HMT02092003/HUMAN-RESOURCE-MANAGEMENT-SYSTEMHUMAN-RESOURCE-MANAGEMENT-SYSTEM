@@ -5,9 +5,10 @@ import cors from 'cors';
 // ensure DB connection is initialized and Objection Model is bound before loading routes/controllers
 import './src/lib/Databases/Connection.ts';
 import routes from './routes/api.ts';
+import rabbitmqManager from './src/utils/rabbitmq.js';
 
 const app = express();
-const PORT = process.env.PORT || 4005;
+const PORT = process.env.PORT || 4007;
 const serviceName = process.env.SERVICE_NAME || 'salary-service';
 
 app.use(cors({ origin: true, credentials: true }));
@@ -35,8 +36,19 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, error: err.message });
 });
 
-const salaryServer = app.listen(PORT, () => {
+const salaryServer = app.listen(PORT, async () => {
   console.log(`🚀 ${serviceName} running on port ${PORT}`);
+  
+  // Kết nối RabbitMQ để gửi messages (không chạy worker)
+  console.log('🔌 Connecting to RabbitMQ for message queuing...');
+  try {
+    await rabbitmqManager.connect();
+    console.log('✅ RabbitMQ ready for message queuing');
+  } catch (err) {
+    console.warn('⚠️  RabbitMQ connection failed, using sync fallback');
+  }
+  
+  console.log('💡 Để chạy worker, dùng lệnh: yarn worker');
 });
 
 salaryServer.on('error', (err) => {

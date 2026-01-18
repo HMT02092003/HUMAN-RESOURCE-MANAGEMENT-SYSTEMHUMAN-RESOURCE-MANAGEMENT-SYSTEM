@@ -190,8 +190,8 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         [
             // Attach permission key 'CV' so this menu item is shown/hidden based on DB permissions
             getItem('Quản lí hồ sơ', 'CV', <FileTextOutlined />, 'CV'),
-            getItem('Danh sách dự án', 'projects', <FileTextOutlined />),
-            getItem('Quản lý KPI nhân viên', 'kpiManagement', <CheckCircleOutlined />),],
+            getItem('Danh sách dự án', 'projects', <FileTextOutlined />, 'projects'),
+            getItem('Quản lý KPI nhân viên', 'kpiManagement', <CheckCircleOutlined />, 'kpiManagement'),],
     ),
 
 ];
@@ -277,9 +277,16 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
 
     const filterMenuItems = useCallback((items: ExtendedMenuItem[]): ExtendedMenuItem[] => {
         console.log('🔍 [FILTER-MENU] Starting menu filter...');
+        console.log('👤 [FILTER-MENU] User role:', userData?.roleId);
 
         return items.flatMap(item => {
             console.log(`\n📌 [FILTER-MENU] Checking item: "${item.label}" (key: ${item.key})`);
+
+            // ✅ Role-based filtering: Hide KPI Management from Employee role (roleId=2)
+            if (item.key === 'kpiManagement' && userData?.roleId === 2) {
+                console.log(`  ❌ KPI Management hidden for Employee role (roleId=2)`);
+                return [];
+            }
 
             // Hàm helper để kiểm tra permissions
             const hasPermissionAccess = (permissionKeys: string[], requireAll: boolean = false) => {
@@ -398,7 +405,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                 return [];
             }
         });
-    }, [userPermissions]);
+    }, [userPermissions, userData]);
 
     // Cập nhật Menu Items khi Permissions thay đổi
     useEffect(() => {

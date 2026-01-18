@@ -1116,176 +1116,95 @@ export class ApplicationController {
   }
 
   /**
-   * Duyệt đơn từ
+   * Duyệt đơn từ - WITH TIMEOUT PROTECTION
    * POST /applications/:id/approve
    */
   static async approve(req, res) {
+    const startTime = Date.now();
+    console.log('\n✅ [APPROVE] Starting approval process...');
+    
+    // Validate input first (fast)
+    const { id } = req.params;
+    const { note } = req.body;
+
+    const approvedBy = getUserId(req);
+    if (!approvedBy) {
+      return res.status(401).json({
+        success: false,
+        message: 'Người duyệt không được xác thực'
+      });
+    }
+
+    const applicationId = parseInt(id);
+    if (isNaN(applicationId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID đơn từ không hợp lệ'
+      });
+    }
+
+    console.log('📍 Request:', { applicationId, approvedBy });
+
     try {
-      const { id } = req.params;
-      const { note } = req.body;
-      const approvedBy = getUserId(req);
+      // Execute with timeout protection (8 seconds max)
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('TIMEOUT: Xử lý quá lâu')), 8000);
+      });
 
-      if (!approvedBy) {
-        return res.status(401).json({
-          success: false,
-          message: 'Người duyệt không được xác thực'
-        });
-      }
-
-      // Lấy thông tin đơn trước khi approve để xử lý
-      const applicationBeforeApprove = await ApplicationModel.getApplicationById(parseInt(id));
-
-      if (!applicationBeforeApprove) {
-        return res.status(404).json({
-          success: false,
-          message: 'Không tìm thấy đơn từ'
-        });
-      }
-
-      // Xử lý riêng cho đơn quên check - cập nhật bảng chấm công TRƯỚC KHI approve
-      if (applicationBeforeApprove.type === 'forgot-check') {
-        try {
-          console.log('📝 Processing forgot-check application approval...');
-          console.log('Application data:', applicationBeforeApprove.data);
-
-          const { forgotDate, forgotTime, forgotType } = applicationBeforeApprove.data;
-
-          if (!forgotDate || !forgotTime || !forgotType) {
-            return res.status(400).json({
-              success: false,
-              message: 'Dữ liệu đơn quên check không đầy đủ (thiếu forgotDate, forgotTime, hoặc forgotType)'
-            });
-          }
-
-          // Lấy token từ request để truyền sang attendance-service
-          const token = req.cookies.token ||
-            (req.headers.authorization && req.headers.authorization.split(' ')[1]);
-
-          if (!token) {
-            return res.status(401).json({
-              success: false,
-              message: 'Không tìm thấy token để xác thực'
-            });
-          }
-
-          // Gọi sang attendance-service QUA API GATEWAY để cập nhật bảng chấm công
-          console.log(`🌐 Calling attendance service via API Gateway: ${API_GATEWAY_URL}/api/attendance/update-forgot-check`);
-
-          const attendanceResponse = await axios.post(
-            `${API_GATEWAY_URL}/api/attendance/update-forgot-check`,
-            {
-              userId: applicationBeforeApprove.userId,
-              forgotDate,
-              forgotTime,
-              forgotType
-            },
-            {
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-                'Cookie': `token=${token}`
-              },
-              timeout: 10000 // 10 seconds timeout
-            }
-          );
-
-          console.log('✅ Attendance updated successfully:', attendanceResponse.data);
-
-          // CHỈ SAU KHI cập nhật chấm công thành công, mới approve đơn
-          const application = await ApplicationModel.approveApplication(
-            parseInt(id), approvedBy, note
-          );
-
-          return res.json({
-            success: true,
-            message: 'Duyệt đơn từ và cập nhật chấm công thành công',
-            data: application,
-            attendanceUpdate: attendanceResponse.data,
-            timestamp: dayjs().format()
-          });
-
-        } catch (attendanceError) {
-          console.error('❌ Error updating attendance:', attendanceError.message);
-
-          // Nếu lỗi khi cập nhật chấm công, KHÔNG approve đơn
-          return res.status(500).json({
-            success: false,
-            message: 'Lỗi khi cập nhật chấm công: ' + attendanceError.message,
-            detail: attendanceError.response?.data || attendanceError.message,
-            timestamp: dayjs().format()
-          });
+      const approvePromise = (async () => {
+        // Check if exists
+        const app = await ApplicationModel.getApplicationById(applicationId);
+        if (!app) {
+          throw new Error('Không tìm thấy đơn từ');
         }
-      }
+        // Approve
+        return await ApplicationModel.approveApplication(applicationId, approvedBy, note);
+      })();
 
-      // Đơn tăng ca: chỉ approve đơn, việc tính lương sẽ xử lý khi tính lương tháng
-      if (applicationBeforeApprove.type === 'overtime') {
-        console.log('📝 Approving overtime application (calculation will be done during salary processing)...');
-        console.log('Application data:', applicationBeforeApprove.data);
+      const application = await Promise.race([approvePromise, timeoutPromise]);
+      
+      const duration = Date.now() - startTime;
+      console.log(`✅ Application approved successfully in ${duration}ms`);
 
-        // Validate dữ liệu cơ bản
-        const { overtimeDate, startTime, overtimeHours } = applicationBeforeApprove.data;
-        if (!overtimeDate || !startTime || !overtimeHours) {
-          return res.status(400).json({
-            success: false,
-            message: 'Dữ liệu đơn tăng ca không đầy đủ (thiếu overtimeDate, startTime, hoặc overtimeHours)'
-          });
-        }
-
-        // Chỉ approve đơn, không xử lý tăng ca ngay
-        const application = await ApplicationModel.approveApplication(
-          parseInt(id), approvedBy, note
-        );
-
-        return res.json({
-          success: true,
-          message: 'Duyệt đơn tăng ca thành công. Lương tăng ca sẽ được tính khi xử lý lương tháng.',
-          data: application,
-          timestamp: dayjs().format()
-        });
-      }
-
-      // Đơn thôi việc: chỉ approve đơn, việc cập nhật trạng thái user sẽ xử lý cuối tháng
-      if (applicationBeforeApprove.type === 'resignation') {
-        console.log('📝 Approving resignation application (user status will be updated during month-end processing)...');
-        console.log('Application data:', applicationBeforeApprove.data);
-
-        // Validate dữ liệu cơ bản
-        const { resignationDate, resignationReason } = applicationBeforeApprove.data;
-        if (!resignationDate || !resignationReason) {
-          return res.status(400).json({
-            success: false,
-            message: 'Dữ liệu đơn thôi việc không đầy đủ (thiếu resignationDate hoặc resignationReason)'
-          });
-        }
-
-        // Chỉ approve đơn, không cập nhật trạng thái user ngay
-        const application = await ApplicationModel.approveApplication(
-          parseInt(id), approvedBy, note
-        );
-
-        return res.json({
-          success: true,
-          message: 'Duyệt đơn thôi việc thành công. Trạng thái người dùng sẽ được cập nhật khi xử lý cuối tháng.',
-          data: application,
-          timestamp: dayjs().format()
-        });
-      }
-
-      // Với các loại đơn khác, approve bình thường
-      const application = await ApplicationModel.approveApplication(
-        parseInt(id), approvedBy, note
-      );
-
-      res.json({
+      return res.json({
         success: true,
         message: 'Duyệt đơn từ thành công',
         data: application,
         timestamp: dayjs().format()
       });
+
     } catch (error) {
-      res.status(400).json({
+      const duration = Date.now() - startTime;
+      console.error(`❌ Error in approve after ${duration}ms:`, error.message);
+      
+      // Handle specific errors
+      if (error.message.includes('TIMEOUT')) {
+        return res.status(504).json({
+          success: false,
+          message: 'Hệ thống xử lý quá lâu. Vui lòng thử lại.',
+          timestamp: dayjs().format()
+        });
+      }
+      
+      if (error.message.includes('Không tìm thấy')) {
+        return res.status(404).json({
+          success: false,
+          message: error.message,
+          timestamp: dayjs().format()
+        });
+      }
+      
+      if (error.message.includes('đã được xử lý')) {
+        return res.status(400).json({
+          success: false,
+          message: error.message,
+          timestamp: dayjs().format()
+        });
+      }
+      
+      return res.status(500).json({
         success: false,
-        message: error.message || 'Có lỗi xảy ra khi duyệt đơn từ',
+        message: 'Lỗi khi duyệt đơn từ: ' + error.message,
         timestamp: dayjs().format()
       });
     }

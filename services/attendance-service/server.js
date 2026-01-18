@@ -27,6 +27,20 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`\n🌐 [ATTENDANCE] ${req.method} ${req.url}`);
+  console.log('📍 Headers:', {
+    authorization: req.headers.authorization ? 'Present' : 'Missing',
+    'x-user-data': req.headers['x-user-data'] ? `Present (${req.headers['x-user-data'].length} chars)` : 'Missing',
+    'content-type': req.headers['content-type']
+  });
+  console.log('📍 Body:', JSON.stringify(req.body, null, 2));
+  console.log('📍 Params:', req.params);
+  console.log('📍 Query:', req.query);
+  next();
+});
+
 // Smart request logging (development only)
 app.use((req, res, next) => {
   next();

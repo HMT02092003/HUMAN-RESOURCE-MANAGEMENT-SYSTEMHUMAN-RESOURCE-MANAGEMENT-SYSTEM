@@ -49,8 +49,8 @@
   "devDependencies": {
     "@types/crypto-js": "^4.2.2",
     "@types/file-saver": "^2.0.7",
-    "@types/jsonwebtoken": "^9.0.7",
     "@types/js-cookie": "^3.0.6",
+    "@types/jsonwebtoken": "^9.0.7",
     "@types/moment-timezone": "^0.5.30",
     "@types/node": "^22.9.1",
     "@types/react": "18.2.73",
@@ -59,7 +59,8 @@
     "@types/react-highlight-words": "^0.20.0",
     "eslint": "^8.57.0",
     "eslint-config-next": "14.2.7",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "update-browserslist-db": "^1.2.3"
   },
   "engines": {
     "node": ">=18.0.0"

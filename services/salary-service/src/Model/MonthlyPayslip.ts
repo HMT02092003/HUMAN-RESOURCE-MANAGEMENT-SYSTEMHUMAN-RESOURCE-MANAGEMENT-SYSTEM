@@ -74,6 +74,15 @@ export class MonthlyPayslip extends Model {
   // No relation mappings: this DB schema stores allowances on the monthly_payslips table
   return {};
   }
+
+  $beforeInsert() {
+    this.created_at = new Date().toISOString();
+    this.updated_at = new Date().toISOString();
+  }
+
+  $beforeUpdate() {
+    this.updated_at = new Date().toISOString();
+  }
 }
 
 export default MonthlyPayslip;

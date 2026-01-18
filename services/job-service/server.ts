@@ -7,6 +7,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import routes from './routes/api.ts';
+import rabbitmqManager from './src/utils/rabbitmq.js';
 
 dotenv.config();
 
@@ -48,6 +49,17 @@ app.use('/uploads', express.static(uploadsDir));
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 ${serviceName} running on port ${PORT}`);
+  
+  // Kết nối RabbitMQ để gử9i messages (không chạy worker)
+  console.log('🔌 Connecting to RabbitMQ for message queuing...');
+  try {
+    await rabbitmqManager.connect();
+    console.log('✅ RabbitMQ ready for message queuing');
+  } catch (err) {
+    console.warn('⚠️  RabbitMQ connection failed, using sync fallback');
+  }
+  
+  console.log('💡 Để chạy worker, dùng lệnh: yarn worker');
 });

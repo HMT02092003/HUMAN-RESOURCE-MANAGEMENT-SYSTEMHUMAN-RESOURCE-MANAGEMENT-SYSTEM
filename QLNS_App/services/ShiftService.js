@@ -122,19 +122,19 @@ export const bulkDeleteShiftRegistrations = async (ids) => {
 };
 
 /**
- * Duyệt đăng ký ca (admin)
+ * Duyệt đăng ký ca (admin) - DEPRECATED: Use bulkApproveSchedules([id], 'approve') instead
+ * Giờ gọi bulk API với mảng 1 phần tử để đảm bảo logic nhất quán
  */
 export const approveShiftRegistration = async (id, notes = '') => {
-    const response = await apiService.post(`/schedules/${id}/approve`, { notes });
-    return response.data;
+    return bulkApproveSchedules([id], 'approve');
 };
 
 /**
- * Từ chối đăng ký ca (admin)
+ * Từ chối đăng ký ca (admin) - DEPRECATED: Use bulkApproveSchedules([id], 'reject') instead
+ * Giờ gọi bulk API với mảng 1 phần tử để đảm bảo logic nhất quán
  */
 export const rejectShiftRegistration = async (id, notes) => {
-    const response = await apiService.post(`/schedules/${id}/reject`, { notes });
-    return response.data;
+    return bulkApproveSchedules([id], 'reject');
 };
 
 /**

@@ -36,7 +36,13 @@ export const createJobWithAnalysis = (payload: any) => {
 };
 
 // CV Management
+// Upload CV ASYNC với RabbitMQ - trả về ngay, xử lý background
 export const uploadCv = (payload: Record<string, any>) => {
+  return api.post(`${JOB_SERVICE_PREFIX}/cvs/upload-async`, payload);
+};
+
+// Upload CV SYNC (Legacy - chờ AI xử lý xong)
+export const uploadCvSync = (payload: Record<string, any>) => {
   return api.post(`${JOB_SERVICE_PREFIX}/cvs/upload`, payload);
 };
 

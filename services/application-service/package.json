@@ -6,10 +6,14 @@
   "scripts": {
     "dev": "nodemon --watch . --ext js,ts,json --exec tsx server.js",
     "start": "tsx server.js",
+    "worker": "node src/workers/cv-analysis-worker.js",
+    "dev:all": "concurrently \"yarn dev\" \"yarn worker\"",
     "migrate": "knex migrate:latest",
+    "migrate:rollback": "knex migrate:rollback",
     "seed": "knex seed:run"
   },
   "dependencies": {
+    "amqplib": "^0.10.3",
     "cookie-parser": "^1.4.7",
     "axios": "^1.6.0",
     "cors": "^2.8.5",
@@ -23,7 +27,8 @@
     "sharp": "^0.34.4",
     "tsx": "^4.19.2"
   },
-  "devDependencies": {
+  "deconcurrently": "^8.2.2",
+    "vDependencies": {
     "nodemon": "^3.1.7"
   }
 }

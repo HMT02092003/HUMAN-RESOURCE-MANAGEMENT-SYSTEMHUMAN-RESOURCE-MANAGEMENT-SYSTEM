@@ -135,14 +135,10 @@ const ApplicationService = {
     }
   },
 
-  // Duyệt application
+  // Duyệt application - DEPRECATED: Use bulkApproveApplications([id]) instead
   approveApplication: async (id: number, approvalData: ApproveApplicationRequest) => {
-    try {
-      const response = await api.post(`/api/applications/${id}/approve`, approvalData);
-      return response.data;
-    } catch (error) {
-      throw error;
-    }
+    // Delegate to bulk API for consistency
+    return applicationService.bulkApproveApplications([id]);
   },
 
   // Duyệt nhiều applications cùng lúc

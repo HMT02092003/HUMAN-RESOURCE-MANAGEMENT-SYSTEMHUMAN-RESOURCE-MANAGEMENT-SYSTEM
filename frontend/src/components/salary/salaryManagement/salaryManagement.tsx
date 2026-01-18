@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from 'react';
-import { DatePicker, Button, message, Space, Tag, notification, Badge } from 'antd';
+import { DatePicker, Button, message, Space, Tag, notification, Badge, InputNumber, Select } from 'antd';
 import dayjs from 'dayjs';
 import salaryService from '@/service/salaryService';
 import { CalculatorOutlined, WarningOutlined } from '@ant-design/icons';
@@ -12,9 +12,12 @@ import type { ServerSideColumnType } from '@/components/common/ServerSideTable/t
 
 const {TypeOfStatusSalary} = constant;
 
-const { MonthPicker } = DatePicker;
-
 const SalaryManagement: React.FC = () => {
+  const currentYear = dayjs().year();
+  const currentMonth = dayjs().month() + 1;
+  
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [month, setMonth] = useState(dayjs());
   const [calculating, setCalculating] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -50,50 +53,21 @@ const SalaryManagement: React.FC = () => {
   const handleCalculate = async () => {
     setCalculating(true);
     try {
-      const str = month.format('YYYY-MM');
-      const res = await salaryService.calculateFromAttendance(str);
-
-      // Always handle invalid-user lists if present, even when success === true.
-      const hasInvalidUsers = 
-        (res.usersWithoutContracts && res.usersWithoutContracts.length > 0) ||
-        (res.usersWithoutApprovedAttendance && res.usersWithoutApprovedAttendance.length > 0) ||
-        (res.usersWithoutSalaryProfile && res.usersWithoutSalaryProfile.length > 0);
-
-      if (hasInvalidUsers) {
-        // Lưu dữ liệu người dùng không hợp lệ
-        setInvalidUsersData({
-          usersWithoutContracts: res.usersWithoutContracts || [],
-          usersWithoutApprovedAttendance: res.usersWithoutApprovedAttendance || [],
-          usersWithoutSalaryProfile: res.usersWithoutSalaryProfile || []
-        });
-        // Mở modal và hiển thị thông báo có nút để xem chi tiết
-        setInvalidUsersModalOpen(true);
-        const total = (res.usersWithoutContracts?.length || 0) + (res.usersWithoutApprovedAttendance?.length || 0) + (res.usersWithoutSalaryProfile?.length || 0);
-        notification.warning({
-          message: 'Có người dùng không thể tính lương',
-          description: `Có ${total} người chưa thể tính lương. Nhấn 'Xem chi tiết' để biết danh sách.`,
-          btn: (
-            <Button type="primary" size="small" onClick={() => { setInvalidUsersModalOpen(true); notification.destroy(); }}>
-              Xem chi tiết
-            </Button>
-          ),
-          duration: 8
-        });
-      }
+      // Dùng API async - trả về ngay, xử lý background
+      const res = await salaryService.calculateBulkAsync({
+        year: selectedYear,
+        month: selectedMonth,
+        userIds: [] // Empty = tính cho tất cả users có attendance approved
+      });
 
       if (res.success) {
-        message.success(`Đã tính bảng lương cho tháng ${month.format('MM/YYYY')}`);
+        message.success({
+          content: `🚀 Đang tính lương cho tháng ${selectedMonth}/${selectedYear} ở background. Bạn sẽ nhận thông báo khi hoàn tất!`,
+          duration: 5
+        });
         setRefreshTrigger(prev => prev + 1);  // Trigger table refresh
-        // Don't clear invalid-users here: we handled them above. Only clear when response has no invalid lists.
-        if (!hasInvalidUsers) {
-          setInvalidUsersData({
-            usersWithoutContracts: [],
-            usersWithoutApprovedAttendance: [],
-            usersWithoutSalaryProfile: []
-          });
-        }
       } else {
-        message.error(res.message || 'Không thể tính bảng lương');
+        message.error(res.message || 'Không thể bắt đầu tính lương');
       }
     } catch (err: any) {
       console.error(err);
@@ -317,22 +291,27 @@ const SalaryManagement: React.FC = () => {
   return (
     <div style={{ padding: 24 }}>
       <Space style={{ marginBottom: 16 }} wrap>
-        <MonthPicker value={month} onChange={(d) => d && setMonth(d)} format="MM/YYYY" placeholder="Chọn tháng tính lương" />
+        <span>Chọn năm:</span>
+        <InputNumber 
+          min={2000} 
+          max={2100} 
+          value={selectedYear}
+          onChange={(val) => setSelectedYear(val || currentYear)}
+          style={{ width: 120 }}
+        />
+        <span>Chọn tháng:</span>
+        <Select
+          value={selectedMonth}
+          onChange={setSelectedMonth}
+          style={{ width: 100 }}
+        >
+          {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+            <Select.Option key={m} value={m}>Tháng {m}</Select.Option>
+          ))}
+        </Select>
         <Button onClick={handleCalculate} type="primary" loading={calculating}>
-          <CalculatorOutlined /> Tính lương tháng {month.format('MM/YYYY')}
+          <CalculatorOutlined /> Tính lương {selectedMonth}/{selectedYear}
         </Button>
-        {hasInvalidUsers && (
-          <Badge count={(invalidUsersData.usersWithoutContracts?.length || 0) + (invalidUsersData.usersWithoutApprovedAttendance?.length || 0) + (invalidUsersData.usersWithoutSalaryProfile?.length || 0)} offset={[6, 0]}>
-            <Button 
-              onClick={() => setInvalidUsersModalOpen(true)} 
-              type="default"
-              danger
-              icon={<WarningOutlined />}
-            >
-              Xem người dùng không hợp lệ
-            </Button>
-          </Badge>
-        )}
       </Space>
       
       <ServerSideTable

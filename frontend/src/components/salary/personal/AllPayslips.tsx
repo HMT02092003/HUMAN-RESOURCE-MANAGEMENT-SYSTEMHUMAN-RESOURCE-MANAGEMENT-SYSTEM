@@ -12,8 +12,6 @@ import { SearchOutlined } from '@ant-design/icons';
 import { ExcelExportButton } from '@/components/common/ExcelExport';
 import type { ExcelColumn } from '@/components/common/ExcelExport';
 
-const { MonthPicker } = DatePicker;
-
 interface PayslipDataType {
   id: string;
   user_id: string;

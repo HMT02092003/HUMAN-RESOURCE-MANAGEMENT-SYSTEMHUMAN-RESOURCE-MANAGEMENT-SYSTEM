@@ -20,12 +20,22 @@ const createOptimizedProxy = (target, fallbackTarget = null, pathRewrite = false
     pathRewrite: pathRewrite || undefined,
     ws: ws || false, // Enable WebSocket proxying
     
+    // ⏱️ TIMEOUT CONFIGURATION - Prevent deadlock (increased to 15s)
+    timeout: 15000,      // Connection timeout: 15 seconds
+    proxyTimeout: 15000, // Response timeout: 15 seconds
+    
     // Dynamically resolve target on each request
     router: (req) => {
       return currentTarget;
     },
     
     onProxyReq: (proxyReq, req, res) => {
+      // 🔥 LOG REQUEST HEADERS TRƯỚC KHI SET
+      console.log('\n🌐🌐🌐 ===== API GATEWAY PROXY (BEFORE SET) ===== 🌐🌐🌐');
+      console.log('📍 Original URL:', req.originalUrl);
+      console.log('📍 req.headers["x-user-data"]:', req.headers['x-user-data'] ? 'EXISTS (length: ' + req.headers['x-user-data'].length + ')' : 'MISSING');
+      console.log('📍 req.headers["authorization"]:', req.headers['authorization'] ? 'EXISTS' : 'MISSING');
+      
       // Set auth headers FIRST before any body writes
       try {
         // Forward authorization header
@@ -37,6 +47,9 @@ const createOptimizedProxy = (target, fallbackTarget = null, pathRewrite = false
         // Forward x-user-data header (contains decoded JWT)
         if (req.headers['x-user-data']) {
           proxyReq.setHeader('x-user-data', String(req.headers['x-user-data']));
+          console.log('✅ x-user-data header forwarded to backend');
+        } else {
+          console.log('⚠️ x-user-data header NOT found in req.headers - NOT forwarded');
         }
         
         // Forward x-user-id header
@@ -49,7 +62,7 @@ const createOptimizedProxy = (target, fallbackTarget = null, pathRewrite = false
           proxyReq.setHeader('x-user-role-id', String(req.headers['x-user-role-id']));
         }
       } catch (e) {
-        console.error('Error setting headers:', e);
+        console.error('❌ Error setting headers:', e);
       }
       
       // 🔥 LOG REQUEST QUA GATEWAY
@@ -76,12 +89,17 @@ const createOptimizedProxy = (target, fallbackTarget = null, pathRewrite = false
         return;
       }
       
-      // Xử lý JSON data (bao gồm cả empty object {})
-      if (contentType.includes('application/json') && req.body !== undefined) {
+      // ⚠️ CHỈ XỬ LÝ BODY NẾU EXPRESS CHƯA PARSE (bodyParser)
+      // Nếu req.body đã tồn tại nghĩa là Express đã parse rồi, cần gửi lại dưới dạng JSON
+      if (req.body && Object.keys(req.body).length > 0) {
         const bodyData = JSON.stringify(req.body);
         proxyReq.setHeader('Content-Type', 'application/json');
         proxyReq.setHeader('Content-Length', Buffer.byteLength(bodyData));
-        proxyReq.write(bodyData);
+        
+        // ⚠️ CHỈ WRITE 1 LẦN, KHÔNG WRITE NẾU ĐÃ SENT
+        if (!proxyReq.writableEnded) {
+          proxyReq.write(bodyData);
+        }
       }
     },
     onProxyRes: (proxyRes, req, res) => {
@@ -98,16 +116,25 @@ const createOptimizedProxy = (target, fallbackTarget = null, pathRewrite = false
     },
     
     onError: (err, req, res) => {
-      console.error(`❌ Proxy error for ${req.url}:`, err && err.message ? err.message : err);
+      const errorCode = err && err.code ? err.code : 'UNKNOWN';
+      const errorMsg = err && err.message ? err.message : String(err);
+      
+      console.error(`❌ Proxy error for ${req.url}:`, errorMsg);
+      console.error(`📍 Error code: ${errorCode}`);
+      console.error(`📍 Target: ${currentTarget}`);
+      
+      // Handle timeout specifically
+      if (errorCode === 'ETIMEDOUT' || errorCode === 'ESOCKETTIMEDOUT') {
+        console.error('⏱️ REQUEST TIMEOUT - Service took too long to respond');
+      }
       
       // Try fallback if available and not already tried
-      if (fallbackTarget && !hasSwitchedToFallback && err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT') {
+      if (fallbackTarget && !hasSwitchedToFallback && (errorCode === 'ECONNREFUSED' || errorCode === 'ENOTFOUND' || errorCode === 'ETIMEDOUT')) {
         console.warn(`⚠️  Primary target ${currentTarget} failed. Switching to fallback: ${fallbackTarget}`);
         currentTarget = fallbackTarget;
         hasSwitchedToFallback = true;
         
         // Retry the request with fallback target
-        // Re-invoke the proxy middleware
         return proxyMiddleware(req, res);
       }
       
@@ -123,9 +150,16 @@ const createOptimizedProxy = (target, fallbackTarget = null, pathRewrite = false
       // If headers already sent, just end
       if (res.headersSent) return res.end();
 
-      res.status(502).json({ 
-        error: 'Bad gateway', 
-        message: 'Service temporarily unavailable',
+      // Return appropriate error based on error type
+      const statusCode = errorCode === 'ETIMEDOUT' || errorCode === 'ESOCKETTIMEDOUT' ? 504 : 502;
+      const message = errorCode === 'ETIMEDOUT' || errorCode === 'ESOCKETTIMEDOUT' 
+        ? 'Service đang xử lý quá lâu hoặc bị treo. Vui lòng thử lại sau.'
+        : 'Service tạm thời không khả dụng';
+      
+      res.status(statusCode).json({ 
+        success: false,
+        error: errorCode,
+        message: message,
         timestamp: new Date().toISOString()
       });
     }

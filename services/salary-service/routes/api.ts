@@ -8,6 +8,7 @@ import express from 'express';
 import * as allowanceCtrl from '../src/controller/allowanceTypeController';
 import * as employeeSalaryCtrl from '../src/controller/employeeSalaryProfileController';
 import * as payslipCtrl from '../src/controller/payslipController';
+import * as payslipAsyncCtrl from '../src/controller/payslipController-async';
 import * as settingsCtrl from '../src/controller/SettingsController';
 
 const router = express.Router();
@@ -54,6 +55,15 @@ router.post('/payslips/generate-from-profile/:userId', payslipCtrl.generateFromP
 router.post('/payslips/generate-from-attendance/:userId', payslipCtrl.generateFromAttendance as express.RequestHandler);
 // Bulk calculate payslips for a month from approved attendances
 router.post('/payslips/calculate-from-attendance', payslipCtrl.calculateFromAttendanceBulk as express.RequestHandler);
+
+// ========== ASYNC ROUTES (RabbitMQ Background Processing) ==========
+// Tính lương async cho 1 user - trả về ngay, xử lý background
+router.post('/payslips/calculate-async/:userId', payslipAsyncCtrl.calculatePayslipAsync as express.RequestHandler);
+// Tính lương bulk async - nhiều user cùng lúc
+router.post('/payslips/calculate-bulk-async', payslipAsyncCtrl.calculateBulkAsync as express.RequestHandler);
+// Kiểm tra trạng thái tính lương
+router.get('/payslips/status/:payslipId', payslipAsyncCtrl.getPayslipStatus as express.RequestHandler);
+// ===================================================================
 
 // Get payslips for a single user (optional month filter)
 router.get('/auth/users/:userId/payslips', payslipCtrl.getPayslipsByUser as express.RequestHandler);

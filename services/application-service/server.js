@@ -30,10 +30,15 @@ app.use('/applications', express.static(path.join(__dirname, '../../frontend/pub
 
 // Logging middleware
 app.use((req, res, next) => {
-  console.log(`🌐 ${req.method} ${req.url}`);
-  console.log(`🌐 Body:`, req.body);
-  console.log(`🌐 Params:`, req.params);
-  console.log(`🌐 Query:`, req.query);
+  console.log(`\n🌐 [APPLICATION] ${req.method} ${req.url}`);
+  console.log('📍 Headers:', {
+    authorization: req.headers.authorization ? 'Present' : 'Missing',
+    'x-user-data': req.headers['x-user-data'] ? `Present (${req.headers['x-user-data'].length} chars)` : 'Missing',
+    'content-type': req.headers['content-type']
+  });
+  console.log('📍 Body:', JSON.stringify(req.body, null, 2));
+  console.log('📍 Params:', req.params);
+  console.log('📍 Query:', req.query);
   next();
 });
 

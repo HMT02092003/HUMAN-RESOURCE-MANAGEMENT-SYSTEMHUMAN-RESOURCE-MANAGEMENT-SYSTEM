@@ -6,20 +6,23 @@
   "scripts": {
     "dev": "nodemon --watch . --ext js,ts,json --exec tsx server.js",
     "start": "tsx server.js",
+    "worker": "tsx worker.js",
+    "worker:multi": "concurrently \"yarn worker\" \"yarn worker\" \"yarn worker\"",
     "migrate": "knex migrate:latest",
     "seed": "knex seed:run"
   },
   "dependencies": {
-    "express": "^4.21.1",
-    "cors": "^2.8.5",
+    "amqplib": "^0.10.9",
     "axios": "^1.6.0",
-    "lodash": "^4.17.21",
+    "cors": "^2.8.5",
+    "dayjs": "^1.11.13",
     "dotenv": "^16.5.0",
-    "knex": "^3.1.0",
+    "express": "^4.21.1",
     "jsonwebtoken": "^9.0.2",
+    "knex": "^3.1.0",
+    "lodash": "^4.17.21",
     "objection": "^3.1.5",
     "pg": "^8.13.1",
-    "dayjs": "^1.11.13",
     "tsx": "^4.19.2"
   },
   "devDependencies": {

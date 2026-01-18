@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { ShiftService } from '../services/ShiftService';
 import CheckScopeService from '../services/CheckScopeService';
 import { getDecodedToken } from '../utils/decode-token';
-import { getUserData, getUserId as getRequestUserId } from '../utils/getUserData';
+import { getUserId as getRequestUserId } from '../utils/getUserData';
 
 /**
  * Helper function to get userId from request
@@ -23,14 +23,14 @@ export class ShiftController {
     try {
       const shifts = await ShiftService.getAllShifts();
 
-      res.json({
+      return res.json({
         success: true,
         data: shifts,
         message: 'Lấy danh sách ca thành công'
       });
     } catch (error: any) {
       console.error('Error in getAllShifts:', error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: error.message || 'Lỗi khi lấy danh sách ca'
       });
@@ -45,14 +45,14 @@ export class ShiftController {
     try {
       const result = await ShiftService.getAllShiftsPaginated(req.query);
 
-      res.json({
+      return res.json({
         success: true,
         ...result,
         message: 'Lấy danh sách ca thành công'
       });
     } catch (error: any) {
       console.error('Error in getAllShiftsPaginated:', error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: error.message || 'Lỗi khi lấy danh sách ca'
       });
@@ -106,14 +106,14 @@ export class ShiftController {
     try {
       const shift = await ShiftService.createShift(req.body);
 
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
         data: shift,
         message: 'Tạo ca thành công'
       });
     } catch (error: any) {
       console.error('Error in createShift:', error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: error.message || 'Lỗi khi tạo ca'
       });
@@ -259,7 +259,7 @@ export class ShiftController {
       });
     } catch (error: any) {
       console.error('Error in getMySchedules:', error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: error.message || 'Lỗi khi lấy danh sách lịch'
       });
@@ -353,7 +353,7 @@ export class ShiftController {
       });
     } catch (error: any) {
       console.error('Error in getMySchedulesPaginated:', error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: error.message || 'Lỗi khi lấy danh sách lịch'
       });
@@ -375,7 +375,7 @@ export class ShiftController {
       });
     } catch (error: any) {
       console.error('Error in getPendingSchedules:', error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: error.message || 'Lỗi khi lấy danh sách lịch chờ duyệt'
       });
@@ -450,7 +450,7 @@ export class ShiftController {
     } catch (error: any) {
       console.error('Error in createSchedule:', error);
       const statusCode = error.message.includes('đã đăng ký') ? 400 : 500;
-      res.status(statusCode).json({
+      return res.status(statusCode).json({
         success: false,
         message: error.message || 'Lỗi khi đăng ký lịch'
       });
@@ -485,7 +485,7 @@ export class ShiftController {
       });
     } catch (error: any) {
       console.error('Error in bulkCreateSchedules:', error);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         message: error.message || 'Lỗi khi đăng ký lịch hàng loạt'
       });
@@ -590,48 +590,89 @@ export class ShiftController {
   }
 
   /**
-   * Duyệt lịch (Admin)
+   * Duyệt lịch (Admin) - WITH TIMEOUT PROTECTION
    * POST /schedules/:id/approve
    */
   static async approveSchedule(req: Request, res: Response) {
+    const startTime = Date.now();
+    console.log('\n✅ [APPROVE SCHEDULE] Starting approval process...');
+    
+    // Validate input first (fast)
+    const id = req.params['id'];
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID lịch không được để trống'
+      });
+    }
+
+    const scheduleId = parseInt(id, 10);
+    if (isNaN(scheduleId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID lịch không hợp lệ'
+      });
+    }
+
+    const approvedBy = getUserId(req);
+    if (!approvedBy) {
+      return res.status(401).json({
+        success: false,
+        message: 'Người dùng không được xác thực'
+      });
+    }
+
+    console.log('📍 Request:', { scheduleId, approvedBy });
+
     try {
-      const id = req.params['id'];
-      if (!id) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID lịch không được để trống'
-        });
-      }
+      // Execute with timeout protection (8 seconds max)
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('TIMEOUT: Xử lý quá lâu')), 8000);
+      });
 
-      const scheduleId = parseInt(id, 10);
-      if (isNaN(scheduleId)) {
-        return res.status(400).json({
-          success: false,
-          message: 'ID lịch không hợp lệ'
-        });
-      }
+      // Reuse bulk approve logic to match behaviour with batch approvals
+      const approvePromise = ShiftService.bulkApproveSchedules([scheduleId], approvedBy);
 
-      const approvedBy = getUserId(req);
-      if (!approvedBy) {
-        return res.status(401).json({
-          success: false,
-          message: 'Người dùng không được xác thực'
-        });
-      }
-
-      const result = await ShiftService.approveSchedule(scheduleId, approvedBy);
+      const result: any = await Promise.race([approvePromise, timeoutPromise]);
+      
+      const duration = Date.now() - startTime;
+      console.log(`✅ Schedule approved successfully in ${duration}ms`);
 
       return res.json({
         success: true,
-        message: result.message
+        message: result.message || (result.approved ? `Đã duyệt ${result.approved} đơn đăng ký` : 'Duyệt lịch thành công'),
+        data: result
       });
+
     } catch (error: any) {
-      console.error('Error in approveSchedule:', error);
-      const statusCode = error.message.includes('Không tìm thấy') ? 404 :
-                         error.message.includes('Chỉ có thể') ? 400 : 500;
-      return res.status(statusCode).json({
+      const duration = Date.now() - startTime;
+      console.error(`❌ Error in approveSchedule after ${duration}ms:`, error.message);
+      
+      // Handle specific errors
+      if (error.message.includes('TIMEOUT')) {
+        return res.status(504).json({
+          success: false,
+          message: 'Hệ thống xử lý quá lâu. Vui lòng thử lại.'
+        });
+      }
+      
+      if (error.message.includes('Không tìm thấy')) {
+        return res.status(404).json({
+          success: false,
+          message: error.message
+        });
+      }
+      
+      if (error.message.includes('Chỉ có thể')) {
+        return res.status(400).json({
+          success: false,
+          message: error.message
+        });
+      }
+      
+      return res.status(500).json({
         success: false,
-        message: error.message || 'Lỗi khi duyệt lịch'
+        message: 'Lỗi khi duyệt lịch: ' + error.message
       });
     }
   }
@@ -748,7 +789,6 @@ export class ShiftController {
       
       // Permission checks for shift approval are handled in the frontend.
       // Keep backend minimal: require authentication only and skip scope authorization here.
-      const userData = getUserData(req);
       const scopeResult = { hasAccess: true, userIds: [] as number[] };
 
       // Get current user ID from token to exclude their own schedules
@@ -1015,12 +1055,9 @@ export class ShiftController {
    */
   static async bulkApproveSchedules(req: Request, res: Response) {
     try {
-      const token = req.headers['authorization'] || '';
       const approvedBy = getUserId(req);
       
       // Permission checks for shift approval are handled in the frontend.
-      const userData = getUserData(req);
-      const scopeResult = { hasAccess: true, userIds: [] as number[] };
 
       const { ids, action } = req.body;
 
@@ -1088,11 +1125,9 @@ export class ShiftController {
    */
   static async approveMonthSchedules(req: Request, res: Response) {
     try {
-      const token = req.headers['authorization'] || '';
       const approvedBy = getUserId(req);
       
       // Permission checks for shift approval are handled in the frontend.
-      const userData = getUserData(req);
       const scopeResult = { hasAccess: true, userIds: [] as number[] };
 
       const { year, month } = req.body;

@@ -9,6 +9,7 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import fs from 'fs';
 import authRoutes from './routes/api.ts';
+import { startMonthlyLeaveDaysCron } from './src/cron/monthlyLeaveDaysCron.ts';
 
 const app = express();
 const PORT = process.env.PORT || 4001;
@@ -130,6 +131,14 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`📧 Email configured: ${process.env.SMTP_USER ? '✅' : '❌'}`);
   console.log(`🗄️  Database: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_DATABASE}`);
+  
+  // Start monthly leave days cron job
+  try {
+    startMonthlyLeaveDaysCron();
+    console.log('📅 Monthly leave days cron job started');
+  } catch (error) {
+    console.error('❌ Failed to start cron job:', error);
+  }
 });
 
 // Graceful shutdown handling

@@ -349,7 +349,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
       penalty_total: round2(totalPenalty).toFixed(2),
       total_deductions: round2(totalDeductions).toFixed(2),
       net_salary: round2(net).toFixed(2),
-      notes:  `Bảng lương cho tháng ${monthStr}`,
+      notes: `Tính lương tháng ${month}/${year}`,
       status: "1"
     });
   }

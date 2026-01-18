@@ -74,12 +74,16 @@ const CreateCv: React.FC = () => {
       const fileObj = fileList[0]?.originFileObj || fileList[0];
       const userId = values.user || initialUser;
 
+      // Async upload - trả về ngay, AI xử lý background
       await jobService.uploadCv({ file: fileObj, user_id: userId });
 
-      message.success('Đã tạo CV, đang xử lý');
+      message.success({
+        content: '🚀 CV đang được xử lý bằng AI. Bạn sẽ nhận thông báo khi hoàn tất!',
+        duration: 5
+      });
       router.push('/CV');
     } catch (err: any) {
-      message.error(err?.message || 'Tạo CV thất bại');
+      message.error(err?.message || 'Upload CV thất bại');
     } finally {
       setSubmitting(false);
     }

@@ -10,8 +10,6 @@ import { attendanceService } from '@/service/attendanceService';
 import dayjs from 'dayjs';
 import { useExcelExport } from '@/components/common/ExcelExport';
 
-const { MonthPicker } = DatePicker;
-
 const AttendanceApprovalManagement: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [selectedRows, setSelectedRows] = useState<any[]>([]);

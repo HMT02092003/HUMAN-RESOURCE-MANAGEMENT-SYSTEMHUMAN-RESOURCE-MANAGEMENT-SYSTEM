@@ -35,21 +35,13 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
     const [detailModalVisible, setDetailModalVisible] = useState(false);
     const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
-    const [allApplications, setAllApplications] = useState<any[]>([]);
+    const [currentPageData, setCurrentPageData] = useState<any[]>([]);
     const [loading, setLoading] = useState(false);
 
-    // Fetch all data for Excel export
-    useEffect(() => {
-        const fetchAllData = async () => {
-            try {
-                const response = await applicationService.getAllApplications({ page: 1, pageSize: 10000 });
-                setAllApplications(response.data || []);
-            } catch (error) {
-                console.error('Error fetching all applications:', error);
-            }
-        };
-        fetchAllData();
-    }, [refreshTrigger]);
+    // Handle data changes from ServerSideTable - use current page data for export
+    const handleDataChange = (data: any[], pagination: { current: number; pageSize: number; total: number }) => {
+        setCurrentPageData(data);
+    };
 
     // Excel columns configuration
     const excelColumns: ExcelColumn[] = [
@@ -123,7 +115,8 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
             cancelText: 'Hủy',
             onOk: async () => {
                 try {
-                    await applicationService.approveApplication(record.id, {});
+                    // Use bulk API with single ID for consistency
+                    await applicationService.bulkApproveApplications([record.id]);
                     message.success('Duyệt đơn từ thành công');
                     setRefreshTrigger(prev => prev + 1);
                 } catch (error: any) {
@@ -353,13 +346,13 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
                             </Button>
                         </>
                     )}
-                    {allApplications.length > 0 && (
+                    {currentPageData.length > 0 && (
                         <ExcelExportButton
-                            data={allApplications}
+                            data={currentPageData}
                             columns={excelColumns}
                             fileName="Danh_sach_don_tu"
                             title="DANH SÁCH ĐƠN TỪ"
-                            description={`Tổng số: ${allApplications.length} đơn từ | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
+                            description={`Tổng số: ${currentPageData.length} đơn từ (trang hiện tại) | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
                             type="primary"
                             style={{
                                 borderRadius: '8px',
@@ -371,7 +364,7 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
                             }}
                         >
                             <DownloadOutlined />
-                            Xuất Excel
+                            Xuất Excel (trang hiện tại)
                         </ExcelExportButton>
                     )}
                 </Space>
@@ -387,6 +380,8 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
                     setSelectedRowKeys(keys);
                     setSelectedRows(rows as any[]);
                 }}
+                // Callback to receive current page data for Excel export
+                onDataChange={handleDataChange}
                 // Only allow selecting pending applications (status === 0)
                 getCheckboxProps={(record: any) => ({ disabled: record.status !== 0 })}
                 defaultPageSize={10}

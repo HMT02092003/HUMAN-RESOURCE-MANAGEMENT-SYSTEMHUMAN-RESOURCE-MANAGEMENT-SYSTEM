@@ -107,10 +107,11 @@ const ApplicationService = {
         }
     },
 
-    // Duyệt application
+    // Duyệt application - DEPRECATED: Use bulkApproveApplications([id]) instead
+    // Giờ gọi bulk API với mảng 1 phần tử để đảm bảo logic nhất quán
     approveApplication: async (id, approvalData = {}) => {
         try {
-            const response = await apiService.post(`/applications/${id}/approve`, approvalData);
+            const response = await apiService.post('/applications/bulk-approve', { ids: [id] });
             return response.data;
         } catch (error) {
             console.error('ApplicationService - approveApplication error:', error);
@@ -118,10 +119,11 @@ const ApplicationService = {
         }
     },
 
-    // Từ chối application
+    // Từ chối application - DEPRECATED: Use bulkRejectApplications([id]) instead
+    // Giờ gọi bulk API với mảng 1 phần tử để đảm bảo logic nhất quán
     rejectApplication: async (id, rejectionData = {}) => {
         try {
-            const response = await apiService.post(`/applications/${id}/reject`, rejectionData);
+            const response = await apiService.post('/applications/bulk-reject', { ids: [id] });
             return response.data;
         } catch (error) {
             console.error('ApplicationService - rejectApplication error:', error);

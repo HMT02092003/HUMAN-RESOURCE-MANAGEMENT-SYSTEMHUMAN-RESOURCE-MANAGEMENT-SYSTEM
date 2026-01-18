@@ -29,6 +29,10 @@ build/
 .env
 .env.*
 
+# Sensitive environment examples (contains real keys/secrets)
+env_examples/
+!env_examples/.gitkeep
+
 # =========================
 # TypeScript
 # =========================

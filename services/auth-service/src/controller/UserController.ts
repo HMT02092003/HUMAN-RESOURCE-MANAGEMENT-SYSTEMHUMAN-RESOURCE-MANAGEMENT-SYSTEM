@@ -233,8 +233,11 @@ export const getAllUsersAll = async (req: any, res: Response) => {
     const genderFilter = req.query.gender as string;
     const statusFilter = req.query.status as string;
     const roleIdFilter = req.query.roleId ? parseInt(req.query.roleId as string, 10) : null;
+    const roleNameFilter = (req.query['role.name'] as string || '').trim();
     const departmentIdFilter = req.query.departmentId ? parseInt(req.query.departmentId as string, 10) : null;
+    const departmentNameFilter = (req.query['department.name'] as string || '').trim();
     const chevronIdFilter = req.query.chevronId ? parseInt(req.query.chevronId as string, 10) : null;
+    const chevronNameFilter = (req.query['chevron.name'] as string || '').trim();
     const startDateFrom = req.query.startDateFrom as string;
     const startDateTo = req.query.startDateTo as string;
     const createdAtFrom = req.query.createdAtFrom as string;
@@ -243,6 +246,38 @@ export const getAllUsersAll = async (req: any, res: Response) => {
     // Determine which user IDs are visible under the provided scope
     let userIds: number[] = await UserModel.checkScope(scope, req);
     console.log('getAllUsersAll - userIds from checkScope:', userIds.length);
+
+    // Fetch department/chevron IDs if name filters are provided
+    let departmentIdsToFilter: number[] | null = null;
+    let chevronIdsToFilter: number[] | null = null;
+    
+    const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
+    const authToken = token ? `Bearer ${token}` : undefined;
+    const currentUserData = getUserData(req);
+    
+    if (departmentNameFilter) {
+      try {
+        const allDepartments = await EmployeeService.getAllDepartments(authToken, currentUserData);
+        departmentIdsToFilter = allDepartments
+          .filter((d: any) => d.name && d.name.toLowerCase().includes(departmentNameFilter.toLowerCase()))
+          .map((d: any) => d.id);
+        console.log('Department name filter:', departmentNameFilter, '-> IDs:', departmentIdsToFilter);
+      } catch (e) {
+        console.error('Error fetching departments for filter:', e);
+      }
+    }
+    
+    if (chevronNameFilter) {
+      try {
+        const allChevrons = await EmployeeService.getAllChevrons(authToken, currentUserData);
+        chevronIdsToFilter = allChevrons
+          .filter((c: any) => c.name && c.name.toLowerCase().includes(chevronNameFilter.toLowerCase()))
+          .map((c: any) => c.id);
+        console.log('Chevron name filter:', chevronNameFilter, '-> IDs:', chevronIdsToFilter);
+      } catch (e) {
+        console.error('Error fetching chevrons for filter:', e);
+      }
+    }
 
     // Build query
     let query = UserModel.query()
@@ -290,8 +325,24 @@ export const getAllUsersAll = async (req: any, res: Response) => {
     if (departmentIdFilter) {
       query = query.where('users.departmentId', departmentIdFilter);
     }
+    if (departmentIdsToFilter !== null) {
+      if (departmentIdsToFilter.length > 0) {
+        query = query.whereIn('users.departmentId', departmentIdsToFilter);
+      } else {
+        // No departments match the name filter, return empty result
+        query = query.where('users.id', -1);
+      }
+    }
     if (chevronIdFilter) {
       query = query.where('users.chevronId', chevronIdFilter);
+    }
+    if (chevronIdsToFilter !== null) {
+      if (chevronIdsToFilter.length > 0) {
+        query = query.whereIn('users.chevronId', chevronIdsToFilter);
+      } else {
+        // No chevrons match the name filter, return empty result
+        query = query.where('users.id', -1);
+      }
     }
     if (startDateFrom) {
       query = query.where('users.startDate', '>=', startDateFrom);
@@ -324,18 +375,19 @@ export const getAllUsersAll = async (req: any, res: Response) => {
     const dbSortField = sortFieldMap[sortField] || 'users.id';
     query = query.orderBy(dbSortField, sortOrder);
 
-    // Execute with pagination and join role
-    const result: any = await query
-      .withGraphJoined('[role]')
-      .page(page, pageSize);
+    // Execute with pagination and join role (with role name filter if present)
+    let joinedQuery = query.withGraphJoined('[role]');
+    
+    // Apply role name filter after join
+    if (roleNameFilter) {
+      joinedQuery = joinedQuery.where('role.name', 'like', `%${roleNameFilter}%`);
+    }
+    
+    const result: any = await joinedQuery.page(page, pageSize);
 
     console.log('getAllUsersAll - query result:', result.results?.length, 'total:', result.total);
 
-    // Enrich with department and chevron details
-    const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
-    const authToken = token ? `Bearer ${token}` : undefined;
-    const currentUserData = getUserData(req);
-
+    // Enrich with department and chevron details (reuse token/authToken/currentUserData from above)
     const usersWithDetails = await Promise.all((result.results || []).map(async (user: any) => {
       let department = null;
       let chevron = null;
@@ -1634,8 +1686,18 @@ export const checkUserScope = async (req: Request, res: Response) => {
         try {
           const decodedAuth = getDecodedToken(tokenFromCookie);
           actualScopeValue = decodedAuth?.user?.scope?.[permissionKey];
-        } catch (err) {
-          console.error("Error decoding token in checkUserScope:", err);
+        } catch (err: any) {
+          console.error("Error decoding token in checkUserScope:", err?.message || err);
+          // If token expired, return 401 với thông báo rõ ràng
+          if (err?.name === 'TokenExpiredError') {
+            return res.status(401).json({
+              success: false,
+              message: "Token expired. Please login again.",
+              code: "TOKEN_EXPIRED"
+            });
+          }
+          // Với lỗi khác, vẫn tiếp tục với scope = personal
+          console.warn("Cannot decode token, defaulting to personal scope");
         }
       }
     }

@@ -127,7 +127,8 @@ const ShiftApprovalManagement: React.FC = () => {
 
     const handleApprove = async (id: number) => {
         try {
-            await shiftService.approveShiftRegistration(id);
+            // Use bulk API with single ID for consistency
+            await shiftService.bulkApproveSchedules([id], 'approve');
             message.success('Duyệt đơn đăng ký thành công');
             setRefreshTrigger(prev => prev + 1);
             // Notify other components (e.g., the user's calendar/list) to refresh
@@ -139,8 +140,8 @@ const ShiftApprovalManagement: React.FC = () => {
 
     const handleReject = async (id: number) => {
         try {
-            // pass empty notes when none provided
-            await shiftService.rejectShiftRegistration(id, '');
+            // Use bulk API with single ID for consistency
+            await shiftService.bulkApproveSchedules([id], 'reject');
             message.success('Từ chối đơn đăng ký thành công');
             setRefreshTrigger(prev => prev + 1);
             try { window.dispatchEvent(new CustomEvent('shifts:updated', { detail: { ids: [id] } })); } catch (e) {}

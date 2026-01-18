@@ -5,6 +5,46 @@ const API_GATEWAY_URL = `http://localhost:${process.env.API_GATEWAY_PORT || 4000
 
 class EmployeeService {
   /**
+   * Get all departments
+   */
+  static async getAllDepartments(authToken?: string, userData?: any): Promise<any[]> {
+    try {
+      const headers: any = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = authToken;
+      if (userData) headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+
+      const response = await axios.get(
+        `${EMPLOYEE_SERVICE_URL}/api/departments`,
+        { headers }
+      );
+      return response.data?.data || response.data || [];
+    } catch (error: any) {
+      console.error(`❌ [EmployeeService] Failed to get all departments:`, error.message);
+      return [];
+    }
+  }
+
+  /**
+   * Get all chevrons
+   */
+  static async getAllChevrons(authToken?: string, userData?: any): Promise<any[]> {
+    try {
+      const headers: any = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = authToken;
+      if (userData) headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+
+      const response = await axios.get(
+        `${EMPLOYEE_SERVICE_URL}/api/chevrons`,
+        { headers }
+      );
+      return response.data?.data || response.data || [];
+    } catch (error: any) {
+      console.error(`❌ [EmployeeService] Failed to get all chevrons:`, error.message);
+      return [];
+    }
+  }
+
+  /**
    * Get department by ID
    */
   static async getDepartmentById(departmentId: number, authToken?: string, userData?: any): Promise<any> {
