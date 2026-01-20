@@ -4,15 +4,23 @@
     "description": "Human Resource Management System with Microservices",
     "private": true,
     "type": "module",
-    "workspaces": [
-        "frontend",
-        "services/api-gateway",
-        "services/auth-service",
-        "services/employee-service",
-        "services/attendance-service",
-        "services/payroll-service",
-        "services/notification-service"
-    ],
+    "workspaces": {
+        "packages": [
+            "frontend",
+            "services/api-gateway",
+            "services/auth-service",
+            "services/employee-service",
+            "services/attendance-service",
+            "services/payroll-service",
+            "services/notification-service"
+        ],
+        "nohoist": [
+            "**/react",
+            "**/react-dom",
+            "**/styled-jsx",
+            "**/next"
+        ]
+    },
     "scripts": {
         "create:service": "node create-service.js",
         "setup:env": "bash setup-env.sh",

@@ -4,7 +4,8 @@
         {
             "label": "Frontend",
             "type": "shell",
-            "command": "yarn build && yarn start",
+            // "command": "yarn build && yarn start",
+            "command": "yarn dev",
             "options": {
                 "cwd": "frontend"
             },

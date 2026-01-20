@@ -8,9 +8,12 @@ import customParseFormat from 'dayjs/plugin/customParseFormat';
 import { LoadingProvider } from "@/components/loadingContext";
 import "@/styles/globals.css";
 import "@/styles/admin.css";
-import dynamic from 'next/dynamic';
+import dynamicImport from 'next/dynamic';
 import Script from 'next/script';
-const DayjsSetup = dynamic(() => import('@/components/DayjsSetup'), { ssr: false });
+const DayjsSetup = dynamicImport(() => import('@/components/DayjsSetup'), { ssr: false });
+
+// Force dynamic rendering for all pages
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: "HRMS - Human Resource Management System",

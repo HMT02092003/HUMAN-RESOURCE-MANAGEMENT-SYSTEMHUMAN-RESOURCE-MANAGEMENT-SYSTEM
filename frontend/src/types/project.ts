@@ -11,7 +11,7 @@ export interface Task {
   id: string;
   title: string;
   description: string;
-  status: 'todo' | 'in_progress' | 'review' | 'done';
+  status: 'todo' | 'in_progress' | 'review' | 'pending_approval' | 'done';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   assignee?: ProjectMember;
   dueDate: string;

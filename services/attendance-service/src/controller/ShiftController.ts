@@ -787,9 +787,15 @@ export class ShiftController {
       console.log('[ShiftController] getSchedulesForApproval called with query:', req.query);
       console.log('[ShiftController] getSchedulesForApproval - has Authorization header?', !!req.headers['authorization']);
       
-      // Permission checks for shift approval are handled in the frontend.
-      // Keep backend minimal: require authentication only and skip scope authorization here.
-      const scopeResult = { hasAccess: true, userIds: [] as number[] };
+      // Check user scope for shift approval permission
+      const scopeResult = await CheckScopeService.checkUserScope('shiftApproval', token);
+      
+      if (!scopeResult.hasAccess) {
+        return res.status(403).json({
+          success: false,
+          message: 'Bạn không có quyền duyệt đơn đăng ký ca'
+        });
+      }
 
       // Get current user ID from token to exclude their own schedules
       let currentUserId: number | null = null;

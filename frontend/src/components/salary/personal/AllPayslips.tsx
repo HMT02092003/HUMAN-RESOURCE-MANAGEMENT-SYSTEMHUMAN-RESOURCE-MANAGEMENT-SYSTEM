@@ -86,16 +86,16 @@ const AllPayslips: React.FC = () => {
         return _r?.department?.name ?? _r?.user?.department?.name ?? _r?.departmentName ?? 'N/A';
       } },
     { title: 'Kỳ', dataIndex: 'month', key: 'month', searchField: 'month', filterType: 'dateRange', render: (_,_r:any) => `${_r.year || ''}-${String(_r.month || '').padStart(2,'0')}` },
-    { title: 'Lương cơ bản', dataIndex: 'base_salary', key: 'base_salary', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Phụ cấp', dataIndex: 'allowances', key: 'allowances', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Lương tăng ca', dataIndex: 'overtime_pay', key: 'overtime_pay', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' }, 
-    { title: 'Tổng lương (Chưa khấu trừ)', dataIndex: 'gross_salary', key: 'gross_salary', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'BHXH', dataIndex: 'social_insurance', key: 'social_insurance', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'BHYT', dataIndex: 'health_insurance', key: 'health_insurance', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Thuế TNCN', dataIndex: 'personal_income_tax', key: 'personal_income_tax', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Tổng khấu trừ', dataIndex: 'total_deductions', key: 'total_deductions', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Tổng tiền phạt', dataIndex: 'penalty_total', key: 'penalty_total', filterType: 'number', min: 0, max: 10000000000, render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Lương thực nhận', dataIndex: 'net_salary', key: 'net_salary', filterType: 'number', min: 0, max: 10000000000, render: (t)=> <b style={{ color: 'green' }}>{formatCurrency(t) + ' VNĐ'}</b> },
+    { title: 'Lương cơ bản', dataIndex: 'base_salary', key: 'base_salary', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'Phụ cấp', dataIndex: 'allowances', key: 'allowances', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'Lương tăng ca', dataIndex: 'overtime_pay', key: 'overtime_pay', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' }, 
+    { title: 'Tổng lương (Chưa khấu trừ)', dataIndex: 'gross_salary', key: 'gross_salary', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'BHXH', dataIndex: 'social_insurance', key: 'social_insurance', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'BHYT', dataIndex: 'health_insurance', key: 'health_insurance', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'Thuế TNCN', dataIndex: 'personal_income_tax', key: 'personal_income_tax', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'Tổng khấu trừ', dataIndex: 'total_deductions', key: 'total_deductions', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'Tổng tiền phạt', dataIndex: 'penalty_total', key: 'penalty_total', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' },
+    { title: 'Lương thực nhận', dataIndex: 'net_salary', key: 'net_salary', filterType: 'number', render: (t)=> <b style={{ color: 'green' }}>{formatCurrency(t) + ' VNĐ'}</b> },
     { title: 'Ghi chú', dataIndex: 'notes', key: 'notes' },
     { title: 'Ngày tạo', dataIndex: 'created_at', key: 'created_at', render: (t)=> formatDate(t) },
     { title: 'Ngày cập nhật', dataIndex: 'updated_at', key: 'updated_at', render: (t)=> formatDate(t) },
@@ -154,7 +154,7 @@ const AllPayslips: React.FC = () => {
             return { data: [], total: 0, page: params.page || 1, pageSize: params.limit || 10 };
           }
         }}
-        pagination={{ pageSize: pageSize, showSizeChanger: true }}
+        defaultPageSize={pageSize}
         scroll={{ x: 'max-content' }}
       />
 

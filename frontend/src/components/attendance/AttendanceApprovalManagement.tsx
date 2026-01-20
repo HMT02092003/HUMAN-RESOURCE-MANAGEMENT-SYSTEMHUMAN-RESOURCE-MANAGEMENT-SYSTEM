@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Button, Space, message, Tooltip, Tag, DatePicker, Modal } from 'antd';
 import viVN from 'antd/locale/vi_VN';
+import type { PickerLocale } from 'antd/es/date-picker/generatePicker';
 import { CheckOutlined, CheckCircleOutlined, CalendarOutlined, FileExcelOutlined, DownloadOutlined } from '@ant-design/icons';
 import { ServerSideTable } from '@/components/common/ServerSideTable';
 import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
@@ -634,7 +635,7 @@ const AttendanceApprovalManagement: React.FC = () => {
             picker="month"
             format="MM/YYYY"
             style={{ width: '100%' }}
-            locale={viVN}
+            locale={viVN as any}
             placeholder="Chọn tháng"
           />
           <p style={{ marginTop: 16, fontSize: 12, color: '#666' }}>
@@ -661,7 +662,7 @@ const AttendanceApprovalManagement: React.FC = () => {
             picker="month"
             format="MM/YYYY"
             style={{ width: '100%' }}
-            locale={viVN}
+            locale={viVN as any}
             placeholder="Chọn tháng"
           />
           <p style={{ marginTop: 16, fontSize: 12, color: '#666' }}>

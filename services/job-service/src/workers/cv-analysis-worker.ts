@@ -47,6 +47,17 @@ class CVAnalysisWorker {
     
     if (!connected) {
       console.log('⚠️  Không kết nối được RabbitMQ, bỏ qua worker mode');
+      console.log('⏳ Sẽ giữ worker chạy và retry sau...');
+      // Keep worker alive and retry every 30 seconds
+      setInterval(async () => {
+        console.log('🔄 Thử kết nối lại RabbitMQ...');
+        const reconnected = await rabbitmqManager.connect();
+        if (reconnected) {
+          console.log('✅ Đã kết nối thành công RabbitMQ!');
+          await rabbitmqManager.consumeQueue('cv_analysis_queue', this.handleCVAnalysis.bind(this));
+          console.log('✅ Worker đã sẵn sàng xử lý CV analysis!');
+        }
+      }, 30000);
       return;
     }
 

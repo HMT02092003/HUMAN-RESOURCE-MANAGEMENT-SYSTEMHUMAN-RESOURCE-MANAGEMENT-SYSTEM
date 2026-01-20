@@ -188,7 +188,7 @@ const ProjectManager: React.FC = () => {
           // refresh
           setSelectedRowKeys([]);
           setSelectedRows([]);
-          loadProjects(currentPage, pageSize);
+          setRefreshTrigger(prev => prev + 1);
         } catch (err) {
           console.error('Failed to delete projects', err);
           message.error('Xóa dự án thất bại');

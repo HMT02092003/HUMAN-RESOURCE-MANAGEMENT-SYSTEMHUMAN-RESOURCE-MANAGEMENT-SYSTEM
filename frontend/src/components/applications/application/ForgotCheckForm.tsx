@@ -104,7 +104,7 @@ const ForgotCheckInForm: React.FC<ForgotCheckInFormProps> = ({ onCancel }) => {
           uid: `-${index}`,
           name: file.originalName || file.filename,
           status: 'done' as const,
-          url: `http://localhost:4000${file.path}`,
+          url: `${process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:4100'}${file.path}`,
         }));
         setFileList(existingFiles);
       }

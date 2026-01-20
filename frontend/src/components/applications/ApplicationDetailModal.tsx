@@ -204,7 +204,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                                 cover={
                                     file.mimetype?.startsWith('image/') ? (
                                         <Image
-                                            src={`http://localhost:4000${file.path}`}
+                                            src={`${process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:4100'}${file.path}`}
                                             alt={file.originalName}
                                             style={{ height: 100, objectFit: 'cover' }}
                                         />
@@ -267,7 +267,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                                     cover={
                                         file.mimetype?.startsWith('image/') ? (
                                             <Image
-                                                src={`http://localhost:4000${file.path}`}
+                                                src={`${process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:4100'}${file.path}`}
                                                 alt={file.originalName}
                                                 style={{ height: 100, objectFit: 'cover' }}
                                             />

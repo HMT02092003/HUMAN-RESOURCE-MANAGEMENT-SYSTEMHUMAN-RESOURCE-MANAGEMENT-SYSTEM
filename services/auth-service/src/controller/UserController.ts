@@ -519,6 +519,19 @@ export const createUser = async (req: Request, res: Response) => {
     }
     console.log("Inputs:", inputs);
 
+    // Parse allowance_type_ids if it's a string (from FormData)
+    if (inputs.contract && typeof inputs.contract.allowance_type_ids === 'string') {
+      try {
+        inputs.contract.allowance_type_ids = JSON.parse(inputs.contract.allowance_type_ids);
+      } catch (e) {
+        // If parsing fails, try splitting by comma
+        inputs.contract.allowance_type_ids = inputs.contract.allowance_type_ids
+          .split(',')
+          .map((id: string) => parseInt(id.trim()))
+          .filter((id: number) => !isNaN(id));
+      }
+    }
+
     const allowFields = {
       fullName: "string!",
       username: "string!",

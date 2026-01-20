@@ -26,7 +26,7 @@ import dayjs from 'dayjs';
 import jobService from '@/service/jobService';
 import ExpenseModal from './ExpenseModal';
 import { ServerSideTable } from '../common/ServerSideTable';
-import { decode } from '@/utils/decode-token';
+import { getDecodedToken } from '@/utils/decode-token';
 
 const { Search } = Input;
 
@@ -67,8 +67,10 @@ const ProjectExpenses: React.FC<ProjectExpensesProps> = ({ projectId, project })
     const token = localStorage.getItem('accessToken');
     if (token) {
       try {
-        const decoded = decode(token);
-        setCurrentUserId(decoded.sub);
+        const decoded = getDecodedToken(token);
+        if (decoded) {
+          setCurrentUserId(Number(decoded.sub));
+        }
       } catch (error) {
         console.error('Failed to decode token:', error);
       }

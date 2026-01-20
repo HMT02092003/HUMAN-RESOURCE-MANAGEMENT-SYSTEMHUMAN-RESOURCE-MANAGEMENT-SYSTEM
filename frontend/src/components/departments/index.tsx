@@ -189,29 +189,7 @@ const Index: React.FC = () => {
       console.error('Error deleting data:', error);
       message.error('Đã xảy ra lỗi khi xóa dữ liệu!');
     } finally {
-      setLoading(false);
       hideDeleteModal();
-    }
-  };
-
-  // 🔥 Server-side: handleTableChange cho pagination và sorting
-  const handleTableChange = (newPagination: any, filters: any, newSorter: any) => {
-    // Cập nhật pagination
-    setPagination(prev => ({
-      ...prev,
-      current: newPagination.current,
-      pageSize: newPagination.pageSize,
-    }));
-
-    // Cập nhật sorter
-    if (newSorter && newSorter.field) {
-      setSorter({
-        field: newSorter.field,
-        order: newSorter.order === 'ascend' ? 'asc' : 'desc',
-      });
-    } else if (!newSorter || !newSorter.order) {
-      // Reset to default sort when sort is cleared
-      setSorter({ field: 'created_at', order: 'desc' });
     }
   };
 

@@ -44,6 +44,7 @@
     "react-topbar-progress-indicator": "^4.1.1",
     "recharts": "^3.6.0",
     "socket.io-client": "^4.8.1",
+    "styled-jsx": "5.1.1",
     "three": "0.160.0"
   },
   "devDependencies": {
@@ -61,6 +62,9 @@
     "eslint-config-next": "14.2.7",
     "typescript": "^5.7.2",
     "update-browserslist-db": "^1.2.3"
+  },
+  "resolutions": {
+    "styled-jsx/react": "18.3.1"
   },
   "engines": {
     "node": ">=18.0.0"

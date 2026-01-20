@@ -93,7 +93,7 @@ export const getProjectTaskStatistics = (projectId: string) => {
 };
 
 // Update task status
-export const updateTaskStatus = (projectId: string, taskId: string, status: 'todo' | 'in_progress' | 'done') => {
+export const updateTaskStatus = (projectId: string, taskId: string, status: 'todo' | 'in_progress' | 'pending_approval' | 'done') => {
   return api.put(`${JOB_SERVICE_PREFIX}/projects/${projectId}/tasks/${taskId}/status`, { status });
 };
 

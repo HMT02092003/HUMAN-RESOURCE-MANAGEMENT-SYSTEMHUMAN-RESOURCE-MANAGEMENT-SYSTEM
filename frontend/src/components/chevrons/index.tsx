@@ -258,7 +258,6 @@ const Index: React.FC = () => {
         <Col xs={24}>
           <div style={{ overflowX: 'auto' }}>
             <ServerSideTable<ChevronData>
-              ref={tableRef as React.Ref<any>}
               columns={columns}
               fetchData={loadData}
               rowKey="id"

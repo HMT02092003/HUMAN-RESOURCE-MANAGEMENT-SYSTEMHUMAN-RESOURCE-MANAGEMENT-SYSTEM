@@ -28,8 +28,8 @@ const formatDate = (date: string | Date | null): string => {
 
 // Helper functions for Excel export
 const getGenderText = (genderCode: number | string): string => {
-  const gender = Gender.find((g: any) => g.value === Number(genderCode));
-  return gender ? gender.label : '';
+  const gender = Gender.find((g: any) => g.key === Number(genderCode));
+  return gender ? gender.value : '';
 };
 
 const getStatusText = (statusCode: number | string): string => {
@@ -215,31 +215,6 @@ const UserTable = () => {
     setSelectedRowKeys(newSelectedRowKeys);
   };
 
-  // � handleTableChange: Gọi API khi thay đổi pagination hoặc sort
-  const handleTableChange = (
-    newPagination: any, 
-    filters: any, 
-    newSorter: any
-  ) => {
-    // Cập nhật pagination
-    setPagination(prev => ({
-      ...prev,
-      current: newPagination.current,
-      pageSize: newPagination.pageSize,
-    }));
-
-    // Cập nhật sorter
-    if (newSorter && newSorter.field) {
-      setSorter({
-        field: newSorter.field,
-        order: newSorter.order as 'ascend' | 'descend' | undefined,
-      });
-    } else if (!newSorter || !newSorter.order) {
-      // Reset to default sort when sort is cleared
-      setSorter({ field: 'id', order: 'descend' });
-    }
-  };
-
   const rowSelection = {
     selectedRowKeys,
     onChange: onSelectChange,
@@ -247,91 +222,6 @@ const UserTable = () => {
       disabled: record.id === 1,
     }),
   };
-
-  // 🔥 handleColumnSearch: Cập nhật filter và reset về trang 1
-  function handleColumnSearch(value: any, dataIndex: string) {
-    const newFilters = { ...columnSearch };
-    if (value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
-      delete newFilters[dataIndex];
-    } else {
-      newFilters[dataIndex] = value;
-    }
-    setColumnSearch(newFilters);
-    // Reset về trang 1 khi filter thay đổi
-    setPagination(prev => ({ ...prev, current: 1 }));
-  }
-
-  function getColumnSearchProps(dataIndex: string, opts?: { type?: 'input' | 'select' | 'dateRange'; options?: { value: any; label: string }[]; placeholder?: string }) {
-    const type = opts?.type || 'input';
-    const placeholder = opts?.placeholder || dataIndex;
-    return {
-      filteredValue: columnSearch[dataIndex] ? (Array.isArray(columnSearch[dataIndex]) ? [columnSearch[dataIndex]] : [columnSearch[dataIndex]]) : null,
-      filterDropdown: ({ setSelectedKeys, selectedKeys, confirm, clearFilters }: any) => (
-        <div style={{ padding: 8 }}>
-          {type === 'select' ? (
-            <Select
-              placeholder={`Chọn ${placeholder}`}
-              value={(selectedKeys && selectedKeys[0]) ?? columnSearch[dataIndex] ?? undefined}
-              onChange={(v) => setSelectedKeys(v !== undefined && v !== null ? [v] : [])}
-              options={opts?.options?.map(o => ({ value: o.value, label: o.label }))}
-              style={{ width: 188, marginBottom: 8, display: 'block' }}
-              allowClear
-              onSelect={() => {
-                const val = (selectedKeys && selectedKeys[0]) ?? columnSearch[dataIndex] ?? undefined;
-                handleColumnSearch(val, dataIndex);
-                confirm();
-              }}
-            />
-          ) : type === 'dateRange' ? (
-            <DatePicker.RangePicker
-              value={(selectedKeys && selectedKeys[0]) ? [dayjs(selectedKeys[0][0]), dayjs(selectedKeys[0][1])] : (columnSearch[dataIndex] ? [dayjs(columnSearch[dataIndex][0]), dayjs(columnSearch[dataIndex][1])] : undefined)}
-              onChange={(vals: any) => {
-                if (!vals || vals.length === 0) {
-                  setSelectedKeys([]);
-                  return;
-                }
-                const start = vals[0] ? vals[0].toISOString() : null;
-                const end = vals[1] ? vals[1].toISOString() : null;
-                setSelectedKeys(start && end ? [[start, end]] : []);
-                if (start && end) {
-                  handleColumnSearch([start, end], dataIndex);
-                  confirm();
-                }
-              }}
-              style={{ width: 250, marginBottom: 8, display: 'block' }}
-            />
-          ) : (
-            <Input
-              placeholder={`Tìm ${placeholder}`}
-              value={(selectedKeys && selectedKeys[0]) ?? columnSearch[dataIndex] ?? ''}
-              onChange={(e) => setSelectedKeys(e.target.value ? [e.target.value] : [])}
-              onPressEnter={() => { handleColumnSearch((selectedKeys && selectedKeys[0]) || '', dataIndex); confirm(); }}
-              style={{ width: 188, marginBottom: 8, display: 'block' }}
-            />
-          )}
-          <Button
-            type="primary"
-            size="small"
-            onClick={() => { handleColumnSearch((selectedKeys && selectedKeys[0]) || '', dataIndex); confirm(); }}
-          >
-            Tìm
-          </Button>
-          <Button
-            size="small"
-            onClick={() => { 
-              clearFilters && clearFilters(); 
-              handleColumnSearch('', dataIndex); 
-            }}
-            style={{ marginLeft: 8 }}
-          >
-            Xóa
-          </Button>
-        </div>
-      ),
-      filterIcon: (filtered: any) => <SearchOutlined style={{ color: columnSearch[dataIndex] ? '#1890ff' : undefined }} />,
-      onFilter: () => true, // Server-side filtering
-    };
-  }
 
   const columns: ServerSideColumnType<any>[] = [
     {
@@ -607,7 +497,7 @@ const UserTable = () => {
               Tạo mới
             </Button>
 
-            <Button
+            {/* <Button
               hidden={!createPer}
               onClick={() => alert("Chức năng upload excel")}
               type="primary"
@@ -619,7 +509,7 @@ const UserTable = () => {
             >
               <CloudUploadOutlined />
               Tải lên Excel
-            </Button>
+            </Button> */}
 
             <ExcelExportButton
               data={userData}

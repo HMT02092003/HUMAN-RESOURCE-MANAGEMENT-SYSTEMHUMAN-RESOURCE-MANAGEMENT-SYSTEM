@@ -582,7 +582,7 @@ export class MonthlyReportService {
       let approvedApplications: any[] = [];
       try {
         const [yearStr, monthStr] = m.split('-');
-        const appUrl = (process.env['APPLICATION_SERVICE_URL'] || 'http://127.0.0.1:4004') as string;
+        const appUrl = (process.env['APPLICATION_SERVICE_URL'] || 'http://127.0.0.1:4008') as string;
         const resp = await axios.get(`${appUrl}/api/applications/user/${userId}/approved`, {
           params: { year: parseInt(yearStr || '0'), month: parseInt(monthStr || '0') }
         });

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const ATTENDANCE_SERVICE_URL = process.env.ATTENDANCE_SERVICE_URL || 'http://127.0.0.1:4003/api';
+const ATTENDANCE_SERVICE_URL = process.env.ATTENDANCE_SERVICE_URL || 'http://127.0.0.1:4003';
 
 class AttendanceService {
   /**
@@ -17,7 +17,7 @@ class AttendanceService {
       // Attendance service expects a 'month' query param in YYYY-MM format
       const monthStr = `${String(year)}-${String(month).padStart(2, '0')}`;
       const response = await axios.get(
-        `${ATTENDANCE_SERVICE_URL}/attendance/monthly-attendance/by-month`,
+        `${ATTENDANCE_SERVICE_URL}/api/attendance/monthly-attendance/by-month`,
         { headers, params: { month: monthStr }, timeout: 10000 }
       );
       return response.data;

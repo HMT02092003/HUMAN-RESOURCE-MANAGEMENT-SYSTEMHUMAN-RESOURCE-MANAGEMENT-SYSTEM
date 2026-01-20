@@ -43,7 +43,7 @@ const ShiftRegistrationManagement = () => {
     useEffect(() => {
         const fetchAllData = async () => {
             try {
-                const response: any = await shiftService.getMyShiftRegistrationsPaginated({ page: 1, pageSize: 10000 });
+                const response: any = await shiftService.getMyShiftRegistrationsPaginated({ page: 1, limit: 10000 });
                 // Normalize response similar to useServerSideTable
                 let payload: any;
                 if (Array.isArray(response)) {
@@ -79,7 +79,7 @@ const ShiftRegistrationManagement = () => {
                     // Load all registrations (all statuses) for calendar view
                     const response: any = await shiftService.getMyShiftRegistrationsPaginated({ 
                         page: 1, 
-                        pageSize: 10000
+                        limit: 10000
                     });
                     console.debug('[ShiftRegistration] loadCalendarData - raw response:', response);
                     
@@ -511,20 +511,6 @@ const ShiftRegistrationManagement = () => {
                         scroll={{ x: 'auto' }}
                         bordered
                         refreshTrigger={refreshTrigger}
-                        emptyText={
-                            <Empty
-                                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                                description={
-                                    <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                                        <div style={{ fontSize: '60px', marginBottom: '16px' }}>📅</div>
-                                        <Title level={4} type="secondary" style={{ marginBottom: '8px' }}>
-                                            Bạn chưa đăng ký ca nào
-                                        </Title>
-                                        <Text type="secondary">Đăng ký ca làm việc để quản lý thời gian</Text>
-                                    </div>
-                                }
-                            />
-                        }
                     />
                 </Tabs.TabPane>
 

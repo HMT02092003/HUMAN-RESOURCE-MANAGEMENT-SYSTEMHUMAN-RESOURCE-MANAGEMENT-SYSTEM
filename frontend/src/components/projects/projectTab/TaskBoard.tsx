@@ -183,11 +183,9 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
       let projectManagerId =
         // Axios-style: { data: { project: { manager_id }}}
         projectRes?.data?.project?.manager_id ||
-        // Old-style: { project: { manager_id }}
-        projectRes?.project?.manager_id ||
         // Direct payload: { manager_id: 3 }
         projectRes?.data?.manager_id ||
-        projectRes?.manager_id ||
+        (projectRes as any)?.manager_id ||
         null;
 
       // Fallback: if manager_id not present, try the overview endpoint
@@ -197,9 +195,8 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
           console.log('🔎 [TaskBoard] projectOverviewRes:', overviewRes);
           const overviewManagerId =
             overviewRes?.data?.project?.manager_id ||
-            overviewRes?.project?.manager_id ||
             overviewRes?.data?.manager_id ||
-            overviewRes?.manager_id ||
+            (overviewRes as any)?.manager_id ||
             null;
           if (overviewManagerId) projectManagerId = overviewManagerId;
         } catch (e) {

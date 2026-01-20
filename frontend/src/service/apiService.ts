@@ -9,9 +9,9 @@ const API_BASE_URL = (() => {
     return process.env.NEXT_PUBLIC_API_GATEWAY_URL;
   }
   if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:4000`;
+    return `${window.location.protocol}//${window.location.hostname}:4100`;
   }
-  return 'http://localhost:4000';
+  return 'http://localhost:4100';
 })();
 
 // --- Hàm để xây dựng FormData (copy từ BaseService) ---

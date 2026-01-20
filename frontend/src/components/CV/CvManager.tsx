@@ -49,9 +49,9 @@ const CvManager: React.FC = () => {
 			return process.env.NEXT_PUBLIC_API_GATEWAY_URL.replace(/\/$/, '');
 		}
 		if (typeof window !== 'undefined') {
-			return `${window.location.protocol}//${window.location.hostname}:4000`;
+			return `${window.location.protocol}//${window.location.hostname}:4100`;
 		}
-		return 'http://localhost:4000';
+		return 'http://localhost:4100';
 	};
 
 	// Helper: direct Job Service base (used for serving static uploads)
@@ -60,9 +60,9 @@ const CvManager: React.FC = () => {
 			return process.env.NEXT_PUBLIC_JOB_SERVICE_URL.replace(/\/$/, '');
 		}
 		if (typeof window !== 'undefined') {
-			return `${window.location.protocol}//${window.location.hostname}:4008`;
+			return `${window.location.protocol}//${window.location.hostname}:4111`;
 		}
-		return 'http://localhost:4008';
+		return 'http://localhost:4111';
 	};
 
 	// do not auto-load here; ServerSideTable will call `fetchData`
@@ -166,7 +166,7 @@ const CvManager: React.FC = () => {
 			searchField: 'uploaded_at',
 			filterType: 'date',
 			sortable: true,
-			defaultSortOrder: 'desc',
+			defaultSortOrder: 'descend' as const,
 			render: (date: string) => date ? new Date(date).toLocaleString('vi-VN') : 'N/A',
 		},
 		{

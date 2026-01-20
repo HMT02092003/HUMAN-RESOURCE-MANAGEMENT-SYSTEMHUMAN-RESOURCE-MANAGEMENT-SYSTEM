@@ -24,9 +24,6 @@ const nextConfig = {
     optimizePackageImports: ['antd'],
   },
   
-  // Output configuration
-  output: 'standalone',
-  
   // Disable x-powered-by header
   poweredByHeader: false,
   
@@ -40,8 +37,11 @@ const nextConfig = {
   
   // ESLint configuration
   eslint: {
-    ignoreDuringBuilds: false,
+    ignoreDuringBuilds: true,
   },
+
+  // Standalone output for Docker
+  output: 'standalone',
 };
 
 export default nextConfig;

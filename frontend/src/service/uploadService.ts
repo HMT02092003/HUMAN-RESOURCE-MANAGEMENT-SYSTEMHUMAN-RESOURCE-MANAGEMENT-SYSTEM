@@ -1,7 +1,15 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { UploadedFile } from 'express-fileupload';
+
+// Define UploadedFile interface for express-fileupload
+interface UploadedFile {
+    name: string;
+    mv: (path: string) => Promise<void>;
+    mimetype: string;
+    data: Buffer;
+    size: number;
+}
 
 // Xác định __dirname khi sử dụng ES Modules
 const __filename = fileURLToPath(import.meta.url);

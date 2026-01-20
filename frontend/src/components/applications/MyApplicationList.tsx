@@ -40,7 +40,7 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
     useEffect(() => {
         const fetchAllData = async () => {
             try {
-                const response = await applicationService.getMyApplications({ page: 1, pageSize: 10000 });
+                const response = await applicationService.getMyApplications({ page: 1, limit: 10000 });
                 setAllApplications(response.data || []);
             } catch (error) {
                 console.error('Error fetching my applications:', error);
