@@ -13,96 +13,83 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    # 2. Inject Secrets (Clean Version - No Special Chars)
+    # 2. Inject Secrets (Robust Version)
     - name: Inject Secrets
       run: |
-        # Set encoding to avoid special character issues
         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-        Write-Host "--- STARTING SECRET INJECTION ---"
+        Write-Host "--- STARTING SECRETS INJECTION ---"
         
-        # Prepare content from GitHub Secret
         $envSecret = @"
-        
-        # --- INJECTED SECRETS ---
         ${{ secrets.ENV_FILE_CONTENT }}
         "@
         
-        # 1. Create root .env file (for docker-compose)
+        # 1. Create/Update root .env file
         Set-Content -Path ".env" -Value $envSecret
         Write-Host "Created root .env file"
 
-        # 2. List of services to inject secrets into
-        # Paths are relative to project root
-        $servicePaths = @(
+        # 2. Update service-specific .env.docker files
+        $services = @(
             "frontend",
-            "services/application-service",
-            "services/job-service",
-            "services/ai-face-recognition-service",
+            "services/api-gateway",
             "services/auth-service",
             "services/employee-service",
             "services/attendance-service",
+            "services/application-service",
+            "services/ai-face-recognition-service",
             "services/salary-service",
-            "services/notification-service",
-            "services/api-gateway"
+            "services/job-service",
+            "services/notification-service"
         )
 
-        foreach ($svcPath in $servicePaths) {
-            # Check if service directory exists
-            if (Test-Path "./$svcPath") {
-                $envFile = "./$svcPath/.env.docker"
-                
-                # If .env.docker exists, append secrets
-                if (Test-Path $envFile) {
-                    Add-Content -Path $envFile -Value $envSecret
-                    Write-Host "Updated: $svcPath"
+        foreach ($svc in $services) {
+            $path = "./$svc/.env.docker"
+            if (Test-Path "./$svc") {
+                if (Test-Path $path) {
+                    # Ensure existing file ends with a newline before appending
+                    $content = Get-Content $path -Raw
+                    if ($content -and -not $content.EndsWith("`n") -and -not $content.EndsWith("`r`n")) {
+                        Add-Content -Path $path -Value "`n"
+                    }
+                    Add-Content -Path $path -Value $envSecret
+                    Write-Host "Updated .env.docker for: $svc"
                 } else {
-                    # If not exists, create new with secrets
-                    Set-Content -Path $envFile -Value $envSecret
-                    Write-Host "Created new: $svcPath"
+                    Set-Content -Path $path -Value $envSecret
+                    Write-Host "Created new .env.docker for: $svc"
                 }
-            } else {
-                Write-Host "Skipping: $svcPath (Directory not found)"
             }
         }
-        
-        Write-Host "--- SECRET INJECTION COMPLETED ---"
+        Write-Host "--- SECRETS INJECTION COMPLETED ---"
 
-    # 3. Inject AI Models (Specific to local runner)
+    # 3. Inject AI Models
     - name: Inject AI Models
       run: |
-        Write-Host "--- STARTING MODEL INJECTION ---"
-        
-        # Absolute path on Toan's Host Machine
+        Write-Host "--- COPYING AI MODELS FROM HOST ---"
         $sourceModelPath = "C:\Users\Toan\.insightface\models"
-        
-        # Destination path inside the repo structure
         $destParentPath = "./services/ai-face-recognition-service"
 
         if (Test-Path $sourceModelPath) {
-            # Copy models recursively
+            if (-not (Test-Path $destParentPath)) {
+                New-Item -ItemType Directory -Force -Path $destParentPath
+            }
             Copy-Item -Path $sourceModelPath -Destination $destParentPath -Recurse -Force
-            Write-Host "AI Models copied successfully"
+            Write-Host "AI Models successfully injected"
         } else {
-            Write-Host "WARNING: Models folder not found at $sourceModelPath"
-            # We exit with error to avoid running service without models
+            Write-Host "ERROR: AI Models not found at: $sourceModelPath"
             exit 1 
         }
 
-    # 4. Clean up old Docker resources
-    - name: Cleanup Old Resources
+    # 4. Cleanup and Prune
+    - name: Docker Cleanup
       run: |
-        Write-Host "--- STARTING CLEANUP ---"
-        # Stop containers and remove orphans
+        Write-Host "--- CLEANING UP ---"
         docker-compose down --remove-orphans
-        
-        # Remove dangling images to free space
         docker image prune -f
-        Write-Host "Cleanup completed"
+        Write-Host "Cleanup finished"
 
     # 5. Build and Deploy
     - name: Build and Deploy
       run: |
-        Write-Host "--- STARTING BUILD AND DEPLOY ---"
-        # Build without cache if needed, or normal build
+        Write-Host "--- BUILDING AND STARTING SERVICES ---"
+        # Using --build to ensure environment changes are captured
         docker-compose up -d --build
-        Write-Host "--- DEPLOYMENT SUCCESSFUL ---"
+        Write-Host "--- DEPLOYMENT COMPLETED ---"

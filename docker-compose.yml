@@ -106,24 +106,26 @@ services:
       # Hot reload support
       - ./services/api-gateway:/app
       - /app/node_modules
-    environment:
-      - PORT=4100
-      - NODE_ENV=production
-      # Service discovery URLs
-      - AUTH_SERVICE_URL=http://auth-service:4101
-      - EMPLOYEE_SERVICE_URL=http://employee-service:4102
-      - ATTENDANCE_SERVICE_URL=http://attendance-service:4103
-      - APPLICATION_SERVICE_URL=http://application-service:4108
-      - AI_FACE_RECOGNITION_SERVICE_URL=http://ai-face-recognition-service:4106
-      - SALARY_SERVICE_URL=http://salary-service:4107
-      - JOB_SERVICE_URL=http://job-service:4111
-      - NOTIFICATION_SERVICE_URL=http://notification-service:4110
-      # Security
-      - JWT_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
-      - JWT_REFRESH_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
-      # Rate limiting
-      - RATE_LIMIT_WINDOW_MS=900000
-      - RATE_LIMIT_MAX_REQUESTS=100
+    env_file:
+      - ./services/api-gateway/.env.docker
+    # environment:
+    #   - PORT=4100
+    #   - NODE_ENV=production
+    #   # Service discovery URLs
+    #   - AUTH_SERVICE_URL=http://auth-service:4101
+    #   - EMPLOYEE_SERVICE_URL=http://employee-service:4102
+    #   - ATTENDANCE_SERVICE_URL=http://attendance-service:4103
+    #   - APPLICATION_SERVICE_URL=http://application-service:4108
+    #   - AI_FACE_RECOGNITION_SERVICE_URL=http://ai-face-recognition-service:4106
+    #   - SALARY_SERVICE_URL=http://salary-service:4107
+    #   - JOB_SERVICE_URL=http://job-service:4111
+    #   - NOTIFICATION_SERVICE_URL=http://notification-service:4110
+    #   # Security
+    #   - JWT_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
+    #   - JWT_REFRESH_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
+    #   # Rate limiting
+    #   - RATE_LIMIT_WINDOW_MS=900000
+    #   - RATE_LIMIT_MAX_REQUESTS=100
     depends_on:
       postgres:
         condition: service_healthy
@@ -149,34 +151,36 @@ services:
       # Hot reload support
       - ./services/auth-service:/app
       - /app/node_modules
-    environment:
-      - PORT=4101
-      - NODE_ENV=production
-      # Database
-      - DB_TYPE=pg
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=123456
-      - DB_DATABASE=auth_service
-      # JWT
-      - JWT_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
-      - JWT_REFRESH_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
-      - JWT_EXPIRES_IN=1h
-      - JWT_REFRESH_EXPIRES_IN=7d
-      # Email
-      - SMTP_HOST=smtp.gmail.com
-      - SMTP_PORT=465
-      - SMTP_USER=hrm.system.notification@gmail.com
-      - SMTP_PASS=asjixznjtslztrbz
-      - EMAIL_FROM=HRMS System <hrm.system.notification@gmail.com>
-      # Frontend
-      - FRONTEND_URL=http://localhost:3000
-      - FRONTEND_PORT=5000
-      - BCRYPT_ROUNDS=12
-      - EMPLOYEE_SERVICE_URL=http://employee-service:4102
-      - AI_SERVICE_URL=http://ai-face-recognition-service:4106
-      - API_GATEWAY_URL=http://api-gateway:4100
+    env_file:
+      - ./services/auth-service/.env.docker
+    # environment:
+    #   - PORT=4101
+    #   - NODE_ENV=production
+    #   # Database
+    #   - DB_TYPE=pg
+    #   - DB_HOST=postgres
+    #   - DB_PORT=5432
+    #   - DB_USER=postgres
+    #   - DB_PASSWORD=123456
+    #   - DB_DATABASE=auth_service
+    #   # JWT
+    #   - JWT_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
+    #   - JWT_REFRESH_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
+    #   - JWT_EXPIRES_IN=1h
+    #   - JWT_REFRESH_EXPIRES_IN=7d
+    #   # Email
+    #   - SMTP_HOST=smtp.gmail.com
+    #   - SMTP_PORT=465
+    #   - SMTP_USER=hrm.system.notification@gmail.com
+    #   - SMTP_PASS=asjixznjtslztrbz
+    #   - EMAIL_FROM=HRMS System <hrm.system.notification@gmail.com>
+    #   # Frontend
+    #   - FRONTEND_URL=http://localhost:3000
+    #   - FRONTEND_PORT=5000
+    #   - BCRYPT_ROUNDS=12
+    #   - EMPLOYEE_SERVICE_URL=http://employee-service:4102
+    #   - AI_SERVICE_URL=http://ai-face-recognition-service:4106
+    #   - API_GATEWAY_URL=http://api-gateway:4100
     depends_on:
       postgres:
         condition: service_healthy
@@ -202,31 +206,33 @@ services:
       # Hot reload support
       - ./services/employee-service:/app
       - /app/node_modules
-    environment:
-      - PORT=4102
-      - NODE_ENV=production
-      # Database
-      - DB_TYPE=pg
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=123456
-      - DB_DATABASE=employee_service
-      # JWT
-      - JWT_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
-      - SECRET_KEY=app_secret_key_123456
-      - SECRET_KEY_ADMIN=admin_secret_key_789101
-      - JWT_SMS_KEY=sms_jwt_key_112233
-      - JWT_REFRESH_TIME=86400
-      - JWT_EXPIRE_ADMIN=86400
-      - JWT_EXPIRE_VERIFY_EMAIL=300
-      # Service URLs
-      - AUTH_SERVICE_URL=http://auth-service:4101
-      - SALARY_SERVICE_URL=http://salary-service:4107
-      - API_GATEWAY_URL=http://api-gateway:4100
-      - NEXT_PUBLIC_API_HOST=4100
-      - PREFIXADMIN=admin
-      - TIMEOUT_DELETE_FILE=6000
+    env_file:
+      - ./services/employee-service/.env.docker
+    # environment:
+    #   - PORT=4102
+    #   - NODE_ENV=production
+    #   # Database
+    #   - DB_TYPE=pg
+    #   - DB_HOST=postgres
+    #   - DB_PORT=5432
+    #   - DB_USER=postgres
+    #   - DB_PASSWORD=123456
+    #   - DB_DATABASE=employee_service
+    #   # JWT
+    #   - JWT_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
+    #   - SECRET_KEY=app_secret_key_123456
+    #   - SECRET_KEY_ADMIN=admin_secret_key_789101
+    #   - JWT_SMS_KEY=sms_jwt_key_112233
+    #   - JWT_REFRESH_TIME=86400
+    #   - JWT_EXPIRE_ADMIN=86400
+    #   - JWT_EXPIRE_VERIFY_EMAIL=300
+    #   # Service URLs
+    #   - AUTH_SERVICE_URL=http://auth-service:4101
+    #   - SALARY_SERVICE_URL=http://salary-service:4107
+    #   - API_GATEWAY_URL=http://api-gateway:4100
+    #   - NEXT_PUBLIC_API_HOST=4100
+    #   - PREFIXADMIN=admin
+    #   - TIMEOUT_DELETE_FILE=6000
     depends_on:
       postgres:
         condition: service_healthy
@@ -254,21 +260,23 @@ services:
       # Hot reload support
       - ./services/attendance-service:/app
       - /app/node_modules
-    environment:
-      - PORT=4103
-      - NODE_ENV=production
-      # Database
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=123456
-      - DB_DATABASE=attendance_service
-      # Service URLs
-      - AUTH_SERVICE_URL=http://auth-service:4101
-      - EMPLOYEE_SERVICE_URL=http://employee-service:4102
-      - API_GATEWAY_URL=http://api-gateway:4100
-      - LOG_LEVEL=info
-      - APPLICATION_SERVICE_URL=http://application-service:4108
+    env_file:
+      - ./services/attendance-service/.env.docker
+    # environment:
+    #   - PORT=4103
+    #   - NODE_ENV=production
+    #   # Database
+    #   - DB_HOST=postgres
+    #   - DB_PORT=5432
+    #   - DB_USER=postgres
+    #   - DB_PASSWORD=123456
+    #   - DB_DATABASE=attendance_service
+    #   # Service URLs
+    #   - AUTH_SERVICE_URL=http://auth-service:4101
+    #   - EMPLOYEE_SERVICE_URL=http://employee-service:4102
+    #   - API_GATEWAY_URL=http://api-gateway:4100
+    #   - LOG_LEVEL=info
+    #   - APPLICATION_SERVICE_URL=http://application-service:4108
     depends_on:
       postgres:
         condition: service_healthy
@@ -318,21 +326,23 @@ services:
     restart: unless-stopped
     ports:
       - "4106:4106" # Expose AI service port for debugging
-    environment:
-      - PORT=4106
-      - DEBUG=False
-      # Database - Corrected to match postgres container
-      - DATABASE_URL=postgresql://postgres:123456@postgres:5432/ai_face_recognition
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=123456
-      - DB_NAME=ai_face_recognition
-      # AI Model settings
-      - MODEL_NAME=buffalo_l
-      - FACE_CONFIDENCE_THRESHOLD=0.6
-      - RECOGNITION_THRESHOLD=0.4
-      - API_GATEWAY_URL=http://api-gateway:4100 # Internal Docker URL
+    env_file:
+      - ./services/ai-face-recognition-service/.env.docker
+    # environment:
+    #   - PORT=4106
+    #   - DEBUG=False
+    #   # Database - Corrected to match postgres container
+    #   - DATABASE_URL=postgresql://postgres:123456@postgres:5432/ai_face_recognition
+    #   - DB_HOST=postgres
+    #   - DB_PORT=5432
+    #   - DB_USER=postgres
+    #   - DB_PASSWORD=123456
+    #   - DB_NAME=ai_face_recognition
+    #   # AI Model settings
+    #   - MODEL_NAME=buffalo_l
+    #   - FACE_CONFIDENCE_THRESHOLD=0.6
+    #   - RECOGNITION_THRESHOLD=0.4
+    #   - API_GATEWAY_URL=http://api-gateway:4100 # Internal Docker URL
     volumes:
       # Model cache and uploads
       - ai-models:/app/models
@@ -364,20 +374,22 @@ services:
       # Hot reload support
       - ./services/salary-service:/app
       - /app/node_modules
-    environment:
-      - PORT=4107
-      - NODE_ENV=production
-      # Database
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=123456
-      - DB_DATABASE=salary_service
-      # Service URLs
-      - EMPLOYEE_SERVICE_URL=http://employee-service:4102
-      - AUTH_SERVICE_URL=http://auth-service:4101
-      - ATTENDANCE_SERVICE_URL=http://attendance-service:4103
-      - API_GATEWAY_URL=http://api-gateway:4100
+    env_file:
+      - ./services/salary-service/.env.docker
+    # environment:
+    #   - PORT=4107
+    #   - NODE_ENV=production
+    #   # Database
+    #   - DB_HOST=postgres
+    #   - DB_PORT=5432
+    #   - DB_USER=postgres
+    #   - DB_PASSWORD=123456
+    #   - DB_DATABASE=salary_service
+    #   # Service URLs
+    #   - EMPLOYEE_SERVICE_URL=http://employee-service:4102
+    #   - AUTH_SERVICE_URL=http://auth-service:4101
+    #   - ATTENDANCE_SERVICE_URL=http://attendance-service:4103
+    #   - API_GATEWAY_URL=http://api-gateway:4100
     depends_on:
       postgres:
         condition: service_healthy
@@ -435,19 +447,21 @@ services:
       # Hot reload support
       - ./services/notification-service:/app
       - /app/node_modules
-    environment:
-      - PORT=4110
-      - NODE_ENV=production
-      # Database
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=123456
-      - DB_DATABASE=notification_service
-      # JWT
-      - JWT_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
-      - AUTH_SERVICE_URL=http://auth-service:4101
-      - API_GATEWAY_URL=http://api-gateway:4100
+    env_file:
+      - ./services/notification-service/.env.docker
+    # environment:
+    #   - PORT=4110
+    #   - NODE_ENV=production
+    #   # Database
+    #   - DB_HOST=postgres
+    #   - DB_PORT=5432
+    #   - DB_USER=postgres
+    #   - DB_PASSWORD=123456
+    #   - DB_DATABASE=notification_service
+    #   # JWT
+    #   - JWT_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
+    #   - AUTH_SERVICE_URL=http://auth-service:4101
+    #   - API_GATEWAY_URL=http://api-gateway:4100
     depends_on:
       postgres:
         condition: service_healthy
@@ -487,7 +501,7 @@ services:
       disable: true
     deploy:
       mode: replicated
-      replicas: 3
+      replicas: 1
       resources:
         limits:
           memory: 512M
@@ -508,23 +522,25 @@ services:
     volumes:
       - ./services/salary-service:/app
       - /app/node_modules
-    environment:
-      - NODE_ENV=production
-      # Database
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=postgres
-      - DB_PASSWORD=123456
-      - DB_DATABASE=salary_service
-      # Service URLs
-      - EMPLOYEE_SERVICE_URL=http://employee-service:4102
-      - ATTENDANCE_SERVICE_URL=http://attendance-service:4103
-      - NOTIFICATION_SERVICE_URL=http://notification-service:4110
-      - AI_SERVICE_URL=http://ai-face-recognition-service:4106
-      - AUTH_SERVICE_URL=http://auth-service:4101
-      - API_GATEWAY_URL=http://api-gateway:4100
-      # CloudAMQP
-      - CLOUDAMQP_URL=amqps://bsifozyk:FXI3aDroM384hUPxUJ4w3CZYg42ZFvGo@rabbit.lmq.cloudamqp.com/bsifozyk
+    env_file:
+      - ./services/salary-service/.env.docker
+    # environment:
+    #   - NODE_ENV=production
+    #   # Database
+    #   - DB_HOST=postgres
+    #   - DB_PORT=5432
+    #   - DB_USER=postgres
+    #   - DB_PASSWORD=123456
+    #   - DB_DATABASE=salary_service
+    #   # Service URLs
+    #   - EMPLOYEE_SERVICE_URL=http://employee-service:4102
+    #   - ATTENDANCE_SERVICE_URL=http://attendance-service:4103
+    #   - NOTIFICATION_SERVICE_URL=http://notification-service:4110
+    #   - AI_SERVICE_URL=http://ai-face-recognition-service:4106
+    #   - AUTH_SERVICE_URL=http://auth-service:4101
+    #   - API_GATEWAY_URL=http://api-gateway:4100
+    #   # CloudAMQP
+    #   - CLOUDAMQP_URL=amqps://bsifozyk:FXI3aDroM384hUPxUJ4w3CZYg42ZFvGo@rabbit.lmq.cloudamqp.com/bsifozyk
     depends_on:
       postgres:
         condition: service_healthy
@@ -536,7 +552,7 @@ services:
       disable: true
     deploy:
       mode: replicated
-      replicas: 3
+      replicas: 1
       resources:
         limits:
           memory: 512M
