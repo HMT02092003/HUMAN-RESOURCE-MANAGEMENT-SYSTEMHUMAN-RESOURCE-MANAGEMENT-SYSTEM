@@ -50,7 +50,7 @@ export class ApplicationController {
       }
 
       if (type == "forgot-check") {
-         await ApplicationModel.checkRequiredApplication(userId);
+        await ApplicationModel.checkRequiredApplication(userId);
       }
 
       const application = await ApplicationModel.createApplication({
@@ -96,8 +96,8 @@ export class ApplicationController {
    */
   static async getAll(req, res) {
     try {
-      const { 
-        page = 1, 
+      const {
+        page = 1,
         limit = 10,  // Changed from pageSize to limit
         sort = 'created_at',  // Changed from sortField to sort
         order = 'desc',  // Changed from sortOrder to order, expecting 'asc'/'desc'
@@ -173,20 +173,21 @@ export class ApplicationController {
               },
               params: {
                 q: searchEmployeeName.trim()
-              }
+              },
+              timeout: 5000
             }
           );
-          
+
           const matchingUsers = searchResponse.data?.data || searchResponse.data || [];
           const matchingUserIds = matchingUsers.map(u => u.id);
-          
+
           // Intersect with allowedUserIds
           if (allowedUserIds && allowedUserIds.length > 0) {
             allowedUserIds = allowedUserIds.filter(id => matchingUserIds.includes(id));
           } else {
             allowedUserIds = matchingUserIds;
           }
-          
+
           // If no matching users, return empty result
           if (allowedUserIds.length === 0) {
             return res.json({
@@ -256,7 +257,8 @@ export class ApplicationController {
               headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
-              }
+              },
+              timeout: 5000
             }
           );
           if (response.data) {
@@ -328,9 +330,9 @@ export class ApplicationController {
       console.log('🔍 getMyApplications called');
       console.log('🔍 getUserData(req):', getUserData(req));
       console.log('🔍 req.query:', req.query);
-      
+
       const { page = 1, pageSize = 10, status, userId: queryUserId, year, month } = req.query;
-      
+
       // Ưu tiên userId từ query (cho inter-service call), fallback về getUserData(req).id
       const userId = queryUserId ? parseInt(queryUserId) : getUserId(req);
 
@@ -368,8 +370,8 @@ export class ApplicationController {
       if (year && month) {
         filteredApplications = applications.filter(app => {
           const appDate = new Date(app.applicationDate || app.createdAt);
-          return appDate.getFullYear() === parseInt(year) && 
-                 appDate.getMonth() + 1 === parseInt(month);
+          return appDate.getFullYear() === parseInt(year) &&
+            appDate.getMonth() + 1 === parseInt(month);
         });
       }
 
@@ -555,10 +557,10 @@ export class ApplicationController {
       if (isNestedUserSort) {
         // For nested user-field sorting: we must fetch all FILTERED records, resolve names, sort, then slice
         // This is not ideal for performance but necessary since user names are not in applications table
-        
+
         // First, get total count with filters applied
         totalCount = await ApplicationModel.getMyApplicationsCountWithFilters(userId, filters);
-        
+
         if (totalCount === 0) {
           applications = [];
         } else {
@@ -697,19 +699,19 @@ export class ApplicationController {
       if (year && month) {
         const targetYear = parseInt(year);
         const targetMonth = parseInt(month);
-        
+
         filteredApplications = applications.filter(app => {
           // Đối với đơn leave và business-trip, kiểm tra startDate và endDate
           if ((app.type === 'leave' || app.type === 'business-trip') && app.data) {
             const startDate = new Date(app.data.startDate);
             const endDate = new Date(app.data.endDate);
-            
+
             // Kiểm tra xem khoảng thời gian có giao với tháng đang xem không
             const startYear = startDate.getFullYear();
             const startMonth = startDate.getMonth() + 1;
             const endYear = endDate.getFullYear();
             const endMonth = endDate.getMonth() + 1;
-            
+
             // Đơn thuộc tháng nếu:
             // - startDate trong tháng, HOẶC
             // - endDate trong tháng, HOẶC  
@@ -717,10 +719,10 @@ export class ApplicationController {
             const isInMonth = (
               (startYear === targetYear && startMonth === targetMonth) ||
               (endYear === targetYear && endMonth === targetMonth) ||
-              (startDate <= new Date(targetYear, targetMonth - 1, 1) && 
-               endDate >= new Date(targetYear, targetMonth, 0))
+              (startDate <= new Date(targetYear, targetMonth - 1, 1) &&
+                endDate >= new Date(targetYear, targetMonth, 0))
             );
-            
+
             if (isInMonth) {
               console.log(`✅ ${app.type} application in month ${targetYear}-${targetMonth}:`, {
                 id: app.id,
@@ -729,15 +731,15 @@ export class ApplicationController {
                 destination: app.data.destination || app.data.location
               });
             }
-            
+
             return isInMonth;
           }
-          
+
           // ✨ Đối với đơn forgot-check, dùng forgotDate
           if (app.type === 'forgot-check' && app.data && app.data.forgotDate) {
             const forgotDate = new Date(app.data.forgotDate);
-            const isInMonth = forgotDate.getFullYear() === targetYear && 
-                              forgotDate.getMonth() + 1 === targetMonth;
+            const isInMonth = forgotDate.getFullYear() === targetYear &&
+              forgotDate.getMonth() + 1 === targetMonth;
             if (isInMonth) {
               console.log(`✅ forgot-check application in month ${targetYear}-${targetMonth}:`, {
                 id: app.id,
@@ -747,7 +749,7 @@ export class ApplicationController {
             }
             return isInMonth;
           }
-          
+
           // ✨ Đối với đơn overtime, dùng overtimeDate hoặc date
           if (app.type === 'overtime' && app.data) {
             const otDateField = app.data.overtimeDate || app.data.date;
@@ -758,7 +760,7 @@ export class ApplicationController {
               const otYear = otDateVN.year();
               const otMonth = otDateVN.month() + 1; // dayjs month is 0-indexed
               const isInMonth = otYear === targetYear && otMonth === targetMonth;
-              
+
               console.log(`🔍 [Filter OT] App ${app.id}:`, {
                 overtimeDateUTC: otDateField,
                 overtimeDateVN: otDateVN.format('YYYY-MM-DD HH:mm:ss'),
@@ -768,7 +770,7 @@ export class ApplicationController {
                 targetMonth,
                 isInMonth
               });
-              
+
               if (isInMonth) {
                 console.log(`✅ overtime application in month ${targetYear}-${targetMonth}:`, {
                   id: app.id,
@@ -781,13 +783,13 @@ export class ApplicationController {
               return isInMonth;
             }
           }
-          
+
           // Đối với các loại đơn khác, dùng applicationDate hoặc createdAt
           const appDate = new Date(app.applicationDate || app.createdAt);
-          return appDate.getFullYear() === targetYear && 
-                 appDate.getMonth() + 1 === targetMonth;
+          return appDate.getFullYear() === targetYear &&
+            appDate.getMonth() + 1 === targetMonth;
         });
-        
+
         console.log(`📅 Filtered to ${filteredApplications.length} applications for ${year}-${month}`);
         console.log(`🚀 Business trips: ${filteredApplications.filter(a => a.type === 'business-trip').length}`);
         console.log(`📄 Application types breakdown:`, {
@@ -981,7 +983,7 @@ export class ApplicationController {
     try {
       const { id } = req.params;
       console.log(`📋 getById called for application ID: ${id}`);
-      
+
       const application = await ApplicationModel.getApplicationById(parseInt(id));
       console.log(`✅ Found application:`, {
         id: application.id,
@@ -1034,7 +1036,7 @@ export class ApplicationController {
         },
         timestamp: dayjs().format()
       };
-      
+
       console.log(`📤 Sending response:`, responseData);
       res.json(responseData);
     } catch (error) {
@@ -1122,7 +1124,7 @@ export class ApplicationController {
   static async approve(req, res) {
     const startTime = Date.now();
     console.log('\n✅ [APPROVE] Starting approval process...');
-    
+
     // Validate input first (fast)
     const { id } = req.params;
     const { note } = req.body;
@@ -1162,7 +1164,7 @@ export class ApplicationController {
       })();
 
       const application = await Promise.race([approvePromise, timeoutPromise]);
-      
+
       const duration = Date.now() - startTime;
       console.log(`✅ Application approved successfully in ${duration}ms`);
 
@@ -1176,7 +1178,7 @@ export class ApplicationController {
     } catch (error) {
       const duration = Date.now() - startTime;
       console.error(`❌ Error in approve after ${duration}ms:`, error.message);
-      
+
       // Handle specific errors
       if (error.message.includes('TIMEOUT')) {
         return res.status(504).json({
@@ -1185,7 +1187,7 @@ export class ApplicationController {
           timestamp: dayjs().format()
         });
       }
-      
+
       if (error.message.includes('Không tìm thấy')) {
         return res.status(404).json({
           success: false,
@@ -1193,7 +1195,7 @@ export class ApplicationController {
           timestamp: dayjs().format()
         });
       }
-      
+
       if (error.message.includes('đã được xử lý')) {
         return res.status(400).json({
           success: false,
@@ -1201,7 +1203,7 @@ export class ApplicationController {
           timestamp: dayjs().format()
         });
       }
-      
+
       return res.status(500).json({
         success: false,
         message: 'Lỗi khi duyệt đơn từ: ' + error.message,
@@ -1294,7 +1296,7 @@ export class ApplicationController {
 
       // rejectionReason là optional, không bắt buộc
       const application = await ApplicationModel.rejectApplication(
-        parseInt(id), approvedBy, rejectionReason || null
+        parseInt(id), approvedBy, rejectionReason || 'Không có lý do cụ thể'
       );
 
       res.json({

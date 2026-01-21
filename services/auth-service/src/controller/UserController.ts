@@ -31,10 +31,9 @@ function getLocalIpAddress(): string {
 const API_GATEWAY_URL = process.env.API_GATEWAY_URL || `http://localhost:${process.env.API_GATEWAY_PORT || 4000}`;
 const { Gender, statusOptions, Relationship } = constantConfig;
 
-// Resolve absolute path for frontend public directory
-const getFrontendPublicPath = (...segments: string[]): string => {
-  // services/auth-service -> repo root -> frontend/public
-  return path.resolve(process.cwd(), "../../frontend/public", ...segments);
+// Resolve absolute path for local public directory
+const getLocalPublicPath = (...segments: string[]): string => {
+  return path.resolve(process.cwd(), "public", ...segments);
 };
 
 // Map stored URL path to absolute filesystem path
@@ -42,16 +41,16 @@ const resolvePhotoAbsolutePath = (storedPath: string): string => {
   if (!storedPath) return '';
   const normalized = storedPath.replace(/\\/g, '/');
   if (normalized.startsWith('/identificationPhoto/')) {
-    return getFrontendPublicPath(normalized.replace('/identificationPhoto/', 'identificationPhoto/'));
+    return getLocalPublicPath(normalized.replace('/identificationPhoto/', 'identificationPhoto/'));
   }
   return path.join(process.cwd(), normalized);
 };
 
-// Helper function to handle file upload and save with username into frontend/public
+// Helper function to handle file upload and save with username into local public
 const handleIdentificationPhotoUpload = (file: any, username: string): string => {
   try {
-    // Tạo thư mục identificationPhoto trong frontend/public nếu chưa tồn tại
-    const uploadDir = getFrontendPublicPath('identificationPhoto');
+    // Tạo thư mục identificationPhoto trong local public nếu chưa tồn tại
+    const uploadDir = getLocalPublicPath('identificationPhoto');
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }

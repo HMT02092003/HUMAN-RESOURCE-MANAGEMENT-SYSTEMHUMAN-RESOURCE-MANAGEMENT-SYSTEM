@@ -19,10 +19,15 @@ class Settings(BaseSettings):
     PORT: int = int(os.getenv("PORT", "4106"))
     
     # Database Configuration
-    DATABASE_URL: str = os.getenv(
-        "DATABASE_URL",
-        "postgresql://postgres:123456@localhost:5433/ai_face_recognition"
-    )
+    DB_USER: str = os.getenv("DB_USER", "postgres")
+    DB_PASSWORD: str = os.getenv("DB_PASSWORD", "123456")
+    DB_HOST: str = os.getenv("DB_HOST", "postgres")
+    DB_PORT: str = os.getenv("DB_PORT", "5432")
+    DB_NAME: str = os.getenv("DB_NAME", "ai_face_recognition")
+
+    @property
+    def DATABASE_URL(self) -> str:
+        return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
     
     # AI Model Configuration
     CONFIDENCE_THRESHOLD: float = float(os.getenv("CONFIDENCE_THRESHOLD", "0.35"))  # Lower threshold for masks

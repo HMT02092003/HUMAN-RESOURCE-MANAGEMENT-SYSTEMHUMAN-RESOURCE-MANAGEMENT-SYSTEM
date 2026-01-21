@@ -33,16 +33,21 @@ app.use((req, res, next) => {
 });
 
 // Serve static files (e.g., uploaded identification photos)
-const uploadsDir = path.resolve(process.cwd(), 'public', 'uploads', 'identificationPhoto');
+const publicDir = path.resolve(process.cwd(), 'public');
+const photoDir = path.join(publicDir, 'identificationPhoto');
 try {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-} catch {}
-app.use(express.static(path.resolve(process.cwd(), 'public')));
+  if (!fs.existsSync(photoDir)) {
+    fs.mkdirSync(photoDir, { recursive: true });
+  }
+} catch (err) {
+  console.error('Error creating photo directory:', err.message);
+}
+app.use(express.static(publicDir));
 
 // Health check with enhanced info
 app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'OK', 
+  res.status(200).json({
+    status: 'OK',
     timestamp: new Date().toISOString(),
     service: 'Auth Service v2.0',
     port: PORT,
@@ -72,7 +77,7 @@ app.use('/api', authRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'Route not found',
     path: req.originalUrl,
     timestamp: new Date().toISOString()
@@ -82,7 +87,7 @@ app.use('*', (req, res) => {
 // Enhanced error handling
 app.use((err, req, res, next) => {
   const timestamp = new Date().toISOString();
-  
+
   // Log error with context
   console.error(`[${timestamp}] Auth Service Error:`, {
     message: err.message,
@@ -131,7 +136,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`📧 Email configured: ${process.env.SMTP_USER ? '✅' : '❌'}`);
   console.log(`🗄️  Database: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_DATABASE}`);
-  
+
   // Start monthly leave days cron job
   try {
     startMonthlyLeaveDaysCron();

@@ -17,7 +17,7 @@ class AuthService {
         headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
         headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
       }
-      const response = await axios.get(`${AUTH_SERVICE_URL}/api/users/${userId}`, { headers });
+      const response = await axios.get(`${AUTH_SERVICE_URL}/api/users/${userId}`, { headers, timeout: 5000 });
       return response.data;
     } catch (error) {
       console.error('Error fetching user info from Auth Service:', error.message);
@@ -35,7 +35,7 @@ class AuthService {
         headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
         headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
       }
-      const response = await axios.get(`${AUTH_SERVICE_URL}/api/users/department/${departmentId}`, { headers });
+      const response = await axios.get(`${AUTH_SERVICE_URL}/api/users/department/${departmentId}`, { headers, timeout: 5000 });
       return response.data;
     } catch (error) {
       console.error('Error fetching users by department:', error.message);
@@ -53,7 +53,7 @@ class AuthService {
         headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
         headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
       }
-      const response = await axios.get(`${AUTH_SERVICE_URL}/api/users/chevron/${chevronId}`, { headers });
+      const response = await axios.get(`${AUTH_SERVICE_URL}/api/users/chevron/${chevronId}`, { headers, timeout: 5000 });
       return response.data;
     } catch (error) {
       console.error('Error fetching users by chevron:', error.message);
@@ -79,7 +79,7 @@ class AuthService {
       // Gọi sang Auth Service để check scope với token
       const response = await axios.post(`${AUTH_SERVICE_URL}/api/users/check-scope`, {
         permissionKey: permissionKey
-      }, { headers });
+      }, { headers, timeout: 5000 });
 
       if (response.data.success) {
         return {
@@ -110,7 +110,7 @@ class AuthService {
 
       const response = await axios.post(`${AUTH_SERVICE_URL}/api/users/bulk`, {
         userIds: userIds
-      }, { headers });
+      }, { headers, timeout: 5000 });
 
       if (response.data.success) {
         return response.data.data || [];

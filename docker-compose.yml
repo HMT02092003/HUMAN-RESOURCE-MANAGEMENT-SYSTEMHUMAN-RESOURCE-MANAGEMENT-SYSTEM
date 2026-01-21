@@ -472,6 +472,7 @@ services:
       - DB_PORT=5432
       - API_GATEWAY_URL=http://api-gateway:4100
       - AUTH_SERVICE_URL=http://auth-service:4101
+      - NOTIFICATION_SERVICE_URL=http://notification-service:4110
     env_file:
       - ./services/job-service/.env.docker
     depends_on:
