@@ -68,20 +68,20 @@ jobs:
         docker-compose up -d --build
         Write-Host "--- DEPLOY SUCCESSFUL ---"
 
-    # 5. Aggressive Cleanup (Save Disk Space)
-    - name: Aggressive Cleanup
+    # 5. Optimized Cleanup (Balance space vs speed)
+    - name: Optimized Cleanup
       run: |
         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-        Write-Host "--- STARTING DEEP CLEAN ---"
+        Write-Host "--- STARTING SYSTEM CLEANUP ---"
         
-        # Remove old Docker images (Dangling)
+        # Remove Dangling Images (Old versions replaced by build)
         docker image prune -f
         
-        # Remove Build cache (Save 20-30GB)
-        docker builder prune -a -f
+        # Remove only UNUSED build cache (Dangling cache)
+        # We don't use -a to avoid redownloading base layers every build (prevents 502/timeout)
+        docker builder prune -f
         
-        # Report status
-        Write-Host "Current Docker Usage:"
+        Write-Host "Final Docker Disk Usage:"
         docker system df
         
-        Write-Host "--- SYSTEM CLEANED ---"
+        Write-Host "--- CLEANUP COMPLETED ---"

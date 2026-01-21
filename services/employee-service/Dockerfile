@@ -7,7 +7,8 @@ RUN corepack enable && corepack prepare yarn@1 --activate
 WORKDIR /app
 
 COPY package.json yarn.lock* ./
-RUN yarn install --production --frozen-lockfile || yarn install --production
+RUN yarn config set network-timeout 600000 && \
+  (yarn install --production --frozen-lockfile || yarn install --production)
 
 COPY . .
 

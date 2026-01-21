@@ -17,7 +17,8 @@ WORKDIR /app
 COPY package.json yarn.lock* ./
 
 # Install dependencies
-RUN yarn install --frozen-lockfile --production=false
+RUN yarn config set network-timeout 600000 && \
+    (yarn install --frozen-lockfile --production=false || yarn install --production=false)
 
 # Copy source code
 COPY . .
@@ -47,7 +48,8 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
 # Install only production dependencies
-RUN yarn install --frozen-lockfile --production=true
+RUN yarn config set network-timeout 600000 && \
+    (yarn install --frozen-lockfile --production=true || yarn install --production=true)
 
 # Expose port
 EXPOSE 3000
