@@ -37,6 +37,7 @@ const getStatusText = (statusCode: number | string): string => {
   return status ? status.label : '';
 };
 
+
 // Excel column configuration for user table
 const excelColumns: ExcelColumn[] = [
   {
@@ -124,7 +125,7 @@ const UserTable = () => {
   const [totalRecords, setTotalRecords] = useState(0);
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  
+
   const router = useRouter();
   const screens = Grid.useBreakpoint();
 
@@ -138,7 +139,7 @@ const UserTable = () => {
     try {
       // Xử lý date range params
       const apiParams: any = { ...params };
-      
+
       // Xử lý date range
       if (params.birthday_range) {
         const [start, end] = params.birthday_range.split(',');
@@ -162,7 +163,7 @@ const UserTable = () => {
       // Đổi tên params cho phù hợp với API
       apiParams.pageSize = params.limit;
       delete apiParams.limit;
-      
+
       // Xử lý sort field
       if (params.sort) {
         apiParams.sortField = params.sort;
@@ -174,7 +175,7 @@ const UserTable = () => {
       }
 
       const response = await UserService.getAllUsersAll(apiParams);
-      
+
       return {
         data: response.results || response || [],
         total: response.total || 0
@@ -569,7 +570,7 @@ const UserTable = () => {
         <p>Bạn có chắc chắn muốn xóa các bản ghi được chọn?</p>
       </Modal>
 
-  {/* Salary editing moved to dedicated page /user/edit-salary/[id] */}
+      {/* Salary editing moved to dedicated page /user/edit-salary/[id] */}
 
       <style jsx global>{`
         .row-even {
