@@ -12,21 +12,21 @@
  * Tháng 12 tính đến ngày 5/12/2025 (ngày hiện tại)
  */
 
-exports.seed = async function(knex) {
+exports.seed = async function (knex) {
   console.log('\n' + '='.repeat(70));
-  console.log('🚀 SEED CHÍNH: Chấm công Oct/Nov/Dec 2025');
+  console.log('🚀 SEED CHÍNH: Chấm công Oct 2025 - Feb 2026');
   console.log('   Đầy đủ các case: đi làm, nghỉ phép, nghỉ không phép, công tác, OT');
   console.log('='.repeat(70));
-  
+
   // =============================================
   // STEP 1: Xóa dữ liệu cũ
   // =============================================
   console.log('\n🗑️  Xóa dữ liệu cũ...');
   await knex('time_attendances')
-    .whereRaw("date >= '2025-10-01' AND date <= '2025-12-31'")
+    .whereRaw("date >= '2025-10-01' AND date <= '2026-02-28'")
     .del();
   await knex('monthly_attendances')
-    .whereIn('month', ['2025-10', '2025-11', '2025-12'])
+    .whereIn('month', ['2025-10', '2025-11', '2025-12', '2026-01', '2026-02'])
     .del();
   console.log('   ✅ Đã xóa dữ liệu cũ');
 
@@ -34,7 +34,7 @@ exports.seed = async function(knex) {
   // STEP 2: Lấy dữ liệu applications đã duyệt từ application-service DB
   // =============================================
   console.log('\n📋 Đang lấy dữ liệu applications đã duyệt...');
-  
+
   // Tạo kết nối tới application-service DB
   const appDbConfig = {
     client: 'pg',
@@ -46,7 +46,7 @@ exports.seed = async function(knex) {
       password: process.env.DB_PASSWORD || '123456'
     }
   };
-  
+
   let approvedApplications = [];
   try {
     const appKnex = require('knex')(appDbConfig);
@@ -61,18 +61,18 @@ exports.seed = async function(knex) {
     console.log(`   ⚠️ Không thể lấy dữ liệu applications: ${err.message}`);
     console.log('   ➡️ Tiếp tục với dữ liệu mặc định...');
   }
-  
+
   // Build maps cho từng loại application theo userId và date
   const leaveMap = new Map(); // userId-date -> leave info
   const businessTripMap = new Map(); // userId-date -> business trip info
   const overtimeMap = new Map(); // userId-date -> OT info
   const forgotCheckMap = new Map(); // userId-date -> forgot check info
-  
+
   for (const app of approvedApplications) {
     try {
       const data = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
       const userId = app.userId;
-      
+
       if (app.type === 'leave') {
         // Leave có startDate và endDate
         const startDate = data.startDate;
@@ -109,7 +109,7 @@ exports.seed = async function(knex) {
       // Skip invalid application data
     }
   }
-  
+
   console.log(`   📊 Leave days: ${leaveMap.size}, Business trips: ${businessTripMap.size}, OT: ${overtimeMap.size}, Forgot check: ${forgotCheckMap.size}`);
 
   // =============================================
@@ -121,16 +121,16 @@ exports.seed = async function(knex) {
   // =============================================
   // HELPER FUNCTIONS
   // =============================================
-  
+
   const isWorkday = (date) => {
     const day = new Date(date).getDay();
     return day >= 1 && day <= 5;
   };
-  
+
   const getWorkdaysInMonth = (year, month, maxDay = 31) => {
     const days = [];
     const daysInMonth = Math.min(new Date(year, month, 0).getDate(), maxDay);
-    
+
     for (let d = 1; d <= daysInMonth; d++) {
       const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       if (isWorkday(dateStr)) {
@@ -139,11 +139,11 @@ exports.seed = async function(knex) {
     }
     return days;
   };
-  
+
   // Tạo thời gian check-in/check-out - ca 8h-17h
   const generateDayTimes = (isLateForced = false, isEarlyLeaveForced = false) => {
     let checkInHour, checkInMinute, checkOutHour, checkOutMinute;
-    
+
     if (isLateForced) {
       // Đi muộn: 8:05-8:45
       checkInHour = 8;
@@ -158,7 +158,7 @@ exports.seed = async function(knex) {
       checkInHour = 8;
       checkInMinute = 1 + Math.floor(Math.random() * 14);
     }
-    
+
     if (isEarlyLeaveForced) {
       // Về sớm: 16:00-16:45
       checkOutHour = 16;
@@ -172,23 +172,23 @@ exports.seed = async function(knex) {
       checkOutHour = 16;
       checkOutMinute = 45 + Math.floor(Math.random() * 14);
     }
-    
+
     const formatTime = (h, m) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
-    
+
     return {
       checkInTime: formatTime(checkInHour, checkInMinute),
       checkOutTime: formatTime(checkOutHour, checkOutMinute),
       checkInHour, checkInMinute, checkOutHour, checkOutMinute
     };
   };
-  
+
   // Tính số giờ làm việc (trừ 1h nghỉ trưa)
   const calculateWorkHours = (inH, inM, outH, outM) => {
     const inMinutes = inH * 60 + inM;
     const outMinutes = outH * 60 + outM;
     return Math.max(0, (outMinutes - inMinutes - 60) / 60);
   };
-  
+
   // Tính muộn/sớm (ca 8h-17h)
   const calculateLateness = (inH, inM, outH, outM) => {
     const lateMinutes = Math.max(0, (inH * 60 + inM) - (8 * 60));
@@ -202,26 +202,28 @@ exports.seed = async function(knex) {
   const months = [
     { year: 2025, month: 10, name: 'Tháng 10/2025' },
     { year: 2025, month: 11, name: 'Tháng 11/2025' },
-    { year: 2025, month: 12, name: 'Tháng 12/2025', maxDay: 5 } // Đến ngày 5/12/2025
+    { year: 2025, month: 12, name: 'Tháng 12/2025' },
+    { year: 2026, month: 1, name: 'Tháng 01/2026' },
+    { year: 2026, month: 2, name: 'Tháng 02/2026' }
   ];
-  
+
   let totalRecords = 0;
   const batchSize = 500;
   let batch = [];
-  
+
   // Lưu thông tin cho monthly calculation
   const monthlyData = {}; // { 'userId-month': { ... } }
-  
+
   for (const monthInfo of months) {
     console.log(`\n📅 ${monthInfo.name}`);
-    
+
     const workdays = getWorkdaysInMonth(monthInfo.year, monthInfo.month, monthInfo.maxDay || 31);
     const monthStr = `${monthInfo.year}-${String(monthInfo.month).padStart(2, '0')}`;
     console.log(`   📆 ${workdays.length} ngày làm việc`);
-    
+
     let monthRecords = 0;
     let monthStats = { present: 0, leave: 0, businessTrip: 0, absent: 0, ot: 0 };
-    
+
     for (const userId of userIds) {
       // Init monthly data
       const key = `${userId}-${monthStr}`;
@@ -243,16 +245,16 @@ exports.seed = async function(knex) {
         totalOvertimeHours: 0,
         totalOtWorkingUnits: 0
       };
-      
+
       for (const date of workdays) {
         const appKey = `${userId}-${date}`;
-        
+
         // Check các trường hợp đặc biệt từ applications
         const hasLeave = leaveMap.has(appKey);
         const hasBusinessTrip = businessTripMap.has(appKey);
         const hasOT = overtimeMap.has(appKey);
         const hasForgotCheck = forgotCheckMap.has(appKey);
-        
+
         // CASE 1: Nghỉ phép - không có time_attendance record
         if (hasLeave) {
           monthlyData[key].approvedLeaveDays++;
@@ -260,14 +262,14 @@ exports.seed = async function(knex) {
           monthStats.leave++;
           continue;
         }
-        
+
         // CASE 2: Công tác - tạo record với flag đặc biệt
         if (hasBusinessTrip) {
           monthlyData[key].businessTripDays++;
           monthlyData[key].totalWorkingUnits += 1; // Công tác tính 1 công
           monthlyData[key].presentDays++;
           monthStats.businessTrip++;
-          
+
           // Tạo attendance record cho công tác (8h làm việc chuẩn)
           batch.push({
             userId,
@@ -289,7 +291,7 @@ exports.seed = async function(knex) {
           totalRecords++;
           continue;
         }
-        
+
         // CASE 3: Random nghỉ không phép (3% mỗi ngày)
         if (Math.random() < 0.03) {
           monthlyData[key].unauthorizedAbsenceDays++;
@@ -297,7 +299,7 @@ exports.seed = async function(knex) {
           monthStats.absent++;
           continue;
         }
-        
+
         // CASE 4: Đi làm bình thường
         // Kiểm tra forgot-check để điều chỉnh thời gian
         let times;
@@ -310,7 +312,7 @@ exports.seed = async function(knex) {
             if (actualTime) {
               times.checkInHour = actualTime.getHours();
               times.checkInMinute = actualTime.getMinutes();
-              times.checkInTime = `${String(times.checkInHour).padStart(2,'0')}:${String(times.checkInMinute).padStart(2,'0')}:00`;
+              times.checkInTime = `${String(times.checkInHour).padStart(2, '0')}:${String(times.checkInMinute).padStart(2, '0')}:00`;
             }
           } else {
             // Quên check-out: dùng actualTime làm check-out
@@ -319,20 +321,20 @@ exports.seed = async function(knex) {
             if (actualTime) {
               times.checkOutHour = actualTime.getHours();
               times.checkOutMinute = actualTime.getMinutes();
-              times.checkOutTime = `${String(times.checkOutHour).padStart(2,'0')}:${String(times.checkOutMinute).padStart(2,'0')}:00`;
+              times.checkOutTime = `${String(times.checkOutHour).padStart(2, '0')}:${String(times.checkOutMinute).padStart(2, '0')}:00`;
             }
           }
         } else {
           times = generateDayTimes();
         }
-        
+
         const workHours = calculateWorkHours(times.checkInHour, times.checkInMinute, times.checkOutHour, times.checkOutMinute);
         const { lateMinutes, earlyMinutes } = calculateLateness(times.checkInHour, times.checkInMinute, times.checkOutHour, times.checkOutMinute);
-        
+
         // Tính công: 1 công nếu làm >= 4h
         let dailyWorkingUnit = workHours >= 4 ? 1 : 0.5;
         let otWorkingUnit = 0;
-        
+
         // CASE 5: Có đơn OT được duyệt
         if (hasOT) {
           const otData = overtimeMap.get(appKey);
@@ -342,7 +344,7 @@ exports.seed = async function(knex) {
           monthlyData[key].totalOtWorkingUnits += otWorkingUnit;
           monthStats.ot++;
         }
-        
+
         // Cập nhật monthly data
         monthlyData[key].presentDays++;
         monthlyData[key].totalWorkHours += workHours;
@@ -352,7 +354,7 @@ exports.seed = async function(knex) {
         if (lateMinutes > 0) monthlyData[key].lateDays++;
         if (earlyMinutes > 0) monthlyData[key].earlyLeaveDays++;
         monthStats.present++;
-        
+
         batch.push({
           userId,
           date,
@@ -369,37 +371,37 @@ exports.seed = async function(knex) {
           created_at: new Date(),
           updated_at: new Date()
         });
-        
+
         monthRecords++;
         totalRecords++;
-        
+
         if (batch.length >= batchSize) {
           await knex('time_attendances').insert(batch);
           batch = [];
         }
       }
     }
-    
+
     if (batch.length > 0) {
       await knex('time_attendances').insert(batch);
       batch = [];
     }
-    
+
     console.log(`   ✅ ${monthRecords} time_attendances records`);
     console.log(`   📊 Thống kê: Present=${monthStats.present}, Leave=${monthStats.leave}, BusinessTrip=${monthStats.businessTrip}, Absent=${monthStats.absent}, OT=${monthStats.ot}`);
   }
-  
+
   console.log(`\n📊 Tổng: ${totalRecords} time_attendances records`);
 
   // =============================================
   // STEP 5: Tạo monthly_attendances từ dữ liệu đã tính
   // =============================================
   console.log('\n🔄 Đang tạo monthly_attendances...');
-  
+
   const monthlyRecords = Object.values(monthlyData).map((data) => {
     const d = data;
     const avgHours = d.presentDays > 0 ? d.totalWorkHours / d.presentDays : 0;
-    
+
     return {
       userId: d.userId,
       month: d.month,
@@ -430,17 +432,17 @@ exports.seed = async function(knex) {
       updated_at: new Date()
     };
   });
-  
+
   // Tất cả users đều có record monthly (kể cả nghỉ cả tháng)
   const validMonthlyRecords = monthlyRecords.filter(r => r.totalScheduledDays > 0);
-  
+
   // Insert batch
   const monthlyBatchSize = 100;
   for (let i = 0; i < validMonthlyRecords.length; i += monthlyBatchSize) {
     const batchInsert = validMonthlyRecords.slice(i, i + monthlyBatchSize);
     await knex('monthly_attendances').insert(batchInsert);
   }
-  
+
   console.log(`   ✅ ${validMonthlyRecords.length} monthly_attendances records`);
 
   // =============================================
@@ -448,26 +450,26 @@ exports.seed = async function(knex) {
   // =============================================
   console.log('\n' + '='.repeat(70));
   console.log('✅ HOÀN THÀNH SEED DỮ LIỆU CHẤM CÔNG!');
-  
+
   const verifyTime = await knex('time_attendances')
     .whereRaw("date >= '2025-10-01' AND date <= '2025-12-31'")
     .count('* as count')
     .first();
-  
+
   const verifyMonthly = await knex('monthly_attendances')
     .whereIn('month', ['2025-10', '2025-11', '2025-12'])
     .count('* as count')
     .first();
-  
+
   console.log(`   📊 time_attendances: ${verifyTime.count} records`);
   console.log(`   📊 monthly_attendances: ${verifyMonthly.count} records`);
-  
+
   // Sample data với đầy đủ thông tin
   const samples = await knex('monthly_attendances')
     .whereIn('month', ['2025-10', '2025-11', '2025-12'])
     .andWhere('presentDays', '>', 0)
     .limit(3);
-  
+
   for (const sample of samples) {
     console.log(`\n📋 Sample (user ${sample.userId}, ${sample.month}):`);
     console.log(`   📅 Ngày làm việc: ${sample.totalScheduledDays}`);
@@ -478,7 +480,7 @@ exports.seed = async function(knex) {
     console.log(`   💼 Tổng công: ${sample.totalWorkingUnits} | OT: ${sample.totalOtWorkingUnits} công`);
     console.log(`   🕐 Tổng giờ làm: ${sample.totalWorkHours}h | OT: ${sample.totalOvertimeHours}h`);
   }
-  
+
   console.log('\n' + '='.repeat(70));
   console.log('📝 GHI CHÚ: Chạy script recalculate_monthly.cjs để tính penalty và OT salary');
   console.log('='.repeat(70));

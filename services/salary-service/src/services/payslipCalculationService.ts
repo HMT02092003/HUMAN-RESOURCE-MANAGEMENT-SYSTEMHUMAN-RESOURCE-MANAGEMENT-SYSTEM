@@ -50,11 +50,11 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
     };
   }
   const records = Array.isArray(payload.results) ? payload.results : (Array.isArray(payload) ? payload : []);
-  
+
   if (records.length === 0) {
-    return { 
-      success: false, 
-      inserted: 0, 
+    return {
+      success: false,
+      inserted: 0,
       message: 'Không có bảng chấm công đã được duyệt cho tháng này',
       usersWithoutContracts: [],
       usersWithoutApprovedAttendance: []
@@ -66,9 +66,9 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
   // Lấy danh sách userId
   const userIds = [...new Set(records.map((r: any) => String(r.userId || r.user_id)))].filter(Boolean);
   if (userIds.length === 0) {
-    return { 
-      success: false, 
-      inserted: 0, 
+    return {
+      success: false,
+      inserted: 0,
       message: 'Không tìm thấy người dùng nào trong dữ liệu chấm công',
       usersWithoutContracts: [],
       usersWithoutApprovedAttendance: []
@@ -80,7 +80,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
     .whereIn('user_id', userIds as any)
     .where({ year, month })
     .select('user_id');
-  
+
   const existingUserIds = new Set(existingPayslips.map(p => String(p.user_id)));
 
   // Lọc ra những user chưa có bảng lương
@@ -90,9 +90,9 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
   });
 
   if (newRecords.length === 0) {
-    return { 
-      success: false, 
-      inserted: 0, 
+    return {
+      success: false,
+      inserted: 0,
       message: 'Tất cả bảng lương tháng này đã tồn tại',
       skipped: records.length,
       usersWithoutContracts: [],
@@ -105,19 +105,19 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
   // Lấy hợp đồng đang hiệu lực cho mỗi user
   // Date to check: bất kỳ ngày nào trong tháng (dùng ngày 15 để an toàn)
   const checkDate = new Date(year, month - 1, 15).toISOString().split('T')[0];
-  
+
   const activeContractsMap = new Map();
   const usersWithoutContracts: string[] = [];
-  const EMPLOYEE_SERVICE_URL = process.env.EMPLOYEE_SERVICE_URL || 'http://127.0.0.1:4002/api';
-  
+  const EMPLOYEE_SERVICE_URL = process.env.EMPLOYEE_SERVICE_URL || 'http://127.0.0.1:4002';
+
   console.log('[salary-service] Fetching active contracts for users:', newUserIds.length, 'on date:', checkDate);
-  
+
   // Gọi sang employee-service để lấy hợp đồng đang hiệu lực
   await Promise.all(newUserIds.map(async (userId) => {
-      try {
+    try {
       const contractAxiosCfg: any = { params: { date: checkDate } };
       if (options?.authToken) contractAxiosCfg.headers = { Authorization: `Bearer ${options.authToken}` };
-      const contractUrl = `${EMPLOYEE_SERVICE_URL}/contracts/user/${userId}/active`;
+      const contractUrl = `${EMPLOYEE_SERVICE_URL}/api/contracts/user/${userId}/active`;
       console.log('[salary-service] Requesting contract:', contractUrl, 'with params:', contractAxiosCfg.params);
       const contractResp = await axios.get(
         contractUrl,
@@ -138,9 +138,9 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
 
   // Lấy salary profiles theo contract_id
   const contractIds = [...activeContractsMap.values()].map((c: any) => c.id).filter(Boolean);
-  
+
   console.log('[salary-service] Active contracts found:', contractIds.length, 'out of', newUserIds.length, 'users');
-  
+
   // If some users do not have active contracts, collect them and fetch basic user info for the response
   let missingContractUsers: Array<{ userId: number | string; username: string; fullName: string }> = [];
   if (usersWithoutContracts.length > 0) {
@@ -195,7 +195,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
   // Lấy allowances từ bảng trung gian
   const profileIds = [...profileMap.values()].map(p => Number(p.id)).filter(Boolean);
   let allowanceRows: any[] = [];
-  
+
   if (profileIds.length > 0) {
     console.log('[salary-service] fetching allowances for profileIds:', profileIds);
     allowanceRows = await EmployeeSalaryProfileAllowance.query()
@@ -207,7 +207,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
   // Lấy default_amount từ bảng allowance_types
   const allowanceTypeIds = [...new Set(allowanceRows.map(r => Number(r.allowance_type_id)).filter(Boolean))];
   const allowanceTypeMap = new Map();
-  
+
   if (allowanceTypeIds.length > 0) {
     console.log('[salary-service] fetching allowance types for ids:', allowanceTypeIds);
     const AllowanceType = (await import('../Model/AllowanceType')).default;
@@ -240,7 +240,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
 
   // Tạo dữ liệu insert
   const insertRows: any[] = [];
-  
+
   // Only process records for users that have active contracts and a salary profile
   const processingRecords = newRecords.filter((r: any) => {
     const uid = String(r.userId || r.user_id);
@@ -250,11 +250,11 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
   for (const rec of processingRecords) {
     const uid = String(rec.userId || rec.user_id);
     const profile = profileMap.get(uid);
-    
+
     if (!profile) {
       console.warn(`[salary-service] No profile found for user ${uid}, skipping allowances`);
     }
-    
+
     const baseSalary = Number(profile?.base_salary || 0);
     // Lấy tổng allowances cho profile hiện tại
     const allowancesSum = profile && allowancesMap.has(Number(profile.id)) ? allowancesMap.get(Number(profile.id)) || 0 : 0;
@@ -277,7 +277,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
     // ✨ Lấy tổng công từ attendance record
     const totalWorkingUnits = Number(rec.totalWorkingUnits || 0);
     const totalOtWorkingUnits = Number(rec.totalOtWorkingUnits || 0);
-    
+
     console.log(`📊 [salary-service] User ${uid}: ${totalWorkingUnits.toFixed(4)} công (trong đó ${totalOtWorkingUnits.toFixed(4)} công OT)`);
     console.log(`📊 [salary-service] Số công chuẩn: ${standardWorkingDays}, Lương cơ bản: ${baseSalary.toLocaleString('vi-VN')}`);
 
@@ -285,7 +285,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
     // Lương/công = Lương cơ bản / Số công chuẩn
     const salaryPerUnit = standardWorkingDays > 0 ? round2(baseSalary / standardWorkingDays) : 0;
     const salaryFromWorkingUnits = round2(salaryPerUnit * totalWorkingUnits);
-    
+
     console.log(`💰 [salary-service] Lương/công: ${salaryPerUnit.toLocaleString('vi-VN')} VNĐ`);
     console.log(`💰 [salary-service] Lương từ công: ${salaryFromWorkingUnits.toLocaleString('vi-VN')} VNĐ`);
 
@@ -293,12 +293,12 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
     const totalScheduledDays = Number(rec.totalScheduledDays || rec.totalDays || standardWorkingDays);
     const unauthorizedAbsencePenaltyPerDay = totalScheduledDays > 0 ? round2(baseSalary / totalScheduledDays) : 0;
     const totalUnauthorizedAbsencePenalty = Number(rec.unauthorizedAbsenceDays || 0) * unauthorizedAbsencePenaltyPerDay;
-    
+
     // Ưu tiên dùng các giá trị precomputed từ attendance
     const totalLatePenalty = Number(rec.totalLatePenalty || 0);
     const totalEarlyLeavePenalty = Number(rec.totalEarlyLeavePenalty || 0);
     const penaltyFromRec = Number(rec.totalPenalty || 0);
-    
+
     // Nếu attendance đã tính totalPenalty thì dùng nó, không thì tính tổng
     const computedPenalty = round2(totalLatePenalty + totalEarlyLeavePenalty + totalUnauthorizedAbsencePenalty);
     const totalPenalty = penaltyFromRec > 0 ? round2(penaltyFromRec) : computedPenalty;
@@ -310,7 +310,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
     let socialInsurance = 0, healthInsurance = 0, unemploymentInsurance = 0;
     // Nếu insurance_salary = 0 hoặc null thì dùng baseSalary
     const insBase = Number(profile?.insurance_salary) || baseSalary;
-    
+
     const socialRate = bhRates?.social != null ? Number(bhRates.social) : (bhxh?.rate != null ? Number(bhxh.rate) : 0);
     const healthRate = bhRates?.health != null ? Number(bhRates.health) : (bhyt?.rate != null ? Number(bhyt.rate) : 0);
     const unemploymentRate = bhRates?.unemployment != null ? Number(bhRates.unemployment) : (unemployment?.rate != null ? Number(unemployment.rate) : 0);
@@ -325,7 +325,7 @@ export async function calculateAndInsertPayslipsForMonth(monthStr: string, optio
 
     // Tổng khấu trừ = 3 bảo hiểm + thuế TNCN + phạt
     const totalDeductions = round2(socialInsurance + healthInsurance + unemploymentInsurance + totalPenalty + personalIncomeTax);
-    
+
     // Lương thực nhận = lương gộp - tổng khấu trừ
     const net = round2(gross - totalDeductions);
 

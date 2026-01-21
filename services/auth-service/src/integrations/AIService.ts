@@ -1,8 +1,7 @@
 import axios from 'axios';
 import FormData from 'form-data';
 
-const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:5000';
-const API_GATEWAY_URL = `http://localhost:${process.env.API_GATEWAY_PORT || 4000}`;
+const API_GATEWAY_URL = process.env.API_GATEWAY_URL || `http://localhost:${process.env.API_GATEWAY_PORT || 4000}`;
 
 class AIService {
   /**
@@ -17,7 +16,7 @@ class AIService {
       if (userData) headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
 
       const response = await axios.post(
-        `${AI_SERVICE_URL}/api/register-face`,
+        `${API_GATEWAY_URL}/api/ai/register-face`,
         formData,
         { headers, timeout: 30000 }
       );
@@ -40,7 +39,7 @@ class AIService {
       if (userData) headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
 
       const response = await axios.post(
-        `${AI_SERVICE_URL}/api/verify-face`,
+        `${API_GATEWAY_URL}/api/ai/verify-face`,
         formData,
         { headers, timeout: 30000 }
       );

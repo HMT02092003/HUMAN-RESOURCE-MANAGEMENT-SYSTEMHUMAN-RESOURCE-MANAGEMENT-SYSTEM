@@ -21,7 +21,7 @@ EXPOSE 4000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:4000/gateway-health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+  CMD node -e "require('http').get('http://localhost:' + (process.env.PORT || 4100) + '/gateway-health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 # Set memory limit for Node.js
 ENV NODE_OPTIONS="--max-old-space-size=512"

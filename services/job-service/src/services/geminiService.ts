@@ -24,7 +24,13 @@ if (!apiKey) {
   console.error('[Gemini] GEMINI_API_KEY chưa được cấu hình!');
 }
 
-const client = apiKey ? new GoogleGenAI({ apiKey, httpOptions: { apiVersion: 'v1alpha' } }) : null;
+const client = apiKey ? new GoogleGenAI({
+  apiKey,
+  httpOptions: {
+    apiVersion: 'v1alpha',
+    timeout: 60000 // Increase timeout to 60 seconds for Gemini calls
+  }
+}) : null;
 
 function ensureGeminiAvailable() {
   if (!client) {
@@ -38,58 +44,62 @@ function ensureGeminiAvailable() {
  */
 async function generateContentWithCascade(prompt: string): Promise<string> {
   ensureGeminiAvailable();
-  
+
   let lastError: any = null;
-  
+
   for (let i = 0; i < MODEL_CASCADE.length; i++) {
     const modelName = MODEL_CASCADE[i];
-    
+
     try {
       console.log(`[Gemini] Trying model: ${modelName} (${i + 1}/${MODEL_CASCADE.length})`);
-      
+
       const response = await client!.models.generateContent({
         model: modelName,
         contents: prompt
       });
-      
+
       const text = response && typeof response.text === 'string' ? response.text : '';
-      
+
       if (!text || text.trim().length === 0) {
         throw new Error('Empty response from model');
       }
-      
+
       console.log(`✅ [Gemini] Success with model: ${modelName}`);
       return text;
-      
+
     } catch (error: any) {
       lastError = error;
       const errorMsg = error?.message || String(error);
-      
-      // Check if it's a rate limit error
-      const isRateLimitError = 
+
+      // Check if it's a rate limit or overloaded error that should trigger fallback
+      const errorMsgLower = errorMsg.toLowerCase();
+      const isRetryableError =
         errorMsg.includes('429') ||
-        errorMsg.includes('rate limit') ||
-        errorMsg.includes('quota') ||
+        errorMsg.includes('503') ||
+        errorMsg.includes('500') ||
+        errorMsgLower.includes('rate limit') ||
+        errorMsgLower.includes('quota') ||
+        errorMsgLower.includes('overloaded') ||
+        errorMsgLower.includes('exhausted') ||
+        errorMsgLower.includes('unavailable') ||
         errorMsg.includes('RESOURCE_EXHAUSTED');
-      
-      if (isRateLimitError) {
-        console.warn(`⚠️ [Gemini] Rate limit hit for model: ${modelName}`);
-        
+
+      if (isRetryableError) {
+        console.warn(`⚠️ [Gemini] Model ${modelName} failed (retryable): ${errorMsg}`);
+
         // If not the last model, try next one
         if (i < MODEL_CASCADE.length - 1) {
           console.log(`🔄 [Gemini] Cascading to next model...`);
           continue;
         }
       }
-      
-      // For non-rate-limit errors, throw immediately
-      if (!isRateLimitError) {
-        console.error(`❌ [Gemini] Error with model ${modelName}:`, errorMsg);
-        throw error;
-      }
+
+      // For truly fatal errors or if we've exhausted all models
+      console.error(`❌ [Gemini] Final error with model ${modelName}:`, errorMsg);
+      throw error;
     }
   }
-  
+
   // If we get here, all models failed with rate limit
   console.error('❌ [Gemini] All models exhausted due to rate limits');
   throw new Error(`All Gemini models are rate limited. Last error: ${lastError?.message || 'Unknown'}`);
@@ -105,21 +115,21 @@ function parseGeminiJSON(raw: string): any {
   }
 
   let cleaned = raw.trim();
-  
+
   // Remove markdown code blocks
   cleaned = cleaned.replace(/^```(?:json)?\s*/i, '');
   cleaned = cleaned.replace(/```\s*$/i, '');
-  
+
   // Extract JSON object by finding first { and last }
   const firstBrace = cleaned.indexOf('{');
   const lastBrace = cleaned.lastIndexOf('}');
-  
+
   if (firstBrace === -1 || lastBrace === -1 || firstBrace >= lastBrace) {
     throw new Error('Không tìm thấy JSON object hợp lệ trong response');
   }
-  
+
   cleaned = cleaned.substring(firstBrace, lastBrace + 1);
-  
+
   try {
     return JSON.parse(cleaned);
   } catch (error: any) {
@@ -690,9 +700,9 @@ export async function validateTaskDependencies(params: {
     recommendations: valid
       ? []
       : [
-          'Không thể bắt đầu task này khi các task phụ thuộc chưa hoàn thành',
-          'Đề xuất: Đợi các task phụ thuộc xong hoặc loại bỏ dependency nếu không cần thiết'
-        ]
+        'Không thể bắt đầu task này khi các task phụ thuộc chưa hoàn thành',
+        'Đề xuất: Đợi các task phụ thuộc xong hoặc loại bỏ dependency nếu không cần thiết'
+      ]
   };
 }
 

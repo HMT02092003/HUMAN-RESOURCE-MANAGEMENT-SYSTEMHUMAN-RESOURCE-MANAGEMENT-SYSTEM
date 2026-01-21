@@ -28,7 +28,7 @@ function getLocalIpAddress(): string {
   return '127.0.0.1';
 }
 
-const API_GATEWAY_URL = `http://localhost:${process.env.API_GATEWAY_PORT || 4000}`;
+const API_GATEWAY_URL = process.env.API_GATEWAY_URL || `http://localhost:${process.env.API_GATEWAY_PORT || 4000}`;
 const { Gender, statusOptions, Relationship } = constantConfig;
 
 // Resolve absolute path for frontend public directory
@@ -124,7 +124,7 @@ export const getAllUsers = async (req: any, res: Response) => {
         message: "Người dùng không được xác thực"
       });
     }
-    
+
     const scope = "users";
     let inputs = { ...req.query, ...req.body };
 
@@ -159,11 +159,11 @@ export const getAllUsers = async (req: any, res: Response) => {
     const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
     const authToken = token ? `Bearer ${token}` : undefined;
     const currentUserData = getUserData(req);
-    
+
     const usersWithDetails = await Promise.all(result.results.map(async (user: any) => {
       let department = null;
       let chevron = null;
-      
+
       try {
         if (user.departmentId) {
           department = await EmployeeService.getDepartmentById(user.departmentId, authToken, currentUserData);
@@ -171,7 +171,7 @@ export const getAllUsers = async (req: any, res: Response) => {
       } catch (e: any) {
         console.error(`Error fetching department ${user.departmentId}:`, e.message || 'Unknown error');
       }
-      
+
       try {
         if (user.chevronId) {
           chevron = await EmployeeService.getChevronDetail(user.chevronId, authToken, currentUserData);
@@ -179,7 +179,7 @@ export const getAllUsers = async (req: any, res: Response) => {
       } catch (e: any) {
         console.error(`Error fetching chevron ${user.chevronId}:`, e.message || 'Unknown error');
       }
-      
+
       return {
         ...user,
         department,
@@ -250,11 +250,11 @@ export const getAllUsersAll = async (req: any, res: Response) => {
     // Fetch department/chevron IDs if name filters are provided
     let departmentIdsToFilter: number[] | null = null;
     let chevronIdsToFilter: number[] | null = null;
-    
+
     const token = req.cookies.token || req.headers.authorization?.split(' ')[1];
     const authToken = token ? `Bearer ${token}` : undefined;
     const currentUserData = getUserData(req);
-    
+
     if (departmentNameFilter) {
       try {
         const allDepartments = await EmployeeService.getAllDepartments(authToken, currentUserData);
@@ -266,7 +266,7 @@ export const getAllUsersAll = async (req: any, res: Response) => {
         console.error('Error fetching departments for filter:', e);
       }
     }
-    
+
     if (chevronNameFilter) {
       try {
         const allChevrons = await EmployeeService.getAllChevrons(authToken, currentUserData);
@@ -377,12 +377,12 @@ export const getAllUsersAll = async (req: any, res: Response) => {
 
     // Execute with pagination and join role (with role name filter if present)
     let joinedQuery = query.withGraphJoined('[role]');
-    
+
     // Apply role name filter after join
     if (roleNameFilter) {
       joinedQuery = joinedQuery.where('role.name', 'like', `%${roleNameFilter}%`);
     }
-    
+
     const result: any = await joinedQuery.page(page, pageSize);
 
     console.log('getAllUsersAll - query result:', result.results?.length, 'total:', result.total);
@@ -1143,7 +1143,7 @@ export const updateUser = async (req: Request, res: Response) => {
 
             let imageBuffer = null;
             let imageName = photoFile.originalname || 'face.jpg';
-            
+
             if (fs.existsSync(savedPhotoPath)) {
               console.log('📎 [UPDATE USER] Adding image from saved path');
               imageBuffer = fs.readFileSync(savedPhotoPath);

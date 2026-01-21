@@ -7,7 +7,7 @@ from typing import Optional
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv()  # Load .env file with PORT=4106
 
 class Settings(BaseSettings):
     """Application settings"""
@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     SERVICE_NAME: str = "AI Face Recognition Service"
     VERSION: str = "1.0.0"
     DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
-    PORT: int = int(os.getenv("PORT", "4006"))
+    PORT: int = int(os.getenv("PORT", "4106"))
     
     # Database Configuration
     DATABASE_URL: str = os.getenv(
@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = 'ignore'
 
 # Global settings instance
 settings = Settings()

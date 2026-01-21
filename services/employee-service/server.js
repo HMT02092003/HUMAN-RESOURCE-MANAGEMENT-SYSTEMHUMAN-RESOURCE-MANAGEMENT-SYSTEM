@@ -32,8 +32,8 @@ app.use((req, res, next) => {
 
 // Health check with enhanced info
 app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'OK', 
+  res.status(200).json({
+    status: 'OK',
     timestamp: new Date().toISOString(),
     service: 'Employee Service v2.0',
     port: PORT,
@@ -62,7 +62,7 @@ app.use('/api', employeeRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'Route not found',
     path: req.originalUrl,
     timestamp: new Date().toISOString()
@@ -72,7 +72,7 @@ app.use('*', (req, res) => {
 // Enhanced error handling
 app.use((err, req, res, next) => {
   const timestamp = new Date().toISOString();
-  
+
   // Log error with context
   console.error(`[${timestamp}] Employee Service Error:`, {
     message: err.message,
@@ -109,7 +109,7 @@ process.on('SIGINT', () => {
 });
 
 // Start server with enhanced startup info
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🏢 Employee Service v2.0 started successfully!`);
   console.log(`📍 Port: ${PORT}`);
   console.log(`🌐 Health: http://localhost:${PORT}/health`);

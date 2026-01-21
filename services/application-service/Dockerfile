@@ -17,7 +17,7 @@ RUN mkdir -p uploads
 EXPOSE 4004
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:4004/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+  CMD node -e "require('http').get('http://localhost:' + (process.env.PORT || 4108) + '/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 ENV NODE_OPTIONS="--max-old-space-size=256"
 

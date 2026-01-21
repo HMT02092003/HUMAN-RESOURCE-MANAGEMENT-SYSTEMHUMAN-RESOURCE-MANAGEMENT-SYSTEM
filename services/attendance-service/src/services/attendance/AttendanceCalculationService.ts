@@ -431,28 +431,28 @@ export class AttendanceCalculationService {
       const overtimeApp = applications.find((app: any) => {
         // Accept different representations of approved status (string 'approved' or numeric 1)
         const isApprovedStatus = app.status === 'approved' || app.status === 1 || app.status === '1' || (typeof app.status === 'string' && app.status.toLowerCase() === 'approved');
-        
+
         console.log(`🔍 Checking app ${app.id}:`, { type: app.type, status: app.status, isApprovedStatus });
-        
+
         if (app.type !== 'overtime' || !isApprovedStatus) return false;
-        
+
         const appData = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
         const otDate = appData.overtimeDate || appData.date;
         if (!otDate) {
           console.log(`  ⚠️ App ${app.id}: No overtimeDate/date field`);
           return false;
         }
-        
+
         const normalizedOtDate = dayjs(otDate).tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
         const normalizedCheckDate = dayjs(date).format('YYYY-MM-DD');
-        
+
         console.log(`  📅 App ${app.id} date comparison:`, {
           otDateUTC: otDate,
           otDateVN: normalizedOtDate,
           checkDate: normalizedCheckDate,
           match: normalizedOtDate === normalizedCheckDate
         });
-        
+
         return normalizedOtDate === normalizedCheckDate;
       });
 
@@ -761,11 +761,12 @@ export class AttendanceCalculationService {
 
           // Tính số giờ OT (raw - chưa nhân hệ số)
           const otHours = result.otMinutes / 60;
-          
-          // ✨ LƯU RAW OT WORKING UNIT (chưa nhân rate)
-          // Công OT = số giờ OT / 8 (1 ngày công)
-          // Rate sẽ được nhân ở MonthlyReportService để tránh nhân 2 lần
-          result.otWorkingUnit = otHours / 8;
+
+          // ✨ NHÂN HỆ SỐ OT (Hệ số lấy từ settings)
+          const otRate = isHoliday ? (settings.holidayRate?.rate || 3.0) : (settings.overtimeRate?.rate || 1.5);
+
+          // Công OT = (số giờ OT / 8) * hệ số
+          result.otWorkingUnit = (otHours / 8) * otRate;
           result.overtimeHours = otHours; // ✨ Lưu số giờ OT thực tế
           result.otSalary = 0; // Không tính lương OT riêng
 

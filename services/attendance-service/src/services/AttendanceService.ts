@@ -1,6 +1,5 @@
 // AttendanceService façade — delegates heavy work to small services
 import axios from 'axios';
-import os from 'os';
 import fs from 'fs';
 import path from 'path';
 import { MonthlyReportService } from './MonthlyReportService';
@@ -10,19 +9,8 @@ import MonthlySummaryModel from '@/Models/MonthlySummaryModel';
 import { getDecodedToken } from '@/utils/decode-token';
 import CheckScopeService from './CheckScopeService';
 
-function getLocalIpAddress(): string {
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    const list = interfaces[name] as any[] | undefined;
-    if (!list) continue;
-    for (const iface of list) {
-      if (iface && iface.family === 'IPv4' && !iface.internal) return iface.address;
-    }
-  }
-  return '127.0.0.1';
-}
-
-const API_GATEWAY_URL = `http://${getLocalIpAddress()}:${process.env['API_GATEWAY_PORT'] || 4000}`;
+const API_GATEWAY_URL = process.env['API_GATEWAY_URL'] || `http://localhost:${process.env['API_GATEWAY_PORT'] || 4000}`;
+const AUTH_SERVICE_URL = process.env['AUTH_SERVICE_URL'] || `http://localhost:${process.env['AUTH_SERVICE_PORT'] || 4001}`;
 
 const logger = { debug: () => { }, info: () => { }, warn: () => { }, error: (...args: any[]) => console.error(...args) };
 
@@ -33,11 +21,11 @@ export class AttendanceService {
    * Supports server-side filtering, sorting, and searching using ObjectionJS
    */
   static async getMonthlySummariesByScope(
-    permissionKey: string, 
-    req: any, 
-    pager?: { 
-      page?: number; 
-      pageSize?: number; 
+    permissionKey: string,
+    req: any,
+    pager?: {
+      page?: number;
+      pageSize?: number;
       month?: string;
       sort?: string;
       order?: string;
@@ -69,7 +57,7 @@ export class AttendanceService {
         throw err;
       }
 
-      const AUTH_SERVICE_URL = `http://${getLocalIpAddress()}:${process.env['AUTH_SERVICE_PORT'] || 4001}`;
+      // AUTH_SERVICE_URL is now defined at file level
 
       // Step 1: Get scope userIds from check-scope
       // Forward gateway injected user-data header if present so auth-service accepts the call
@@ -197,11 +185,11 @@ export class AttendanceService {
       // Apply filters for DB fields only
       const dbFields = ['month', 'isApproved', 'totalScheduledDays', 'presentDays', 'absentDays',
         'approvedLeaveDays', 'unauthorizedAbsenceDays', 'businessTripDays', 'lateDays', 'earlyLeaveDays',
-        'totalLateMinutes', 'totalEarlyLeaveMinutes', 'totalWorkHours', 'averageWorkHours', 
+        'totalLateMinutes', 'totalEarlyLeaveMinutes', 'totalWorkHours', 'averageWorkHours',
         'totalWorkingUnits', 'totalOvertimeHours', 'totalOtWorkingUnits', 'totalOvertimeSalary',
         'totalLatePenalty', 'totalEarlyLeavePenalty', 'totalUnauthorizedAbsencePenalty', 'totalPenalty',
         'created_at', 'updated_at'];
-      
+
       for (const field of dbFields) {
         const value = pager?.[field];
         if (value !== undefined && value !== null && String(value).trim() !== '') {
@@ -214,11 +202,11 @@ export class AttendanceService {
             if (!allMonths || trimmedValue) {
               baseQuery.where(field, 'ilike', `%${trimmedValue}%`);
             }
-          } else if (['totalScheduledDays', 'presentDays', 'absentDays', 'approvedLeaveDays', 
-                      'unauthorizedAbsenceDays', 'businessTripDays', 'lateDays', 'earlyLeaveDays',
-                      'totalLateMinutes', 'totalEarlyLeaveMinutes', 'totalWorkHours', 'averageWorkHours',
-                      'totalWorkingUnits', 'totalOvertimeHours', 'totalOtWorkingUnits', 'totalOvertimeSalary',
-                      'totalLatePenalty', 'totalEarlyLeavePenalty', 'totalUnauthorizedAbsencePenalty', 'totalPenalty'].includes(field)) {
+          } else if (['totalScheduledDays', 'presentDays', 'absentDays', 'approvedLeaveDays',
+            'unauthorizedAbsenceDays', 'businessTripDays', 'lateDays', 'earlyLeaveDays',
+            'totalLateMinutes', 'totalEarlyLeaveMinutes', 'totalWorkHours', 'averageWorkHours',
+            'totalWorkingUnits', 'totalOvertimeHours', 'totalOtWorkingUnits', 'totalOvertimeSalary',
+            'totalLatePenalty', 'totalEarlyLeavePenalty', 'totalUnauthorizedAbsencePenalty', 'totalPenalty'].includes(field)) {
             // Numeric fields - exact match or range
             const numValue = Number(trimmedValue);
             if (!isNaN(numValue)) {
@@ -244,7 +232,7 @@ export class AttendanceService {
       // Step 6: Apply sorting (DB fields only in query)
       const userEnrichedFields = ['fullName', 'username', 'departmentName'];
       const needsInMemorySort = sortField && userEnrichedFields.includes(sortField);
-      
+
       if (sortField && !needsInMemorySort && dbFields.includes(sortField)) {
         baseQuery.orderBy(sortField, sortOrder);
       } else if (!needsInMemorySort) {
@@ -310,7 +298,7 @@ export class AttendanceService {
       try {
         const logPath = path.resolve(process.cwd(), 'logs', 'attendance-debug.log');
         fs.appendFileSync(logPath, `\n=== CATCH in getMonthlySummariesByScope (${new Date().toISOString()}) ===\n${err && err.stack ? err.stack : JSON.stringify(err)}\n`);
-      } catch (e) {}
+      } catch (e) { }
       if (err?.response?.status === 401 || err?.status === 401) {
         const e: any = new Error(err?.response?.data?.message || err?.message || 'Unauthorized');
         e.status = 401;
@@ -402,7 +390,7 @@ export class AttendanceService {
     try {
       // Check user's scope
       const scopeResult = await CheckScopeService.checkUserScope('timeAttendance', token);
-      
+
       if (!scopeResult.hasAccess) {
         throw new Error('Bạn không có quyền duyệt bảng chấm công');
       }
@@ -426,7 +414,7 @@ export class AttendanceService {
 
       // Get all records to approve
       const recordsToApprove = await query;
-      
+
       if (recordsToApprove.length === 0) {
         return { approved: 0, message: 'Không có bảng chấm công nào cần duyệt' };
       }
@@ -442,8 +430,8 @@ export class AttendanceService {
         });
 
       console.log(`[AttendanceService] Approved ${updated} records for month ${month}`);
-      
-      return { 
+
+      return {
         approved: Number(updated || 0),
         total: recordsToApprove.length,
         scopedUsers: scopedUserIds.length,

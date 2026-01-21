@@ -236,107 +236,52 @@ class FaceQualityChecker:
         """
         Tính toán Yaw, Pitch, Roll từ 5 điểm landmarks (InsightFace)
         0: left eye, 1: right eye, 2: nose, 3: left mouth, 4: right mouth
+        
+        NOTE: Sử dụng phương pháp Heuristic (tỷ lệ hình học) thay vì solvePnP để đảm bảo ổn định
+        với 5 điểm landmarks 2D mà không cần 3D model chính xác.
         """
         try:
-            # Use solvePnP for a robust head-pose estimation
-            # landmarks: 5 points: left eye, right eye, nose, left mouth, right mouth
-            image_points = np.array([
-                landmarks[0],  # left eye
-                landmarks[1],  # right eye
-                landmarks[2],  # nose
-                landmarks[3],  # left mouth
-                landmarks[4]   # right mouth
-            ], dtype=np.float64)
+            # Chuyển đổi landmarks sang numpy array float32
+            left_eye = np.array(landmarks[0], dtype=np.float32)
+            right_eye = np.array(landmarks[1], dtype=np.float32)
+            nose = np.array(landmarks[2], dtype=np.float32)
+            left_mouth = np.array(landmarks[3], dtype=np.float32)
+            right_mouth = np.array(landmarks[4], dtype=np.float32)
 
-            # Define a simple 3D model of facial points (approximate, units arbitrary)
-            model_points = np.array([
-                [-30.0,  30.0, -30.0],  # left eye
-                [ 30.0,  30.0, -30.0],  # right eye
-                [  0.0,   0.0,   0.0],  # nose tip
-                [-25.0, -30.0, -30.0],  # left mouth
-                [ 25.0, -30.0, -30.0]   # right mouth
-            ], dtype=np.float64)
+            # 1. Tính YAW (Quay trái/phải)
+            # Dựa trên vị trí mũi so với trung tâm hai mắt
+            eye_dist = np.linalg.norm(right_eye - left_eye)
+            eye_center_x = (left_eye[0] + right_eye[0]) / 2.0
+            
+            # Nếu mũi lệch khỏi trung tâm mắt -> đang quay đầu
+            # Hệ số 70.0 là ước lượng thực nghiệm
+            yaw = ((nose[0] - eye_center_x) / (eye_dist / 2.0)) * 70.0 if eye_dist > 0 else 0.0
 
-            # Build camera matrix approximation using image size
-            if image_shape is None:
-                # default assume 640x480
-                h, w = 480, 640
+            # 2. Tính PITCH (Ngẩng/Cúi)
+            # Dựa trên vị trí mũi theo chiều dọc so với mắt và miệng
+            eye_center_y = (left_eye[1] + right_eye[1]) / 2.0
+            mouth_center_y = (left_mouth[1] + right_mouth[1]) / 2.0
+            face_height = mouth_center_y - eye_center_y
+            
+            if face_height > 0:
+                # Tỷ lệ vị trí mũi trong khoảng mắt-miệng
+                # 0.45 là vị trí trung bình chuẩn của mũi
+                nose_rel_y = (nose[1] - eye_center_y) / face_height
+                pitch = (nose_rel_y - 0.45) * 150.0 # Hệ số 150.0 ước lượng
             else:
-                h, w = int(image_shape[0]), int(image_shape[1])
+                pitch = 0.0
 
-            focal_length = float(w)
-            center = (w / 2.0, h / 2.0)
-            camera_matrix = np.array([
-                [focal_length, 0, center[0]],
-                [0, focal_length, center[1]],
-                [0, 0, 1]
-            ], dtype=np.float64)
-
-            dist_coeffs = np.zeros((4, 1))  # assume no lens distortion
-
-            success, rotation_vector, translation_vector = cv2.solvePnP(
-                model_points,
-                image_points,
-                camera_matrix,
-                dist_coeffs,
-                flags=cv2.SOLVEPNP_ITERATIVE
-            )
-
-            if not success:
-                raise RuntimeError('solvePnP failed')
-
-            # Convert rotation vector to rotation matrix
-            rmat, _ = cv2.Rodrigues(rotation_vector)
-
-            # Convert rotation matrix to Euler angles
-            def rotationMatrixToEulerAngles(R):
-                sy = math.sqrt(R[0, 0] * R[0, 0] + R[1, 0] * R[1, 0])
-                singular = sy < 1e-6
-                if not singular:
-                    x = math.atan2(R[2, 1], R[2, 2])
-                    y = math.atan2(-R[2, 0], sy)
-                    z = math.atan2(R[1, 0], R[0, 0])
-                else:
-                    x = math.atan2(-R[1, 2], R[1, 1])
-                    y = math.atan2(-R[2, 0], sy)
-                    z = 0
-                return np.degrees([y, x, z])  # yaw, pitch, roll
-
-            yaw, pitch, roll = rotationMatrixToEulerAngles(rmat)
+            # 3. Tính ROLL (Nghiêng đầu trái/phải)
+            # Dựa trên độ dốc của đường thẳng nối hai mắt
+            dY = right_eye[1] - left_eye[1]
+            dX = right_eye[0] - left_eye[0]
+            roll = np.degrees(np.arctan2(dY, dX))
 
             return {'yaw': float(yaw), 'pitch': float(pitch), 'roll': float(roll)}
 
         except Exception as e:
-            logger.error(f"Error pose calc (solvePnP fallback): {e}")
-            # Fallback to previous heuristic if solvePnP fails
-            try:
-                left_eye = np.array(landmarks[0], dtype=np.float32)
-                right_eye = np.array(landmarks[1], dtype=np.float32)
-                nose = np.array(landmarks[2], dtype=np.float32)
-                left_mouth = np.array(landmarks[3], dtype=np.float32)
-                right_mouth = np.array(landmarks[4], dtype=np.float32)
-
-                eye_dist = np.linalg.norm(right_eye - left_eye)
-                eye_center_x = (left_eye[0] + right_eye[0]) / 2.0
-                yaw = ((nose[0] - eye_center_x) / (eye_dist / 2.0)) * 70.0 if eye_dist > 0 else 0.0
-
-                eye_center_y = (left_eye[1] + right_eye[1]) / 2.0
-                mouth_center_y = (left_mouth[1] + right_mouth[1]) / 2.0
-                face_height = mouth_center_y - eye_center_y
-                if face_height > 0:
-                    nose_rel_y = (nose[1] - eye_center_y) / face_height
-                    pitch = (nose_rel_y - 0.45) * 150.0
-                else:
-                    pitch = 0.0
-
-                dY = right_eye[1] - left_eye[1]
-                dX = right_eye[0] - left_eye[0]
-                roll = np.degrees(np.arctan2(dY, dX))
-
-                return {'yaw': float(yaw), 'pitch': float(pitch), 'roll': float(roll)}
-            except Exception as e2:
-                logger.error(f"Fallback heuristic failed: {e2}")
-                return {'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
+            logger.error(f"Error calculating head pose (heuristic): {e}")
+            return {'yaw': 0.0, 'pitch': 0.0, 'roll': 0.0}
 
 
 # Singleton instance

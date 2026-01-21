@@ -36,9 +36,9 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, error: err.message });
 });
 
-const salaryServer = app.listen(PORT, async () => {
+const salaryServer = app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 ${serviceName} running on port ${PORT}`);
-  
+
   // Kết nối RabbitMQ để gửi messages (không chạy worker)
   console.log('🔌 Connecting to RabbitMQ for message queuing...');
   try {
@@ -47,7 +47,7 @@ const salaryServer = app.listen(PORT, async () => {
   } catch (err) {
     console.warn('⚠️  RabbitMQ connection failed, using sync fallback');
   }
-  
+
   console.log('💡 Để chạy worker, dùng lệnh: yarn worker');
 });
 

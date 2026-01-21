@@ -40,8 +40,8 @@ wheels/
 Thumbs.db
 
 # Models (sẽ download trong container)
-models/*.onnx
-models/*.pth
+# models/*.onnx
+# models/*.pth
 
 # Git
 .git/

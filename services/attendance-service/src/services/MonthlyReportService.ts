@@ -139,7 +139,7 @@ export class MonthlyReportService {
     let approvedAppsForMonth: any[] = [];
     try {
       const [y, mStr] = (month || '').split('-');
-      const appUrl = (process.env['APPLICATION_SERVICE_URL'] || 'http://127.0.0.1:4004') as string;
+      const appUrl = (process.env['APPLICATION_SERVICE_URL'] || 'http://127.0.0.1:4008') as string;
       const resp = await axios.get(`${appUrl}/api/applications/user/${userId}/approved`, {
         params: { year: parseInt(y || '0'), month: parseInt(mStr || '0') }
       });
@@ -231,7 +231,7 @@ export class MonthlyReportService {
       const lateArrivalPenalty = Number(record.lateArrivalPenalty ?? 0);
       const earlyLeavePenalty = Number(record.earlyLeavePenalty ?? 0);
       const workHours = Number(record.dailyTotalWorkHours ?? record.workHours ?? record.totalHours ?? 0);
-      
+
       /**
        * ✅ KHÔNG NHÂN HỆ SỐ NỮA - DB ĐÃ LƯU GIÁ TRỊ SAU KHI NHÂN RATE!
        * 
@@ -258,7 +258,7 @@ export class MonthlyReportService {
       if (record.hasBusinessTrip || record.type === 'business_trip') { status = 'business_trip'; statusText = 'Công tác'; }
       else if (record.hasApprovedOT) { status = 'overtime'; statusText = 'Làm thêm giờ'; }
       else if (!isWorkDay) { status = 'weekend'; statusText = 'Cuối tuần'; }
-      else if (record.hasApprovedLeave || ['leave','sick-leave'].includes(record.type)) { status = 'approved_leave'; statusText = record.leaveInfo ?? record.leaveTypeName ?? 'Nghỉ phép'; }
+      else if (record.hasApprovedLeave || ['leave', 'sick-leave'].includes(record.type)) { status = 'approved_leave'; statusText = record.leaveInfo ?? record.leaveTypeName ?? 'Nghỉ phép'; }
       else if (isWorkDay && !record.checkInTime && !isFuture) { status = 'absent'; statusText = 'Nghỉ không phép'; }
       else if (record.checkInTime) {
         const late = lateMinutes > 0;
@@ -269,7 +269,7 @@ export class MonthlyReportService {
         else if (early) statusText = 'Về sớm';
       }
 
-  // Prefer the full HolidayModel object for the date if available (added map below)
+      // Prefer the full HolidayModel object for the date if available (added map below)
       const holidayObjForDate = (record._holidayFullObject) ? record._holidayFullObject : undefined;
       const holidayData = holidayObjForDate ? {
         // include full holiday object fields: keep original keys for consumers
@@ -293,7 +293,7 @@ export class MonthlyReportService {
       // Determine leaveApplications array only when no single leave object is set (avoid redundancy)
       const leaveAppsArray = !(singleLeaveObj) ? ((record as any)._leaveFullObjects ?? (leaveAppsFromMap.length > 0 ? leaveAppsFromMap : undefined)) : undefined;
 
-      const leaveData = (record.hasApprovedLeave || ['leave','sick-leave'].includes(record.type) || singleLeaveObj || (leaveAppsFromMap && leaveAppsFromMap.length > 0)) ? {
+      const leaveData = (record.hasApprovedLeave || ['leave', 'sick-leave'].includes(record.type) || singleLeaveObj || (leaveAppsFromMap && leaveAppsFromMap.length > 0)) ? {
         hasApprovedLeave: Boolean(record.hasApprovedLeave),
         leaveType: record.leaveType ?? record.type,
         leaveInfo: record.leaveInfo ?? record.reason ?? null,
@@ -432,9 +432,9 @@ export class MonthlyReportService {
       totalLatePenalty: parseFloat((db.totalLatePenalty ?? totalLatePenalty).toString()) || totalLatePenalty,
       totalEarlyLeavePenalty: parseFloat((db.totalEarlyLeavePenalty ?? totalEarlyLeavePenalty).toString()) || totalEarlyLeavePenalty,
       // Recalculate total penalty to ensure it includes authorized absence
-      totalPenalty: (parseFloat((db.totalLatePenalty ?? totalLatePenalty).toString()) || totalLatePenalty) + 
-                    (parseFloat((db.totalEarlyLeavePenalty ?? totalEarlyLeavePenalty).toString()) || totalEarlyLeavePenalty) +
-                    Math.round(parseFloat((db.totalUnauthorizedAbsencePenalty ?? totalUnauthorizedAbsencePenalty).toString()) || totalUnauthorizedAbsencePenalty),
+      totalPenalty: (parseFloat((db.totalLatePenalty ?? totalLatePenalty).toString()) || totalLatePenalty) +
+        (parseFloat((db.totalEarlyLeavePenalty ?? totalEarlyLeavePenalty).toString()) || totalEarlyLeavePenalty) +
+        Math.round(parseFloat((db.totalUnauthorizedAbsencePenalty ?? totalUnauthorizedAbsencePenalty).toString()) || totalUnauthorizedAbsencePenalty),
       totalOvertimePay: summary.totalOvertimeSalary || 0, // totalOvertimeSalary removed from DB
       totalLateMinutes: parseFloat((db.totalLateMinutes ?? totalLateMinutes).toString()) || totalLateMinutes,
       totalEarlyLeaveMinutes: parseFloat((db.totalEarlyLeaveMinutes ?? totalEarlyLeaveMinutes).toString()) || totalEarlyLeaveMinutes,
@@ -480,7 +480,7 @@ export class MonthlyReportService {
     }
 
     const [yearStr, monthStr] = (month || '').split('-');
-    
+
     // Calculate total overtime hours from daily details for summary
     const summaryTotalOvertimeHours = processedDailyDetails.reduce((sum: number, d: any) => {
       const dayOvertimeHours = Number(d.attendanceData?.overtimeHours ?? 0);
@@ -602,13 +602,13 @@ export class MonthlyReportService {
 
       for (let d = 1; d <= daysInMonth; d++) {
         const dateKey = dayjs(`${m}-${String(d).padStart(2, '0')}`).format('YYYY-MM-DD');
-        
+
         // ✨ Chỉ tính những ngày từ startDate trở đi
         if (userStartDate && dayjs(dateKey).isBefore(userStartDate, 'day')) {
           console.log(`⏭️ [attendance] Skipping ${dateKey} (before startDate ${userStartDate})`);
           continue; // Bỏ qua những ngày trước khi user bắt đầu làm việc
         }
-        
+
         const dow = dayjs(dateKey).day(); // 0-6 Sun-Sat
         const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const dayKey = dayNames[dow] || 'monday';
@@ -683,7 +683,7 @@ export class MonthlyReportService {
         .whereRaw("employee_schedules.date >= ? AND employee_schedules.date <= ?", [startDate, endDate])
         .whereRaw("LOWER(shifts.name) LIKE '%ngh%' OR shifts.start_time = '00:00:00'") // Ca nghỉ ngày
         .select('employee_schedules.date');
-      
+
       const dayOffDaysSet = new Set<string>();
       for (const schedule of dayOffSchedules) {
         dayOffDaysSet.add(dayjs(schedule.date).format('YYYY-MM-DD'));
@@ -738,7 +738,7 @@ export class MonthlyReportService {
           // Recalculate để có dữ liệu chính xác nhất
           // ✨ Cần lấy shift cho ngày này
           const shift = await import('./attendance/ShiftHelper').then(m => m.getShiftForUserAndDate(userId, dateKey));
-          
+
           const calc = await AttendanceCalculationService.calculateAttendance(
             r.checkInTime || null,
             r.checkOutTime || null,
@@ -756,7 +756,7 @@ export class MonthlyReportService {
           const latePenalty = parseFloat((calc.latePenaltyAmount || 0).toString());
           const earlyPenalty = parseFloat((calc.earlyLeavePenaltyAmount || 0).toString());
           // ✅ REMOVED: otMin (deprecated, use otWorkingUnit instead)
-          
+
           // ✨ Lấy công từ calculation
           const dailyUnits = parseFloat((calc.totalWorkingUnit || 0).toString()); // Tổng công (bao gồm cả OT)
           const otUnits = parseFloat((calc.otWorkingUnit || 0).toString()); // Công OT RAW
@@ -805,7 +805,7 @@ export class MonthlyReportService {
             const data = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
             // Chỉ tính nghỉ phép CÓ LƯƠNG (leaveType === 'paid' hoặc không có leaveType = mặc định có lương)
             const isPaidLeave = !data.leaveType || data.leaveType === 'paid' || data.leaveType === 'annual';
-            
+
             if (isPaidLeave) {
               if (data.date) {
                 paidLeaveDaysSet.add(dayjs(data.date).format('YYYY-MM-DD'));
@@ -831,14 +831,14 @@ export class MonthlyReportService {
         if (userStartDate && dayjs(dateKey).isBefore(userStartDate, 'day')) {
           continue;
         }
-        
+
         const isHoliday = holidaySet.has(dateKey);
         const isPaidLeave = paidLeaveDaysSet.has(dateKey);
         const isBusinessTrip = businessTripDaysSet.has(dateKey);
         const hasAttendance = attendanceDaysSet.has(dateKey);
         const isScheduledWork = isScheduledWorkingDay(dateKey);
         const isPast = dayjs(dateKey).isSameOrBefore(todayStr, 'day');
-        
+
         // Chỉ cộng công nếu KHÔNG có chấm công và ngày đã qua
         if (!hasAttendance && isPast) {
           // 1. Nghỉ phép CÓ LƯƠNG vào ngày làm việc → +1 công
@@ -900,7 +900,7 @@ export class MonthlyReportService {
       const unauthorizedAbsenceDates: string[] = [];
       for (let d = 1; d <= daysInMonth; d++) {
         const dateKey = dayjs(`${m}-${String(d).padStart(2, '0')}`).format('YYYY-MM-DD');
-        
+
         // ✨ Bỏ qua những ngày trước startDate
         if (userStartDate && dayjs(dateKey).isBefore(userStartDate, 'day')) {
           console.log(`⏭️ [attendance] Skipping unauthorized check for ${dateKey} (before startDate ${userStartDate})`);
@@ -912,7 +912,7 @@ export class MonthlyReportService {
           console.log(`⏭️ [attendance] Skipping unauthorized check for ${dateKey} (approved day-off)`);
           continue;
         }
-        
+
         if (
           isScheduledWorkingDay(dateKey)
           && dayjs(dateKey).isSameOrBefore(todayStr, 'day')
@@ -1049,27 +1049,29 @@ export class MonthlyReportService {
       if (result.results && result.results.length > 0) {
         // Lấy danh sách unique userIds
         const userIds = [...new Set(result.results.map((r: any) => r.userId))];
-        
+
         // Gọi sang auth-service để lấy thông tin users
         try {
+          const authUrl = process.env['AUTH_SERVICE_URL'] || 'http://auth-service:4101';
           const response = await axios.post(
-            'http://127.0.0.1:4001/api/users/bulk',
+            `${authUrl}/api/users/bulk`,
             { userIds },
             { headers: { 'Content-Type': 'application/json' }, timeout: 5000 }
           );
 
           if (response.data && response.data.success && response.data.data) {
             const users = response.data.data;
-            
+
             // Lấy danh sách unique departmentIds từ users
             const departmentIds = [...new Set(users.map((u: any) => u.departmentId).filter(Boolean))];
-            
+
             // Gọi sang employee-service để lấy thông tin departments
             let departmentsById = new Map();
             if (departmentIds.length > 0) {
               try {
+                const employeeServiceUrl = process.env['EMPLOYEE_SERVICE_URL'] || 'http://employee-service:4102';
                 const deptPromises = departmentIds.map((deptId: any) =>
-                  axios.get(`http://127.0.0.1:4002/api/departments/${deptId}`)
+                  axios.get(`${employeeServiceUrl}/api/departments/${deptId}`)
                     .then(r => r.data)
                     .catch(() => null)
                 );

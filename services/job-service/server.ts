@@ -41,7 +41,7 @@ try {
 
 try {
   fs.mkdirSync(uploadsDir, { recursive: true });
-} catch (e) {}
+} catch (e) { }
 
 console.log('[job-service] Serving uploads from:', uploadsDir);
 app.use('/uploads', express.static(uploadsDir));
@@ -49,9 +49,9 @@ app.use('/uploads', express.static(uploadsDir));
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 });
 
-app.listen(PORT, async () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 ${serviceName} running on port ${PORT}`);
-  
+
   // Kết nối RabbitMQ để gử9i messages (không chạy worker)
   console.log('🔌 Connecting to RabbitMQ for message queuing...');
   try {
@@ -60,6 +60,6 @@ app.listen(PORT, async () => {
   } catch (err) {
     console.warn('⚠️  RabbitMQ connection failed, using sync fallback');
   }
-  
+
   console.log('💡 Để chạy worker, dùng lệnh: yarn worker');
 });

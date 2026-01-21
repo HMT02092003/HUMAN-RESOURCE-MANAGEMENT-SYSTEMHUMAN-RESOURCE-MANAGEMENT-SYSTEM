@@ -26,9 +26,9 @@ class AuthService {
       if (response.data && response.data.success) {
         return response.data.data || [];
       }
-      
-      return Array.isArray(response.data?.data) ? response.data.data : 
-             Array.isArray(response.data) ? response.data : [];
+
+      return Array.isArray(response.data?.data) ? response.data.data :
+        Array.isArray(response.data) ? response.data : [];
     } catch (error: any) {
       console.error('[AuthService] Error fetching users by IDs:', error.message);
       return [];

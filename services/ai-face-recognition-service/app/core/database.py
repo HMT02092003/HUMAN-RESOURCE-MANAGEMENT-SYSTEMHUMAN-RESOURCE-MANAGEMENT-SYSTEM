@@ -58,7 +58,7 @@ class AttendanceLog(Base):
     matched_by_type = Column(String(20), nullable=True, index=True)
     
     # Similarity score (0-1)
-    similarity_score = Column(Float, nullable=False)
+    similarity_score = Column(Float, nullable=True)
     
     # Recognition type: check_in or check_out
     recognition_type = Column(String(20), nullable=False, index=True)

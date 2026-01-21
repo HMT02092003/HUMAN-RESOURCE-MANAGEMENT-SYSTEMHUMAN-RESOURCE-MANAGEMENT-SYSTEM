@@ -19,7 +19,7 @@ services:
       POSTGRES_PASSWORD: 123456
       POSTGRES_DB: postgres
     ports:
-      - "5433:5432"  # Host:Container - Avoid conflict with local PostgreSQL on 5432
+      - "5433:5432" # Host:Container - Avoid conflict with local PostgreSQL on 5432
     volumes:
       # Persistent data storage
       - postgres-data:/var/lib/postgresql/data
@@ -28,7 +28,7 @@ services:
     networks:
       - hrms-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -47,7 +47,7 @@ services:
   # Configure CLOUDAMQP_URL in service .env files
   # Fallback: Services auto-switch to synchronous processing if CloudAMQP unavailable
   # ==========================================================================
-  
+
   # rabbitmq:
   #   image: rabbitmq:3.12-management-alpine
   #   container_name: hrms-rabbitmq
@@ -64,7 +64,7 @@ services:
   # ==========================================================================
   # SERVICE LAYER - Backend Microservices
   # ==========================================================================
-  
+
   # --------------------------------------------------------------------------
   # Frontend - Next.js Application (Port 3001) - Production Mode
   # --------------------------------------------------------------------------
@@ -75,7 +75,7 @@ services:
     container_name: hrms-frontend
     restart: unless-stopped
     ports:
-      - "3001:3000"  # Docker port 3001, internal 3000 (avoid conflict with local dev)
+      - "3001:3000" # Docker port 3001, internal 3000 (avoid conflict with local dev)
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_GATEWAY_URL=http://192.168.1.8:4100
@@ -174,6 +174,9 @@ services:
       - FRONTEND_URL=http://localhost:3000
       - FRONTEND_PORT=5000
       - BCRYPT_ROUNDS=12
+      - EMPLOYEE_SERVICE_URL=http://employee-service:4102
+      - AI_SERVICE_URL=http://ai-face-recognition-service:4106
+      - API_GATEWAY_URL=http://api-gateway:4100
     depends_on:
       postgres:
         condition: service_healthy
@@ -219,6 +222,8 @@ services:
       - JWT_EXPIRE_VERIFY_EMAIL=300
       # Service URLs
       - AUTH_SERVICE_URL=http://auth-service:4101
+      - SALARY_SERVICE_URL=http://salary-service:4107
+      - API_GATEWAY_URL=http://api-gateway:4100
       - NEXT_PUBLIC_API_HOST=4100
       - PREFIXADMIN=admin
       - TIMEOUT_DELETE_FILE=6000
@@ -260,7 +265,10 @@ services:
       - DB_DATABASE=attendance_service
       # Service URLs
       - AUTH_SERVICE_URL=http://auth-service:4101
+      - EMPLOYEE_SERVICE_URL=http://employee-service:4102
+      - API_GATEWAY_URL=http://api-gateway:4100
       - LOG_LEVEL=info
+      - APPLICATION_SERVICE_URL=http://application-service:4108
     depends_on:
       postgres:
         condition: service_healthy
@@ -308,6 +316,8 @@ services:
       dockerfile: Dockerfile
     container_name: hrms-ai-face-service
     restart: unless-stopped
+    ports:
+      - "4106:4106" # Expose AI service port for debugging
     environment:
       - PORT=4106
       - DEBUG=False
@@ -322,6 +332,7 @@ services:
       - MODEL_NAME=buffalo_l
       - FACE_CONFIDENCE_THRESHOLD=0.6
       - RECOGNITION_THRESHOLD=0.4
+      - API_GATEWAY_URL=http://api-gateway:4100 # Internal Docker URL
     volumes:
       # Model cache and uploads
       - ai-models:/app/models
@@ -363,7 +374,10 @@ services:
       - DB_PASSWORD=123456
       - DB_DATABASE=salary_service
       # Service URLs
-      - EMPLOYEE_SERVICE_URL=http://employee-service:4102/api
+      - EMPLOYEE_SERVICE_URL=http://employee-service:4102
+      - AUTH_SERVICE_URL=http://auth-service:4101
+      - ATTENDANCE_SERVICE_URL=http://attendance-service:4103
+      - API_GATEWAY_URL=http://api-gateway:4100
     depends_on:
       postgres:
         condition: service_healthy
@@ -398,6 +412,9 @@ services:
         condition: service_healthy
     networks:
       - hrms-network
+    environment:
+      - AUTH_SERVICE_URL=http://auth-service:4101
+      - API_GATEWAY_URL=http://api-gateway:4100
     deploy:
       resources:
         limits:
@@ -429,6 +446,8 @@ services:
       - DB_DATABASE=notification_service
       # JWT
       - JWT_SECRET=c7c5f8d1a7b84e6a6c8b0f95c4b3e9a0f57e9d4a3c8a4b3d7e1f9b2c5d6e4f1
+      - AUTH_SERVICE_URL=http://auth-service:4101
+      - API_GATEWAY_URL=http://api-gateway:4100
     depends_on:
       postgres:
         condition: service_healthy
@@ -451,7 +470,7 @@ services:
       dockerfile: Dockerfile
     # Remove container_name to allow multiple instances
     restart: unless-stopped
-    command: ["yarn", "worker"]
+    command: [ "yarn", "worker" ]
     volumes:
       - ./services/job-service:/app
       - /app/node_modules
@@ -464,6 +483,8 @@ services:
         condition: service_started
     networks:
       - hrms-network
+    healthcheck:
+      disable: true
     deploy:
       mode: replicated
       replicas: 3
@@ -483,7 +504,7 @@ services:
       dockerfile: Dockerfile
     # Remove container_name to allow multiple instances
     restart: unless-stopped
-    command: ["yarn", "worker"]
+    command: [ "yarn", "worker" ]
     volumes:
       - ./services/salary-service:/app
       - /app/node_modules
@@ -500,6 +521,8 @@ services:
       - ATTENDANCE_SERVICE_URL=http://attendance-service:4103
       - NOTIFICATION_SERVICE_URL=http://notification-service:4110
       - AI_SERVICE_URL=http://ai-face-recognition-service:4106
+      - AUTH_SERVICE_URL=http://auth-service:4101
+      - API_GATEWAY_URL=http://api-gateway:4100
       # CloudAMQP
       - CLOUDAMQP_URL=amqps://bsifozyk:FXI3aDroM384hUPxUJ4w3CZYg42ZFvGo@rabbit.lmq.cloudamqp.com/bsifozyk
     depends_on:
@@ -509,6 +532,8 @@ services:
         condition: service_started
     networks:
       - hrms-network
+    healthcheck:
+      disable: true
     deploy:
       mode: replicated
       replicas: 3

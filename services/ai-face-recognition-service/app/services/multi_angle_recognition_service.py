@@ -81,7 +81,7 @@ class MultiAngleFaceService:
                     "gender": getattr(result.face_data, 'gender', None),
                     "age": getattr(result.face_data, 'age', None),
                     "bbox": getattr(result.face_data, 'bbox', None),
-                    "quality_score": getattr(result, 'quality_score', None)
+                    "quality_score": result.quality_result.blur_score if result.quality_result else None
                 }
             }
             
@@ -143,16 +143,28 @@ class MultiAngleFaceService:
                     "message": "Không có dữ liệu ảnh để đăng ký"
                 }
             
+            # Mapping from API pose names to DB face_type names
+            pose_map = {
+                "frontal": "CENTER",
+                "left": "LEFT",
+                "right": "RIGHT",
+                "center": "CENTER"
+            }
+            
             # Lưu từng pose vào DB
             embedding_ids = []
+            import json
             for pose_data in poses_data:
+                api_pose = pose_data.get("pose_type", "frontal")
+                db_face_type = pose_map.get(api_pose, api_pose.upper())
+                
                 new_embedding = FaceEmbedding(
                     user_id=user_id,
                     username=username,
-                    full_name=full_name,
-                    face_embedding=pose_data["embedding"],
-                    pose_type=pose_data.get("pose_type", "frontal"),
-                    confidence_score=pose_data.get("confidence", 100.0)
+                    # full_name=full_name, # Remove this if not in DB model
+                    embedding_vector=json.dumps(pose_data["embedding"]), # Use json.dumps for Text column
+                    face_type=db_face_type,
+                    quality_score=pose_data.get("metadata", {}).get("quality_score")
                 )
                 db.add(new_embedding)
                 db.flush()
@@ -308,6 +320,7 @@ class MultiAngleFaceService:
                     username='unknown',
                     recognition_type=recognition_type,
                     confidence_score=0,
+                    similarity_score=0.0,
                     status='validation_failed',
                     notes=process_result["message"]
                 )
@@ -331,6 +344,7 @@ class MultiAngleFaceService:
                     username='unknown',
                     recognition_type=recognition_type,
                     confidence_score=0,
+                    similarity_score=0.0,
                     status='unknown_face',
                     notes='Không tìm thấy khuôn mặt khớp trong hệ thống'
                 )
@@ -348,6 +362,8 @@ class MultiAngleFaceService:
                 username=match["username"],
                 recognition_type=recognition_type,
                 confidence_score=int(match["confidence"]),
+                similarity_score=match["confidence"] / 100.0,
+                matched_by_type=match["matched_pose"],
                 status='recognized',
                 notes=f"Matched with {match['matched_pose']} pose (distance: {match['distance']:.4f})"
             )

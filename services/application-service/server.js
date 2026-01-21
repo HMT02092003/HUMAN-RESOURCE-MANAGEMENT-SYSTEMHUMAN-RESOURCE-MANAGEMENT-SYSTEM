@@ -43,9 +43,9 @@ app.use((req, res, next) => {
 });
 
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    service: 'application-service', 
+  res.json({
+    status: 'OK',
+    service: 'application-service',
     port: PORT,
     timestamp: new Date().toISOString(),
     database: 'Connected'
@@ -57,8 +57,8 @@ app.use('/api', routes);
 app.use((err, req, res, next) => {
   console.error('❌❌❌ SERVER ERROR:', err);
   console.error('❌ Stack:', err.stack);
-  res.status(500).json({ 
-    success: false, 
+  res.status(500).json({
+    success: false,
     error: err.message,
     timestamp: new Date().toISOString()
   });
@@ -74,7 +74,7 @@ process.on('uncaughtException', (error) => {
   console.error('❌❌❌ Uncaught Exception:', error);
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 ${serviceName} running on port ${PORT}`);
   console.log(`📊 Database: ${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_DATABASE}`);
   console.log(`🔗 Health check: http://localhost:${PORT}/health`);

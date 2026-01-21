@@ -35,6 +35,7 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
     const [detailModalVisible, setDetailModalVisible] = useState(false);
     const [selectedApplicationId, setSelectedApplicationId] = useState<number | null>(null);
     const [allApplications, setAllApplications] = useState<any[]>([]);
+    const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     // Fetch all data for Excel export
     useEffect(() => {
@@ -159,7 +160,7 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
                     const response = await applicationService.deleteApplication(record.id);
                     if (response.success) {
                         message.success('Xóa đơn từ thành công');
-                        // Table will auto-reload via ServerSideTable
+                        setRefreshTrigger(prev => prev + 1);
                     }
                 } catch (error: any) {
                     message.error(error.response?.data?.message || 'Xóa đơn từ thất bại');
@@ -354,6 +355,7 @@ const MyApplicationList: React.FC<MyApplicationListProps> = ({
                 defaultPageSize={10}
                 scroll={{ x: 'auto' }}
                 bordered
+                refreshTrigger={refreshTrigger}
                 locale={{
                     emptyText: (
                         <Empty

@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const SALARY_SERVICE_URL = process.env.SALARY_SERVICE_URL || 'http://127.0.0.1:4007';
-const API_GATEWAY_URL = `http://127.0.0.1:${process.env.API_GATEWAY_PORT || 4000}`;
+const API_GATEWAY_URL = process.env.API_GATEWAY_URL || `http://127.0.0.1:${process.env.API_GATEWAY_PORT || 4000}`;
 
 class SalaryService {
   /**

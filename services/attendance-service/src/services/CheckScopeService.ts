@@ -4,7 +4,7 @@ import axios from 'axios';
  * Service để check scope quyền thông qua Auth Service
  */
 
-const AUTH_SERVICE_URL = process.env['AUTH_SERVICE_URL'] || 'http://127.0.0.1:4001';
+const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://127.0.0.1:4001';
 
 class CheckScopeService {
   /**
@@ -14,7 +14,7 @@ class CheckScopeService {
    * @returns Object chứa hasAccess, userIds, scope
    */
   static async checkUserScope(
-    permissionKey: string, 
+    permissionKey: string,
     token: string,
     userData?: any
   ): Promise<{ hasAccess: boolean; userIds: number[]; scope: string }> {
@@ -33,7 +33,7 @@ class CheckScopeService {
         scopeHeaders['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
         scopeHeaders['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
       }
-      
+
       const response = await axios.post(
         url,
         { permissionKey },
@@ -94,7 +94,7 @@ class CheckScopeService {
       }
 
       const response = await axios.post(
-        `${AUTH_SERVICE_URL}/api/users/bulk`, 
+        `${AUTH_SERVICE_URL}/api/users/bulk`,
         { userIds },
         {
           headers,
@@ -105,7 +105,7 @@ class CheckScopeService {
       if (response.data && response.data.success) {
         return response.data.data || [];
       }
-      
+
       return [];
     } catch (error: any) {
       console.error('[CheckScopeService] Error fetching users:', error.message);
@@ -141,7 +141,7 @@ class CheckScopeService {
       if (response.data && response.data.success) {
         return response.data.data || [];
       }
-      
+
       return [];
     } catch (error: any) {
       console.error('[CheckScopeService] Error searching users:', error.message);

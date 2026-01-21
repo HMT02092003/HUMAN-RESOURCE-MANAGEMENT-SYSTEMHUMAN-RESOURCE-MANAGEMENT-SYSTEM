@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://127.0.0.1:4001';
-const API_GATEWAY_URL = `http://127.0.0.1:${process.env.API_GATEWAY_PORT || 4000}`;
+const API_GATEWAY_URL = process.env.API_GATEWAY_URL || `http://127.0.0.1:${process.env.API_GATEWAY_PORT || 4000}`;
 
 class AuthService {
   /**

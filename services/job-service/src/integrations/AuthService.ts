@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL || 'http://127.0.0.1:4001';
-const API_GATEWAY_URL = `http://127.0.0.1:${process.env.API_GATEWAY_PORT || 4000}`;
+const API_GATEWAY_URL = process.env.API_GATEWAY_URL || `http://127.0.0.1:${process.env.API_GATEWAY_PORT || 4000}`;
 
 class AuthService {
   /**
@@ -76,9 +76,9 @@ class AuthService {
       if (response.data && response.data.success) {
         return response.data.data || [];
       }
-      
-      return Array.isArray(response.data?.data) ? response.data.data : 
-             Array.isArray(response.data) ? response.data : [];
+
+      return Array.isArray(response.data?.data) ? response.data.data :
+        Array.isArray(response.data) ? response.data : [];
     } catch (error: any) {
       console.error('[AuthService] Error fetching users by IDs:', error.message);
       return [];
@@ -91,7 +91,7 @@ class AuthService {
    * @param token - Authorization token
    */
   static async checkUserScope(
-    permissionKey: string, 
+    permissionKey: string,
     token: string,
     userData?: any
   ): Promise<{ hasAccess: boolean; userIds: number[]; scope: string }> {
