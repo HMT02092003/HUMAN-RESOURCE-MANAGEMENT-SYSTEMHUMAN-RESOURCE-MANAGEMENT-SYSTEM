@@ -9,78 +9,100 @@ jobs:
     runs-on: self-hosted
     
     steps:
-    # 1. Lay code ve
+    # 1. Checkout Code
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    # 2. Nap Secret (Phien ban sach, khong icon)
+    # 2. Inject Secrets (Clean Version - No Special Chars)
     - name: Inject Secrets
       run: |
+        # Set encoding to avoid special character issues
         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-        Write-Host "--- BAT DAU NAP SECRET ---"
+        Write-Host "--- STARTING SECRET INJECTION ---"
         
+        # Prepare content from GitHub Secret
         $envSecret = @"
+        
+        # --- INJECTED SECRETS ---
         ${{ secrets.ENV_FILE_CONTENT }}
         "@
         
-        # Ghi file .env goc
+        # 1. Create root .env file (for docker-compose)
         Set-Content -Path ".env" -Value $envSecret
-        Write-Host "Da tao file .env goc"
+        Write-Host "Created root .env file"
 
-        # Danh sach cac service can nap them secret
-        $services = @(
-            "application-service", 
-            "job-service", 
-            "ai-face-recognition-service", 
-            "auth-service", 
-            "employee-service",
-            "attendance-service",
-            "salary-service",
-            "notification-service"
+        # 2. List of services to inject secrets into
+        # Paths are relative to project root
+        $servicePaths = @(
+            "frontend",
+            "services/application-service",
+            "services/job-service",
+            "services/ai-face-recognition-service",
+            "services/auth-service",
+            "services/employee-service",
+            "services/attendance-service",
+            "services/salary-service",
+            "services/notification-service",
+            "services/api-gateway"
         )
 
-        foreach ($svc in $services) {
-             $path = "./services/$svc/.env.docker"
-             if (Test-Path $path) { 
-                Add-Content -Path $path -Value $envSecret 
-                Write-Host "Da cap nhat: $svc"
-             } else { 
-                Set-Content -Path $path -Value $envSecret 
-                Write-Host "Da tao moi: $svc"
-             }
+        foreach ($svcPath in $servicePaths) {
+            # Check if service directory exists
+            if (Test-Path "./$svcPath") {
+                $envFile = "./$svcPath/.env.docker"
+                
+                # If .env.docker exists, append secrets
+                if (Test-Path $envFile) {
+                    Add-Content -Path $envFile -Value $envSecret
+                    Write-Host "Updated: $svcPath"
+                } else {
+                    # If not exists, create new with secrets
+                    Set-Content -Path $envFile -Value $envSecret
+                    Write-Host "Created new: $svcPath"
+                }
+            } else {
+                Write-Host "Skipping: $svcPath (Directory not found)"
+            }
         }
-        Write-Host "--- NAP SECRET HOAN TAT ---"
+        
+        Write-Host "--- SECRET INJECTION COMPLETED ---"
 
-    # 3. Copy Model AI (DA CAP NHAT DUONG DAN CUA TOAN)
+    # 3. Inject AI Models (Specific to local runner)
     - name: Inject AI Models
       run: |
-        Write-Host "--- COPY MODEL AI TU MAY LOCAL ---"
+        Write-Host "--- STARTING MODEL INJECTION ---"
         
-        # !!! DUONG DAN CHINH XAC TREN MAY TOAN !!!
+        # Absolute path on Toan's Host Machine
         $sourceModelPath = "C:\Users\Toan\.insightface\models"
         
-        # Duong dan dich (trong Runner)
+        # Destination path inside the repo structure
         $destParentPath = "./services/ai-face-recognition-service"
 
         if (Test-Path $sourceModelPath) {
-            # Copy toan bo folder models vao trong thu muc service
+            # Copy models recursively
             Copy-Item -Path $sourceModelPath -Destination $destParentPath -Recurse -Force
-            Write-Host "Copy model thanh cong!"
+            Write-Host "AI Models copied successfully"
         } else {
-            Write-Host "LOI: Khong tim thay folder models tai: $sourceModelPath"
+            Write-Host "WARNING: Models folder not found at $sourceModelPath"
+            # We exit with error to avoid running service without models
             exit 1 
         }
 
-    # 4. Don dep rac
-    - name: Cleanup Old Docker
+    # 4. Clean up old Docker resources
+    - name: Cleanup Old Resources
       run: |
-        Write-Host "--- DANG DON DEP ---"
+        Write-Host "--- STARTING CLEANUP ---"
+        # Stop containers and remove orphans
         docker-compose down --remove-orphans
+        
+        # Remove dangling images to free space
         docker image prune -f
+        Write-Host "Cleanup completed"
 
-    # 5. Build va Deploy
+    # 5. Build and Deploy
     - name: Build and Deploy
       run: |
-        Write-Host "--- DANG BUILD VA DEPLOY ---"
+        Write-Host "--- STARTING BUILD AND DEPLOY ---"
+        # Build without cache if needed, or normal build
         docker-compose up -d --build
-        Write-Host "--- THANH CONG! WEB DA CHAY ---"
+        Write-Host "--- DEPLOYMENT SUCCESSFUL ---"
