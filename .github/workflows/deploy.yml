@@ -1,0 +1,68 @@
+name: Deploy Microservices
+
+on:
+  push:
+    branches: [ "deployment" ] # Chạy khi có code mới ở nhánh main
+
+jobs:
+  deploy:
+    runs-on: self-hosted # Chạy trên Laptop Toàn
+    
+    steps:
+    # 1. Lấy code mới nhất về (Chỉ cập nhật file thay đổi)
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    # 2. Tạo/Cập nhật file .env từ GitHub Secret
+    - name: Inject Secrets to Environment Files
+      run: |
+        Write-Host "🔐 Dang nap Secret vao cac file cau hinh..."
+        
+        # Nội dung từ Secret (Chứa API Key, Password...)
+        $envSecret = @"
+        
+        # --- INJECTED SECRETS FROM GITHUB ---
+        ${{ secrets.ENV_FILE_CONTENT }}
+        "@
+        
+        # Danh sách các file .env.docker cần nạp thêm secret
+        # Dựa trên file docker-compose.yml hiện tại:
+        # - application-service dùng ./services/application-service/.env.docker
+        # - job-service dùng ./services/job-service/.env.docker
+        
+        $targetFiles = @(
+            "./services/application-service/.env.docker",
+            "./services/job-service/.env.docker"
+        )
+
+        foreach ($file in $targetFiles) {
+            if (Test-Path $file) {
+                Write-Host "   -> Updating: $file"
+                # Nối thêm nội dung secret vào cuối file hiện có (giữ lại cấu hình PORT, DB_NAME cũ)
+                Add-Content -Path $file -Value $envSecret
+            } else {
+                Write-Host "   ⚠️ Warning: Khong tim thay file $file"
+            }
+        }
+        
+        Write-Host "✅ Da nap xong Secret!"
+
+    # 3. Dọn dẹp rác (Rất quan trọng với ổ 62GB của bạn)
+    - name: Cleanup Old Docker
+      run: |
+        Write-Host "🧹 Don dep container va image cu..."
+        # Tắt container cũ nếu đang chạy (remove-orphans để xóa các service thừa)
+        docker-compose down --remove-orphans
+        
+        # Xóa sạch image rác (dangling) để cứu ổ cứng
+        docker image prune -f
+
+    # 4. Build và Chạy lại
+    - name: Build & Deploy
+      run: |
+        Write-Host "🚀 Bat dau Build & Deploy..."
+        
+        # Lệnh này tự động build lại những service có code thay đổi
+        docker-compose up -d --build
+        
+        Write-Host "✅ Web da chay thanh cong!"
