@@ -13,11 +13,11 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    # 2. Smart Inject Secrets (Prevents unnecessary rebuilds and fixes CRLF issues)
+    # 2. Smart Inject Secrets
     - name: Smart Inject Secrets
       run: |
         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-        Write-Host "--- SMART SECRET INJECTION ---"
+        Write-Host "--- STARTING SECRET INJECTION ---"
         
         $envSecret = @"
         ${{ secrets.ENV_FILE_CONTENT }}
@@ -25,85 +25,63 @@ jobs:
         
         function Update-File-If-Changed ($filePath, $newContent) {
             if (Test-Path $filePath) {
-                # Read existing content and normalize line endings for comparison
                 $currentContent = Get-Content $filePath -Raw
-                # Simple normalization for comparison: remove all newlines/returns
                 $cleanCurrent = $currentContent -replace "`r`n", "`n" -replace "`n", ""
                 $cleanNew = $newContent -replace "`r`n", "`n" -replace "`n", ""
-                
                 if ($cleanCurrent -eq $cleanNew) {
-                    Write-Host "   -> Skipping (No change): $filePath"
-                    return 
+                    Write-Host "   Skipping: $filePath"
+                    return
                 }
             }
-            # Write new content if changed or not exists
             Set-Content -Path $filePath -Value $newContent
-            Write-Host "   -> Updated: $filePath"
+            Write-Host "   Updated: $filePath"
         }
 
-        # Update root .env
         Update-File-If-Changed ".env" $envSecret
         
-        # List of all services to inject
-        $services = @(
-            "frontend", 
-            "services/api-gateway", 
-            "services/auth-service", 
-            "services/employee-service", 
-            "services/attendance-service", 
-            "services/application-service", 
-            "services/ai-face-recognition-service", 
-            "services/salary-service", 
-            "services/job-service", 
-            "services/notification-service"
-        )
+        $services = @("frontend", "services/api-gateway", "services/auth-service", "services/employee-service", "services/attendance-service", "services/application-service", "services/ai-face-recognition-service", "services/salary-service", "services/job-service", "services/notification-service")
         
         foreach ($svc in $services) {
-            $path = "./$svc/.env.docker"
-            if (Test-Path "./$svc") { 
-                Update-File-If-Changed $path $envSecret 
-            }
+            if (Test-Path "./$svc") { Update-File-If-Changed "./$svc/.env.docker" $envSecret }
         }
-        Write-Host "--- SECRET INJECTION COMPLETED ---"
+        Write-Host "--- INJECTION COMPLETED ---"
 
     # 3. Inject AI Models
     - name: Inject AI Models
       run: |
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
         Write-Host "--- INJECTING AI MODELS ---"
         $sourceModelPath = "C:\Users\Toan\.insightface\models"
         $destParentPath = "./services/ai-face-recognition-service"
         if (Test-Path $sourceModelPath) {
              Copy-Item -Path $sourceModelPath -Destination $destParentPath -Recurse -Force
-             Write-Host "   -> Models injected successfully"
+             Write-Host "   Models copied successfully"
         } else {
-             Write-Host "   ⚠️ Warning: Models not found at $sourceModelPath"
+             Write-Host "   Warning: Models not found at $sourceModelPath"
         }
 
     # 4. Build and Deploy
     - name: Build and Deploy
       run: |
-        Write-Host "--- BUILDING AND STARTING SERVICES ---"
-        # 1. Stop old containers (Optional: can just let --build handle it, but cleaner)
-        # docker-compose down --remove-orphans
-        
-        # 2. Up & Build (This replaces old containers with new ones)
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+        Write-Host "--- BUILDING SERVICES ---"
         docker-compose up -d --build
         Write-Host "--- DEPLOY SUCCESSFUL ---"
 
-    # 5. AGGRESSIVE CLEANUP (Saves 20-40GB after build)
+    # 5. Aggressive Cleanup (Save Disk Space)
     - name: Aggressive Cleanup
       run: |
+        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
         Write-Host "--- STARTING DEEP CLEAN ---"
         
-        # 1. Remove Dangling Images (Old versions of images replaced by --build)
+        # Remove old Docker images (Dangling)
         docker image prune -f
         
-        # 2. Xóa sạch Build Cache (Saves ~17-20GB on personal laptops)
-        # We prune ALL build cache because subsequent builds will likely change deps anyway.
+        # Remove Build cache (Save 20-30GB)
         docker builder prune -a -f
         
-        # 3. Report Disk Usage
-        Write-Host "`n📊 Current Docker Disk Usage:"
+        # Report status
+        Write-Host "Current Docker Usage:"
         docker system df
         
-        Write-Host "--- SYSTEM CLEANED SUCCESSFULLY ---"
+        Write-Host "--- SYSTEM CLEANED ---"
