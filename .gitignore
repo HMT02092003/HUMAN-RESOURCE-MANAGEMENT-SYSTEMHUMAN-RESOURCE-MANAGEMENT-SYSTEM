@@ -74,6 +74,10 @@ env/
 # =========================
 public/
 
+# Allow frontend public assets to be tracked
+!frontend/public/
+!frontend/public/**
+
 # =========================
 # QLNS_App (React Native / Expo)
 # =========================
