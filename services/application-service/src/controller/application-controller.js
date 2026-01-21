@@ -1277,6 +1277,70 @@ export class ApplicationController {
   }
 
   /**
+   * Từ chối nhiều đơn từ cùng lúc
+   * POST /applications/bulk-reject
+   * Body: { ids: number[], rejectionReason?: string }
+   */
+  static async bulkReject(req, res) {
+    try {
+      const { ids, rejectionReason } = req.body;
+      const approvedBy = getUserId(req);
+
+      if (!approvedBy) {
+        return res.status(401).json({
+          success: false,
+          message: 'Người duyệt không được xác thực'
+        });
+      }
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Danh sách ID không hợp lệ'
+        });
+      }
+
+      console.log(`📝 Bulk rejecting ${ids.length} applications by user ${approvedBy}...`);
+
+      const updatedCount = await ApplicationModel.query()
+        .whereIn('id', ids)
+        .where('status', 0) // Chỉ reject các đơn đang pending
+        .patch({
+          status: 2, // rejected
+          approvedBy: approvedBy,
+          approvedDate: new Date().toISOString(),
+          rejectionReason: rejectionReason || 'Không có lý do cụ thể'
+        });
+
+      if (updatedCount === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Không có đơn nào được từ chối. Vui lòng kiểm tra lại trạng thái đơn.'
+        });
+      }
+
+      console.log(`✅ Successfully rejected ${updatedCount} applications`);
+
+      res.json({
+        success: true,
+        message: `Đã từ chối thành công ${updatedCount} đơn từ`,
+        data: {
+          rejectedCount: updatedCount,
+          requestedCount: ids.length
+        },
+        timestamp: dayjs().format()
+      });
+    } catch (error) {
+      console.error('❌ Error in bulkReject:', error);
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Có lỗi xảy ra khi từ chối đơn hàng loạt',
+        timestamp: dayjs().format()
+      });
+    }
+  }
+
+  /**
    * Từ chối đơn từ
    * POST /applications/:id/reject
    */

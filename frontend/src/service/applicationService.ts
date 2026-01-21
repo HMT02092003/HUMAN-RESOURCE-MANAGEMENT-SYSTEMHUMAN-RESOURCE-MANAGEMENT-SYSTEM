@@ -63,7 +63,7 @@ const ApplicationService = {
     approvedDateTo?: string;
   }) => {
     try {
-      const response = await api.get("/api/applications", { 
+      const response = await api.get("/api/applications", {
         params: {
           ...params,
           _t: Date.now() // Cache buster
@@ -145,6 +145,16 @@ const ApplicationService = {
     }
   },
 
+  // Từ chối nhiều applications cùng lúc
+  bulkRejectApplications: async (ids: number[], rejectionReason?: string) => {
+    try {
+      const response = await api.post('/api/applications/bulk-reject', { ids, rejectionReason });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
   // Từ chối application
   rejectApplication: async (id: number, rejectionData: RejectApplicationRequest) => {
     try {
@@ -156,8 +166,8 @@ const ApplicationService = {
   },
 
   // Lấy applications của user hiện tại - có server-side search/sort/filter (cho bảng)
-  getMyApplications: async (params?: { 
-    page?: number; 
+  getMyApplications: async (params?: {
+    page?: number;
     limit?: number;
     sort?: string;
     order?: string;
@@ -170,7 +180,7 @@ const ApplicationService = {
     try {
       // Call the backend paginated endpoint for my-applications
       // Note: the application-service registers the route at `/api/applications/my-applications`
-      const response = await api.get("/api/applications/my-applications", { 
+      const response = await api.get("/api/applications/my-applications", {
         params: {
           ...params,
           _t: Date.now() // Cache buster

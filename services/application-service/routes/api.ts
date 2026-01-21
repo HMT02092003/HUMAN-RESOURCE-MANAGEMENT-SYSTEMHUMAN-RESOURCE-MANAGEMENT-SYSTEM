@@ -73,6 +73,9 @@ router.get('/applications/date-range', ApplicationController.getByDateRange);
 // Duyệt nhiều đơn cùng lúc - ĐẶT TRƯỚC :id route
 router.post('/applications/bulk-approve', ApplicationController.bulkApprove);
 
+// Từ chối nhiều đơn cùng lúc - ĐẶT TRƯỚC :id route
+router.post('/applications/bulk-reject', ApplicationController.bulkReject);
+
 // Duyệt đơn từ - ĐẶT TRƯỚC :id route
 router.post('/applications/:id/approve', ApplicationController.approve);
 

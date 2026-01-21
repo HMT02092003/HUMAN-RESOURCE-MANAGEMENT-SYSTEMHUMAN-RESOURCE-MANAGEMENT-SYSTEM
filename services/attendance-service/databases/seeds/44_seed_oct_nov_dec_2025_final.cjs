@@ -140,7 +140,7 @@ exports.seed = async function (knex) {
     return days;
   };
 
-  // Tạo thời gian check-in/check-out - ca 8h-17h
+  // Tạo thời gian check-in/check-out - ca 8h-18h
   const generateDayTimes = (isLateForced = false, isEarlyLeaveForced = false) => {
     let checkInHour, checkInMinute, checkOutHour, checkOutMinute;
 
@@ -160,16 +160,16 @@ exports.seed = async function (knex) {
     }
 
     if (isEarlyLeaveForced) {
-      // Về sớm: 16:00-16:45
-      checkOutHour = 16;
+      // Về sớm: 17:00-17:45
+      checkOutHour = 17;
       checkOutMinute = Math.floor(Math.random() * 45);
     } else if (Math.random() < 0.75) {
-      // 75% về đúng giờ: 17:00-17:20
-      checkOutHour = 17;
+      // 75% về đúng giờ: 18:00-18:20
+      checkOutHour = 18;
       checkOutMinute = Math.floor(Math.random() * 20);
     } else {
-      // 25% về sớm nhẹ: 16:45-16:59
-      checkOutHour = 16;
+      // 25% về sớm nhẹ: 17:45-17:59
+      checkOutHour = 17;
       checkOutMinute = 45 + Math.floor(Math.random() * 14);
     }
 
@@ -189,10 +189,10 @@ exports.seed = async function (knex) {
     return Math.max(0, (outMinutes - inMinutes - 60) / 60);
   };
 
-  // Tính muộn/sớm (ca 8h-17h)
+  // Tính muộn/sớm (ca 8h-18h)
   const calculateLateness = (inH, inM, outH, outM) => {
     const lateMinutes = Math.max(0, (inH * 60 + inM) - (8 * 60));
-    const earlyMinutes = Math.max(0, (17 * 60) - (outH * 60 + outM));
+    const earlyMinutes = Math.max(0, (18 * 60) - (outH * 60 + outM));
     return { lateMinutes, earlyMinutes };
   };
 
@@ -275,8 +275,8 @@ exports.seed = async function (knex) {
             userId,
             date,
             checkInTime: `${date}T08:00:00+07:00`,
-            checkOutTime: `${date}T17:00:00+07:00`,
-            dailyTotalWorkHours: 8,
+            checkOutTime: `${date}T18:00:00+07:00`,
+            dailyTotalWorkHours: 9,
             dailyWorkingUnit: 1,
             totalWorkingUnit: 1,
             otWorkingUnit: 0,

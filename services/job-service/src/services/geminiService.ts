@@ -7,14 +7,15 @@ dayjs.extend(isBetween);
 
 // Model cascade from strongest to weakest
 const MODEL_CASCADE = [
-  'gemini-1.5-flash',      // Current stable
-  'gemini-2.0-flash-exp',  // New exp
-  'gemini-1.5-pro',
+  'gemini-3-flash',
   'gemini-2.5-flash',
-  'gemma-3-1b',
+  'gemini-2.5-flash-lite',
+  'gemini-robotics-er-1.5-preview',
   'gemma-3-27b',
+  'gemma-3-12b',
+  'gemma-3-4b',
   'gemma-3-2b',
-  'gemma-3-4b'
+  'gemma-3-1b'
 ];
 
 const MODEL_NAME = MODEL_CASCADE[0]; // Default to strongest
@@ -56,7 +57,7 @@ async function generateContentWithCascade(prompt: string): Promise<string> {
       const response = await client!.models.generateContent({
         model: modelName,
         contents: prompt
-      }, { timeout: 30000 });
+      });
 
       const text = response && typeof response.text === 'string' ? response.text : '';
 

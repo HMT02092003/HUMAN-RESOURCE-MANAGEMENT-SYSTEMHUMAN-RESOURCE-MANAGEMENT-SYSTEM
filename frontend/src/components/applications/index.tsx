@@ -173,6 +173,47 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
         });
     };
 
+    const handleBulkReject = async () => {
+        if (selectedRowKeys.length === 0) {
+            message.warning('Vui lòng chọn ít nhất một đơn để từ chối');
+            return;
+        }
+
+        let reason = '';
+        Modal.confirm({
+            title: 'Xác nhận từ chối hàng loạt',
+            icon: <CloseOutlined style={{ color: '#ff4d4f' }} />,
+            content: (
+                <div style={{ marginTop: 16 }}>
+                    <p>Bạn có chắc chắn muốn từ chối {selectedRowKeys.length} đơn đã chọn?</p>
+                    <Input.TextArea
+                        placeholder="Nhập lý do từ chối (tùy chọn)"
+                        onChange={(e) => { reason = e.target.value; }}
+                        rows={3}
+                        style={{ marginTop: 8 }}
+                    />
+                </div>
+            ),
+            okText: 'Từ chối tất cả',
+            okType: 'danger',
+            cancelText: 'Hủy',
+            onOk: async () => {
+                try {
+                    setLoading(true);
+                    await applicationService.bulkRejectApplications(selectedRowKeys as number[], reason);
+                    message.success(`Đã từ chối thành công ${selectedRowKeys.length} đơn`);
+                    setSelectedRowKeys([]);
+                    setSelectedRows([]);
+                    setRefreshTrigger(prev => prev + 1);
+                } catch (error: any) {
+                    message.error(error.response?.data?.message || 'Từ chối hàng loạt thất bại');
+                } finally {
+                    setLoading(false);
+                }
+            }
+        });
+    };
+
     // Define columns với ServerSideTable format
     const columns: ServerSideColumnType<any>[] = useMemo(() => [
         {
@@ -333,6 +374,8 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
                             <Button
                                 danger
                                 icon={<CloseOutlined />}
+                                onClick={handleBulkReject}
+                                loading={loading}
                                 style={{
                                     borderRadius: '8px',
                                     height: '48px',
