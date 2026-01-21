@@ -9,69 +9,78 @@ jobs:
     runs-on: self-hosted
     
     steps:
-    # 1. Lay code moi nhat ve
+    # 1. Lay code ve
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    # 2. Nap Secret vao cac file .env (Viet thang duong dan, khong dung vong lap)
-    - name: Inject Secrets to Environment Files
+    # 2. Nap Secret (Phien ban sach, khong icon)
+    - name: Inject Secrets
       run: |
-        # Thiet lap ma hoa tieng Viet/UTF-8 de khong bi loi ky tu la
         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
         Write-Host "--- BAT DAU NAP SECRET ---"
         
-        # Lay noi dung tu GitHub Secret
         $envSecret = @"
-        
-        # --- INJECTED SECRETS FROM GITHUB ---
         ${{ secrets.ENV_FILE_CONTENT }}
         "@
         
-        # --- FILE 1: ROOT .ENV (Cho docker-compose doc) ---
-        # Tao moi hoac ghi de file .env o thu muc goc
+        # Ghi file .env goc
         Set-Content -Path ".env" -Value $envSecret
-        Write-Host "-> Da tao file .env goc"
+        Write-Host "Da tao file .env goc"
 
-        # --- FILE 2: APPLICATION SERVICE ---
-        $appFile = "./services/application-service/.env.docker"
-        if (Test-Path $appFile) {
-            Add-Content -Path $appFile -Value $envSecret
-            Write-Host "-> Da cap nhat: application-service"
-        } else {
-            Set-Content -Path $appFile -Value $envSecret
-            Write-Host "-> Da tao moi: application-service"
+        # Danh sach cac service can nap them secret
+        $services = @(
+            "application-service", 
+            "job-service", 
+            "ai-face-recognition-service", 
+            "auth-service", 
+            "employee-service",
+            "attendance-service",
+            "salary-service",
+            "notification-service"
+        )
+
+        foreach ($svc in $services) {
+             $path = "./services/$svc/.env.docker"
+             if (Test-Path $path) { 
+                Add-Content -Path $path -Value $envSecret 
+                Write-Host "Da cap nhat: $svc"
+             } else { 
+                Set-Content -Path $path -Value $envSecret 
+                Write-Host "Da tao moi: $svc"
+             }
         }
-
-        # --- FILE 3: JOB SERVICE ---
-        $jobFile = "./services/job-service/.env.docker"
-        if (Test-Path $jobFile) {
-            Add-Content -Path $jobFile -Value $envSecret
-            Write-Host "-> Da cap nhat: job-service"
-        } else {
-            Set-Content -Path $jobFile -Value $envSecret
-            Write-Host "-> Da tao moi: job-service"
-        }
-
-        # --- BAN CO THE COPY DOAN TREN DE THEM CHO CAC SERVICE KHAC O DAY ---
-        
         Write-Host "--- NAP SECRET HOAN TAT ---"
 
-    # 3. Don dep rac
+    # 3. Copy Model AI (DA CAP NHAT DUONG DAN CUA TOAN)
+    - name: Inject AI Models
+      run: |
+        Write-Host "--- COPY MODEL AI TU MAY LOCAL ---"
+        
+        # !!! DUONG DAN CHINH XAC TREN MAY TOAN !!!
+        $sourceModelPath = "C:\Users\Toan\.insightface\models"
+        
+        # Duong dan dich (trong Runner)
+        $destParentPath = "./services/ai-face-recognition-service"
+
+        if (Test-Path $sourceModelPath) {
+            # Copy toan bo folder models vao trong thu muc service
+            Copy-Item -Path $sourceModelPath -Destination $destParentPath -Recurse -Force
+            Write-Host "Copy model thanh cong!"
+        } else {
+            Write-Host "LOI: Khong tim thay folder models tai: $sourceModelPath"
+            exit 1 
+        }
+
+    # 4. Don dep rac
     - name: Cleanup Old Docker
       run: |
         Write-Host "--- DANG DON DEP ---"
-        # Tat container cu
         docker-compose down --remove-orphans
-        
-        # Xoa image rac
         docker image prune -f
 
-    # 4. Build va Chay lai
-    - name: Build & Deploy
+    # 5. Build va Deploy
+    - name: Build and Deploy
       run: |
         Write-Host "--- DANG BUILD VA DEPLOY ---"
-        
-        # Build va chay lai
         docker-compose up -d --build
-        
         Write-Host "--- THANH CONG! WEB DA CHAY ---"
