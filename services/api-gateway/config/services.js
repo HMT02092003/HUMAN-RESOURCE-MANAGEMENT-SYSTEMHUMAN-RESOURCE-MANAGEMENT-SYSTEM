@@ -38,11 +38,16 @@ const ROUTE_CONFIG = [
     target: 'auth',
     pathRewrite: { '^/api/refresh-token': '/api/refresh-token' }
   },
-  // Job service - CV upload and job CRUD
   {
     path: '/jobs',
     target: 'job',
     pathRewrite: { '^/jobs': '/api' },
+    handleMultipart: true
+  },
+  {
+    path: '/api/cvs',
+    target: 'job',
+    pathRewrite: { '^/api/cvs': '/api/cvs' },
     handleMultipart: true
   },
   {
