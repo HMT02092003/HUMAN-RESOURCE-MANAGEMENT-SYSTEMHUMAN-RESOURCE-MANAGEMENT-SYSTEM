@@ -56,5 +56,5 @@ yarn-error.log*
 # =========================
 # Public assets (images, uploads)
 # =========================
-# public/
-!public/logo/
+# Keep the `public` folder tracked (no ignore rules)
+
