@@ -84,6 +84,8 @@ jobs:
         Write-Host "--- CLEANING UP ---"
         docker-compose down --remove-orphans
         docker image prune -f
+        # Clear BuildKit cache to fix snapshot/cache corruption issues
+        docker builder prune -a -f
         Write-Host "Cleanup finished"
 
     # 5. Build and Deploy
