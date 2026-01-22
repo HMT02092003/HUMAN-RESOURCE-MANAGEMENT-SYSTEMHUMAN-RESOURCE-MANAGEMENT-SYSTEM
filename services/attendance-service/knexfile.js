@@ -1,6 +1,22 @@
-import 'dotenv/config';
+// ============================================================================
+// KNEX DATABASE CONFIGURATION - Attendance Service
+// ============================================================================
+// Ưu tiên env variables từ Docker/System trước, sau đó mới load .env file
+// ============================================================================
+
+// Only load .env if running locally
+if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
+  try {
+    const dotenv = await import('dotenv');
+    dotenv.config();
+  } catch (err) { /* Production mode */ }
+}
 
 const { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_DATABASE } = process.env;
+
+if (!DB_USER) {
+  console.warn('⚠️  WARNING: DB_USER not set! Using default "postgres"');
+}
 
 const knexConfig = {
   development: {
@@ -24,11 +40,11 @@ const knexConfig = {
   production: {
     client: 'pg',
     connection: {
-      host: DB_HOST,
-      port: Number(DB_PORT),
-      database: DB_DATABASE,
-      user: DB_USER,
-      password: DB_PASSWORD
+      host: DB_HOST || 'localhost',
+      port: Number(DB_PORT) || 5432,
+      database: DB_DATABASE || 'attendance_service',
+      user: DB_USER || 'postgres',
+      password: DB_PASSWORD || '123456'
     },
     pool: { min: 2, max: 10 },
     migrations: { 

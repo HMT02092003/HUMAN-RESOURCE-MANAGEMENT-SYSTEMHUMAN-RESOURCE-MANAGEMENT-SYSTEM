@@ -1,15 +1,32 @@
-import 'dotenv/config'; 
+// ============================================================================
+// KNEX DATABASE CONFIGURATION - Auth Service
+// ============================================================================
+// Ưu tiên env variables từ Docker/System trước, sau đó mới load .env file
+// ============================================================================
+
+// Only load .env if running locally
+if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
+  try {
+    const dotenv = await import('dotenv');
+    dotenv.config();
+  } catch (err) { /* Production mode */ }
+}
+
 const { DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_DATABASE } = process.env;
+
+if (!DB_USER) {
+  console.warn('⚠️  WARNING: DB_USER not set! Using default "postgres"');
+}
 
 const knexConfig = {
   development: {
     client: 'pg',
     connection: {
-      host: DB_HOST,
-      user: DB_USER,
-      password: DB_PASSWORD,
-      database: DB_DATABASE,
-      port: DB_PORT
+      host: DB_HOST || 'localhost',
+      user: DB_USER || 'postgres',
+      password: DB_PASSWORD || '',
+      database: DB_DATABASE || 'auth_service',
+      port: DB_PORT ? Number(DB_PORT) : 5432
     },
     migrations: {
       directory: './databases/migrations',
@@ -36,22 +53,24 @@ const knexConfig = {
     }
   },
 
-  // production: {
-  //   client: 'pg',
-  //   connection: {
-  //     host: 'localhost',
-  //     user: 'postgres',
-  //     password: '123456',
-  //     database: 'DA1'
-  //   },
-  //   migrations: {
-  //     directory: './databases/migrations',
-  //     tableName: 'migrations'
-  //   },
-  //   seeds: {
-  //     directory: './databases/seeds',
-  //   }
-  // }
+  production: {
+    client: 'pg',
+    connection: {
+      host: DB_HOST || 'localhost',
+      user: DB_USER || 'postgres',
+      password: DB_PASSWORD || '',
+      database: DB_DATABASE || 'auth_service',
+      port: DB_PORT ? Number(DB_PORT) : 5432
+    },
+    pool: { min: 2, max: 10 },
+    migrations: {
+      directory: './databases/migrations',
+      tableName: 'migrations'
+    },
+    seeds: {
+      directory: './databases/seeds',
+    }
+  }
 };
 
 export default knexConfig;
