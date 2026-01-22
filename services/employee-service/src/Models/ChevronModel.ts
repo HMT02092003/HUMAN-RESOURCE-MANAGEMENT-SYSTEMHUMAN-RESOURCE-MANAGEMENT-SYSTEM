@@ -11,6 +11,7 @@ class ChevronModel extends Model {
   name!: string;
   description!: string;
   chevronCoefficient!: number;
+  role_ids!: number[];
 }
 
 export default ChevronModel;

@@ -37,9 +37,9 @@ class DepartmentService {
   }
 
   // Get all departments as plain array for dropdowns
-  async getAllDepartmentsForSelect() {
+  async getAllDepartmentsForSelect(role_id?: number) {
     try {
-      const response = await api.get(`/api/employee/all/departments`);
+      const response = await api.get(`/api/employee/all/departments`, { params: { role_id } });
       return response.data?.data || response.data || [];
     } catch (error: any) {
       throw error;

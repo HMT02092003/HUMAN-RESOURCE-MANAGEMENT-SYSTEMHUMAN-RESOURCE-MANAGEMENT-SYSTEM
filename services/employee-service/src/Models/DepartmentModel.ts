@@ -10,6 +10,7 @@ class DepartmentModel extends Model {
   id!: number;
   name!: string;
   description!: string;
+  role_ids!: number[];
 }
 
 export default DepartmentModel;

@@ -232,6 +232,10 @@ const ContractForm: React.FC<ContractFormProps> = ({
                   if (!value) {
                     return Promise.reject(new Error("Vui lòng chọn ngày bắt đầu hợp đồng"));
                   }
+                  const startDate = getFieldValue("startDate");
+                  if (startDate && value.isBefore(startDate, 'day')) {
+                    return Promise.reject(new Error("Ngày bắt đầu không được trước ngày ký"));
+                  }
                   return Promise.resolve();
                 },
               }),

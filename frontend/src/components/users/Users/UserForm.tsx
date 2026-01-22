@@ -43,7 +43,7 @@ const UserForm: React.FC<UserFormProps> = ({
 }) => {
   const [form] = Form.useForm();
   const router = useRouter();
-  
+
   // State for API data
   const [roles, setRoles] = useState<any[]>([]);
   const [chevrons, setChevrons] = useState<any[]>([]);
@@ -55,35 +55,55 @@ const UserForm: React.FC<UserFormProps> = ({
     const fetchData = async () => {
       setApiLoading(true);
       try {
-  // Fetch roles from auth-service (use the select helper which returns a plain array)
-  const rolesData = await roleService.getAllRolesForSelect();
-  setRoles(rolesData || []);
+        const rolesData = await roleService.getAllRolesForSelect();
+        setRoles(rolesData || []);
 
-  // Fetch departments, chevrons and contract types using select helpers
-  // so we always get a plain array (not a paginated object)
-  const departmentsData = await departmentService.getAllDepartmentsForSelect();
-  setDepartments(departmentsData || []);
-
-  // Fetch chevrons from employee-service
-  const chevronsData = await chevronService.getAllChevronsForSelect();
-  setChevrons(chevronsData || []);
-
-  // Fetch contract types
-  const contractTypesData = await (await import('@/service/contractTypeService')).contractTypeService.getAllContractTypesForSelect();
-  // contractTypeService is not imported at top to avoid unused imports in some build paths
-  // but we still want to load contract types for the form
-  // set a local state only if the component uses it (currently not but safe to fetch)
-  // If you want to render contract types in the form, add state and options accordingly.
+        // If editing, fetch filtered data based on initial roleId
+        if (isEdit && initialValues?.roleId) {
+          const [depts, chevs] = await Promise.all([
+            departmentService.getAllDepartmentsForSelect(initialValues.roleId),
+            chevronService.getAllChevronsForSelect(initialValues.roleId)
+          ]);
+          setDepartments(depts || []);
+          setChevrons(chevs || []);
+        }
       } catch (error: any) {
-        console.error('Error fetching form data:', error);
-        message.error('Có lỗi xảy ra khi tải dữ liệu form');
+        console.error('Error fetching initial form data:', error);
+        message.error('Có lỗi xảy ra khi tải dữ liệu ban đầu');
       } finally {
         setApiLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+  }, [isEdit, initialValues?.roleId]);
+
+  const handleRoleChange = async (roleId: number) => {
+    // Reset selected department and chevron
+    form.setFieldsValue({
+      departmentId: undefined,
+      chevronId: undefined
+    });
+    setDepartments([]);
+    setChevrons([]);
+
+    if (roleId) {
+      setApiLoading(true);
+      try {
+        const [depts, chevs] = await Promise.all([
+          departmentService.getAllDepartmentsForSelect(roleId),
+          chevronService.getAllChevronsForSelect(roleId)
+        ]);
+        setDepartments(depts || []);
+        setChevrons(chevs || []);
+      } catch (error) {
+        console.error('Error fetching filtered data:', error);
+        message.error('Không thể tải danh sách phòng ban và chức vụ theo vai trò này');
+      } finally {
+        setApiLoading(false);
+      }
+    }
+  };
 
   const handleFinish = (values: any) => {
     // Map Upload file list to backend field
@@ -328,7 +348,7 @@ const UserForm: React.FC<UserFormProps> = ({
               style={{ width: "100%" }}
               format="DD/MM/YYYY"
               disabledDate={(current) => current && current > dayjs().endOf("day")}
-              // allow manual input in DD/MM/YYYY and parse using dayjs customParseFormat
+            // allow manual input in DD/MM/YYYY and parse using dayjs customParseFormat
             />
           </Form.Item>
         </Col>
@@ -398,6 +418,7 @@ const UserForm: React.FC<UserFormProps> = ({
               allowClear
               showSearch
               loading={apiLoading}
+              onChange={handleRoleChange}
             >
               {roles.map((item) => (
                 <Option value={item.id} key={item.id}>
@@ -434,10 +455,11 @@ const UserForm: React.FC<UserFormProps> = ({
             ]}
           >
             <Select
-              placeholder="Chọn cấp bậc"
+              placeholder={form.getFieldValue('roleId') ? "Chọn cấp bậc" : "Vui lòng chọn vai trò trước"}
               allowClear
               showSearch
               loading={apiLoading}
+              disabled={!form.getFieldValue('roleId')}
             >
               {chevrons.map((item) => (
                 <Option value={item.id} key={item.id}>
@@ -457,10 +479,11 @@ const UserForm: React.FC<UserFormProps> = ({
             ]}
           >
             <Select
-              placeholder="Chọn phòng ban"
+              placeholder={form.getFieldValue('roleId') ? "Chọn phòng ban" : "Vui lòng chọn vai trò trước"}
               allowClear
               showSearch
               loading={apiLoading}
+              disabled={!form.getFieldValue('roleId')}
             >
               {departments.map((item) => (
                 <Option value={item.id} key={item.id}>
@@ -545,7 +568,7 @@ const UserForm: React.FC<UserFormProps> = ({
                   </Card>
                 ))}
                 {fields.length === 0 && (
-                    <p style={{ textAlign: 'center', color: '#999' }}>Chưa có thành viên gia đình nào được thêm.</p>
+                  <p style={{ textAlign: 'center', color: '#999' }}>Chưa có thành viên gia đình nào được thêm.</p>
                 )}
               </Card>
             )}

@@ -33,9 +33,9 @@ class ChevronService {
   }
 
   // Get all chevrons as plain array for dropdowns
-  async getAllChevronsForSelect() {
+  async getAllChevronsForSelect(role_id?: number) {
     try {
-      const response = await api.get(`/api/employee/all/chevrons`);
+      const response = await api.get(`/api/employee/all/chevrons`, { params: { role_id } });
       return response.data?.data || response.data || [];
     } catch (error: any) {
       throw error;

@@ -14,6 +14,7 @@ export const getAllDepartments = async (req: Request, res: Response) => {
       "departments.id as id",
       "departments.name",
       "departments.description",
+      "departments.role_ids",
       "departments.created_at",
     ];
 
@@ -79,10 +80,14 @@ export const getAllDepartments = async (req: Request, res: Response) => {
  */
 export const getAllDepartmentsList = async (req: Request, res: Response) => {
   try {
-    let result = await DepartmentModel.query()
-      .select(['id', 'name'])
-      .orderBy('name', 'asc');
+    const { role_id } = req.query;
+    let query = DepartmentModel.query().select(['id', 'name']);
 
+    if (role_id) {
+      query = query.whereRaw('? = ANY(role_ids)', [role_id]);
+    }
+
+    const result = await query.orderBy('name', 'asc');
     return res.status(200).json(result);
   } catch (error) {
     console.error("Error fetching departments for select:", error);
@@ -101,6 +106,7 @@ export const createDepartment = async (req: Request, res: Response) => {
     const allowFields = {
       name: "string!",
       description: "string",
+      role_ids: "any",
     };
 
     let params = validate(inputs, allowFields, { removeNotAllow: true });
@@ -125,6 +131,7 @@ export const createDepartment = async (req: Request, res: Response) => {
     const data = {
       name: params.name,
       description: params.description || null,
+      role_ids: params.role_ids || null,
       created_at: new Date(),
       updated_at: new Date(),
     };
@@ -205,6 +212,10 @@ export const getDepartmentSelect2 = async (req: Request, res: Response) => {
           queryBuilder.where('name', 'like', `%${data.search}%`);
         }
 
+        if (data.role_id) {
+          queryBuilder.whereRaw('? = ANY(role_ids)', [data.role_id]);
+        }
+
         // Add pagination
         if (data.page && data.limit) {
           const page = Number(data.page) || 1;
@@ -236,6 +247,7 @@ export const updateDepartment = async (req: Request, res: Response) => {
       id: "number!",
       name: "string!",
       description: "string",
+      role_ids: "any",
     };
 
     let params = validate(inputs, allowFields, { removeNotAllow: true });
@@ -253,6 +265,7 @@ export const updateDepartment = async (req: Request, res: Response) => {
     const updateData = {
       name: params.name,
       description: params.description,
+      role_ids: params.role_ids,
       updated_at: new Date()
     };
 

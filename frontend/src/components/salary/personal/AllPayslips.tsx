@@ -80,31 +80,35 @@ const AllPayslips: React.FC = () => {
   };
 
   const columns: ServerSideColumnType<PayslipDataType>[] = [
-    { title: 'Tên nhân viên', dataIndex: 'user', key: 'user', render: (_v, r:any) => r.fullName || r.username || 'N/A' },
-    { title: 'Phòng ban', dataIndex: ['department','name'], key: 'department', render: (_,_r:any) => {
+    { title: 'Tên nhân viên', dataIndex: 'user', key: 'user', render: (_v, r: any) => r.fullName || r.username || 'N/A' },
+    {
+      title: 'Phòng ban', dataIndex: ['department', 'name'], key: 'department', render: (_, _r: any) => {
         // department may be present in several shapes depending on backend: prefer record.department.name, then record.user.department.name, then departmentName
         return _r?.department?.name ?? _r?.user?.department?.name ?? _r?.departmentName ?? 'N/A';
-      } },
-    { title: 'Kỳ', dataIndex: 'month', key: 'month', searchField: 'month', filterType: 'dateRange', render: (_,_r:any) => `${_r.year || ''}-${String(_r.month || '').padStart(2,'0')}` },
-    { title: 'Lương cơ bản', dataIndex: 'base_salary', key: 'base_salary', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Phụ cấp', dataIndex: 'allowances', key: 'allowances', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Lương tăng ca', dataIndex: 'overtime_pay', key: 'overtime_pay', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' }, 
-    { title: 'Tổng lương (Chưa khấu trừ)', dataIndex: 'gross_salary', key: 'gross_salary', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'BHXH', dataIndex: 'social_insurance', key: 'social_insurance', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'BHYT', dataIndex: 'health_insurance', key: 'health_insurance', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Thuế TNCN', dataIndex: 'personal_income_tax', key: 'personal_income_tax', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Tổng khấu trừ', dataIndex: 'total_deductions', key: 'total_deductions', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Tổng tiền phạt', dataIndex: 'penalty_total', key: 'penalty_total', filterType: 'number', render: (t)=> formatCurrency(t) + ' VNĐ' },
-    { title: 'Lương thực nhận', dataIndex: 'net_salary', key: 'net_salary', filterType: 'number', render: (t)=> <b style={{ color: 'green' }}>{formatCurrency(t) + ' VNĐ'}</b> },
+      }
+    },
+    { title: 'Kỳ', dataIndex: 'month', key: 'month', searchField: 'month', filterType: 'dateRange', render: (_, _r: any) => `${_r.year || ''}-${String(_r.month || '').padStart(2, '0')}` },
+    { title: 'Lương cơ bản', dataIndex: 'base_salary', key: 'base_salary', filterType: 'number', render: (t) => formatCurrency(t) + ' VNĐ' },
+    { title: 'Phụ cấp', dataIndex: 'allowances', key: 'allowances', filterType: 'number', render: (t) => formatCurrency(t) + ' VNĐ' },
+    { title: 'Lương tăng ca', dataIndex: 'overtime_pay', key: 'overtime_pay', filterType: 'number', render: (t) => formatCurrency(t) + ' VNĐ' },
+    { title: 'Tổng lương (Chưa khấu trừ)', dataIndex: 'gross_salary', key: 'gross_salary', filterType: 'number', render: (t) => formatCurrency(t) + ' VNĐ' },
+    { title: 'BHXH', dataIndex: 'social_insurance', key: 'social_insurance', filterType: 'number', render: (t) => formatCurrency(t) + ' VNĐ' },
+    { title: 'BHYT', dataIndex: 'health_insurance', key: 'health_insurance', filterType: 'number', render: (t) => formatCurrency(t) + ' VNĐ' },
+    { title: 'Thuế TNCN', dataIndex: 'personal_income_tax', key: 'personal_income_tax', filterType: 'number', render: (t) => formatCurrency(t) + ' VNĐ' },
+    { title: 'Tổng khấu trừ', dataIndex: 'total_deductions', key: 'total_deductions', filterType: 'number', render: (t) => formatCurrency(t) + ' VNĐ' },
+    { title: 'Tổng tiền phạt', dataIndex: 'penalty_total', key: 'penalty_total', filterType: 'number', render: (t) => formatCurrency(t) + ' VNĐ' },
+    { title: 'Lương thực nhận', dataIndex: 'net_salary', key: 'net_salary', filterType: 'number', render: (t) => <b style={{ color: 'green' }}>{formatCurrency(t) + ' VNĐ'}</b> },
     { title: 'Ghi chú', dataIndex: 'notes', key: 'notes' },
-    { title: 'Ngày tạo', dataIndex: 'created_at', key: 'created_at', render: (t)=> formatDate(t) },
-    { title: 'Ngày cập nhật', dataIndex: 'updated_at', key: 'updated_at', render: (t)=> formatDate(t) },
-    { title: 'Thao tác', key: 'actions', fixed: 'right', width: 80, render: (_,_r:any) => (
-      <Button type="text" onClick={() => openDetail(_r.id)} aria-label="Xem chi tiết">
-        {/* eye outline icon */}
-        <svg style={{ width: 18, height: 18 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
-      </Button>
-    ) },
+    { title: 'Ngày tạo', dataIndex: 'created_at', key: 'created_at', render: (t) => formatDate(t) },
+    { title: 'Ngày cập nhật', dataIndex: 'updated_at', key: 'updated_at', render: (t) => formatDate(t) },
+    {
+      title: 'Thao tác', key: 'actions', fixed: 'right', width: 80, render: (_, _r: any) => (
+        <Button type="text" onClick={() => openDetail(_r.id)} aria-label="Xem chi tiết">
+          {/* eye outline icon */}
+          <svg style={{ width: 18, height: 18 }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z" /><circle cx="12" cy="12" r="3" /></svg>
+        </Button>
+      )
+    },
   ];
 
   const excelColumns: ExcelColumn[] = [
@@ -137,7 +141,7 @@ const AllPayslips: React.FC = () => {
 
       <ServerSideTable
         columns={columns}
-        rowKey={(r:any) => r.id || `${r.user_id}-${r.year}-${r.month}`}
+        rowKey={(r: any) => r.id || `${r.user_id}-${r.year}-${r.month}`}
         fetchData={async (params: any) => {
           // Forward table params to server-side paginated endpoint so backend applies filters/sort/pagination.
           // useServerSideTable already converts *_range -> fieldFrom/fieldTo; pass params through.
@@ -154,12 +158,12 @@ const AllPayslips: React.FC = () => {
             return { data: [], total: 0, page: params.page || 1, pageSize: params.limit || 10 };
           }
         }}
-        defaultPageSize={pageSize}
+        onDataChange={(loadedData) => setData(loadedData)}
         scroll={{ x: 'max-content' }}
       />
 
       <Modal
-        title={selectedPayslip ? `Phiếu lương - ${selectedPayslip.fullName || selectedPayslip.username || ''} (${selectedPayslip.year || ''}-${String(selectedPayslip.month || '').padStart(2,'0')})` : 'Phiếu lương'}
+        title={selectedPayslip ? `Phiếu lương - ${selectedPayslip.fullName || selectedPayslip.username || ''} (${selectedPayslip.year || ''}-${String(selectedPayslip.month || '').padStart(2, '0')})` : 'Phiếu lương'}
         open={detailModalVisible}
         onCancel={() => { setDetailModalVisible(false); setSelectedPayslip(null); }}
         footer={null}

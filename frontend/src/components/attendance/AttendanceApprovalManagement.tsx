@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { Button, Space, message, Tooltip, Tag, DatePicker, Modal } from 'antd';
+import { Button, Space, message, Tooltip, Tag, DatePicker, Modal, InputNumber, Select } from 'antd';
 import viVN from 'antd/locale/vi_VN';
 import type { PickerLocale } from 'antd/es/date-picker/generatePicker';
 import { CheckOutlined, CheckCircleOutlined, CalendarOutlined, FileExcelOutlined, DownloadOutlined } from '@ant-design/icons';
@@ -15,18 +15,19 @@ const AttendanceApprovalManagement: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [selectedRows, setSelectedRows] = useState<any[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  
+
   // Hook Excel Export
   const { exportToExcel } = useExcelExport();
-  
+
   // State cho xuất Excel
   const [loadingApprovalExport, setLoadingApprovalExport] = useState(false);
   const [loadingAttendanceExport, setLoadingAttendanceExport] = useState(false);
-  
+
   // Modal cho duyệt bảng chấm công và xuất bảng công
   const [showApproveMonthModal, setShowApproveMonthModal] = useState(false);
   const [showAttendanceMonthModal, setShowAttendanceMonthModal] = useState(false);
-  const [exportMonthSelection, setExportMonthSelection] = useState(dayjs());
+  const [exportYearSelection, setExportYearSelection] = useState(dayjs().year());
+  const [exportMonthSelection, setExportMonthSelection] = useState(dayjs().month() + 1);
 
   // Ref để lưu trữ dữ liệu đã filter/sort từ table
   const currentTableDataRef = useRef<any[]>([]);
@@ -67,11 +68,11 @@ const AttendanceApprovalManagement: React.FC = () => {
     }
   };
 
-  const handleApproveAllMonth = async (selectedMonth: dayjs.Dayjs) => {
+  const handleApproveAllMonth = async () => {
     setShowApproveMonthModal(false);
-    const monthStr = selectedMonth.format('YYYY-MM');
-    const monthDisplay = selectedMonth.format('MM/YYYY');
-    
+    const monthStr = `${exportYearSelection}-${String(exportMonthSelection).padStart(2, '0')}`;
+    const monthDisplay = `${String(exportMonthSelection).padStart(2, '0')}/${exportYearSelection}`;
+
     Modal.confirm({
       title: 'Xác nhận duyệt tất cả',
       content: `Bạn có chắc chắn muốn duyệt TẤT CẢ bảng chấm công (chưa duyệt) của tháng ${monthDisplay}?`,
@@ -92,7 +93,7 @@ const AttendanceApprovalManagement: React.FC = () => {
   // Hàm xuất Excel Bảng Duyệt - Gọi API lấy TẤT CẢ dữ liệu theo scope
   const handleExportApprovalData = async () => {
     setLoadingApprovalExport(true);
-    
+
     try {
       console.log('📊 Xuất Excel - Gọi API lấy tất cả dữ liệu theo scope...');
       // Export should reflect the current table view (search/sort/filter/pagination).
@@ -180,19 +181,19 @@ const AttendanceApprovalManagement: React.FC = () => {
   };
 
   // Hàm xuất Excel Bảng Công chi tiết theo ngày
-  const handleExportDailyAttendanceData = async (selectedMonth: dayjs.Dayjs) => {
+  const handleExportDailyAttendanceData = async () => {
     setLoadingAttendanceExport(true);
     setShowAttendanceMonthModal(false);
-    
+
     try {
-      const monthStr = selectedMonth.format('YYYY-MM');
-      const monthDisplay = selectedMonth.format('MM/YYYY');
-      
+      const monthStr = `${exportYearSelection}-${String(exportMonthSelection).padStart(2, '0')}`;
+      const monthDisplay = `${String(exportMonthSelection).padStart(2, '0')}/${exportYearSelection}`;
+
       console.log('📊 Fetching daily attendance for export:', monthStr);
-      
+
       // Gọi API mới để lấy chi tiết theo ngày
       const response = await attendanceService.getDailyAttendanceForExport(monthStr);
-      
+
       if (!response.success || !response.data || response.data.length === 0) {
         message.warning(`Không có dữ liệu bảng công tháng ${monthDisplay}`);
         return;
@@ -205,15 +206,15 @@ const AttendanceApprovalManagement: React.FC = () => {
       // Prefer fields returned by the API (flat `fullName`/`department`), fallback to nested `user` when present.
       const formattedData = Array.isArray(data)
         ? data.map((rec: any, idx: number) => {
-            const user = rec.user || {};
-            return {
-              ...rec,
-              stt: rec.stt || idx + 1,
-              fullName: rec.fullName || user.fullName || user.firstName || user.lastName || user.username || `User ${rec.userId || idx + 1}`,
-              position: rec.position || user.position?.name || user.position || user.jobTitle || '-',
-              department: rec.department || user.department?.name || '-',
-            };
-          })
+          const user = rec.user || {};
+          return {
+            ...rec,
+            stt: rec.stt || idx + 1,
+            fullName: rec.fullName || user.fullName || user.firstName || user.lastName || user.username || `User ${rec.userId || idx + 1}`,
+            position: rec.position || user.position?.name || user.position || user.jobTitle || '-',
+            department: rec.department || user.department?.name || '-',
+          };
+        })
         : [];
 
       // Build columns: STT, Họ và tên, Phòng ban, Chức vụ, Day1-31, Tổng ngày công
@@ -223,7 +224,7 @@ const AttendanceApprovalManagement: React.FC = () => {
         { title: 'Phòng ban', dataIndex: 'department', width: 25 },
         { title: 'Chức vụ', dataIndex: 'position', width: 20 },
       ];
-      
+
       // Add day columns
       for (let day = 1; day <= daysInMonth; day++) {
         columns.push({
@@ -232,7 +233,7 @@ const AttendanceApprovalManagement: React.FC = () => {
           width: 6,
         });
       }
-      
+
       columns.push({
         title: 'Tổng ngày công',
         dataIndex: 'totalWorkingDays',
@@ -271,7 +272,7 @@ const AttendanceApprovalManagement: React.FC = () => {
       page: normalized.page,
       pageSize: normalized.pageSize, // Lưu pageSize hiện tại
     };
-    
+
     // Lưu sort riêng
     if (normalized.sortField || normalized.sortOrder) {
       currentSortRef.current = {
@@ -329,7 +330,7 @@ const AttendanceApprovalManagement: React.FC = () => {
       key: 'month',
       searchField: 'month',
       sortable: true,
-      filterType: 'text',
+      filterType: 'dateRange',
       width: 120,
       render: (val: string) => {
         if (!val) return '-';
@@ -507,11 +508,11 @@ const AttendanceApprovalManagement: React.FC = () => {
             </Tooltip>
           ) : (
             <Tooltip title="Đã duyệt">
-              <Button 
-                type="text" 
+              <Button
+                type="text"
                 size="small"
-                icon={<CheckCircleOutlined style={{ color: 'gray' }} />} 
-                disabled 
+                icon={<CheckCircleOutlined style={{ color: 'gray' }} />}
+                disabled
               />
             </Tooltip>
           )}
@@ -541,7 +542,8 @@ const AttendanceApprovalManagement: React.FC = () => {
             type="primary"
             icon={<CalendarOutlined />}
             onClick={() => {
-              setExportMonthSelection(dayjs());
+              setExportYearSelection(dayjs().year());
+              setExportMonthSelection(dayjs().month() + 1);
               setShowApproveMonthModal(true);
             }}
             style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
@@ -552,8 +554,8 @@ const AttendanceApprovalManagement: React.FC = () => {
 
         {/* Nút duyệt đã chọn - chỉ hiện khi có checkbox được chọn */}
         {selectedRowKeys.length > 0 && (
-          <Button 
-            type="default" 
+          <Button
+            type="default"
             onClick={handleApproveSelected}
             style={{ marginLeft: 8 }}
           >
@@ -580,7 +582,8 @@ const AttendanceApprovalManagement: React.FC = () => {
             type="default"
             icon={<DownloadOutlined />}
             onClick={() => {
-              setExportMonthSelection(dayjs());
+              setExportYearSelection(dayjs().year());
+              setExportMonthSelection(dayjs().month() + 1);
               setShowAttendanceMonthModal(true);
             }}
             style={{ backgroundColor: '#fa8c16', color: 'white', borderColor: '#fa8c16' }}
@@ -589,7 +592,7 @@ const AttendanceApprovalManagement: React.FC = () => {
           </Button>
         </Tooltip>
       </Space>
-      
+
       <ServerSideTable
         columns={columns}
         fetchData={fetchData}
@@ -623,21 +626,31 @@ const AttendanceApprovalManagement: React.FC = () => {
         title="Chọn tháng duyệt bảng chấm công"
         open={showApproveMonthModal}
         onCancel={() => setShowApproveMonthModal(false)}
-        onOk={() => handleApproveAllMonth(exportMonthSelection)}
+        onOk={() => handleApproveAllMonth()}
         okText="Duyệt tất cả"
         cancelText="Hủy"
       >
         <div style={{ padding: '20px 0' }}>
           <p style={{ marginBottom: 16 }}>Chọn tháng bạn muốn duyệt tất cả bảng chấm công:</p>
-          <DatePicker
-            value={exportMonthSelection}
-            onChange={(date) => date && setExportMonthSelection(date)}
-            picker="month"
-            format="MM/YYYY"
-            style={{ width: '100%' }}
-            locale={viVN as any}
-            placeholder="Chọn tháng"
-          />
+          <Space wrap>
+            <span>Năm:</span>
+            <InputNumber
+              min={2000}
+              max={2100}
+              value={exportYearSelection}
+              onChange={(val) => setExportYearSelection(val || dayjs().year())}
+            />
+            <span>Tháng:</span>
+            <Select
+              value={exportMonthSelection}
+              onChange={setExportMonthSelection}
+              style={{ width: 100 }}
+            >
+              {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                <Select.Option key={m} value={m}>Tháng {m}</Select.Option>
+              ))}
+            </Select>
+          </Space>
           <p style={{ marginTop: 16, fontSize: 12, color: '#666' }}>
             Sẽ duyệt TẤT CẢ các bảng chấm công (chưa duyệt) của tháng đã chọn
           </p>
@@ -649,22 +662,32 @@ const AttendanceApprovalManagement: React.FC = () => {
         title="Chọn tháng xuất Bảng Công"
         open={showAttendanceMonthModal}
         onCancel={() => setShowAttendanceMonthModal(false)}
-        onOk={() => handleExportDailyAttendanceData(exportMonthSelection)}
+        onOk={() => handleExportDailyAttendanceData()}
         okText="Xuất Excel"
         cancelText="Hủy"
         confirmLoading={loadingAttendanceExport}
       >
         <div style={{ padding: '20px 0' }}>
           <p style={{ marginBottom: 16 }}>Chọn tháng bạn muốn xuất bảng công chi tiết:</p>
-          <DatePicker
-            value={exportMonthSelection}
-            onChange={(date) => date && setExportMonthSelection(date)}
-            picker="month"
-            format="MM/YYYY"
-            style={{ width: '100%' }}
-            locale={viVN as any}
-            placeholder="Chọn tháng"
-          />
+          <Space wrap>
+            <span>Năm:</span>
+            <InputNumber
+              min={2000}
+              max={2100}
+              value={exportYearSelection}
+              onChange={(val) => setExportYearSelection(val || dayjs().year())}
+            />
+            <span>Tháng:</span>
+            <Select
+              value={exportMonthSelection}
+              onChange={setExportMonthSelection}
+              style={{ width: 100 }}
+            >
+              {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                <Select.Option key={m} value={m}>Tháng {m}</Select.Option>
+              ))}
+            </Select>
+          </Space>
           <p style={{ marginTop: 16, fontSize: 12, color: '#666' }}>
             Bảng công sẽ hiển thị chi tiết chấm công từng ngày (1-31) của tháng đã chọn
           </p>

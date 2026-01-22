@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Button, ConfigProvider, Tooltip, Space, Modal, message, Grid, Row, Col } from "antd";
+import { Button, ConfigProvider, Tooltip, Space, Modal, message, Grid, Row, Col, Tag } from "antd";
 import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, SearchOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
@@ -14,6 +14,7 @@ interface DepartmentData {
   id: number;
   name: string;
   description: string;
+  role_ids: number[];
   created_at: Date;
 }
 
@@ -40,6 +41,11 @@ const excelColumns: ExcelColumn[] = [
     width: 40
   },
   {
+    title: 'Vai trò liên quan',
+    dataIndex: 'role_names',
+    width: 30
+  },
+  {
     title: 'Ngày tạo',
     dataIndex: 'created_at',
     width: 15,
@@ -57,6 +63,21 @@ const Index: React.FC = () => {
   const [totalRecords, setTotalRecords] = useState(0);
   const router = useRouter();
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [roles, setRoles] = useState<any[]>([]);
+
+  // Fetch roles for mapping IDs to names
+  useEffect(() => {
+    const fetchRoles = async () => {
+      try {
+        const { roleService } = await import('@/service/roleService');
+        const data = await roleService.getAllRolesForSelect();
+        setRoles(data || []);
+      } catch (error) {
+        console.error('Error fetching roles:', error);
+      }
+    };
+    fetchRoles();
+  }, []);
 
   // Giả lập quyền hạn
   const createPer: boolean = true;
@@ -112,6 +133,23 @@ const Index: React.FC = () => {
       searchable: true,
       searchPlaceholder: 'Tìm theo mô tả',
       width: 300,
+    },
+    {
+      title: 'Vai trò liên quan',
+      dataIndex: 'role_ids',
+      key: 'role_ids',
+      width: 250,
+      render: (roleIds: number[]) => {
+        if (!roleIds || !Array.isArray(roleIds)) return '-';
+        return (
+          <Space wrap>
+            {roleIds.map(id => {
+              const role = roles.find(r => r.id === id);
+              return role ? <Tag key={id} color="blue">{role.name}</Tag> : null;
+            })}
+          </Space>
+        );
+      }
     },
     {
       title: "Ngày tạo",
@@ -180,7 +218,7 @@ const Index: React.FC = () => {
   const handleDelete = async () => {
     try {
       await departmentService.deleteMultipleDepartments(selectedIds);
-      
+
       setSelectedIds([]);
       setHiddenDeleteBtn(true);
       message.success('Xóa thành công!');
@@ -258,7 +296,15 @@ const Index: React.FC = () => {
             refreshTrigger={refreshTrigger}
             showTotal={true}
             onDataChange={(data, pagination) => {
-              setDepartmentData(data);
+              // Map role names for Excel export
+              const mappedData = data.map((item: any) => ({
+                ...item,
+                role_names: (item.role_ids || [])
+                  .map((id: number) => roles.find(r => r.id === id)?.name)
+                  .filter(Boolean)
+                  .join(', ')
+              }));
+              setDepartmentData(mappedData);
               setTotalRecords(pagination.total);
             }}
             scroll={{ x: 'max-content' }}

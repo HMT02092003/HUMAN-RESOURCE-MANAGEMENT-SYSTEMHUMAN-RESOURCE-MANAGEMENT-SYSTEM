@@ -25,16 +25,16 @@ export const calculatePayslipAsync = async (req: Request, res: Response, next: N
     const userId = String(req.params.userId);
     const year = Number(req.query.year) || new Date().getFullYear();
     const month = Number(req.query.month) || (new Date().getMonth() + 1);
-    
+
     const authUserId = getUserId(req);
     const userData = getUserData(req);
-    
+
     // Check existing payslip
     const existing = await MonthlyPayslip.query().findOne({ user_id: userId, year, month });
     if (existing) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'Payslip already exists for this user/month' 
+        message: 'Payslip already exists for this user/month'
       });
     }
 
@@ -80,7 +80,7 @@ export const calculatePayslipAsync = async (req: Request, res: Response, next: N
 export const calculateBulkAsync = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { year, month, userIds, forceRecalculate = false } = req.body;
-    
+
     // Validation - userIds có thể là empty array
     if (!year || !month || !Array.isArray(userIds)) {
       return res.status(400).json({
@@ -92,7 +92,7 @@ export const calculateBulkAsync = async (req: Request, res: Response, next: Next
     const authUserId = getUserId(req);
     const userData = getUserData(req);
     const authToken = req.headers.authorization;
-    
+
     const results = [];
     const errors = [];
 
@@ -101,21 +101,21 @@ export const calculateBulkAsync = async (req: Request, res: Response, next: Next
     if (userIds.length === 0) {
       try {
         console.log(`📊 Fetching users with approved attendance for ${month}/${year}...`);
-        
+
         // Gọi Attendance Service để lấy monthly attendance
         const attendanceData = await AttendanceService.getMonthlyAttendanceByMonth(
-          Number(year), 
+          Number(year),
           Number(month),
           authToken,
           userData
         );
-        
+
         // Lọc users có isApproved = true từ monthly_attendances
         // Response structure: { success: true, data: { results: [...], total: x } }
         if (attendanceData?.data?.results && Array.isArray(attendanceData.data.results)) {
           // Debug log để xem dữ liệu trả về
           console.log('📝 Sample attendance record:', JSON.stringify(attendanceData.data.results[0], null, 2));
-          
+
           targetUserIds = attendanceData.data.results
             .filter((att: any) => att.isApproved === true)
             .map((att: any) => {
@@ -123,14 +123,14 @@ export const calculateBulkAsync = async (req: Request, res: Response, next: Next
               return att.user_id || att.userId || att.employee_id || att.employeeId;
             })
             .filter((id: any) => id != null); // Loại bỏ null/undefined
-          
+
           console.log(`✅ Found ${targetUserIds.length} users with approved attendance`);
           console.log(`📋 User IDs:`, targetUserIds.slice(0, 5), '...'); // In 5 IDs đầu
         } else {
           console.warn('⚠️  No attendance data found or invalid format');
           targetUserIds = [];
         }
-        
+
       } catch (err: any) {
         console.error('❌ Error fetching attendance:', err.message);
         return res.status(500).json({
@@ -143,7 +143,7 @@ export const calculateBulkAsync = async (req: Request, res: Response, next: Next
     if (targetUserIds.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'No users found to calculate salary. Please ensure attendance is approved.'
+        message: 'Không tìm thấy người dùng nào để tính lương. Vui lòng đảm bảo bảng công đã được duyệt.'
       });
     }
 
@@ -233,9 +233,9 @@ export const calculateBulkAsync = async (req: Request, res: Response, next: Next
 export const getPayslipStatus = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const payslipId = req.params.payslipId;
-    
+
     const payslip = await MonthlyPayslip.query().findById(payslipId);
-    
+
     if (!payslip) {
       return res.status(404).json({
         success: false,

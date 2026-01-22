@@ -4,23 +4,26 @@ import React, { useState, useCallback } from 'react';
 import { DatePicker, Button, message, Space, Tag, notification, Badge, InputNumber, Select } from 'antd';
 import dayjs from 'dayjs';
 import salaryService from '@/service/salaryService';
-import { CalculatorOutlined, WarningOutlined } from '@ant-design/icons';
+import { CalculatorOutlined, WarningOutlined, DownloadOutlined } from '@ant-design/icons';
+import { ExcelExportButton, ExcelColumn } from '@/components/common/ExcelExport';
 import constant from '@/config/constant';
 import InvalidUsersModal from '../InvalidUsersModal';
 import { ServerSideTable } from '@/components/common/ServerSideTable';
 import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
 
-const {TypeOfStatusSalary} = constant;
+const { TypeOfStatusSalary } = constant;
 
 const SalaryManagement: React.FC = () => {
   const currentYear = dayjs().year();
   const currentMonth = dayjs().month() + 1;
-  
+
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
   const [month, setMonth] = useState(dayjs());
   const [calculating, setCalculating] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [tableData, setTableData] = useState<any[]>([]);
+  const [totalRecords, setTotalRecords] = useState(0);
 
   // State cho modal hiển thị người dùng không hợp lệ
   const [invalidUsersModalOpen, setInvalidUsersModalOpen] = useState(false);
@@ -41,11 +44,11 @@ const SalaryManagement: React.FC = () => {
     const normalized = { ...params };
     if (normalized.allMonths !== undefined) delete normalized.allMonths;
     const result = await salaryService.listPayslipsPaginated(normalized);
-    console.log('[salaryManagement] Payslips result:', { 
-      success: result.success, 
-      dataCount: result.data?.length || 0, 
+    console.log('[salaryManagement] Payslips result:', {
+      success: result.success,
+      dataCount: result.data?.length || 0,
       total: result.total,
-      message: result.message 
+      message: result.message
     });
     return result;
   }, []);
@@ -283,7 +286,7 @@ const SalaryManagement: React.FC = () => {
   ];
 
   // Kiểm tra xem có người dùng không hợp lệ không
-  const hasInvalidUsers = 
+  const hasInvalidUsers =
     invalidUsersData.usersWithoutContracts.length > 0 ||
     invalidUsersData.usersWithoutApprovedAttendance.length > 0 ||
     invalidUsersData.usersWithoutSalaryProfile.length > 0;
@@ -292,9 +295,9 @@ const SalaryManagement: React.FC = () => {
     <div style={{ padding: 24 }}>
       <Space style={{ marginBottom: 16 }} wrap>
         <span>Chọn năm:</span>
-        <InputNumber 
-          min={2000} 
-          max={2100} 
+        <InputNumber
+          min={2000}
+          max={2100}
           value={selectedYear}
           onChange={(val) => setSelectedYear(val || currentYear)}
           style={{ width: 120 }}
@@ -312,8 +315,27 @@ const SalaryManagement: React.FC = () => {
         <Button onClick={handleCalculate} type="primary" loading={calculating}>
           <CalculatorOutlined /> Tính lương {selectedMonth}/{selectedYear}
         </Button>
+
+        {tableData && tableData.length > 0 && (
+          <ExcelExportButton
+            data={tableData}
+            columns={columns.map(col => ({
+              title: col.title as string,
+              dataIndex: col.dataIndex as string | string[],
+              width: 20,
+              render: col.render
+            }))}
+            fileName={`Bang_luong_${selectedMonth}_${selectedYear}`}
+            title={`BẢNG LƯƠNG THÁNG ${selectedMonth}/${selectedYear}`}
+            description={`Tổng số: ${totalRecords} nhân viên | Xuất ngày: ${dayjs().format('DD/MM/YYYY HH:mm')}`}
+            type="default"
+            style={{ backgroundColor: '#52c41a', color: 'white', borderColor: '#52c41a' }}
+          >
+            <DownloadOutlined /> Xuất Excel
+          </ExcelExportButton>
+        )}
       </Space>
-      
+
       <ServerSideTable
         columns={columns}
         fetchData={fetchData}
@@ -322,6 +344,10 @@ const SalaryManagement: React.FC = () => {
         defaultSortOrder="desc"
         defaultPageSize={25}
         refreshTrigger={refreshTrigger}
+        onDataChange={(data, pagination) => {
+          setTableData(data);
+          setTotalRecords(pagination.total);
+        }}
         scroll={{ x: 'max-content' }}
         bordered
       />

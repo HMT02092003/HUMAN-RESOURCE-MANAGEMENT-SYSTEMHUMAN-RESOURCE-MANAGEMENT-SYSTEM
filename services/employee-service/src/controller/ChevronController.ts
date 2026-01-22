@@ -13,6 +13,7 @@ export const getAllChevrons = async (req: Request, res: Response) => {
       "chevrons.name",
       "chevrons.description",
       "chevrons.chevronCoefficient",
+      "chevrons.role_ids",
       "chevrons.created_at",
       "chevrons.updated_at",
     ];
@@ -67,10 +68,14 @@ export const getAllChevrons = async (req: Request, res: Response) => {
  */
 export const getAllChevronsList = async (req: Request, res: Response) => {
   try {
-    let result = await ChevronModel.query()
-      .select(['id', 'name', 'chevronCoefficient'])
-      .orderBy('name', 'asc');
+    const { role_id } = req.query;
+    let query = ChevronModel.query().select(['id', 'name', 'chevronCoefficient']);
 
+    if (role_id) {
+      query = query.whereRaw('? = ANY(role_ids)', [role_id]);
+    }
+
+    const result = await query.orderBy('name', 'asc');
     return res.status(200).json(result);
   } catch (error) {
     console.error("Error fetching chevrons for select:", error);
@@ -90,6 +95,7 @@ export const createChevron = async (req: Request, res: Response) => {
       name: "string!",
       description: "string",
       chevronCoefficient: "number!",
+      role_ids: "any",
     };
 
     let params = validate(inputs, allowFields, { removeNotAllow: true });
@@ -107,6 +113,7 @@ export const createChevron = async (req: Request, res: Response) => {
       name: params.name,
       description: params.description || null,
       chevronCoefficient: params.chevronCoefficient,
+      role_ids: params.role_ids || null,
       created_at: new Date(),
       updated_at: new Date(),
     };
@@ -176,6 +183,7 @@ export const updateChevron = async (req: Request, res: Response) => {
       name: "string!",
       description: "string",
       chevronCoefficient: "number!",
+      role_ids: "any",
     };
 
     let params = validate(inputs, allowFields, { removeNotAllow: true });
@@ -186,6 +194,7 @@ export const updateChevron = async (req: Request, res: Response) => {
       name: params.name,
       description: params.description || null,
       chevronCoefficient: params.chevronCoefficient,
+      role_ids: params.role_ids,
       updated_at: new Date()
     };
 
@@ -234,7 +243,7 @@ export const deleteChevron = async (req: Request, res: Response) => {
   try {
     // Lấy id từ query và chuyển sang number
     const id = parseInt(req.query.id as string, 10);
-    
+
     if (isNaN(id)) {
       return res.status(400).json({ error: "id phải là số!" });
     }
@@ -268,10 +277,10 @@ export const deleteChevron = async (req: Request, res: Response) => {
 export const deleteMultipleChevrons = async (req: Request, res: Response) => {
   try {
     console.log("Received request to delete multiple chevrons:", req.body);
-    
+
     // Lấy ids trực tiếp từ body
     const { ids } = req.body;
-    
+
     // Kiểm tra ids có phải là mảng không
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: "ids phải là một mảng và không được rỗng!" });
@@ -328,6 +337,10 @@ export const getChevronSelect2 = async (req: Request, res: Response) => {
         // Apply filters from query params if needed
         if (data.search) {
           queryBuilder.where('name', 'like', `%${data.search}%`);
+        }
+
+        if (data.role_id) {
+          queryBuilder.whereRaw('? = ANY(role_ids)', [data.role_id]);
         }
 
         // Add pagination
