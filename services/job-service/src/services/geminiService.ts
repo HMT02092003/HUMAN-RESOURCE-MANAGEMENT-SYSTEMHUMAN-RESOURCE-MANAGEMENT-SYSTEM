@@ -5,7 +5,7 @@ import SkillModel from '../Models/SkillModel.ts';
 
 dayjs.extend(isBetween);
 
-// Model cascade from strongest to weakest
+// Model cascade from strongest to weakest based on user image
 const MODEL_CASCADE = [
   'gemini-3-flash',
   'gemini-2.5-flash',
@@ -28,7 +28,7 @@ if (!apiKey) {
 const client = apiKey ? new GoogleGenAI({
   apiKey,
   httpOptions: {
-    apiVersion: 'v1alpha',
+    apiVersion: 'v1beta',
     timeout: 60000 // Increase timeout to 60 seconds for Gemini calls
   }
 }) : null;
@@ -78,11 +78,14 @@ async function generateContentWithCascade(prompt: string): Promise<string> {
         errorMsg.includes('429') ||
         errorMsg.includes('503') ||
         errorMsg.includes('500') ||
+        errorMsg.includes('404') ||
         errorMsgLower.includes('rate limit') ||
         errorMsgLower.includes('quota') ||
         errorMsgLower.includes('overloaded') ||
         errorMsgLower.includes('exhausted') ||
         errorMsgLower.includes('unavailable') ||
+        errorMsgLower.includes('not found') ||
+        errorMsgLower.includes('not_found') ||
         errorMsg.includes('RESOURCE_EXHAUSTED');
 
       if (isRetryableError) {

@@ -193,7 +193,12 @@ exports.seed = async function (knex) {
   const calculateLateness = (inH, inM, outH, outM) => {
     const lateMinutes = Math.max(0, (inH * 60 + inM) - (8 * 60));
     const earlyMinutes = Math.max(0, (18 * 60) - (outH * 60 + outM));
-    return { lateMinutes, earlyMinutes };
+
+    // Giả sử tiền phạt là 2500 VNĐ / phút
+    const latePenalty = lateMinutes * 2500;
+    const earlyPenalty = earlyMinutes * 2500;
+
+    return { lateMinutes, earlyMinutes, latePenalty, earlyPenalty };
   };
 
   // =============================================
@@ -243,7 +248,11 @@ exports.seed = async function (knex) {
         totalWorkHours: 0,
         totalWorkingUnits: 0,
         totalOvertimeHours: 0,
-        totalOtWorkingUnits: 0
+        totalOtWorkingUnits: 0,
+        totalLatePenalty: 0,
+        totalEarlyLeavePenalty: 0,
+        totalUnauthorizedAbsencePenalty: 0,
+        totalPenalty: 0
       };
 
       for (const date of workdays) {
@@ -295,7 +304,8 @@ exports.seed = async function (knex) {
         // CASE 3: Random nghỉ không phép (3% mỗi ngày)
         if (Math.random() < 0.03) {
           monthlyData[key].unauthorizedAbsenceDays++;
-          monthlyData[key].absentDays++;
+          monthlyData[key].totalUnauthorizedAbsencePenalty += 200000; // Phạt 200k/ngày vắng không phép
+          monthlyData[key].totalPenalty += 200000;
           monthStats.absent++;
           continue;
         }
@@ -329,18 +339,19 @@ exports.seed = async function (knex) {
         }
 
         const workHours = calculateWorkHours(times.checkInHour, times.checkInMinute, times.checkOutHour, times.checkOutMinute);
-        const { lateMinutes, earlyMinutes } = calculateLateness(times.checkInHour, times.checkInMinute, times.checkOutHour, times.checkOutMinute);
+        const { lateMinutes, earlyMinutes, latePenalty, earlyPenalty } = calculateLateness(times.checkInHour, times.checkInMinute, times.checkOutHour, times.checkOutMinute);
 
         // Tính công: 1 công nếu làm >= 4h
         let dailyWorkingUnit = workHours >= 4 ? 1 : 0.5;
         let otWorkingUnit = 0;
+        let otHoursRecord = 0;
 
         // CASE 5: Có đơn OT được duyệt
         if (hasOT) {
           const otData = overtimeMap.get(appKey);
-          const otHours = otData.totalHours || 0;
-          otWorkingUnit = otHours / 8; // Mỗi 8h OT = 1 công OT
-          monthlyData[key].totalOvertimeHours += otHours;
+          otHoursRecord = otData.totalHours || 0;
+          otWorkingUnit = otHoursRecord / 8; // Mỗi 8h OT = 1 công OT
+          monthlyData[key].totalOvertimeHours += otHoursRecord;
           monthlyData[key].totalOtWorkingUnits += otWorkingUnit;
           monthStats.ot++;
         }
@@ -351,6 +362,10 @@ exports.seed = async function (knex) {
         monthlyData[key].totalWorkingUnits += dailyWorkingUnit;
         monthlyData[key].totalLateMinutes += lateMinutes;
         monthlyData[key].totalEarlyLeaveMinutes += earlyMinutes;
+        monthlyData[key].totalLatePenalty += latePenalty;
+        monthlyData[key].totalEarlyLeavePenalty += earlyPenalty;
+        monthlyData[key].totalPenalty += (latePenalty + earlyPenalty);
+
         if (lateMinutes > 0) monthlyData[key].lateDays++;
         if (earlyMinutes > 0) monthlyData[key].earlyLeaveDays++;
         monthStats.present++;
@@ -364,10 +379,11 @@ exports.seed = async function (knex) {
           dailyWorkingUnit,
           totalWorkingUnit: dailyWorkingUnit + otWorkingUnit,
           otWorkingUnit,
+          overtimeHours: otHoursRecord,
           lateMinutes,
           earlyDepartureMinutes: earlyMinutes,
-          lateArrivalPenalty: 0,
-          earlyLeavePenalty: 0,
+          lateArrivalPenalty: latePenalty,
+          earlyLeavePenalty: earlyPenalty,
           created_at: new Date(),
           updated_at: new Date()
         });
@@ -420,10 +436,10 @@ exports.seed = async function (knex) {
       totalWorkingUnits: Math.round(d.totalWorkingUnits * 100) / 100,
       totalOvertimeHours: Math.round(d.totalOvertimeHours * 100) / 100,
       totalOtWorkingUnits: Math.round(d.totalOtWorkingUnits * 100) / 100,
-      totalLatePenalty: 0, // Sẽ được tính trong script recalculate
-      totalEarlyLeavePenalty: 0,
-      totalUnauthorizedAbsencePenalty: 0,
-      totalPenalty: 0,
+      totalLatePenalty: d.totalLatePenalty,
+      totalEarlyLeavePenalty: d.totalEarlyLeavePenalty,
+      totalUnauthorizedAbsencePenalty: d.totalUnauthorizedAbsencePenalty,
+      totalPenalty: d.totalPenalty,
       isApproved: false,
       approvedBy: null,
       approvedAt: null,

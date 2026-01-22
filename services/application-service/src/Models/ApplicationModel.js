@@ -15,11 +15,11 @@ export class ApplicationModel extends Model {
       required: ['type', 'data', 'userId'],
       properties: {
         id: { type: 'integer' },
-        type: { 
-          type: 'string', 
-          enum: Object.values(ApplicationType) 
+        type: {
+          type: 'string',
+          enum: Object.values(ApplicationType)
         },
-        status: { 
+        status: {
           type: 'integer',
           enum: Object.values(ApplicationStatus),
           default: ApplicationStatus.PENDING
@@ -97,22 +97,22 @@ export class ApplicationModel extends Model {
   // Query để lấy các đơn theo user
   static async getByUser(userId, status = null) {
     let query = this.query().where('userId', userId);
-    
+
     if (status !== null) {
       query = query.where('status', status);
     }
-    
+
     return query.orderBy('applicationDate', 'desc');
   }
 
   // Query để lấy các đơn cần duyệt
   static async getPendingApplications(type = null) {
     let query = this.query().where('status', ApplicationStatus.PENDING);
-    
+
     if (type) {
       query = query.where('type', type);
     }
-    
+
     return query.orderBy('applicationDate', 'asc');
   }
 
@@ -126,10 +126,10 @@ export class ApplicationModel extends Model {
     const inputs = { type, data, userId };
     const allowFields = {
       type: "string!",
-      data: "object!", 
+      data: "object!",
       userId: "number!",
     };
-    
+
     const validatedData = validate(inputs, allowFields, { removeNotAllow: true });
 
     // Kiểm tra đơn trùng lặp
@@ -150,7 +150,7 @@ export class ApplicationModel extends Model {
    */
   static async getUserApplicationsPaginated(userId, status = null, type = null, offset = 0, limit = 10) {
     let query = this.query().where('userId', userId);
-    
+
     if (status !== null) {
       query = query.where('status', status);
     }
@@ -158,7 +158,7 @@ export class ApplicationModel extends Model {
     if (type) {
       query = query.where('type', type);
     }
-    
+
     return query
       .orderBy('created_at', 'desc')
       .offset(offset)
@@ -170,7 +170,7 @@ export class ApplicationModel extends Model {
    */
   static async getUserApplicationsCount(userId, status = null, type = null) {
     let query = this.query().where('userId', userId);
-    
+
     if (status !== null) {
       query = query.where('status', status);
     }
@@ -178,7 +178,7 @@ export class ApplicationModel extends Model {
     if (type) {
       query = query.where('type', type);
     }
-    
+
     return query.resultSize();
   }
 
@@ -187,7 +187,7 @@ export class ApplicationModel extends Model {
    */
   static async getUserApplications(userId, status = null, type = null) {
     let query = this.query().where('userId', userId);
-    
+
     if (status !== null) {
       query = query.where('status', status);
     }
@@ -195,7 +195,7 @@ export class ApplicationModel extends Model {
     if (type) {
       query = query.where('type', type);
     }
-    
+
     return query.orderBy('applicationDate', 'desc');
   }
 
@@ -259,7 +259,7 @@ export class ApplicationModel extends Model {
    */
   static async getPendingApplicationsPaginated(type = null, offset = 0, limit = 10, allowedUserIds = null) {
     let query = this.query().where('status', ApplicationStatus.PENDING);
-    
+
     if (type) {
       query = query.where('type', type);
     }
@@ -268,7 +268,7 @@ export class ApplicationModel extends Model {
     if (allowedUserIds && allowedUserIds.length > 0) {
       query = query.whereIn('userId', allowedUserIds);
     }
-    
+
     return query
       .orderBy('created_at', 'asc')
       .offset(offset)
@@ -280,7 +280,7 @@ export class ApplicationModel extends Model {
    */
   static async getPendingApplicationsCount(type = null, allowedUserIds = null) {
     let query = this.query().where('status', ApplicationStatus.PENDING);
-    
+
     if (type) {
       query = query.where('type', type);
     }
@@ -289,7 +289,7 @@ export class ApplicationModel extends Model {
     if (allowedUserIds && allowedUserIds.length > 0) {
       query = query.whereIn('userId', allowedUserIds);
     }
-    
+
     return query.resultSize();
   }
 
@@ -298,11 +298,11 @@ export class ApplicationModel extends Model {
    */
   static async getApplicationsByTypePaginated(type, userId = null, status = null, offset = 0, limit = 10, allowedUserIds = null) {
     let query = this.query().where('type', type);
-    
+
     if (userId) {
       query = query.where('userId', userId);
     }
-    
+
     if (status !== null) {
       query = query.where('status', status);
     }
@@ -311,7 +311,7 @@ export class ApplicationModel extends Model {
     if (allowedUserIds && allowedUserIds.length > 0) {
       query = query.whereIn('userId', allowedUserIds);
     }
-    
+
     return query
       .orderBy('created_at', 'desc')
       .offset(offset)
@@ -323,11 +323,11 @@ export class ApplicationModel extends Model {
    */
   static async getApplicationsByTypeCount(type, userId = null, status = null, allowedUserIds = null) {
     let query = this.query().where('type', type);
-    
+
     if (userId) {
       query = query.where('userId', userId);
     }
-    
+
     if (status !== null) {
       query = query.where('status', status);
     }
@@ -336,7 +336,7 @@ export class ApplicationModel extends Model {
     if (allowedUserIds && allowedUserIds.length > 0) {
       query = query.whereIn('userId', allowedUserIds);
     }
-    
+
     return query.resultSize();
   }
 
@@ -347,7 +347,7 @@ export class ApplicationModel extends Model {
     let query = this.query()
       .where('applicationDate', '>=', startDate)
       .where('applicationDate', '<=', endDate);
-      
+
     if (userId) {
       query = query.where('userId', userId);
     }
@@ -374,7 +374,7 @@ export class ApplicationModel extends Model {
     let query = this.query()
       .where('applicationDate', '>=', startDate)
       .where('applicationDate', '<=', endDate);
-      
+
     if (userId) {
       query = query.where('userId', userId);
     }
@@ -433,7 +433,7 @@ export class ApplicationModel extends Model {
    */
   static async approveApplication(id, approvedBy, note = null) {
     const application = await this.getApplicationById(id);
-    
+
     if (application.status !== ApplicationStatus.PENDING) {
       throw new Error('Đơn từ này đã được xử lý');
     }
@@ -446,16 +446,12 @@ export class ApplicationModel extends Model {
    */
   static async rejectApplication(id, approvedBy, rejectionReason) {
     const application = await this.getApplicationById(id);
-    
+
     if (application.status !== ApplicationStatus.PENDING) {
       throw new Error('Đơn từ này đã được xử lý');
     }
 
-    if (!rejectionReason) {
-      throw new Error('Lý do từ chối là bắt buộc');
-    }
-
-    return await application.reject(approvedBy, rejectionReason);
+    return await application.reject(approvedBy, rejectionReason || 'Không có lý do cụ thể');
   }
 
   /**
@@ -463,7 +459,7 @@ export class ApplicationModel extends Model {
    */
   static async updateApplication(id, userId, data) {
     const application = await this.getApplicationById(id);
-    
+
     if (application.userId !== userId) {
       throw new Error('Bạn không có quyền chỉnh sửa đơn này');
     }
@@ -483,7 +479,7 @@ export class ApplicationModel extends Model {
    */
   static async cancelApplication(id, userId) {
     const application = await this.getApplicationById(id);
-    
+
     if (application.userId !== userId) {
       throw new Error('Bạn không có quyền hủy đơn này');
     }
@@ -501,7 +497,7 @@ export class ApplicationModel extends Model {
    */
   static async getApplicationStats(userId = null, filters = {}) {
     let baseQuery = this.query();
-    
+
     if (userId) {
       baseQuery = baseQuery.where('userId', userId);
     }
@@ -537,7 +533,7 @@ export class ApplicationModel extends Model {
     let query = this.query()
       .where('applicationDate', '>=', startDate)
       .where('applicationDate', '<=', endDate);
-      
+
     if (userId) {
       query = query.where('userId', userId);
     }
@@ -554,15 +550,15 @@ export class ApplicationModel extends Model {
    */
   static async getApplicationsByType(type, userId = null, status = null) {
     let query = this.query().where('type', type);
-    
+
     if (userId) {
       query = query.where('userId', userId);
     }
-    
+
     if (status !== null) {
       query = query.where('status', status);
     }
-    
+
     return await query.orderBy('applicationDate', 'desc');
   }
 
@@ -636,11 +632,11 @@ export class ApplicationModel extends Model {
    * @param {number} limit
    */
   static async getAllApplicationsPaginatedWithSort(filters = {}, offset = 0, limit = 10) {
-    const { 
-      allowedUserIds, 
-      userId, 
-      type, 
-      status, 
+    const {
+      allowedUserIds,
+      userId,
+      type,
+      status,
       search,
       createdAtFrom,
       createdAtTo,
@@ -704,10 +700,10 @@ export class ApplicationModel extends Model {
    * @param {Object} filters
    */
   static async getAllApplicationsCountWithFilters(filters = {}) {
-    const { 
-      allowedUserIds, 
-      userId, 
-      type, 
+    const {
+      allowedUserIds,
+      userId,
+      type,
       status,
       createdAtFrom,
       createdAtTo,
@@ -751,7 +747,7 @@ export class ApplicationModel extends Model {
    * @param {number} limit
    */
   static async getMyApplicationsPaginatedWithSort(userId, filters = {}, offset = 0, limit = 10) {
-    const { 
+    const {
       search,
       type,
       status,

@@ -179,28 +179,17 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
             return;
         }
 
-        let reason = '';
         Modal.confirm({
             title: 'Xác nhận từ chối hàng loạt',
             icon: <CloseOutlined style={{ color: '#ff4d4f' }} />,
-            content: (
-                <div style={{ marginTop: 16 }}>
-                    <p>Bạn có chắc chắn muốn từ chối {selectedRowKeys.length} đơn đã chọn?</p>
-                    <Input.TextArea
-                        placeholder="Nhập lý do từ chối (tùy chọn)"
-                        onChange={(e) => { reason = e.target.value; }}
-                        rows={3}
-                        style={{ marginTop: 8 }}
-                    />
-                </div>
-            ),
+            content: `Bạn có chắc chắn muốn từ chối ${selectedRowKeys.length} đơn đã chọn?`,
             okText: 'Từ chối tất cả',
             okType: 'danger',
             cancelText: 'Hủy',
             onOk: async () => {
                 try {
                     setLoading(true);
-                    await applicationService.bulkRejectApplications(selectedRowKeys as number[], reason);
+                    await applicationService.bulkRejectApplications(selectedRowKeys as number[], 'Từ chối hàng loạt');
                     message.success(`Đã từ chối thành công ${selectedRowKeys.length} đơn`);
                     setSelectedRowKeys([]);
                     setSelectedRows([]);
