@@ -129,7 +129,7 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
     const handleRejectClick = (record: any) => {
         Modal.confirm({
             title: 'Xác nhận từ chối đơn từ',
-            content: 'Bạn có chắc chắn muốn từ chối đơn từ này?',
+            content: `Bạn có chắc chắn muốn từ chối đơn từ của ${record.userInfo?.fullName || 'nhân viên này'}?`,
             okText: 'Từ chối',
             okType: 'danger',
             cancelText: 'Hủy',
@@ -189,7 +189,7 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
             onOk: async () => {
                 try {
                     setLoading(true);
-                    await applicationService.bulkRejectApplications(selectedRowKeys as number[], 'Từ chối hàng loạt');
+                    await applicationService.bulkRejectApplications(selectedRowKeys as number[]);
                     message.success(`Đã từ chối thành công ${selectedRowKeys.length} đơn`);
                     setSelectedRowKeys([]);
                     setSelectedRows([]);

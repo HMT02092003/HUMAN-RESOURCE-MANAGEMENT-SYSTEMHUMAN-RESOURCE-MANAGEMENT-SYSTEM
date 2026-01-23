@@ -12,9 +12,6 @@ export interface BaseApplication {
   approvedBy?: number;
   applicationDate?: string;
   approvedDate?: string;
-  reason?: string;
-  rejectionReason?: string;
-  note?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -41,11 +38,9 @@ export interface CreateApplicationRequest {
 }
 
 export interface ApproveApplicationRequest {
-  note?: string;
 }
 
 export interface RejectApplicationRequest {
-  rejectionReason?: string; // Optional
 }
 
 const ApplicationService = {
@@ -146,9 +141,9 @@ const ApplicationService = {
   },
 
   // Từ chối nhiều applications cùng lúc
-  bulkRejectApplications: async (ids: number[], rejectionReason?: string) => {
+  bulkRejectApplications: async (ids: number[]) => {
     try {
-      const response = await api.post('/api/applications/bulk-reject', { ids, rejectionReason });
+      const response = await api.post('/api/applications/bulk-reject', { ids });
       return response.data;
     } catch (error) {
       throw error;

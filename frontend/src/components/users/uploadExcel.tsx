@@ -1,285 +1,314 @@
-// @ts-nocheck
-import React, { useState } from 'react';
-import useBaseHook from '@src/hooks/BaseHook';
-import dynamic from 'next/dynamic';
-import to from 'await-to-js';
-import _ from 'lodash';
-import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
-import useSWR from "swr";
-import roleService from "@src/services/roleService";
-import departmentService from "@root/src/services/departmentService";
-import chevronService from "@root/src/services/chevronService";
+"use client";
 
-import BaseUploadExcel from '@root/src/components/Excel/BaseUploadExcel';
-import userService from '@src/services/userService';
-import constantConfig from "@config/constant";
+import React, { useState, useEffect } from "react";
+import { Upload, Button, message, Card, Table, Tag, Typography, Space, Divider } from "antd";
+import { InboxOutlined, DownloadOutlined, ArrowLeftOutlined, CheckCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
+import { useRouter } from "next/navigation";
+import UserService from "@/service/userService";
+import { roleService } from "@/service/roleService";
+import { departmentService } from "@/service/departmentService";
+import { chevronService } from "@/service/chevronService";
+import dayjs from "dayjs";
+import constantConfig from "@/config/constant";
 
-const { Gender, statusOptions, Relationship } = constantConfig
+const { Dragger } = Upload;
+const { Title, Text } = Typography;
+const { statusOptions, Gender } = constantConfig;
 
-const Layout = dynamic(() => import('@src/layouts/Admin'), { ssr: false });
-
-const UploadExcel = () => {
-  const { t, notify, getData, redirect } = useBaseHook();
-  const [errorUploads, setError] = useState({ data: [], total: 0, pageSize: 10, countErrorRecord: 0 });
-  const [warringUploads, setWarring] = useState({ data: [], total: 0, pageSize: 5, countWarringRecord: 0 });
+const UserUpload = () => {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [results, setResults] = useState<any[]>([]);
 
+  // Data for mapping
+  const [roles, setRoles] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [chevrons, setChevrons] = useState<any[]>([]);
 
-  const { data: dataR } = useSWR("roleData", () =>
-    roleService().withAuth().select2({ pageSize: -1 })
-  );
+  useEffect(() => {
+    fetchMetadata();
+  }, []);
 
-  const { data: dataD } = useSWR("departmentData", () =>
-    departmentService().withAuth().select2({ pageSize: -1 })
-  );
+  const fetchMetadata = async () => {
+    try {
+      const [rolesRes, deptsRes, chevronsRes] = await Promise.all([
+        roleService.getAllRoles({ limit: 1000 }),
+        departmentService.getAllDepartments({ limit: 1000 }),
+        chevronService.getAllChevrons({ limit: 1000 })
+      ]);
 
-  const { data: dataC } = useSWR("chevronData", () =>
-    chevronService().withAuth().select2({ pageSize: -1 })
-  );
-
-  const roles = getData(dataR, "data", []);
-  const departments = getData(dataD, "data", []);
-  const chevrons = getData(dataC, "data", []);
-
-  // const options = roles.data.data.map(item => item.label);
-  // const formulaString = `"${options.join(",")}"`;
-
-  const defaultStartRow = 4;
-
-  const defaultColumns = [
-    {
-      index: 0,
-      name: "username",
-      width: 20,
-      label: t("pages:users.form.username")
-    },
-    {
-      index: 1,
-      name: "password",
-      width: 20,
-      label: t("pages:users.form.password")
-    },
-    {
-      index: 2,
-      name: "fullName",
-      width: 30,
-      label: "Họ và tên"
-    },
-    {
-      index: 3,
-      name: "email",
-      width: 30,
-      label: t("pages:users.form.email")
-
-    },
-    {
-      index: 4,
-      name: "roleName",
-      width: 20,
-      label: t("pages:users.form.role")
-
-    },
-    {
-      index: 6,
-      name: "birthday",
-      width: 20,
-      label: t("pages:users.form.birthday")
-
-    },
-    {
-      index: 7,
-      name: "gender",
-      width: 20,
-      label: t("pages:users.form.gender")
-
-    },
-    {
-      index: 8,
-      name: "phone",
-      width: 20,
-      label: t("pages:users.form.phone")
-
-    },
-    {
-      index: 9,
-      name: "status",
-      width: 20,
-      label: t("pages:users.form.status")
-
-    },
-    {
-      index: 10,
-      name: "startDateUser",
-      width: 20,
-      label: t("pages:users.form.startDateUser")
-
-    },
-    {
-      index: 11,
-      name: "chevron",
-      width: 20,
-      label: t("pages:users.form.chevron")
-
-    },
-    {
-      index: 12,
-      name: "department",
-      width: 20,
-      label: t("pages:users.form.department")
-
-    },
-    {
-      index: 13,
-      name: "contractType",
-      width: 20,
-      label: t("pages:users.form.contract")
-    },
-    {
-      index: 14,
-      name: "insurance",
-      width: 20,
-      label: t("pages:users.form.insurance")
-    },
-    {
-      index: 15,
-      name: "startDate",
-      width: 20,
-      label: t("pages:users.form.startDate")
-    },
-    {
-      index: 16,
-      name: "activeDay",
-      width: 25,
-      label: t("pages:users.form.activeDay")
-    },
-  ];
-
-  const generateExampleData = (column) => {
-    switch (column.name) {
-      case 'username': return 'nguyen.van.a';
-      case 'fullName': return 'Nguyễn Văn A';
-      case 'email': return 'nguyen.van.a@example.com';
-      case 'status': return 'Đang làm việc';
-      default: return '';
+      setRoles(rolesRes?.data?.results || rolesRes?.results || rolesRes?.data || rolesRes || []);
+      setDepartments(deptsRes?.data?.results || deptsRes?.results || deptsRes?.data || deptsRes || []);
+      setChevrons(chevronsRes?.data?.results || chevronsRes?.results || chevronsRes?.data || chevronsRes || []);
+    } catch (error) {
+      console.error("Error fetching metadata:", error);
+      message.error("Không thể tải dữ liệu danh mục. Vui lòng thử lại!");
     }
   };
 
   const handleDownloadTemplate = async () => {
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('User');
+    const worksheet = workbook.addWorksheet("Template");
 
-    // Merge toàn bộ cột ở dòng 1 để làm tiêu đề chính
-    const totalColumns = defaultColumns.length;
-    worksheet.mergeCells(1, 1, 1, totalColumns);
-    worksheet.getCell(1, 1).value = "Mẫu xuất Excel";
-    worksheet.getCell(1, 1).alignment = { horizontal: 'center', vertical: 'middle' };
-    worksheet.getCell(1, 1).font = { bold: true, size: 14 };
+    // Set columns
+    worksheet.columns = [
+      { header: "Họ và tên", key: "fullName", width: 25 },
+      { header: "Tên đăng nhập", key: "username", width: 15 },
+      { header: "Mật khẩu", key: "password", width: 15 },
+      { header: "Vai trò (Tên)", key: "roleName", width: 20 },
+      { header: "Email", key: "email", width: 25 },
+      { header: "Phòng ban (Tên)", key: "departmentName", width: 20 },
+      { header: "Chức vụ (Tên)", key: "chevronName", width: 20 },
+      { header: "Trạng thái (Đang làm việc/Nghỉ việc/Thử việc)", key: "statusName", width: 20 },
+      { header: "Giới tính (Nam/Nữ)", key: "genderName", width: 15 },
+      { header: "Số điện thoại", key: "phone", width: 15 },
+      { header: "Ngày sinh (DD/MM/YYYY)", key: "birthday", width: 20 },
+      { header: "Ngày bắt đầu (DD/MM/YYYY)", key: "startDate", width: 20 },
+    ];
 
-    // Header dòng 2: chứa thông tin đến department, sau đó là "Hợp đồng"
-    const headerRow2 = defaultColumns.map(col => col.label);
-    worksheet.addRow(headerRow2);
+    // Style header
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFE6E6E6' }
+    };
 
-    defaultColumns.forEach((col, index) => {
-      worksheet.getColumn(index + 1).width = col.width;
+    // Add example row
+    worksheet.addRow({
+      fullName: "Nguyễn Văn A",
+      username: "nguyenvana",
+      password: "password123",
+      roleName: "Nhân viên",
+      email: "vana@example.com",
+      departmentName: "Phòng Kỹ thuật",
+      chevronName: "Lập trình viên",
+      statusName: "Đang làm việc",
+      genderName: "Nam",
+      phone: "0123456789",
+      birthday: "01/01/1995",
+      startDate: "01/01/2024"
     });
 
-    // Merge các cột của nhóm "Hợp đồng"
-    const contractStartIndex = defaultColumns.findIndex(col => col.name === "contractType") + 1;
-    worksheet.mergeCells(2, contractStartIndex, 2, totalColumns);
-    worksheet.getCell(2, contractStartIndex).value = "Hợp đồng";
-    worksheet.getCell(2, contractStartIndex).alignment = { horizontal: 'center', vertical: 'middle' };
-    worksheet.getCell(2, contractStartIndex).font = { bold: true }; defaultColumns
+    // Add help sheet for valid names
+    const helpSheet = workbook.addWorksheet("Danh mục hợp lệ");
+    helpSheet.columns = [
+      { header: "Vai trò", key: "role", width: 25 },
+      { header: "Phòng ban", key: "dept", width: 25 },
+      { header: "Chức vụ", key: "chevron", width: 25 },
+    ];
 
-    // Dòng 3: Trống từ đầu đến department, sau đó là các trường thông tin gia đình
-    const row3 = defaultColumns.map((col, index) => {
-      if (index < contractStartIndex - 1) {
-        return '';
-      }else{
-        return col.label;
-      }
-    });
-    worksheet.addRow(row3);
-
-    worksheet.mergeCells(2, 1, 3, 1);
-    worksheet.mergeCells(2, 2, 3, 2);
-    worksheet.mergeCells(2, 3, 3, 3);
-    worksheet.mergeCells(2, 4, 3, 4);
-    worksheet.mergeCells(2, 5, 3, 5);
-    worksheet.mergeCells(2, 6, 3, 6);
-    worksheet.mergeCells(2, 7, 3, 7);
-    worksheet.mergeCells(2, 8, 3, 8);
-    worksheet.mergeCells(2, 9, 3, 9);
-    worksheet.mergeCells(2, 10, 3, 10);
-    worksheet.mergeCells(2, 11, 3, 11);
-    worksheet.mergeCells(2, 12, 3, 12);
-    worksheet.mergeCells(2, 13, 3, 13);
-
-    // Định dạng header
-    [2, 3].forEach(rowIndex => {
-      worksheet.getRow(rowIndex).eachCell(cell => {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D3D3D3' } }; // màu xám
-        cell.font = { bold: true };
-        cell.alignment = { horizontal: 'center', vertical: 'middle' };
-        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    const maxLen = Math.max(roles.length, departments.length, chevrons.length);
+    for (let i = 0; i < maxLen; i++) {
+      helpSheet.addRow({
+        role: roles[i]?.name || "",
+        dept: departments[i]?.name || "",
+        chevron: chevrons[i]?.name || ""
       });
-    });
-
-    // Dòng 4: Dữ liệu mẫu
-    const exampleData = defaultColumns.map(col => generateExampleData(col));
-    worksheet.addRow(exampleData);
-
-    // Xuất file Excel
-    const buffer = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), 'Mau_xuat_Excel.xlsx');
-  };
-
-
-  const onSubmit = async (values: any) => {
-    setLoading(true);
-    let { file } = values;
-
-    let [userError, user]: [any, any] = await to(
-      userService().withAuth().importExcel({ users: file })
-    );
-    setLoading(false);
-    setError(_.get(userError, 'data.error', { data: [], total: 0, pageSize: 10, countErrorRecord: 0 }));
-    setWarring({ data: user?.warring || [], total: user?.warring?.length || 0, pageSize: 5, countWarringRecord: user?.warring?.length || 0 });
-
-    if (userError) {
-      return notify(t(`errors:${userError.code}`), '', 'error');
     }
-    notify(t('messages:message.uploadExcelSuccess'));
-    redirect("frontend.admin.users.index");
+    helpSheet.getRow(1).font = { bold: true };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    saveAs(blob, "Mau_nhap_nhan_vien.xlsx");
   };
 
+  const processExcel = async (file: File) => {
+    const workbook = new ExcelJS.Workbook();
+    const reader = new FileReader();
+
+    reader.onload = async (e) => {
+      setUploading(true);
+      const buffer = e.target?.result;
+      if (!buffer) return;
+
+      try {
+        await workbook.xlsx.load(buffer as ArrayBuffer);
+        const worksheet = workbook.getWorksheet(1);
+        const data: any[] = [];
+
+        // Skip header row
+        worksheet?.eachRow((row: any, rowNumber: number) => {
+          if (rowNumber > 1) {
+            const rowData: any = {};
+            row.eachCell((cell: any, colNumber: number) => {
+              const headerCell = worksheet.getRow(1).getCell(colNumber);
+              const header = String(headerCell.value || "");
+              const keyMap: any = {
+                "Họ và tên": "fullName",
+                "Tên đăng nhập": "username",
+                "Mật khẩu": "password",
+                "Vai trò (Tên)": "roleName",
+                "Email": "email",
+                "Phòng ban (Tên)": "departmentName",
+                "Chức vụ (Tên)": "chevronName",
+                "Trạng thái (Đang làm việc/Nghỉ việc/Thử việc)": "statusName",
+                "Giới tính (Nam/Nữ)": "genderName",
+                "Số điện thoại": "phone",
+                "Ngày sinh (DD/MM/YYYY)": "birthday",
+                "Ngày bắt đầu (DD/MM/YYYY)": "startDate"
+              };
+              if (keyMap[header]) {
+                rowData[keyMap[header]] = cell.value;
+              }
+            });
+            data.push(rowData);
+          }
+        });
+
+        const importResults = [];
+        for (const row of data) {
+          try {
+            const mappedData = mapExcelDataToUser(row);
+            const res = await UserService.createUser(mappedData);
+            importResults.push({
+              ...row,
+              status: "success",
+              message: "Thành công"
+            });
+          } catch (err: any) {
+            importResults.push({
+              ...row,
+              status: "error",
+              message: err.response?.data?.message || err.message || "Lỗi không xác định"
+            });
+          }
+        }
+        setResults(importResults);
+        message.success(`Xử lý xong ${importResults.length} bản ghi`);
+      } catch (err) {
+        console.error("Error processing Excel:", err);
+        message.error("Không thể đọc file Excel. Vui lòng kiểm tra lại!");
+      } finally {
+        setUploading(false);
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  };
+
+  const mapExcelDataToUser = (row: any) => {
+    // Map Role
+    const role = roles.find(r => r.name.toLowerCase() === (row.roleName || "").toLowerCase());
+    const roleId = role?.id || 1; // Default to basic role if not found
+
+    // Map Department
+    const dept = departments.find(d => d.name.toLowerCase() === (row.departmentName || "").toLowerCase());
+    const departmentId = dept?.id || null;
+
+    // Map Chevron
+    const chevron = chevrons.find(c => c.name.toLowerCase() === (row.chevronName || "").toLowerCase());
+    const chevronId = chevron?.id || null;
+
+    // Map Status
+    const statusOption = statusOptions.find(s => s.label.toLowerCase() === (row.statusName || "").toLowerCase());
+    const status = statusOption?.value || 1;
+
+    // Map Gender
+    const genderOption = Gender.find(g => g.value.toLowerCase() === (row.genderName || "").toLowerCase());
+    const gender = genderOption?.key || 1;
+
+    // Parse Dates
+    const parseDate = (val: any) => {
+      if (!val) return null;
+      if (val instanceof Date) return val.toISOString();
+      const d = dayjs(val, "DD/MM/YYYY");
+      return d.isValid() ? d.toISOString() : null;
+    };
+
+    return {
+      fullName: row.fullName,
+      username: row.username,
+      password: row.password || "password123",
+      roleId: Number(roleId),
+      email: row.email,
+      departmentId: departmentId ? Number(departmentId) : null,
+      chevronId: chevronId ? Number(chevronId) : null,
+      status: Number(status),
+      gender: Number(gender),
+      phone: String(row.phone || ""),
+      birthday: parseDate(row.birthday),
+      startDate: parseDate(row.startDate)
+    };
+  };
+
+  const columns = [
+    { title: "Tên đăng nhập", dataIndex: "username", key: "username" },
+    { title: "Họ và tên", dataIndex: "fullName", key: "fullName" },
+    { title: "Vai trò", dataIndex: "roleName", key: "roleName" },
+    {
+      title: "Trạng thái xử lý",
+      key: "processStatus",
+      render: (_: any, record: any) => (
+        <Tag color={record.status === "success" ? "green" : "red"}>
+          {record.status === "success" ? <CheckCircleOutlined /> : <CloseCircleOutlined />} {record.status === "success" ? "Thành công" : "Thất bại"}
+        </Tag>
+      )
+    },
+    { title: "Ghi chú", dataIndex: "message", key: "message" }
+  ];
+
   return (
-    <BaseUploadExcel
-      defaultColumns={defaultColumns}
-      defaultStartRow={defaultStartRow}
-      onSubmit={onSubmit}
-      loading={loading}
-      warringUploads={warringUploads}
-      errorUploads={errorUploads}
-      parentPageLink={'frontend.admin.users.index'}
-      exampleUploadFile={handleDownloadTemplate}
-    />
+    <Space direction="vertical" size="large" style={{ width: "100%" }}>
+      <Card>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <Title level={4}>Tải lên danh sách nhân viên</Title>
+          <Space>
+            <Button
+              icon={<ArrowLeftOutlined />}
+              onClick={() => router.push("/user")}
+            >
+              Quay lại
+            </Button>
+            <Button
+              type="primary"
+              icon={<DownloadOutlined />}
+              onClick={handleDownloadTemplate}
+              style={{ backgroundColor: "#52c41a", borderColor: "#52c41a" }}
+            >
+              Tải file mẫu
+            </Button>
+          </Space>
+        </div>
+
+        <Divider />
+
+        <Dragger
+          accept=".xlsx, .xls"
+          multiple={false}
+          beforeUpload={(file) => {
+            processExcel(file);
+            return false;
+          }}
+          showUploadList={false}
+          disabled={uploading}
+        >
+          <p className="ant-upload-drag-icon">
+            <InboxOutlined />
+          </p>
+          <p className="ant-upload-text">Nhấp vào đây hoặc kéo thả file Excel vào để tải lên</p>
+          <p className="ant-upload-hint">
+            Vui lòng sử dụng file mẫu để đảm bảo dữ liệu được nhập chính xác.
+          </p>
+        </Dragger>
+      </Card>
+
+      {results.length > 0 && (
+        <Card title={`Kết quả xử lý (${results.length} bản ghi)`}>
+          <Table
+            dataSource={results}
+            columns={columns}
+            rowKey={(record, idx) => `res-${idx}`}
+            pagination={{ pageSize: 10 }}
+          />
+        </Card>
+      )}
+    </Space>
   );
 };
 
-UploadExcel.Layout = (props) => {
-  const { t } = useBaseHook();
-  return (
-    <Layout
-      title={t('pages:users.upload.title')}
-      description={t('pages:users.upload.description')}
-      {...props}
-    />
-  );
-};
-
-UploadExcel.permissions = {
-  "users": 'C',
-};
-
-export default UploadExcel;
+export default UserUpload;

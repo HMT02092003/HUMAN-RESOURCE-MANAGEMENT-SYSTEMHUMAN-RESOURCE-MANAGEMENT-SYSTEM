@@ -24,7 +24,7 @@ const { Title, Text, Paragraph } = Typography;
 // Helper function để parse thời gian từ nhiều định dạng
 const parseTime = (timeValue: any): string => {
     if (!timeValue) return '--:--';
-    
+
     // Nếu là string chỉ có giờ:phút (VD: "17:00" hoặc "17:00:00")
     if (typeof timeValue === 'string') {
         // Kiểm tra format HH:mm hoặc HH:mm:ss
@@ -33,26 +33,26 @@ const parseTime = (timeValue: any): string => {
             return `${timeOnlyMatch[1].padStart(2, '0')}:${timeOnlyMatch[2]}`;
         }
     }
-    
+
     // Nếu là ISO string hoặc Date object, parse bằng dayjs
     const parsed = dayjs(timeValue);
     if (parsed.isValid()) {
         return parsed.format('HH:mm');
     }
-    
+
     return '--:--';
 };
 
 // Helper function để parse ngày từ nhiều định dạng
 const parseDate = (dateValue: any): string => {
     if (!dateValue) return '--/--/----';
-    
+
     // Thử parse với dayjs
     const parsed = dayjs(dateValue);
     if (parsed.isValid()) {
         return parsed.format('DD/MM/YYYY');
     }
-    
+
     // Thử parse format YYYY-MM-DD
     if (typeof dateValue === 'string') {
         const dateOnlyMatch = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -60,7 +60,7 @@ const parseDate = (dateValue: any): string => {
             return `${dateOnlyMatch[3]}/${dateOnlyMatch[2]}/${dateOnlyMatch[1]}`;
         }
     }
-    
+
     return '--/--/----';
 };
 
@@ -449,30 +449,6 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                         {/* Application Content */}
                         {renderApplicationContent()}
 
-                        {/* Note or Rejection Reason */}
-                        {application.note && (
-                            <>
-                                <Divider orientation="left">
-                                    <Text strong><FileTextOutlined /> Ghi chú phê duyệt</Text>
-                                </Divider>
-                                <Card size="small" style={{ background: '#f6ffed' }}>
-                                    <Paragraph style={{ marginBottom: 0 }}>{application.note}</Paragraph>
-                                </Card>
-                            </>
-                        )}
-
-                        {application.rejectionReason && (
-                            <>
-                                <Divider orientation="left">
-                                    <Text strong type="danger"><CloseCircleOutlined /> Lý do từ chối</Text>
-                                </Divider>
-                                <Card size="small" style={{ background: '#fff2e8', borderColor: '#ff7875' }}>
-                                    <Paragraph style={{ marginBottom: 0, color: '#cf1322' }}>
-                                        {application.rejectionReason}
-                                    </Paragraph>
-                                </Card>
-                            </>
-                        )}
                     </div>
                 )}
             </Spin>

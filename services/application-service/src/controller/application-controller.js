@@ -1127,7 +1127,6 @@ export class ApplicationController {
 
     // Validate input first (fast)
     const { id } = req.params;
-    const { note } = req.body;
 
     const approvedBy = getUserId(req);
     if (!approvedBy) {
@@ -1160,7 +1159,7 @@ export class ApplicationController {
           throw new Error('Không tìm thấy đơn từ');
         }
         // Approve
-        return await ApplicationModel.approveApplication(applicationId, approvedBy, note);
+        return await ApplicationModel.approveApplication(applicationId, approvedBy);
       })();
 
       const application = await Promise.race([approvePromise, timeoutPromise]);
@@ -1279,11 +1278,11 @@ export class ApplicationController {
   /**
    * Từ chối nhiều đơn từ cùng lúc
    * POST /applications/bulk-reject
-   * Body: { ids: number[], rejectionReason?: string }
+   * Body: { ids: number[] }
    */
   static async bulkReject(req, res) {
     try {
-      const { ids, rejectionReason } = req.body;
+      const { ids } = req.body;
       const approvedBy = getUserId(req);
 
       if (!approvedBy) {
@@ -1308,8 +1307,7 @@ export class ApplicationController {
         .patch({
           status: 2, // rejected
           approvedBy: approvedBy,
-          approvedDate: new Date().toISOString(),
-          rejectionReason: rejectionReason || 'Không có lý do cụ thể'
+          approvedDate: new Date().toISOString()
         });
 
       if (updatedCount === 0) {
@@ -1348,7 +1346,6 @@ export class ApplicationController {
     try {
 
       const { id } = req.params;
-      const { rejectionReason } = req.body;
       const approvedBy = getUserId(req);
 
       if (!approvedBy) {
@@ -1358,9 +1355,9 @@ export class ApplicationController {
         });
       }
 
-      // rejectionReason là optional, không bắt buộc
+      // reject
       const application = await ApplicationModel.rejectApplication(
-        parseInt(id), approvedBy, rejectionReason || 'Không có lý do cụ thể'
+        parseInt(id), approvedBy
       );
 
       res.json({

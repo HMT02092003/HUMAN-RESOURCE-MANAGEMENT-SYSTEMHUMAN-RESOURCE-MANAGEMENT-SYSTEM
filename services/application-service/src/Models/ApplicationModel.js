@@ -26,12 +26,8 @@ export class ApplicationModel extends Model {
         },
         data: { type: 'object' },
         userId: { type: 'integer' },
-        approvedBy: { type: ['integer', 'null'] },
         applicationDate: { type: 'string', format: 'date-time' },
         approvedDate: { type: ['string', 'null'], format: 'date-time' },
-        reason: { type: ['string', 'null'] },
-        rejectionReason: { type: ['string', 'null'] },
-        note: { type: ['string', 'null'] },
         created_at: { type: 'string', format: 'date-time' },
         updated_at: { type: 'string', format: 'date-time' }
       }
@@ -68,7 +64,7 @@ export class ApplicationModel extends Model {
   }
 
   // Phương thức approve đơn
-  async approve(approvedBy, note = null) {
+  async approve(approvedBy) {
     const updateData = {
       status: ApplicationStatus.APPROVED,
       approvedBy,
@@ -76,19 +72,14 @@ export class ApplicationModel extends Model {
       updated_at: new Date().toISOString()
     };
 
-    if (note) {
-      updateData.note = note;
-    }
-
     return await this.$query().patchAndFetch(updateData);
   }
 
   // Phương thức reject đơn
-  async reject(approvedBy, rejectionReason) {
+  async reject(approvedBy) {
     return await this.$query().patchAndFetch({
       status: ApplicationStatus.REJECTED,
       approvedBy,
-      rejectionReason,
       approvedDate: new Date().toISOString(),
       updated_at: new Date().toISOString()
     });
@@ -431,27 +422,27 @@ export class ApplicationModel extends Model {
   /**
    * Duyệt đơn
    */
-  static async approveApplication(id, approvedBy, note = null) {
+  static async approveApplication(id, approvedBy) {
     const application = await this.getApplicationById(id);
 
     if (application.status !== ApplicationStatus.PENDING) {
       throw new Error('Đơn từ này đã được xử lý');
     }
 
-    return await application.approve(approvedBy, note);
+    return await application.approve(approvedBy);
   }
 
   /**
    * Từ chối đơn
    */
-  static async rejectApplication(id, approvedBy, rejectionReason) {
+  static async rejectApplication(id, approvedBy) {
     const application = await this.getApplicationById(id);
 
     if (application.status !== ApplicationStatus.PENDING) {
       throw new Error('Đơn từ này đã được xử lý');
     }
 
-    return await application.reject(approvedBy, rejectionReason || 'Không có lý do cụ thể');
+    return await application.reject(approvedBy);
   }
 
   /**
@@ -772,7 +763,7 @@ export class ApplicationModel extends Model {
     };
 
     // Searchable fields
-    const searchFields = ['type', 'reason', 'note'];
+    const searchFields = ['type'];
 
     // Build base query
     let query = this.query().where('userId', userId);
@@ -814,7 +805,7 @@ export class ApplicationModel extends Model {
     const { search, type, status, createdAtFrom, createdAtTo } = filters;
 
     // Searchable fields
-    const searchFields = ['type', 'reason', 'note'];
+    const searchFields = ['type'];
 
     // Build base query
     let query = this.query().where('userId', userId);

@@ -198,8 +198,21 @@ export class AttendanceService {
             const boolValue = trimmedValue === 'true' || trimmedValue === '1';
             baseQuery.where(field, boolValue);
           } else if (field === 'month') {
-            // Only apply month filter if frontend asked for a specific month OR explicitly set allMonths=false
-            if (!allMonths || trimmedValue) {
+            // Check if month_range is provided instead of single month
+            const rangeKey = `${field}_range`;
+            const rangeValue = pager?.[rangeKey];
+
+            if (rangeValue && String(rangeValue).includes(',')) {
+              const parts = String(rangeValue).split(',');
+              const start = parts[0];
+              const end = parts[1];
+              if (start && end) {
+                // Extract YYYY-MM from YYYY-MM-DD
+                const startMonth = start.slice(0, 7);
+                const endMonth = end.slice(0, 7);
+                baseQuery.whereBetween('month', [startMonth, endMonth]);
+              }
+            } else if (!allMonths || trimmedValue) {
               baseQuery.where(field, 'ilike', `%${trimmedValue}%`);
             }
           } else if (['totalScheduledDays', 'presentDays', 'absentDays', 'approvedLeaveDays',
@@ -214,6 +227,20 @@ export class AttendanceService {
             }
           } else {
             baseQuery.where(field, 'ilike', `%${trimmedValue}%`);
+          }
+        } else if (field === 'month') {
+          // Explicitly check for month_range even if 'month' is empty
+          const rangeKey = `${field}_range`;
+          const rangeValue = pager?.[rangeKey];
+          if (rangeValue && String(rangeValue).includes(',')) {
+            const parts = String(rangeValue).split(',');
+            const start = parts[0];
+            const end = parts[1];
+            if (start && end) {
+              const startMonth = start.slice(0, 7);
+              const endMonth = end.slice(0, 7);
+              baseQuery.whereBetween('month', [startMonth, endMonth]);
+            }
           }
         }
       }

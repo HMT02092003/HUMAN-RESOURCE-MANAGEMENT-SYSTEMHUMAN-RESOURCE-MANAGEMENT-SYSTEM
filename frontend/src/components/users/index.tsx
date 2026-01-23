@@ -498,19 +498,20 @@ const UserTable = () => {
               Tạo mới
             </Button>
 
-            {/* <Button
+            <Button
               hidden={!createPer}
-              onClick={() => alert("Chức năng upload excel")}
+              onClick={() => router.push("/user/upload")}
               type="primary"
               className="btn-top"
               style={{
                 backgroundColor: '#fc5603',
-                border: 'none'
+                border: 'none',
+                color: 'white'
               }}
             >
               <CloudUploadOutlined />
               Tải lên Excel
-            </Button> */}
+            </Button>
 
             <ExcelExportButton
               data={userData}
