@@ -328,23 +328,30 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                     return [{ ...item, children: filteredChildren }];
                 }
 
+                // Nếu item có children mà filteredChildren rỗng (không có con nào được phép xem)
+                // Ta kiểm tra xem bản thân parent này có permission cụ thể để hiển thị không.
+                // Nếu parent không có item.permission (ví dụ: job_management_parent), ta ẩn luôn.
                 if (item.permissions && item.permissions.length > 0) {
                     const requireAll = item.requireAllPermissions || false;
                     if (hasPermissionAccess(item.permissions, requireAll)) {
-                        return [{ ...item, children: filteredChildren }];
+                        return [{ ...item, children: [] }];
                     }
                     return [];
                 }
 
                 const parentPermissionKey = item.permission;
-                const hasParentPermission = !parentPermissionKey ||
-                    (userPermissions[parentPermissionKey] &&
-                        userPermissions[parentPermissionKey] !== null &&
-                        userPermissions[parentPermissionKey] !== '' &&
-                        decodePermissions(parseInt(userPermissions[parentPermissionKey])).read);
+                // Nếu không có permission key, ta mặc định là ẩn (vì children đã rỗng)
+                if (!parentPermissionKey) {
+                    return [];
+                }
+
+                const hasParentPermission = userPermissions[parentPermissionKey] &&
+                    userPermissions[parentPermissionKey] !== null &&
+                    userPermissions[parentPermissionKey] !== '' &&
+                    decodePermissions(parseInt(userPermissions[parentPermissionKey] as string)).read;
 
                 if (hasParentPermission) {
-                    return [{ ...item, children: filteredChildren }];
+                    return [{ ...item, children: [] }];
                 }
 
                 return [];
@@ -628,184 +635,184 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
     return (
         <Layout style={{ minHeight: '100vh' }}>
             <Sider
-                    width={220}
-                    style={{
-                        backgroundColor: "white",
-                        position: isMobile ? 'fixed' : 'relative',
-                        height: isMobile ? '100vh' : 'auto',
-                        zIndex: 1000,
-                        left: isMobile && collapsed ? -220 : 0,
-                        transition: 'left 0.2s'
-                    }}
-                    collapsible={!isMobile}
-                    collapsed={collapsed}
-                    onCollapse={(value) => setCollapsed(value)}
+                width={220}
+                style={{
+                    backgroundColor: "white",
+                    position: isMobile ? 'fixed' : 'relative',
+                    height: isMobile ? '100vh' : 'auto',
+                    zIndex: 1000,
+                    left: isMobile && collapsed ? -220 : 0,
+                    transition: 'left 0.2s'
+                }}
+                collapsible={!isMobile}
+                collapsed={collapsed}
+                onCollapse={(value) => setCollapsed(value)}
+                theme="light"
+                breakpoint="lg"
+                collapsedWidth={0}
+                trigger={null}
+            >
+                <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "50px" }}>
+                    <img src="/logo/logo.png" alt="" style={{ width: "200px" }} />
+                </div>
+                <Menu
                     theme="light"
-                    breakpoint="lg"
-                    collapsedWidth={0}
-                    trigger={null}
-                >
-                    <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "50px" }}>
-                        <img src="/logo/logo.png" alt="" style={{ width: "200px" }} />
+                    mode="inline"
+                    items={convertToAntMenuItems(menuItems)}
+                    onClick={handleMenuClick}
+                    selectedKeys={getSelectedKeys()}
+                    // Ensure salary section is open on initial load in addition to other defaults
+                    defaultOpenKeys={['applications_parent', 'account_management_parent', 'attendance_parent', 'shifts_parent', 'salary_parent', 'job_management_parent', pathname && pathname.startsWith('/salary') ? 'salary_parent' : ''].filter(Boolean)}
+                />
+            </Sider>
+
+            <Layout>
+                <Header style={{
+                    paddingLeft: isMobile ? "16px" : "10px",
+                    paddingRight: isMobile ? "16px" : "50px",
+                    background: colorBgContainer,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 999
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <Button
+                            type="text"
+                            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                            onClick={() => setCollapsed(!collapsed)}
+                            aria-label="Toggle menu"
+                        />
                     </div>
-                    <Menu
-                        theme="light"
-                        mode="inline"
-                        items={convertToAntMenuItems(menuItems)}
-                        onClick={handleMenuClick}
-                        selectedKeys={getSelectedKeys()}
-                        // Ensure salary section is open on initial load in addition to other defaults
-                        defaultOpenKeys={['applications_parent', 'account_management_parent', 'attendance_parent', 'shifts_parent', 'salary_parent', 'job_management_parent', pathname && pathname.startsWith('/salary') ? 'salary_parent' : ''].filter(Boolean)}
-                    />
-                </Sider>
 
-                <Layout>
-                    <Header style={{
-                        paddingLeft: isMobile ? "16px" : "10px",
-                        paddingRight: isMobile ? "16px" : "50px",
-                        background: colorBgContainer,
+                    <div style={{
                         display: 'flex',
-                        justifyContent: 'space-between',
                         alignItems: 'center',
-                        position: 'sticky',
-                        top: 0,
-                        zIndex: 999
+                        gap: isMobile ? '8px' : '16px',
+                        flexWrap: 'wrap'
                     }}>
-                        <div style={{ display: 'flex', alignItems: 'center' }}>
-                            <Button
-                                type="text"
-                                icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                                onClick={() => setCollapsed(!collapsed)}
-                                aria-label="Toggle menu"
-                            />
-                        </div>
+                        {/* Notification Bell */}
+                        {userData?.user?.id && (
+                            <NotificationBell userId={userData.user.id} />
+                        )}
 
-                        <div style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: isMobile ? '8px' : '16px',
-                            flexWrap: 'wrap'
-                        }}>
-                            {/* Notification Bell */}
-                            {userData?.user?.id && (
-                                <NotificationBell userId={userData.user.id} />
-                            )}
-
-                            <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow>
-                                <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                    <Avatar style={{ backgroundColor: color, verticalAlign: 'middle' }} size="default">
-                                        {getUserInitials(userData?.user?.username || 'User')}
-                                    </Avatar>
-                                    <span style={{ marginLeft: 8, display: isMobile ? 'none' : 'inline' }}>
-                                        Hi, {userData?.user?.username || 'User'}
-                                    </span>
-                                </div>
-                            </Dropdown>
-                        </div>
-                    </Header>
-
-                    <Content style={{ flex: 1 }}>
-                        <div
-                            style={{
-                                background: "linear-gradient(to right, #e6f7ff, rgb(106, 218, 255))",
-                                padding: isMobile ? "20px 16px" : "20px 50px",
-                                height: isMobile ? "200px" : "250px",
-                                marginBottom: isMobile ? "-60px" : "-80px",
-                            }}
-                        >
-                            <div
-                                style={{
-                                    display: "flex",
-                                    flexDirection: "row",
-                                    justifyContent: "space-between",
-                                    alignItems: "center",
-                                    flexWrap: 'wrap'
-                                }}
-                            >
-                                <div style={{ display: "flex", flexDirection: "column" }}>
-                                    <h1 style={{
-                                        color: "#91caff",
-                                        margin: 0,
-                                        fontSize: isMobile ? "24px" : "32px",
-                                        fontWeight: "bold",
-                                        lineHeight: isMobile ? "1.2" : "1.4"
-                                    }}>
-                                        {pageTitle}
-                                    </h1>
-                                    <p style={{
-                                        color: "#8c8c8c",
-                                        margin: 0,
-                                        fontSize: isMobile ? "14px" : "16px",
-                                        marginTop: isMobile ? "8px" : "12px",
-                                    }}>
-                                        {pageDescription}
-                                    </p>
-                                </div>
-
-                                <Breadcrumb
-                                    style={{
-                                        padding: isMobile ? "8px 16px" : "16px 28px",
-                                        backgroundColor: "white",
-                                        borderRadius: "25px",
-                                        fontWeight: "bold",
-                                        opacity: 0.6,
-                                        color: "#595959",
-                                        fontSize: isMobile ? "12px" : "14px",
-                                        marginTop: isMobile ? "12px" : "0"
-                                    }}
-                                >
-                                    {breadcrumbItems.map((item, index) => (
-                                        <Breadcrumb.Item key={index.toString()}>
-                                            {item.href ? (
-                                                <Link href={item.href} style={{ fontSize: isMobile ? "12px" : "14px" }}>
-                                                    {item.title}
-                                                </Link>
-                                            ) : (
-                                                <span style={{ fontSize: isMobile ? "12px" : "14px" }}>
-                                                    {item.title}
-                                                </span>
-                                            )}
-                                        </Breadcrumb.Item>
-                                    ))}
-                                </Breadcrumb>
+                        <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow>
+                            <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                                <Avatar style={{ backgroundColor: color, verticalAlign: 'middle' }} size="default">
+                                    {getUserInitials(userData?.user?.username || 'User')}
+                                </Avatar>
+                                <span style={{ marginLeft: 8, display: isMobile ? 'none' : 'inline' }}>
+                                    Hi, {userData?.user?.username || 'User'}
+                                </span>
                             </div>
-                        </div>
+                        </Dropdown>
+                    </div>
+                </Header>
 
-                        <LoadingProgress>
-                            <div
-                                style={{
-                                    padding: isMobile ? 16 : 24,
-                                    background: colorBgContainer,
-                                    borderRadius: borderRadiusLG,
-                                    margin: isMobile ? "0" : "0 24px",
-                                    maxWidth: isMobile ? "100%" : "none",
-                                    width: isMobile ? "100%" : "auto"
-                                }}
-                            >
-                                {children}
-                            </div>
-                        </LoadingProgress>
-                    </Content>
-
-                    <Footer style={{ textAlign: 'center' }}>
-                        QLNS ©{new Date().getFullYear()} Created by Hoàng Mạnh Toàn
-                    </Footer>
-                </Layout>
-
-                {isMobile && !collapsed && (
+                <Content style={{ flex: 1 }}>
                     <div
                         style={{
-                            position: 'fixed',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                            zIndex: 999,
+                            background: "linear-gradient(to right, #e6f7ff, rgb(106, 218, 255))",
+                            padding: isMobile ? "20px 16px" : "20px 50px",
+                            height: isMobile ? "200px" : "250px",
+                            marginBottom: isMobile ? "-60px" : "-80px",
                         }}
-                        onClick={() => setCollapsed(true)}
-                    />
-                )}
+                    >
+                        <div
+                            style={{
+                                display: "flex",
+                                flexDirection: "row",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                flexWrap: 'wrap'
+                            }}
+                        >
+                            <div style={{ display: "flex", flexDirection: "column" }}>
+                                <h1 style={{
+                                    color: "#91caff",
+                                    margin: 0,
+                                    fontSize: isMobile ? "24px" : "32px",
+                                    fontWeight: "bold",
+                                    lineHeight: isMobile ? "1.2" : "1.4"
+                                }}>
+                                    {pageTitle}
+                                </h1>
+                                <p style={{
+                                    color: "#8c8c8c",
+                                    margin: 0,
+                                    fontSize: isMobile ? "14px" : "16px",
+                                    marginTop: isMobile ? "8px" : "12px",
+                                }}>
+                                    {pageDescription}
+                                </p>
+                            </div>
+
+                            <Breadcrumb
+                                style={{
+                                    padding: isMobile ? "8px 16px" : "16px 28px",
+                                    backgroundColor: "white",
+                                    borderRadius: "25px",
+                                    fontWeight: "bold",
+                                    opacity: 0.6,
+                                    color: "#595959",
+                                    fontSize: isMobile ? "12px" : "14px",
+                                    marginTop: isMobile ? "12px" : "0"
+                                }}
+                            >
+                                {breadcrumbItems.map((item, index) => (
+                                    <Breadcrumb.Item key={index.toString()}>
+                                        {item.href ? (
+                                            <Link href={item.href} style={{ fontSize: isMobile ? "12px" : "14px" }}>
+                                                {item.title}
+                                            </Link>
+                                        ) : (
+                                            <span style={{ fontSize: isMobile ? "12px" : "14px" }}>
+                                                {item.title}
+                                            </span>
+                                        )}
+                                    </Breadcrumb.Item>
+                                ))}
+                            </Breadcrumb>
+                        </div>
+                    </div>
+
+                    <LoadingProgress>
+                        <div
+                            style={{
+                                padding: isMobile ? 16 : 24,
+                                background: colorBgContainer,
+                                borderRadius: borderRadiusLG,
+                                margin: isMobile ? "0" : "0 24px",
+                                maxWidth: isMobile ? "100%" : "none",
+                                width: isMobile ? "100%" : "auto"
+                            }}
+                        >
+                            {children}
+                        </div>
+                    </LoadingProgress>
+                </Content>
+
+                <Footer style={{ textAlign: 'center' }}>
+                    QLNS ©{new Date().getFullYear()} Created by Hoàng Mạnh Toàn
+                </Footer>
+            </Layout>
+
+            {isMobile && !collapsed && (
+                <div
+                    style={{
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                        zIndex: 999,
+                    }}
+                    onClick={() => setCollapsed(true)}
+                />
+            )}
 
             <Modal
                 title="Thông tin tài khoản"
