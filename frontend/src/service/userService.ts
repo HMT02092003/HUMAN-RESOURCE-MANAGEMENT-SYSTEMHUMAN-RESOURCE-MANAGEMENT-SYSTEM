@@ -4,7 +4,7 @@ const UserService = {
   // Lấy danh sách users với pagination
   getAllUsers: async (params: { page: number; pageSize: number }) => {
     try {
-      const response = await api.get('/api/auth/users', { 
+      const response = await api.get('/api/auth/users', {
         params: {
           page: params.page,
           pageSize: params.pageSize,
@@ -158,10 +158,10 @@ const UserService = {
     createdAtTo?: string;
   }) => {
     try {
-      const response = await api.get('/api/auth/users/all', { 
-        params: { 
-          ...(params || {}), 
-          _t: Date.now() 
+      const response = await api.get('/api/auth/users/all', {
+        params: {
+          ...(params || {}),
+          _t: Date.now()
         },
         headers: {
           'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -180,6 +180,16 @@ const UserService = {
     try {
       const response = await api.get('/api/auth/users/allForSelect', { params: { ...(params || {}), _t: Date.now() } });
       return response.data; // array of users
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Bulk import users
+  importUsers: async (users: any[]) => {
+    try {
+      const response = await api.post('/api/auth/users/import', users);
+      return response.data;
     } catch (error) {
       throw error;
     }

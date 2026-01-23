@@ -7,6 +7,7 @@ import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import utc from 'dayjs/plugin/utc';
 import SettingsService from '../../service/settingsService';
+import CheckPermission from '@/components/common/CheckPermission';
 
 // Configure dayjs plugins
 dayjs.extend(customParseFormat);
@@ -15,7 +16,7 @@ dayjs.extend(utc);
 // CSS cho TimePicker hover effect
 const timePickerStyle = {
   width: '100%',
-            
+
 }
 
 const { TabPane } = Tabs;
@@ -107,10 +108,10 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
       saturday: false,
       sunday: false
     }
-  ,
-  BHXH: { rate: 8.0 },
-  BHYT: { rate: 1.5 },
-  TNCN: { rate: 0.0 }
+    ,
+    BHXH: { rate: 8.0 },
+    BHYT: { rate: 1.5 },
+    TNCN: { rate: 0.0 }
   };
 
   const [settingsData, setSettingsData] = useState<SettingsData>(defaultSettings);
@@ -171,10 +172,10 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
         friday: transformedData?.WorkingDays?.friday ?? defaultSettings.WorkingDays.friday,
         saturday: transformedData?.WorkingDays?.saturday ?? defaultSettings.WorkingDays.saturday,
         sunday: transformedData?.WorkingDays?.sunday ?? defaultSettings.WorkingDays.sunday
-  },
-  BHXH: { rate: transformedData?.BHXH?.rate ?? defaultSettings.BHXH.rate },
-  BHYT: { rate: transformedData?.BHYT?.rate ?? defaultSettings.BHYT.rate },
-  TNCN: { rate: transformedData?.TNCN?.rate ?? defaultSettings.TNCN.rate },
+      },
+      BHXH: { rate: transformedData?.BHXH?.rate ?? defaultSettings.BHXH.rate },
+      BHYT: { rate: transformedData?.BHYT?.rate ?? defaultSettings.BHYT.rate },
+      TNCN: { rate: transformedData?.TNCN?.rate ?? defaultSettings.TNCN.rate },
     };
   };
 
@@ -183,7 +184,7 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
     const n = Number(val ?? 0);
     if (Number.isNaN(n)) return '0';
     // keep up to 6 decimal places, trim trailing zeros
-    return n.toFixed(6).replace(/\.0+$|(?<=\.[0-9]*?)0+$/,'').replace(/\.$/, '');
+    return n.toFixed(6).replace(/\.0+$|(?<=\.[0-9]*?)0+$/, '').replace(/\.$/, '');
   };
 
   const fetchSettings = async () => {
@@ -284,10 +285,10 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
         friday: data?.WorkingDays?.friday ?? defaultSettings.WorkingDays.friday,
         saturday: data?.WorkingDays?.saturday ?? defaultSettings.WorkingDays.saturday,
         sunday: data?.WorkingDays?.sunday ?? defaultSettings.WorkingDays.sunday
-  },
-  BHXH: { rate: data?.BHXH?.rate ?? defaultSettings.BHXH.rate },
-  BHYT: { rate: data?.BHYT?.rate ?? defaultSettings.BHYT.rate },
-  TNCN: { rate: data?.TNCN?.rate ?? defaultSettings.TNCN.rate },
+      },
+      BHXH: { rate: data?.BHXH?.rate ?? defaultSettings.BHXH.rate },
+      BHYT: { rate: data?.BHYT?.rate ?? defaultSettings.BHYT.rate },
+      TNCN: { rate: data?.TNCN?.rate ?? defaultSettings.TNCN.rate },
     };
   };
 
@@ -308,9 +309,9 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
         holidayRate: data.HolidayRate.rate,
         penaltyRate: data.PenaltyRate.rate,
         unauthorizedAbsencePenaltyRate: data.UnauthorizedAbsencePenaltyRate.rate,
-  BHXH: data.BHXH?.rate,
-  BHYT: data.BHYT?.rate,
-  TNCN: data.TNCN?.rate,
+        BHXH: data.BHXH?.rate,
+        BHYT: data.BHYT?.rate,
+        TNCN: data.TNCN?.rate,
         workingDays: {
           monday: data.WorkingDays.monday,
           tuesday: data.WorkingDays.tuesday,
@@ -346,9 +347,9 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
         holidayRate: defaultSettings.HolidayRate.rate,
         penaltyRate: defaultSettings.PenaltyRate.rate,
         unauthorizedAbsencePenaltyRate: defaultSettings.UnauthorizedAbsencePenaltyRate.rate,
-  BHXH: defaultSettings.BHXH.rate,
-  BHYT: defaultSettings.BHYT.rate,
-  TNCN: defaultSettings.TNCN.rate,
+        BHXH: defaultSettings.BHXH.rate,
+        BHYT: defaultSettings.BHYT.rate,
+        TNCN: defaultSettings.TNCN.rate,
         workingDays: {
           monday: defaultSettings.WorkingDays.monday,
           tuesday: defaultSettings.WorkingDays.tuesday,
@@ -1452,7 +1453,9 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 24 }}>
           <Button onClick={() => revertKey('WorkingDays')} size="large" style={{ minWidth: 120, padding: '8px 18px' }}>Trở về</Button>
-          <Button type="primary" onClick={() => saveKey('WorkingDays')} size="large" style={{ minWidth: 120, padding: '8px 18px' }}>Lưu</Button>
+          <CheckPermission permissionKey="settings" requiredType="update">
+            <Button type="primary" onClick={() => saveKey('WorkingDays')} size="large" style={{ minWidth: 120, padding: '8px 18px' }}>Lưu</Button>
+          </CheckPermission>
         </div>
 
 
@@ -1563,11 +1566,13 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
                   name="BHXH"
                   rules={[{ required: true, message: 'Vui lòng nhập BHXH' }, { type: 'number', min: 0, max: 100 }]}
                 >
-                  <InputNumber min={0} max={100} step={0.1} precision={2} style={{ width: '100%' }} formatter={v => `${v}%`} parser={v => v!.replace('%','') as any} />
+                  <InputNumber min={0} max={100} step={0.1} precision={2} style={{ width: '100%' }} formatter={v => `${v}%`} parser={v => v!.replace('%', '') as any} />
                 </Form.Item>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 12 }}>
                   <Button onClick={() => revertKey('BHXH')}><RollbackOutlined />Trở về</Button>
-                  <Button type="primary" onClick={() => saveKey('BHXH')}><SaveOutlined />Lưu</Button>
+                  <CheckPermission permissionKey="settings" requiredType="update">
+                    <Button type="primary" onClick={() => saveKey('BHXH')}><SaveOutlined />Lưu</Button>
+                  </CheckPermission>
                 </div>
               </Card>
             </TabPane>
@@ -1582,11 +1587,13 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
                   name="BHYT"
                   rules={[{ required: true, message: 'Vui lòng nhập BHYT' }, { type: 'number', min: 0, max: 100 }]}
                 >
-                  <InputNumber min={0} max={100} step={0.1} precision={2} style={{ width: '100%' }} formatter={v => `${v}%`} parser={v => v!.replace('%','') as any} />
+                  <InputNumber min={0} max={100} step={0.1} precision={2} style={{ width: '100%' }} formatter={v => `${v}%`} parser={v => v!.replace('%', '') as any} />
                 </Form.Item>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 12 }}>
                   <Button onClick={() => revertKey('BHYT')}><RollbackOutlined />Trở về</Button>
-                  <Button type="primary" onClick={() => saveKey('BHYT')}><SaveOutlined />Lưu</Button>
+                  <CheckPermission permissionKey="settings" requiredType="update">
+                    <Button type="primary" onClick={() => saveKey('BHYT')}><SaveOutlined />Lưu</Button>
+                  </CheckPermission>
                 </div>
               </Card>
             </TabPane>
@@ -1595,11 +1602,13 @@ const SettingsComponent: React.FC<SettingsComponentProps> = ({
             <TabPane tab={<span><FileTextOutlined /> Thuế thu nhập cá nhân</span>} key="TNCN">
               <Card title={<><FileTextOutlined /> Thuế thu nhập cá nhân (TNCN)</>}>
                 <Form.Item label="Cấu hình TNCN (phần trăm mẫu / placeholder)" name="TNCN" rules={[{ required: true, message: 'Vui lòng nhập TNCN' }, { type: 'number', min: 0, max: 100 }]}>
-                  <InputNumber min={0} max={100} step={0.1} precision={2} style={{ width: '100%' }} formatter={v => `${v}%`} parser={v => v!.replace('%','') as any} />
+                  <InputNumber min={0} max={100} step={0.1} precision={2} style={{ width: '100%' }} formatter={v => `${v}%`} parser={v => v!.replace('%', '') as any} />
                 </Form.Item>
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 12 }}>
                   <Button onClick={() => revertKey('TNCN')}><RollbackOutlined />Trở về</Button>
-                  <Button type="primary" onClick={() => saveKey('TNCN')}><SaveOutlined />Lưu</Button>
+                  <CheckPermission permissionKey="settings" requiredType="update">
+                    <Button type="primary" onClick={() => saveKey('TNCN')}><SaveOutlined />Lưu</Button>
+                  </CheckPermission>
                 </div>
               </Card>
             </TabPane>

@@ -5,6 +5,8 @@ import { Button, Space, Tag, Progress, Avatar, Modal, message } from 'antd';
 import { PlusOutlined, EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { ServerSideTable } from '@/components/common/ServerSideTable';
 import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
+import { usePermission } from "@/hooks/usePermission";
+import CheckPermission from "@/components/common/CheckPermission";
 import { useRouter } from 'next/navigation';
 import { Project } from '@/types/project';
 import dayjs from 'dayjs';
@@ -390,27 +392,33 @@ const ProjectManager: React.FC = () => {
       fixed: 'right',
       render: (_, record) => (
         <Space size="small">
-          <Button
-            type="link"
-            icon={<EyeOutlined />}
-            onClick={() => handleViewDetail(record.id)}
-          >
-          </Button>
+          <CheckPermission permissionKey="projects" requiredType="read">
+            <Button
+              type="link"
+              icon={<EyeOutlined />}
+              onClick={() => handleViewDetail(record.id)}
+            >
+            </Button>
+          </CheckPermission>
           {userScope !== 'personal' && (
             <>
-              <Button
-                type="link"
-                icon={<EditOutlined />}
-                onClick={() => handleEdit(record)}
-              >
-              </Button>
-              <Button
-                type="link"
-                danger
-                icon={<DeleteOutlined />}
-                onClick={() => handleDelete(record)}
-              >
-              </Button>
+              <CheckPermission permissionKey="projects" requiredType="update">
+                <Button
+                  type="link"
+                  icon={<EditOutlined />}
+                  onClick={() => handleEdit(record)}
+                >
+                </Button>
+              </CheckPermission>
+              <CheckPermission permissionKey="projects" requiredType="delete">
+                <Button
+                  type="link"
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => handleDelete(record)}
+                >
+                </Button>
+              </CheckPermission>
             </>
           )}
         </Space>
@@ -432,19 +440,23 @@ const ProjectManager: React.FC = () => {
     <div>
       <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {userScope !== 'personal' && (
-          <Button
-            icon={<PlusOutlined />}
-            type="primary"
-            onClick={handleCreate}
-          >
-            Tạo dự án mới
-          </Button>
+          <CheckPermission permissionKey="projects" requiredType="create">
+            <Button
+              icon={<PlusOutlined />}
+              type="primary"
+              onClick={handleCreate}
+            >
+              Tạo dự án mới
+            </Button>
+          </CheckPermission>
         )}
-        {selectedRowKeys && selectedRowKeys.length > 0 && (
-          <Button danger ghost onClick={deleteSelected} style={{ borderColor: '#ff4d4f' }}>
-            Xóa ({selectedRowKeys.length})
-          </Button>
-        )}
+        <CheckPermission permissionKey="projects" requiredType="delete">
+          {selectedRowKeys && selectedRowKeys.length > 0 && (
+            <Button danger ghost onClick={deleteSelected} style={{ borderColor: '#ff4d4f' }}>
+              Xóa dự án ({selectedRowKeys.length})
+            </Button>
+          )}
+        </CheckPermission>
         <ExcelExportButton
           data={excelData}
           columns={excelColumns}

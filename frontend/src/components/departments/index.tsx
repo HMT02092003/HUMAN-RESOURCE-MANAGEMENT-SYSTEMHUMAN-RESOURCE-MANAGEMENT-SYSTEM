@@ -8,6 +8,8 @@ import { ExcelExportButton } from '@/components/common/ExcelExport';
 import type { ExcelColumn } from '@/components/common/ExcelExport';
 import { ServerSideTable } from '@/components/common/ServerSideTable';
 import type { ServerSideColumnType } from '@/components/common/ServerSideTable';
+import { usePermission } from "@/hooks/usePermission";
+import CheckPermission from "@/components/common/CheckPermission";
 
 // Định nghĩa interfaces
 interface DepartmentData {
@@ -79,10 +81,11 @@ const Index: React.FC = () => {
     fetchRoles();
   }, []);
 
-  // Giả lập quyền hạn
-  const createPer: boolean = true;
-  const updatePer: boolean = true;
-  const deletePer: boolean = true;
+  // Kiểm tra quyền hạn
+  const { permissions } = usePermission('departments');
+  const createPer = permissions.create;
+  const updatePer = permissions.update;
+  const deletePer = permissions.delete;
 
   // Fetch function cho ServerSideTable
   const loadData = useCallback(async (params: any) => {
@@ -196,18 +199,19 @@ const Index: React.FC = () => {
           }}
         >
           <Space size="small">
-            <Tooltip title="Chỉnh sửa">
-              <Button
-                type="default"
-                shape="circle"
-                icon={<EditOutlined />}
-                size="small"
-                onClick={() => {
-                  router.push(`departments/edit/${record.id}`);
-                }}
-                hidden={!updatePer}
-              />
-            </Tooltip>
+            <CheckPermission permissionKey="departments" requiredType="update">
+              <Tooltip title="Chỉnh sửa">
+                <Button
+                  type="default"
+                  shape="circle"
+                  icon={<EditOutlined />}
+                  size="small"
+                  onClick={() => {
+                    router.push(`departments/edit/${record.id}`);
+                  }}
+                />
+              </Tooltip>
+            </CheckPermission>
           </Space>
         </ConfigProvider>
       ),
@@ -245,28 +249,31 @@ const Index: React.FC = () => {
         <Col xs={24}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {selectedIds.length > 0 && (
-                <Button
-                  danger
-                  className='btn-top'
-                  onClick={showDeleteConfirm}
-                >
-                  <DeleteOutlined />
-                  Xóa
-                </Button>
-              )}
+              <CheckPermission permissionKey="departments" requiredType="delete">
+                {selectedIds.length > 0 && (
+                  <Button
+                    danger
+                    className='btn-top'
+                    onClick={showDeleteConfirm}
+                  >
+                    <DeleteOutlined />
+                    Xóa
+                  </Button>
+                )}
+              </CheckPermission>
 
-              <Button
-                onClick={() => {
-                  router.push('/departments/create');
-                }}
-                type="primary"
-                className='btn-top'
-                hidden={!createPer}
-              >
-                <PlusCircleOutlined />
-                Tạo mới phòng ban
-              </Button>
+              <CheckPermission permissionKey="departments" requiredType="create">
+                <Button
+                  onClick={() => {
+                    router.push('/departments/create');
+                  }}
+                  type="primary"
+                  className='btn-top'
+                >
+                  <PlusCircleOutlined />
+                  Tạo mới phòng ban
+                </Button>
+              </CheckPermission>
 
               {DepartmentData && DepartmentData.length > 0 && (
                 <ExcelExportButton

@@ -160,29 +160,29 @@ const UserUpload = () => {
           }
         });
 
-        const importResults = [];
-        for (const row of data) {
-          try {
-            const mappedData = mapExcelDataToUser(row);
-            const res = await UserService.createUser(mappedData);
-            importResults.push({
-              ...row,
-              status: "success",
-              message: "Thành công"
-            });
-          } catch (err: any) {
-            importResults.push({
-              ...row,
-              status: "error",
-              message: err.response?.data?.message || err.message || "Lỗi không xác định"
-            });
-          }
+        if (data.length === 0) {
+          message.warning("Không tìm thấy dữ liệu trong file!");
+          return;
         }
-        setResults(importResults);
-        message.success(`Xử lý xong ${importResults.length} bản ghi`);
-      } catch (err) {
+
+        // Map all data first
+        const mappedUsers = data.map(row => mapExcelDataToUser(row));
+
+        // Single bulk call
+        const response = await UserService.importUsers(mappedUsers);
+
+        // Response contains { results: [ { username, status, message: [] }, ... ] }
+        const finalResults = (response?.results || []).map((res: any, idx: number) => ({
+          ...data[idx],
+          status: res.status,
+          message: res.message
+        }));
+
+        setResults(finalResults);
+        message.success(response?.message || `Xử lý xong ${finalResults.length} bản ghi`);
+      } catch (err: any) {
         console.error("Error processing Excel:", err);
-        message.error("Không thể đọc file Excel. Vui lòng kiểm tra lại!");
+        message.error(err.response?.data?.message || "Không thể xử lý file Excel. Vui lòng kiểm tra lại!");
       } finally {
         setUploading(false);
       }
@@ -249,7 +249,25 @@ const UserUpload = () => {
         </Tag>
       )
     },
-    { title: "Ghi chú", dataIndex: "message", key: "message" }
+    {
+      title: "Ghi chú",
+      dataIndex: "message",
+      key: "message",
+      render: (messages: any) => {
+        if (Array.isArray(messages)) {
+          return (
+            <Space direction="vertical" size={0}>
+              {messages.map((msg, i) => (
+                <Text key={i} type={msg === "Thành công" ? "success" : "danger"} style={{ fontSize: 12 }}>
+                  • {msg}
+                </Text>
+              ))}
+            </Space>
+          );
+        }
+        return <Text>{messages}</Text>;
+      }
+    }
   ];
 
   return (

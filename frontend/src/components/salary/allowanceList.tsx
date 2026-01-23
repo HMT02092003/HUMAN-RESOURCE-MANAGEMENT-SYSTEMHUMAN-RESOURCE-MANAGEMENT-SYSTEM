@@ -10,6 +10,8 @@ import type { ExcelColumn } from '@/components/common/ExcelExport';
 import dayjs from 'dayjs';
 import { ServerSideTable } from '@/components/common/ServerSideTable';
 import type { ServerSideColumnType, TableQueryParams } from '@/components/common/ServerSideTable';
+import { usePermission } from "@/hooks/usePermission";
+import CheckPermission from "@/components/common/CheckPermission";
 
 interface AllowanceType {
   id: number;
@@ -131,10 +133,14 @@ const AdminAllowanceList: React.FC = () => {
       filterType: 'none',
       sortable: false,
       render: (_: any, record: AllowanceType) => (
-        <div style={{ display: "flex", justifyItems: "row" }}>
-          <Button type="text" onClick={() => handleEdit(record.id)}><EditOutlined /></Button>
-          <Button type="text" danger onClick={() => handleDeleteOne(record.id)}><DeleteOutlined /></Button>
-        </div>
+        <Space size="small">
+          <CheckPermission permissionKey="salary_allowances" requiredType="update">
+            <Button type="text" onClick={() => handleEdit(record.id)}><EditOutlined /></Button>
+          </CheckPermission>
+          <CheckPermission permissionKey="salary_allowances" requiredType="delete">
+            <Button type="text" danger onClick={() => handleDeleteOne(record.id)}><DeleteOutlined /></Button>
+          </CheckPermission>
+        </Space>
       )
     }
   ];
@@ -239,14 +245,18 @@ const AdminAllowanceList: React.FC = () => {
     <Row gutter={[16, 16]}>
       <Col span={24}>
         <Space style={{ marginBottom: 12 }}>
-          <Button type="primary" onClick={() => router.push('/salary/allowances/create')}>
-            <PlusOutlined /> Tạo mới
-          </Button>
-          {selectedRowKeys.length > 0 && (
-            <Button danger onClick={handleBulkDelete}>
-              Xóa đã chọn ({selectedRowKeys.length})
+          <CheckPermission permissionKey="salary_allowances" requiredType="create">
+            <Button type="primary" onClick={() => router.push('/salary/allowances/create')}>
+              <PlusOutlined /> Tạo mới
             </Button>
-          )}
+          </CheckPermission>
+          <CheckPermission permissionKey="salary_allowances" requiredType="delete">
+            {selectedRowKeys.length > 0 && (
+              <Button danger onClick={handleBulkDelete}>
+                Xóa đã chọn ({selectedRowKeys.length})
+              </Button>
+            )}
+          </CheckPermission>
           {selectedRowKeys.length > 0 ? (
             <ExcelExportButton
               data={selectedRows}

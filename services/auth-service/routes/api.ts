@@ -42,6 +42,7 @@ import {
   getAllUsersAllForSelect,
   getUserInfo,
   searchUsers,
+  importUsers,
 } from '@/src/controller/UserController';
 
 const router = Router();
@@ -138,6 +139,7 @@ const userRoutes = [
   { method: 'get', path: '/me', handler: getUserInfo, auth: true },
   { method: 'delete', path: '/users/:id', handler: deleteUser, auth: true },
   { method: 'get', path: '/users/:id/number-of-days-off', handler: getNumberOfDaysOff, auth: false }, // Internal
+  { method: 'post', path: '/users/import', handler: importUsers, auth: true },
   { method: 'post', path: '/users/check-scope', handler: checkUserScope, auth: true }, // Internal scope check
 ];
 

@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import ChevronModel from "@/src/Models/ChevronModel";
 import { validate, ValidationException } from "@/src/utils/validation-utility";
+import AuthService from "@/src/integrations/AuthService";
+import { getUserData } from "@/src/utils/getUserData";
 
 /**
  * Get all chevrons from the database with optional search, sort, and pagination
@@ -53,8 +55,27 @@ export const getAllChevrons = async (req: Request, res: Response) => {
     }
     const totalCount = await countQuery.first();
 
+    // Fetch roles to map IDs to names
+    const authHeader = req.headers.authorization;
+    const userData = getUserData(req);
+    const roles = await AuthService.getRoles(authHeader, userData);
+
+    const resultWithRoles = result.map((chevron: any) => {
+      let roleNames: string[] = [];
+      if (chevron.role_ids && Array.isArray(chevron.role_ids)) {
+        roleNames = chevron.role_ids.map((id: any) => {
+          const role = roles.find((r: any) => Number(r.id) === Number(id));
+          return role ? role.name : null;
+        }).filter(Boolean);
+      }
+      return {
+        ...chevron,
+        role_names: roleNames
+      };
+    });
+
     return res.status(200).json({
-      data: result,
+      data: resultWithRoles,
       total: totalCount ? (totalCount as any).count : 0
     });
   } catch (error) {

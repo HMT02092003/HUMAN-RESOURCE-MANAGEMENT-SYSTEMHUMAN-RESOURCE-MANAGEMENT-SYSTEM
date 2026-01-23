@@ -105,6 +105,27 @@ class AuthService {
       console.error(`❌ [AuthService] Failed to get users by department:`, error.message);
       return [];
     }
+  /**
+   * Get all roles from auth service
+   */
+  static async getRoles(authToken?: string, userData?: any): Promise<any[]> {
+    try {
+      const headers: any = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = authToken;
+      if (userData) {
+        headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
+        headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
+      }
+
+      const response = await axios.get(
+        `${AUTH_SERVICE_URL}/api/roles`,
+        { headers, params: { limit: 1000 } }
+      );
+      return response.data?.results || response.data?.data || response.data || [];
+    } catch (error: any) {
+      console.error(`❌ [AuthService] Failed to get roles:`, error.message);
+      return [];
+    }
   }
 }
 

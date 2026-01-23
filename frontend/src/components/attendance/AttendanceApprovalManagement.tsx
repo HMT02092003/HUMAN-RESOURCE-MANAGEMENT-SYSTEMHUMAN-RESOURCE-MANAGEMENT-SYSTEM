@@ -7,6 +7,8 @@ import type { PickerLocale } from 'antd/es/date-picker/generatePicker';
 import { CheckOutlined, CheckCircleOutlined, CalendarOutlined, FileExcelOutlined, DownloadOutlined } from '@ant-design/icons';
 import { ServerSideTable } from '@/components/common/ServerSideTable';
 import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
+import { usePermission } from "@/hooks/usePermission";
+import CheckPermission from "@/components/common/CheckPermission";
 import { attendanceService } from '@/service/attendanceService';
 import dayjs from 'dayjs';
 import { useExcelExport } from '@/components/common/ExcelExport';
@@ -498,14 +500,16 @@ const AttendanceApprovalManagement: React.FC = () => {
       render: (_: any, record: any) => (
         <Space>
           {!record.isApproved ? (
-            <Tooltip title="Duyệt bảng chấm công">
-              <Button
-                type="text"
-                size="small"
-                icon={<CheckOutlined style={{ color: 'green' }} />}
-                onClick={() => handleApproveAttendance(record.id)}
-              />
-            </Tooltip>
+            <CheckPermission permissionKey="timeAttendance" requiredType="approve">
+              <Tooltip title="Duyệt bảng chấm công">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<CheckOutlined style={{ color: 'green' }} />}
+                  onClick={() => handleApproveAttendance(record.id)}
+                />
+              </Tooltip>
+            </CheckPermission>
           ) : (
             <Tooltip title="Đã duyệt">
               <Button
@@ -537,31 +541,35 @@ const AttendanceApprovalManagement: React.FC = () => {
     <div style={{ padding: '24px' }}>
       <Space style={{ marginBottom: 16 }} wrap align="center">
         {/* Nút duyệt bảng chấm công - hiện modal chọn tháng */}
-        <Tooltip title="Duyệt tất cả bảng chấm công (chưa duyệt) của tháng">
-          <Button
-            type="primary"
-            icon={<CalendarOutlined />}
-            onClick={() => {
-              setExportYearSelection(dayjs().year());
-              setExportMonthSelection(dayjs().month() + 1);
-              setShowApproveMonthModal(true);
-            }}
-            style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-          >
-            Duyệt bảng chấm công
-          </Button>
-        </Tooltip>
+        <CheckPermission permissionKey="timeAttendance" requiredType="approve">
+          <Tooltip title="Duyệt tất cả bảng chấm công (chưa duyệt) của tháng">
+            <Button
+              type="primary"
+              icon={<CalendarOutlined />}
+              onClick={() => {
+                setExportYearSelection(dayjs().year());
+                setExportMonthSelection(dayjs().month() + 1);
+                setShowApproveMonthModal(true);
+              }}
+              style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+            >
+              Duyệt bảng chấm công
+            </Button>
+          </Tooltip>
+        </CheckPermission>
 
         {/* Nút duyệt đã chọn - chỉ hiện khi có checkbox được chọn */}
-        {selectedRowKeys.length > 0 && (
-          <Button
-            type="default"
-            onClick={handleApproveSelected}
-            style={{ marginLeft: 8 }}
-          >
-            <CheckOutlined /> Duyệt đã chọn ({selectedRowKeys.length})
-          </Button>
-        )}
+        <CheckPermission permissionKey="timeAttendance" requiredType="approve">
+          {selectedRowKeys.length > 0 && (
+            <Button
+              type="default"
+              onClick={handleApproveSelected}
+              style={{ marginLeft: 8 }}
+            >
+              <CheckOutlined /> Duyệt đã chọn ({selectedRowKeys.length})
+            </Button>
+          )}
+        </CheckPermission>
 
         {/* Nút xuất Excel bảng duyệt - xuất trực tiếp không có modal */}
         <Tooltip title="Xuất toàn bộ dữ liệu trong bảng ra Excel">

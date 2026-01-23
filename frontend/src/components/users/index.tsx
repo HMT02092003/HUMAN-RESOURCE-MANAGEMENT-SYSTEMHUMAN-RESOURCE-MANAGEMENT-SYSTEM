@@ -17,6 +17,8 @@ import { ExcelExportButton } from '@/components/common/ExcelExport';
 import type { ExcelColumn } from '@/components/common/ExcelExport';
 import { ServerSideTable } from '@/components/common/ServerSideTable';
 import type { ServerSideColumnType } from '@/components/common/ServerSideTable';
+import { usePermission } from "@/hooks/usePermission";
+import CheckPermission from "@/components/common/CheckPermission";
 
 const { statusOptions, Gender } = constantConfig;
 
@@ -130,10 +132,11 @@ const UserTable = () => {
   const router = useRouter();
   const screens = Grid.useBreakpoint();
 
-  const createPer = true;
-  const updatePer = true;
-  const deletePer = true;
-  const viewPer = true;
+  const { permissions, loading: permissionLoading } = usePermission('users');
+  const createPer = permissions.create;
+  const updatePer = permissions.update;
+  const deletePer = permissions.delete;
+  const viewPer = permissions.read;
 
   // 🔥 Fetch function để dùng với ServerSideTable
   const fetchUsers = useCallback(async (params: any) => {
@@ -410,36 +413,38 @@ const UserTable = () => {
             },
           }}
         >
-          <Tooltip title="Xem">
-            <Button
-              type="text"
-              icon={<EyeOutlined />}
-              size="small"
-              onClick={() => router.push(`/user/view/${record.id}`)}
-              hidden={!viewPer}
-              style={{
-                padding: '4px 6px',
-                minWidth: 'auto',
-                height: '26px',
-                color: '#1677ff'
-              }}
-            />
-          </Tooltip>
-          <Tooltip title="Sửa">
-            <Button
-              type="text"
-              icon={<EditOutlined />}
-              size="small"
-              onClick={() => router.push(`/user/edit/${record.id}`)}
-              hidden={!updatePer}
-              style={{
-                padding: '4px 6px',
-                minWidth: 'auto',
-                height: '26px',
-                color: '#52c41a'
-              }}
-            />
-          </Tooltip>
+          <CheckPermission permissionKey="users" requiredType="read">
+            <Tooltip title="Xem">
+              <Button
+                type="text"
+                icon={<EyeOutlined />}
+                size="small"
+                onClick={() => router.push(`/user/view/${record.id}`)}
+                style={{
+                  padding: '4px 6px',
+                  minWidth: 'auto',
+                  height: '26px',
+                  color: '#1677ff'
+                }}
+              />
+            </Tooltip>
+          </CheckPermission>
+          <CheckPermission permissionKey="users" requiredType="update">
+            <Tooltip title="Sửa">
+              <Button
+                type="text"
+                icon={<EditOutlined />}
+                size="small"
+                onClick={() => router.push(`/user/edit/${record.id}`)}
+                style={{
+                  padding: '4px 6px',
+                  minWidth: 'auto',
+                  height: '26px',
+                  color: '#52c41a'
+                }}
+              />
+            </Tooltip>
+          </CheckPermission>
           <Tooltip title="Tạo hợp đồng">
             <Button
               type="text"
@@ -466,27 +471,29 @@ const UserTable = () => {
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24}>
           <div style={{ display: 'flex', justifyContent: 'flex-start', flexWrap: 'wrap' }}>
-            {selectedRowKeys.length > 0 && (
-              <Button
-                danger
-                className="btn-top"
-                hidden={!deletePer}
-                onClick={showDeleteConfirm}
-              >
-                <DeleteOutlined />
-                Xóa
-              </Button>
-            )}
+            <CheckPermission permissionKey="users" requiredType="delete">
+              {selectedRowKeys.length > 0 && (
+                <Button
+                  danger
+                  className="btn-top"
+                  onClick={showDeleteConfirm}
+                >
+                  <DeleteOutlined />
+                  Xóa
+                </Button>
+              )}
+            </CheckPermission>
 
-            <Button
-              hidden={!createPer}
-              onClick={() => router.push("/user/create")}
-              type="primary"
-              className="btn-top"
-            >
-              <PlusCircleOutlined />
-              Tạo mới
-            </Button>
+            <CheckPermission permissionKey="users" requiredType="create">
+              <Button
+                onClick={() => router.push("/user/create")}
+                type="primary"
+                className="btn-top"
+              >
+                <PlusCircleOutlined />
+                Tạo mới
+              </Button>
+            </CheckPermission>
 
             <Button
               hidden={!createPer}

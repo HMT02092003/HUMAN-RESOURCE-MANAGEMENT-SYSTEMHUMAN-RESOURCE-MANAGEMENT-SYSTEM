@@ -481,6 +481,145 @@ export const getAllUsersAllForSelect = async (req: any, res: Response) => {
 }
 
 /**
+ * Bulk create users from import
+ */
+export const importUsers = async (req: Request, res: Response) => {
+  try {
+    const auth = getUserData(req) || (req as any).auth;
+    const users = req.body;
+
+    if (!Array.isArray(users)) {
+      return res.status(400).json({ message: "Dữ liệu phải là một mảng!", code: 400 });
+    }
+
+    const authToken = req.headers.authorization;
+    const [roles, departments, chevrons] = await Promise.all([
+      RoleModel.query(),
+      EmployeeService.getAllDepartments(authToken, auth),
+      EmployeeService.getAllChevrons(authToken, auth)
+    ]);
+
+    const allowFields = {
+      fullName: "string!",
+      username: "string!",
+      password: "string!",
+      roleId: "number!",
+      email: "string!",
+      departmentId: "number!",
+      chevronId: "number!",
+      status: "number",
+      gender: "number",
+      phone: "string",
+      birthday: "date",
+      startDate: "date"
+    };
+
+    const results = [];
+
+    for (const user of users) {
+      const result: any = {
+        username: user.username,
+        fullName: user.fullName,
+        roleName: user.roleName,
+        status: "error",
+        message: [] as string[]
+      };
+
+      try {
+        // Validate each field and collect errors
+        const params: any = {};
+        const errors: string[] = [];
+
+        // Manual validation for better error messages in Vietnamese as requested
+        for (const [field, type] of Object.entries(allowFields)) {
+          const isRequired = (type as string).endsWith("!");
+          const val = user[field];
+
+          if (isRequired && (val === undefined || val === null || (typeof val === 'string' && val.trim() === ""))) {
+            const fieldLabel = field === 'fullName' ? 'Họ và tên' :
+              field === 'username' ? 'Tên đăng nhập' :
+                field === 'password' ? 'Mật khẩu' :
+                  field === 'roleId' ? 'Vai trò' :
+                    field === 'email' ? 'Email' :
+                      field === 'departmentId' ? 'Phòng ban' :
+                        field === 'chevronId' ? 'Chức vụ' : field;
+            errors.push(`${fieldLabel} là bắt buộc`);
+          } else if (val !== undefined && val !== null) {
+            params[field] = typeof val === 'string' ? val.trim() : val;
+          }
+        }
+
+        if (errors.length > 0) {
+          result.message = errors;
+          results.push(result);
+          continue;
+        }
+
+        // Check existences in DB
+        const existingUser = await UserModel.query()
+          .where("username", params.username)
+          .orWhere("email", params.email)
+          .first();
+
+        if (existingUser) {
+          if (existingUser.username === params.username) errors.push("Tên đăng nhập đã tồn tại");
+          if (existingUser.email === params.email) errors.push("Email đã tồn tại");
+        }
+
+        // Check role
+        if (!roles.find(r => Number(r.id) === Number(params.roleId))) {
+          errors.push("Vai trò không tồn tại");
+        }
+
+        // Check department
+        if (!departments.find((d: any) => Number(d.id) === Number(params.departmentId))) {
+          errors.push("Phòng ban không tồn tại");
+        }
+
+        // Check chevron
+        const foundChevron = chevrons.find((c: any) => Number(c.id) === Number(params.chevronId));
+        if (!foundChevron) {
+          errors.push("Chức vụ không tồn tại");
+        }
+
+        if (errors.length > 0) {
+          result.message = errors;
+          results.push(result);
+          continue;
+        }
+
+        // Hash password
+        params.password = await bcrypt.hash(params.password, 10);
+
+        // Add createdBy
+        if (auth && auth.id) {
+          params.createdBy = auth.id;
+        }
+
+        // Insert
+        await UserModel.query().insert(params);
+        result.status = "success";
+        result.message = ["Thành công"];
+
+      } catch (err: any) {
+        result.message = [err.message || "Lỗi không xác định"];
+      }
+
+      results.push(result);
+    }
+
+    return res.status(200).json({
+      message: `Đã xử lý xong ${users.length} bản ghi`,
+      results
+    });
+
+  } catch (error) {
+    console.error("Error importing users:", error);
+    return res.status(500).json({ message: "Lỗi máy chủ nội bộ", code: 500 });
+  }
+};
+
+/**
  * Create a new user
  */
 export const createUser = async (req: Request, res: Response) => {

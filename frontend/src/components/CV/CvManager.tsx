@@ -4,6 +4,8 @@ import { DeleteOutlined, PlusOutlined, FileTextOutlined, SearchOutlined } from '
 import type { InputRef } from 'antd';
 import { ServerSideTable } from '@/components/common/ServerSideTable';
 import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
+import { usePermission } from "@/hooks/usePermission";
+import CheckPermission from "@/components/common/CheckPermission";
 import type { FilterDropdownProps } from 'antd/es/table/interface';
 import jobService from '@/service/jobService';
 import UserService from '@/service/userService';
@@ -169,14 +171,16 @@ const CvManager: React.FC = () => {
 			fixed: 'right',
 			width: 100,
 			render: (_: any, record: CvWithUser) => (
-				<Button
-					danger
-					size="small"
-					icon={<DeleteOutlined />}
-					onClick={() => handleDelete(record.cv_id)}
-				>
-					Xóa
-				</Button>
+				<CheckPermission permissionKey="CV" requiredType="delete">
+					<Button
+						danger
+						size="small"
+						icon={<DeleteOutlined />}
+						onClick={() => handleDelete(record.cv_id)}
+					>
+						Xóa
+					</Button>
+				</CheckPermission>
 			)
 		}
 	];
@@ -231,21 +235,25 @@ const CvManager: React.FC = () => {
 		<div>
 			<Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
 				<Col>
-					<Button type="primary" icon={<PlusOutlined />} onClick={goCreate}>
-						Tạo mới hồ sơ
-					</Button>
-				</Col>
-				{selectedRowKeys.length > 0 && (
-					<Col>
-						<Button
-							danger
-							icon={<DeleteOutlined />}
-							onClick={handleBulkDelete}
-						>
-							Xóa {selectedRowKeys.length} mục đã chọn
+					<CheckPermission permissionKey="CV" requiredType="create">
+						<Button type="primary" icon={<PlusOutlined />} onClick={goCreate}>
+							Tạo mới hồ sơ
 						</Button>
-					</Col>
-				)}
+					</CheckPermission>
+				</Col>
+				<Col>
+					<CheckPermission permissionKey="CV" requiredType="delete">
+						{selectedRowKeys.length > 0 && (
+							<Button
+								danger
+								icon={<DeleteOutlined />}
+								onClick={handleBulkDelete}
+							>
+								Xóa {selectedRowKeys.length} mục đã chọn
+							</Button>
+						)}
+					</CheckPermission>
+				</Col>
 				<Col>
 					<ExcelExportButton
 						data={excelData}

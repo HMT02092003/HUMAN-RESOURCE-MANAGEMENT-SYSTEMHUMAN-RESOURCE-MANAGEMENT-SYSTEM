@@ -10,6 +10,8 @@ import ApplicationDetailModal from './ApplicationDetailModal';
 import { ExcelExportButton } from '@/components/common/ExcelExport';
 import type { ExcelColumn } from '@/components/common/ExcelExport';
 import dayjs from 'dayjs';
+import { usePermission } from "@/hooks/usePermission";
+import CheckPermission from "@/components/common/CheckPermission";
 
 // Material icons for filters
 import BeachAccessIcon from '@mui/icons-material/BeachAccess';
@@ -299,24 +301,28 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
                     </Tooltip>
                     {record.status === 0 && (
                         <>
-                            <Tooltip title="Duyệt đơn">
-                                <Button
-                                    type="text"
-                                    size="small"
-                                    icon={<CheckOutlined />}
-                                    onClick={() => handleApproveClick(record)}
-                                    style={{ color: '#52c41a' }}
-                                />
-                            </Tooltip>
-                            <Tooltip title="Từ chối">
-                                <Button
-                                    type="text"
-                                    size="small"
-                                    icon={<CloseOutlined />}
-                                    onClick={() => handleRejectClick(record)}
-                                    danger
-                                />
-                            </Tooltip>
+                            <CheckPermission permissionKey="manage_applications" requiredType="approve">
+                                <Tooltip title="Duyệt đơn">
+                                    <Button
+                                        type="text"
+                                        size="small"
+                                        icon={<CheckOutlined />}
+                                        onClick={() => handleApproveClick(record)}
+                                        style={{ color: '#52c41a' }}
+                                    />
+                                </Tooltip>
+                            </CheckPermission>
+                            <CheckPermission permissionKey="manage_applications" requiredType="approve">
+                                <Tooltip title="Từ chối">
+                                    <Button
+                                        type="text"
+                                        size="small"
+                                        icon={<CloseOutlined />}
+                                        onClick={() => handleRejectClick(record)}
+                                        danger
+                                    />
+                                </Tooltip>
+                            </CheckPermission>
                         </>
                     )}
                 </Space>
@@ -344,38 +350,42 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
                 <Space>
                     {selectedRowKeys.length > 0 && (
                         <>
-                            <Button
-                                type="primary"
-                                icon={<CheckOutlined />}
-                                onClick={handleBulkApprove}
-                                loading={loading}
-                                style={{
-                                    borderRadius: '8px',
-                                    height: '48px',
-                                    paddingLeft: '24px',
-                                    paddingRight: '24px',
-                                    fontSize: '16px',
-                                    fontWeight: '500'
-                                }}
-                            >
-                                Duyệt đã chọn ({selectedRowKeys.length})
-                            </Button>
-                            <Button
-                                danger
-                                icon={<CloseOutlined />}
-                                onClick={handleBulkReject}
-                                loading={loading}
-                                style={{
-                                    borderRadius: '8px',
-                                    height: '48px',
-                                    paddingLeft: '24px',
-                                    paddingRight: '24px',
-                                    fontSize: '16px',
-                                    fontWeight: '500'
-                                }}
-                            >
-                                Từ chối đã chọn ({selectedRowKeys.length})
-                            </Button>
+                            <CheckPermission permissionKey="manage_applications" requiredType="approve">
+                                <Button
+                                    type="primary"
+                                    icon={<CheckOutlined />}
+                                    onClick={handleBulkApprove}
+                                    loading={loading}
+                                    style={{
+                                        borderRadius: '8px',
+                                        height: '48px',
+                                        paddingLeft: '24px',
+                                        paddingRight: '24px',
+                                        fontSize: '16px',
+                                        fontWeight: '500'
+                                    }}
+                                >
+                                    Duyệt đã chọn ({selectedRowKeys.length})
+                                </Button>
+                            </CheckPermission>
+                            <CheckPermission permissionKey="manage_applications" requiredType="approve">
+                                <Button
+                                    danger
+                                    icon={<CloseOutlined />}
+                                    onClick={handleBulkReject}
+                                    loading={loading}
+                                    style={{
+                                        borderRadius: '8px',
+                                        height: '48px',
+                                        paddingLeft: '24px',
+                                        paddingRight: '24px',
+                                        fontSize: '16px',
+                                        fontWeight: '500'
+                                    }}
+                                >
+                                    Từ chối đã chọn ({selectedRowKeys.length})
+                                </Button>
+                            </CheckPermission>
                         </>
                     )}
                     {currentPageData.length > 0 && (

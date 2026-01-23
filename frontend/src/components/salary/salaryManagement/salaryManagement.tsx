@@ -10,6 +10,7 @@ import constant from '@/config/constant';
 import InvalidUsersModal from '../InvalidUsersModal';
 import { ServerSideTable } from '@/components/common/ServerSideTable';
 import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
+import CheckPermission from '@/components/common/CheckPermission';
 
 const { TypeOfStatusSalary } = constant;
 
@@ -312,9 +313,11 @@ const SalaryManagement: React.FC = () => {
             <Select.Option key={m} value={m}>Tháng {m}</Select.Option>
           ))}
         </Select>
-        <Button onClick={handleCalculate} type="primary" loading={calculating}>
-          <CalculatorOutlined /> Tính lương {selectedMonth}/{selectedYear}
-        </Button>
+        <CheckPermission permissionKey="salaries" requiredType="create">
+          <Button onClick={handleCalculate} type="primary" loading={calculating}>
+            <CalculatorOutlined /> Tính lương {selectedMonth}/{selectedYear}
+          </Button>
+        </CheckPermission>
 
         {tableData && tableData.length > 0 && (
           <ExcelExportButton

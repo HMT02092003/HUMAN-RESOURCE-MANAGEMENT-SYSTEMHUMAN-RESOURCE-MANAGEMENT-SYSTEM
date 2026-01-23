@@ -65,8 +65,27 @@ export const getAllDepartments = async (req: Request, res: Response) => {
     }
     const totalCount = await countQuery.first();
 
+    // Fetch roles to map IDs to names
+    const authHeader = req.headers.authorization;
+    const userData = getUserData(req);
+    const roles = await AuthService.getRoles(authHeader, userData);
+
+    const resultWithRoles = result.map((dept: any) => {
+      let roleNames: string[] = [];
+      if (dept.role_ids && Array.isArray(dept.role_ids)) {
+        roleNames = dept.role_ids.map((id: any) => {
+          const role = roles.find((r: any) => Number(r.id) === Number(id));
+          return role ? role.name : null;
+        }).filter(Boolean);
+      }
+      return {
+        ...dept,
+        role_names: roleNames
+      };
+    });
+
     return res.status(200).json({
-      data: result,
+      data: resultWithRoles,
       total: totalCount ? (totalCount as any).count : 0
     });
   } catch (error) {
