@@ -105,6 +105,8 @@ class AuthService {
       console.error(`❌ [AuthService] Failed to get users by department:`, error.message);
       return [];
     }
+  }
+
   /**
    * Get all roles from auth service
    */

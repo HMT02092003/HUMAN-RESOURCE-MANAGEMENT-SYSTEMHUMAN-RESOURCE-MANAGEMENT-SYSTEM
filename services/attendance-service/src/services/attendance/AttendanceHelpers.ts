@@ -24,8 +24,8 @@ interface ApprovedLeaveApplication {
  */
 export async function getWorkingDaysConfig(): Promise<WorkingDaysConfig> {
   try {
-  // Load settings from DB
-  const setting = await SettingModel.query().findOne('key', 'WorkingDays');
+    // Load settings from DB
+    const setting = await SettingModel.query().findOne('key', 'WorkingDays');
 
     if (setting && setting.value) {
       const value = typeof setting.value === 'string' ? JSON.parse(setting.value) : setting.value;
@@ -107,7 +107,7 @@ export function checkDateHasBusinessTrip(date: string, applications: ApprovedLea
   if (dayjs(date).isAfter(today, 'day')) return { hasBusinessTrip: false };
 
   for (const app of applications) {
-    if (app.type === 'business-trip') {
+    if (app.type === 'business-trip' || app.type === 'business_trip') {
       const appData = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
       if (appData.startDate && appData.endDate) {
         const checkDate = dayjs(date);

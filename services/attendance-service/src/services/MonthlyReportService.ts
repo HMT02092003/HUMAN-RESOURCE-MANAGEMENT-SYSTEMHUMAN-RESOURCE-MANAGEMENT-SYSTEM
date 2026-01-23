@@ -155,7 +155,7 @@ export class MonthlyReportService {
         const data = typeof app.data === 'string' ? JSON.parse(app.data) : app.data || {};
         const t = (app.type || '').toString().toLowerCase();
         const isLeaveApp = t.includes('leave');
-        const isBusinessTripApp = t.includes('business') || t.includes('trip') || t.includes('businesstrip') || t.includes('business_trip') || t.includes('business-trip') || t === 'businesstrip';
+        const isBusinessTripApp = t.includes('business') || t.includes('trip') || t === 'business-trip' || t === 'business_trip';
 
         // single-day
         // Single-day (explicit date) or date range. Normalize dates before expansion.
@@ -255,7 +255,7 @@ export class MonthlyReportService {
 
       // ✨ ƯU TIÊN: Công tác và OT được kiểm tra TRƯỚC khi kiểm tra weekend
       // Vì công tác và OT có thể xảy ra vào cuối tuần
-      if (record.hasBusinessTrip || record.type === 'business_trip') { status = 'business_trip'; statusText = 'Công tác'; }
+      if (record.hasBusinessTrip || record.type === 'business-trip' || record.type === 'business_trip') { status = 'business_trip'; statusText = 'Công tác'; }
       else if (record.hasApprovedOT) { status = 'overtime'; statusText = 'Làm thêm giờ'; }
       else if (!isWorkDay) { status = 'weekend'; statusText = 'Cuối tuần'; }
       else if (record.hasApprovedLeave || ['leave', 'sick-leave'].includes(record.type)) { status = 'approved_leave'; statusText = record.leaveInfo ?? record.leaveTypeName ?? 'Nghỉ phép'; }
@@ -415,7 +415,6 @@ export class MonthlyReportService {
     const weekendDays = agg.weekendDays;
 
     const totalUnauthorizedAbsencePenalty = unauthorizedAbsenceDays * unauthorizedAbsencePenaltyPerDay;
-    const totalPenalty = totalLatePenalty + totalEarlyLeavePenalty + totalUnauthorizedAbsencePenalty;
     const absentDays = approvedLeaveDays + businessTripDays;
 
     const monthlyRecord = await MonthlySummaryModel.getByUserAndMonth(userId, month);
@@ -653,7 +652,7 @@ export class MonthlyReportService {
             }
           }
 
-          if (app.type === 'business_trip') {
+          if (app.type === 'business-trip' || app.type === 'business_trip') {
             if (data.date) {
               businessTripDaysSet.add(dayjs(data.date).format('YYYY-MM-DD'));
             } else if (data.startDate && data.endDate) {

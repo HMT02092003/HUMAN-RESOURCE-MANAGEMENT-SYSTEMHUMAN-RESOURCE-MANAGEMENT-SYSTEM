@@ -44,9 +44,9 @@ import dayjs from 'dayjs';
 export const getDailyAttendanceForExport = async (req: Request, res: Response) => {
   try {
     console.log('\n📊 === GET DAILY ATTENDANCE FOR EXPORT (WITH SCOPE) ===');
-    
+
     const { month } = req.query;
-    
+
     if (!month) {
       return res.status(400).json({
         success: false,
@@ -72,7 +72,7 @@ export const getDailyAttendanceForExport = async (req: Request, res: Response) =
     const userData = getUserData(req);
     const CheckScopeService = (await import('../services/CheckScopeService')).default;
     const scopeResult = await CheckScopeService.checkUserScope('users', token, userData);
-    
+
     if (!scopeResult.hasAccess) {
       return res.status(403).json({
         success: false,
@@ -80,9 +80,9 @@ export const getDailyAttendanceForExport = async (req: Request, res: Response) =
       });
     }
 
-    console.log('🔐 Scope check result:', { 
-      scope: scopeResult.scope, 
-      userCount: scopeResult.userIds.length 
+    console.log('🔐 Scope check result:', {
+      scope: scopeResult.scope,
+      userCount: scopeResult.userIds.length
     });
 
     // Xác định userIds theo scope
@@ -110,12 +110,12 @@ export const getDailyAttendanceForExport = async (req: Request, res: Response) =
     const startDate = dayjs(`${year}-${monthNum}-01`).startOf('month');
     const endDate = startDate.endOf('month');
     const daysInMonth = endDate.date();
-    
+
     const startDateStr = startDate.format('YYYY-MM-DD');
     const endDateStr = endDate.format('YYYY-MM-DD');
 
     console.log('📅 Date range:', { startDateStr, endDateStr, daysInMonth });
-    
+
     // Lấy tất cả time_attendances trong tháng cho các users trong scope
     const timeAttendances = await TimeAttendanceModel.query()
       .whereIn('userId', userIds)
@@ -144,14 +144,14 @@ export const getDailyAttendanceForExport = async (req: Request, res: Response) =
     const result = userIds.map((userId, index) => {
       const user = usersMap.get(userId);
       const userAttendances = attendancesByUser.get(userId) || [];
-      
+
       // Create a map: dayOfMonth -> attendance record
       const dailyMap = new Map<number, any>();
       userAttendances.forEach((att: any) => {
         const dayOfMonth = dayjs(att.date).date();
         dailyMap.set(dayOfMonth, att);
       });
-      
+
       // Build result object with daily columns
       const row: any = {
         stt: index + 1,
@@ -159,27 +159,27 @@ export const getDailyAttendanceForExport = async (req: Request, res: Response) =
         position: user?.position || user?.jobTitle || user?.chevron?.name || 'Chưa xác định',
         department: user?.department?.name || 'Chưa phân công',
       };
-      
+
       let totalWorkingDays = 0;
-      
+
       // Add columns for each day (1-31)
       for (let day = 1; day <= daysInMonth; day++) {
         const att = dailyMap.get(day);
-        
+
         if (!att) {
           row[`day${day}`] = 0;
           continue;
         }
-        
+
         // Tính giá trị công dựa trên dailyWorkingUnit (hoặc totalWorkingUnit)
         // dailyWorkingUnit là số công thực tế (0, 0.5, 1, 1.5, 2...)
         const workValue = Number(att.dailyWorkingUnit || att.totalWorkingUnit || 0);
         row[`day${day}`] = workValue;
         totalWorkingDays += workValue;
       }
-      
+
       row.totalWorkingDays = Math.round(totalWorkingDays * 100) / 100; // Làm tròn 2 chữ số
-      
+
       return row;
     });
 
@@ -192,7 +192,7 @@ export const getDailyAttendanceForExport = async (req: Request, res: Response) =
       daysInMonth,
       month: monthStr
     });
-    
+
   } catch (error: any) {
     console.error('❌ Error in getDailyAttendanceForExport:', error);
     return res.status(500).json({
@@ -240,7 +240,7 @@ export const getUserMonthlyFull = async (req: Request, res: Response) => {
       const presentDays = Number(db.presentDays || 0);
       const approvedLeaveDays = Number(db.approvedLeaveDays || 0);
       const businessTripDays = Number(db.businessTripDays || 0);
-      const unauthorizedAbsenceDays = Number(db.unauthorizedAbsenceDays ?? Math.max(0, totalScheduledDays - (presentDays + approvedLeaveDays + businessTripDays)) );
+      const unauthorizedAbsenceDays = Number(db.unauthorizedAbsenceDays ?? Math.max(0, totalScheduledDays - (presentDays + approvedLeaveDays + businessTripDays)));
 
       const userData = getUserData(req);
       const salary = await SalaryService.fetchSalary(parseInt(userId), token, userData);
@@ -337,13 +337,13 @@ export const recordAttendance = async (req: Request, res: Response) => {
 
 export const getAllMonthlyAttendance = async (req: Request, res: Response) => {
   try {
-    const { page = 0, pageSize = 10, sortField = 'id', sortOrder = 'desc' } = req.query;  
+    const { page = 0, pageSize = 10, sortField = 'id', sortOrder = 'desc' } = req.query;
     const result = await MonthlyReportService.getMonthlyAttendanceForAllUsers(
       Number(page),
       Number(pageSize),
       String(sortField),
       String(sortOrder) as 'asc' | 'desc'
-    ); 
+    );
     res.json({
       success: true,
       data: result
@@ -363,10 +363,10 @@ export const getAllMonthlyAttendance = async (req: Request, res: Response) => {
  */
 export const getMonthlyAttendanceByMonth = async (req: Request, res: Response) => {
   try {
-  const month = String((req.query as any)['month'] || req.body?.['month'] || '').trim();
-  const isApprovedRaw = (req.query as any)['isApproved'] ?? req.body?.['isApproved'];
-  const page = Number((req.query as any)['page'] ?? req.body?.['page'] ?? 0);
-  const pageSize = Number((req.query as any)['pageSize'] ?? req.body?.['pageSize'] ?? 1000);
+    const month = String((req.query as any)['month'] || req.body?.['month'] || '').trim();
+    const isApprovedRaw = (req.query as any)['isApproved'] ?? req.body?.['isApproved'];
+    const page = Number((req.query as any)['page'] ?? req.body?.['page'] ?? 0);
+    const pageSize = Number((req.query as any)['pageSize'] ?? req.body?.['pageSize'] ?? 1000);
 
     if (!month || !/^\d{4}-\d{2}$/.test(month)) {
       return res.status(400).json({ success: false, message: 'month is required in YYYY-MM format' });
@@ -401,7 +401,7 @@ export const getMonthlyAttendanceByMonth = async (req: Request, res: Response) =
 export const getMonthlySummariesForExport = async (req: Request, res: Response) => {
   try {
     console.log('\n📊 === GET MONTHLY SUMMARIES FOR EXPORT (WITH SCOPE) ===');
-    
+
     // Lấy token để check scope
     let token = req.cookies?.['token'];
     if (!token && req.headers.authorization) {
@@ -420,7 +420,7 @@ export const getMonthlySummariesForExport = async (req: Request, res: Response) 
     const userData = getUserData(req);
     const CheckScopeService = (await import('../services/CheckScopeService')).default;
     const scopeResult = await CheckScopeService.checkUserScope('users', token, userData);
-    
+
     if (!scopeResult.hasAccess) {
       return res.status(403).json({
         success: false,
@@ -428,14 +428,14 @@ export const getMonthlySummariesForExport = async (req: Request, res: Response) 
       });
     }
 
-    console.log('🔐 Scope check result:', { 
-      scope: scopeResult.scope, 
-      userCount: scopeResult.userIds.length 
+    console.log('🔐 Scope check result:', {
+      scope: scopeResult.scope,
+      userCount: scopeResult.userIds.length
     });
 
     // Build query với filters từ params (nếu có)
     let query = MonthlySummaryModel.query();
-    
+
     // Filter theo tháng nếu có
     const { month, ...otherFilters } = req.query;
     if (month) {
@@ -505,34 +505,33 @@ export const getMonthlySummariesForExport = async (req: Request, res: Response) 
  */
 export const getMonthlySummariesByScopeController = async (req: Request, res: Response) => {
   try {
-    // Permission key is determined by the route context, not from frontend
-    // For attendance approval screen, we check 'users' permission
-    const permissionKey = 'users';
-    
+    // For attendance approval screen, we check 'timeAttendance' permission
+    const permissionKey = 'timeAttendance';
+
     // Frontend sends 1-based page from ServerSideTable via 'page' param
     const pageFromFrontend = Number(req.query['page'] ?? req.body?.page ?? 1);
     const page = Math.max(0, pageFromFrontend - 1); // Convert to 0-based
-    
+
     // Accept both 'pageSize' and 'limit'
     const pageSize = Number(req.query['pageSize'] ?? req.query['limit'] ?? req.body?.pageSize ?? req.body?.limit ?? 20);
-    
+
     // Get all query params and pass to service
     const params: any = {
       page,
       pageSize
     };
-    
+
     // Pass through all filter/sort params
     Object.keys(req.query).forEach(key => {
       if (key !== 'page' && key !== 'pageSize' && key !== 'limit') {
         params[key] = req.query[key];
       }
     });
-    
+
     const result = await AttendanceService.getMonthlySummariesByScope(permissionKey, req, params);
 
     // Convert page back to 1-based for frontend
-    return res.status(200).json({ 
+    return res.status(200).json({
       success: true,
       results: result.results || [],
       total: result.total || 0,
@@ -552,7 +551,7 @@ export const approveMonthlyAttendance = async (req: Request, res: Response) => {
   try {
     const { ids } = req.body;
 
-    const token = req.cookies?.['token'] || req.headers.authorization?.replace('Bearer ', '') ||  req.headers.authorization?.split(' ')[1];
+    const token = req.cookies?.['token'] || req.headers.authorization?.replace('Bearer ', '') || req.headers.authorization?.split(' ')[1];
     let approverId: number | undefined;
     try {
       const decoded = getDecodedToken(token || '');
@@ -561,7 +560,7 @@ export const approveMonthlyAttendance = async (req: Request, res: Response) => {
       approverId = undefined;
     }
 
-    if(!ids || !Array.isArray(ids) || ids.length === 0) {
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ success: false, message: 'Không có ID nào được cung cấp' });
     }
 
@@ -581,16 +580,16 @@ export const approveMonthlyAttendance = async (req: Request, res: Response) => {
 export const approveAllByMonth = async (req: Request, res: Response) => {
   try {
     const { month } = req.body;
-    
+
     if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Tháng không hợp lệ. Định dạng: YYYY-MM' 
+      return res.status(400).json({
+        success: false,
+        message: 'Tháng không hợp lệ. Định dạng: YYYY-MM'
       });
     }
 
     const token = req.cookies?.['token'] || req.headers.authorization?.replace('Bearer ', '') || req.headers.authorization?.split(' ')[1];
-    
+
     let approverId: number | undefined;
     try {
       const decoded = getDecodedToken(token || '');
@@ -602,17 +601,17 @@ export const approveAllByMonth = async (req: Request, res: Response) => {
     console.log('[AttendanceController] approveAllByMonth called for month:', month);
 
     const result = await AttendanceService.approveAllByMonth(month, token || '', approverId);
-    
-    return res.status(200).json({ 
-      success: true, 
+
+    return res.status(200).json({
+      success: true,
       data: result,
-      message: `Đã duyệt ${result.approved} bảng chấm công cho tháng ${month}` 
+      message: `Đã duyệt ${result.approved} bảng chấm công cho tháng ${month}`
     });
   } catch (error: any) {
     console.error('❌ Error in approveAllByMonth:', error);
-    return res.status(500).json({ 
-      success: false, 
-      message: error.message || 'Lỗi khi duyệt tất cả bảng chấm công theo tháng' 
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Lỗi khi duyệt tất cả bảng chấm công theo tháng'
     });
   }
 };
@@ -623,7 +622,7 @@ export const calculateAndSaveMonthly = async (req: Request, res: Response) => {
     const { userId } = req.params;
     const { year, month } = req.query;
     if (!userId || !year || !month) return res.status(400).json({ success: false, message: 'userId, year and month are required' });
-    const dateStr = `${String(year)}-${String(month).padStart(2,'0')}-01`;
+    const dateStr = `${String(year)}-${String(month).padStart(2, '0')}-01`;
     const userData = getUserData(req);
     await MonthlyReportService.calculateAndSaveMonthlyAttendance(Number(userId), dateStr, userData);
     return res.status(200).json({ success: true, message: 'Monthly attendance calculated and saved' });
@@ -641,23 +640,23 @@ export const calculateAndSaveMonthly = async (req: Request, res: Response) => {
 export const bulkCalculateMonthly = async (req: Request, res: Response) => {
   try {
     const { userIds, year, month } = req.body;
-    
+
     if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'userIds (array) is required' 
+      return res.status(400).json({
+        success: false,
+        message: 'userIds (array) is required'
       });
     }
-    
+
     if (!year || !month) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'year and month are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'year and month are required'
       });
     }
 
     const dateStr = `${String(year)}-${String(month).padStart(2, '0')}-01`;
-    
+
     console.log(`\n📊 === BULK CALCULATE MONTHLY ATTENDANCE ===`);
     console.log(`   📅 Month: ${year}-${String(month).padStart(2, '0')}`);
     console.log(`   👥 Total users: ${userIds.length}`);
@@ -675,12 +674,12 @@ export const bulkCalculateMonthly = async (req: Request, res: Response) => {
     // Process each user sequentially to avoid overwhelming the database
     for (let i = 0; i < userIds.length; i++) {
       const userId = Number(userIds[i]);
-      
+
       try {
         console.log(`\n   [${i + 1}/${userIds.length}] Processing user ${userId}...`);
-        
+
         const result = await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, dateStr, userData);
-        
+
         if (result && result.success !== false) {
           results.success++;
           console.log(`   ✅ User ${userId} - Success`);
@@ -704,7 +703,7 @@ export const bulkCalculateMonthly = async (req: Request, res: Response) => {
     console.log(`\n📊 === BULK CALCULATE SUMMARY ===`);
     console.log(`   ✅ Success: ${results.success}/${results.total}`);
     console.log(`   ❌ Failed: ${results.failed}/${results.total}`);
-    
+
     if (results.errors.length > 0) {
       console.log(`   ⚠️  Errors:`, results.errors.slice(0, 5));
     }
@@ -716,9 +715,9 @@ export const bulkCalculateMonthly = async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('❌ Error in bulkCalculateMonthly:', error);
-    return res.status(500).json({ 
-      success: false, 
-      message: error.message || 'Internal error' 
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Internal error'
     });
   }
 };
@@ -808,7 +807,7 @@ export const updateForgotCheck = async (req: Request, res: Response) => {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
-      
+
       record = await TimeAttendanceModel.query().insertAndFetch(newRecordData);
     }
 
@@ -912,10 +911,10 @@ export const getTimeAttendancesController = async (req: Request, res: Response) 
     // Frontend sends 1-based page
     const pageFromFrontend = Number(req.query['page'] ?? req.body?.page ?? 1);
     const page = Math.max(1, pageFromFrontend);
-    
+
     // Accept both 'pageSize' and 'limit'
     const pageSize = Number(req.query['pageSize'] ?? req.query['limit'] ?? req.body?.pageSize ?? req.body?.limit ?? 20);
-    
+
     // Build query - không dùng eager loading để tránh lỗi relation
     // Sẽ fetch user data từ auth-service nếu cần
     let query = TimeAttendanceModel.query()
@@ -930,7 +929,7 @@ export const getTimeAttendancesController = async (req: Request, res: Response) 
       const monthStr = String(req.query['month']);
       query = query.whereRaw(`DATE_FORMAT(time_attendances.date, '%Y-%m') = ?`, [monthStr]);
     }
-    
+
     // Status filter
     if (req.query['status']) {
       query = query.where('status', String(req.query['status']));
@@ -944,7 +943,7 @@ export const getTimeAttendancesController = async (req: Request, res: Response) 
     // Sorting
     const sortField = req.query['sortField'] as string || 'date';
     const sortOrder = (req.query['sortOrder'] as string || 'desc').toLowerCase();
-    
+
     if (sortField && ['date', 'userId', 'status'].includes(sortField)) {
       query = query.clearOrder().orderBy(`time_attendances.${sortField}`, sortOrder as 'asc' | 'desc');
     }
@@ -997,9 +996,9 @@ export const getTimeAttendancesController = async (req: Request, res: Response) 
     });
   } catch (error: any) {
     console.error('Error in getTimeAttendancesController:', error);
-    return res.status(500).json({ 
-      success: false, 
-      message: error.message || 'Internal Server Error' 
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Internal Server Error'
     });
   }
 };

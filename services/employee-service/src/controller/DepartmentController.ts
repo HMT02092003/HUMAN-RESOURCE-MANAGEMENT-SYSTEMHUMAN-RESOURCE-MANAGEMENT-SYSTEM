@@ -103,7 +103,8 @@ export const getAllDepartmentsList = async (req: Request, res: Response) => {
     let query = DepartmentModel.query().select(['id', 'name']);
 
     if (role_id) {
-      query = query.whereRaw('? = ANY(role_ids)', [role_id]);
+      // Cast role_id to integer to ensure postgres can compare it with integer[] array
+      query = query.whereRaw('?::integer = ANY(role_ids)', [role_id]);
     }
 
     const result = await query.orderBy('name', 'asc');
@@ -232,7 +233,7 @@ export const getDepartmentSelect2 = async (req: Request, res: Response) => {
         }
 
         if (data.role_id) {
-          queryBuilder.whereRaw('? = ANY(role_ids)', [data.role_id]);
+          queryBuilder.whereRaw('?::integer = ANY(role_ids)', [data.role_id]);
         }
 
         // Add pagination

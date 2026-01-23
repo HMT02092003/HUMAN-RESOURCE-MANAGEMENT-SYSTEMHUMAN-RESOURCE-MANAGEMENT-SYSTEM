@@ -313,7 +313,7 @@ export class AttendanceCalculationService {
           hasApprovedLeave: leaveCheck.hasLeave,
           leaveType: leaveCheck.leaveType,
           leaveInfo: leaveCheck.leaveInfo,
-          type: leaveCheck.hasLeave ? leaveCheck.leaveType : (businessTripCheck.hasBusinessTrip ? 'business_trip' : 'attendance'),
+          type: leaveCheck.hasLeave ? leaveCheck.leaveType : (businessTripCheck.hasBusinessTrip ? 'business-trip' : 'attendance'),
           hasBusinessTrip: businessTripCheck.hasBusinessTrip,
           businessTripInfo: businessTripCheck.tripInfo,
           businessTripDestination: businessTripCheck.destination,

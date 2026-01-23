@@ -9,6 +9,7 @@ import { usePermission } from "@/hooks/usePermission";
 import CheckPermission from "@/components/common/CheckPermission";
 import { useRouter } from 'next/navigation';
 import { Project } from '@/types/project';
+import { useAuth } from '@/hooks/useAuth';
 import dayjs from 'dayjs';
 import jobService from '@/service/jobService';
 import { ExcelExportButton } from '@/components/common/ExcelExport';
@@ -38,6 +39,7 @@ const ProjectManager: React.FC = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [selectedRows, setSelectedRows] = useState<any[]>([]);
   const [userScope, setUserScope] = useState<string | null>(null);
+  const { user, userId } = useAuth();
 
   // ServerSideTable will trigger fetchData; no immediate load here
 
@@ -390,39 +392,48 @@ const ProjectManager: React.FC = () => {
       title: 'Hành động',
       key: 'action',
       fixed: 'right',
-      render: (_, record) => (
-        <Space size="small">
-          <CheckPermission permissionKey="projects" requiredType="read">
-            <Button
-              type="link"
-              icon={<EyeOutlined />}
-              onClick={() => handleViewDetail(record.id)}
-            >
-            </Button>
-          </CheckPermission>
-          {userScope !== 'personal' && (
-            <>
-              <CheckPermission permissionKey="projects" requiredType="update">
+      render: (_, record) => {
+        const isAdmin = user?.role === 'admin' || user?.role === 1 || String(user?.role) === '1';
+        const isPM = record.manager?.id === userId;
+        const isPublicStatus = ['active', 'completed'].includes(record.status);
+        const canView = isAdmin || isPM || isPublicStatus;
+
+        return (
+          <Space size="small">
+            {canView && (
+              <CheckPermission permissionKey="projects" requiredType="read">
                 <Button
                   type="link"
-                  icon={<EditOutlined />}
-                  onClick={() => handleEdit(record)}
+                  icon={<EyeOutlined />}
+                  onClick={() => handleViewDetail(record.id)}
                 >
                 </Button>
               </CheckPermission>
-              <CheckPermission permissionKey="projects" requiredType="delete">
-                <Button
-                  type="link"
-                  danger
-                  icon={<DeleteOutlined />}
-                  onClick={() => handleDelete(record)}
-                >
-                </Button>
-              </CheckPermission>
-            </>
-          )}
-        </Space>
-      ),
+            )}
+            {userScope !== 'personal' && (
+              <>
+                <CheckPermission permissionKey="projects" requiredType="update">
+                  <Button
+                    type="link"
+                    icon={<EditOutlined />}
+                    onClick={() => handleEdit(record)}
+                  >
+                  </Button>
+                </CheckPermission>
+                <CheckPermission permissionKey="projects" requiredType="delete">
+                  <Button
+                    type="link"
+                    danger
+                    icon={<DeleteOutlined />}
+                    onClick={() => handleDelete(record)}
+                  >
+                  </Button>
+                </CheckPermission>
+              </>
+            )}
+          </Space>
+        );
+      },
     },
   ];
 

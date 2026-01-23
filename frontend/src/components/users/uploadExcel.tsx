@@ -11,6 +11,8 @@ import { roleService } from "@/service/roleService";
 import { departmentService } from "@/service/departmentService";
 import { chevronService } from "@/service/chevronService";
 import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
+dayjs.extend(customParseFormat);
 import constantConfig from "@/config/constant";
 
 const { Dragger } = Upload;
@@ -23,10 +25,10 @@ const UserUpload = () => {
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState<any[]>([]);
 
-  // Data for mapping
   const [roles, setRoles] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [chevrons, setChevrons] = useState<any[]>([]);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
 
   useEffect(() => {
     fetchMetadata();
@@ -34,15 +36,17 @@ const UserUpload = () => {
 
   const fetchMetadata = async () => {
     try {
-      const [rolesRes, deptsRes, chevronsRes] = await Promise.all([
+      const [rolesRes, deptsRes, chevronsRes, allUsersRes] = await Promise.all([
         roleService.getAllRoles({ limit: 1000 }),
         departmentService.getAllDepartments({ limit: 1000 }),
-        chevronService.getAllChevrons({ limit: 1000 })
+        chevronService.getAllChevrons({ limit: 1000 }),
+        UserService.getAllUsersAllForSelect()
       ]);
 
       setRoles(rolesRes?.data?.results || rolesRes?.results || rolesRes?.data || rolesRes || []);
       setDepartments(deptsRes?.data?.results || deptsRes?.results || deptsRes?.data || deptsRes || []);
       setChevrons(chevronsRes?.data?.results || chevronsRes?.results || chevronsRes?.data || chevronsRes || []);
+      setAllUsers(allUsersRes || []);
     } catch (error) {
       console.error("Error fetching metadata:", error);
       message.error("Không thể tải dữ liệu danh mục. Vui lòng thử lại!");
@@ -55,18 +59,17 @@ const UserUpload = () => {
 
     // Set columns
     worksheet.columns = [
-      { header: "Họ và tên", key: "fullName", width: 25 },
-      { header: "Tên đăng nhập", key: "username", width: 15 },
-      { header: "Mật khẩu", key: "password", width: 15 },
-      { header: "Vai trò (Tên)", key: "roleName", width: 20 },
-      { header: "Email", key: "email", width: 25 },
-      { header: "Phòng ban (Tên)", key: "departmentName", width: 20 },
-      { header: "Chức vụ (Tên)", key: "chevronName", width: 20 },
-      { header: "Trạng thái (Đang làm việc/Nghỉ việc/Thử việc)", key: "statusName", width: 20 },
+      { header: "Họ và tên", key: "fullName", width: 30 },
+      { header: "Tên đăng nhập", key: "username", width: 20 },
+      { header: "Mật khẩu", key: "password", width: 20 },
+      { header: "Vai trò (Tên)", key: "roleName", width: 25 },
+      { header: "Email", key: "email", width: 30 },
+      { header: "Phòng ban (Tên)", key: "departmentName", width: 30 },
+      { header: "Chức vụ (Tên)", key: "chevronName", width: 25 },
       { header: "Giới tính (Nam/Nữ)", key: "genderName", width: 15 },
-      { header: "Số điện thoại", key: "phone", width: 15 },
-      { header: "Ngày sinh (DD/MM/YYYY)", key: "birthday", width: 20 },
-      { header: "Ngày bắt đầu (DD/MM/YYYY)", key: "startDate", width: 20 },
+      { header: "Số điện thoại", key: "phone", width: 20 },
+      { header: "Ngày sinh (DD/MM/YYYY)", key: "birthday", width: 25 },
+      { header: "Ngày bắt đầu (DD/MM/YYYY)", key: "startDate", width: 25 },
     ];
 
     // Style header
@@ -87,7 +90,6 @@ const UserUpload = () => {
       email: "vana@example.com",
       departmentName: "Phòng Kỹ thuật",
       chevronName: "Lập trình viên",
-      statusName: "Đang làm việc",
       genderName: "Nam",
       phone: "0123456789",
       birthday: "01/01/1995",
@@ -131,11 +133,10 @@ const UserUpload = () => {
         const worksheet = workbook.getWorksheet(1);
         const data: any[] = [];
 
-        // Skip header row
         worksheet?.eachRow((row: any, rowNumber: number) => {
           if (rowNumber > 1) {
             const rowData: any = {};
-            row.eachCell((cell: any, colNumber: number) => {
+            row.eachCell({ includeEmpty: true }, (cell: any, colNumber: number) => {
               const headerCell = worksheet.getRow(1).getCell(colNumber);
               const header = String(headerCell.value || "");
               const keyMap: any = {
@@ -146,7 +147,6 @@ const UserUpload = () => {
                 "Email": "email",
                 "Phòng ban (Tên)": "departmentName",
                 "Chức vụ (Tên)": "chevronName",
-                "Trạng thái (Đang làm việc/Nghỉ việc/Thử việc)": "statusName",
                 "Giới tính (Nam/Nữ)": "genderName",
                 "Số điện thoại": "phone",
                 "Ngày sinh (DD/MM/YYYY)": "birthday",
@@ -165,21 +165,48 @@ const UserUpload = () => {
           return;
         }
 
-        // Map all data first
-        const mappedUsers = data.map(row => mapExcelDataToUser(row));
+        // Map all data first and validate
+        const mappedResults = data.map((row, idx) => mapExcelDataToUser(row, idx, data, allUsers));
 
-        // Single bulk call
-        const response = await UserService.importUsers(mappedUsers);
+        // Separate valid and invalid records
+        const recordsToImport: any[] = [];
+        const processResults: any[] = new Array(data.length).fill(null);
 
-        // Response contains { results: [ { username, status, message: [] }, ... ] }
-        const finalResults = (response?.results || []).map((res: any, idx: number) => ({
-          ...data[idx],
-          status: res.status,
-          message: res.message
-        }));
+        mappedResults.forEach((res, idx) => {
+          if (res.errors.length > 0) {
+            processResults[idx] = {
+              ...data[idx],
+              status: "error",
+              message: res.errors
+            };
+          } else {
+            recordsToImport.push({ ...res.user, originalIndex: idx });
+          }
+        });
 
-        setResults(finalResults);
-        message.success(response?.message || `Xử lý xong ${finalResults.length} bản ghi`);
+        // Send valid records to backend
+        if (recordsToImport.length > 0) {
+          const importData = recordsToImport.map(r => {
+            const { originalIndex, ...userData } = r;
+            return userData;
+          });
+
+          const response = await UserService.importUsers(importData);
+          const backendResults = response?.results || [];
+
+          backendResults.forEach((backendRes: any, i: number) => {
+            const originalIndex = recordsToImport[i].originalIndex;
+            processResults[originalIndex] = {
+              ...data[originalIndex],
+              status: backendRes.status,
+              message: backendRes.message
+            };
+          });
+        }
+
+        setResults(processResults);
+        const successCount = processResults.filter(r => r.status === "success").length;
+        message.success(`Đã xử lý xong. Thành công: ${successCount}/${data.length}`);
       } catch (err: any) {
         console.error("Error processing Excel:", err);
         message.error(err.response?.data?.message || "Không thể xử lý file Excel. Vui lòng kiểm tra lại!");
@@ -191,48 +218,103 @@ const UserUpload = () => {
     reader.readAsArrayBuffer(file);
   };
 
-  const mapExcelDataToUser = (row: any) => {
+  const mapExcelDataToUser = (row: any, index: number, allData: any[], existingUsers: any[]) => {
+    const errors: string[] = [];
+
+    // Basic required fields
+    if (!row.fullName) errors.push("Họ và tên là bắt buộc");
+    if (!row.username) errors.push("Tên đăng nhập là bắt buộc");
+    if (!row.email) errors.push("Email là bắt buộc");
+
+    // Check duplicate username in file
+    const duplicateUsernameInFile = allData.some((r, i) => i < index && r.username === row.username);
+    if (duplicateUsernameInFile) errors.push("Tên đăng nhập bị trùng trong file");
+
+    // Check duplicate email in file
+    const duplicateEmailInFile = allData.some((r, i) => i < index && r.email === row.email);
+    if (duplicateEmailInFile) errors.push("Email bị trùng trong file");
+
+    // Check duplicate against existing users
+    if (existingUsers.some(u => u.username === row.username)) errors.push("Tên đăng nhập đã tồn tại trong hệ thống");
+    if (existingUsers.some(u => u.email === row.email)) errors.push("Email đã tồn tại trong hệ thống");
+
     // Map Role
     const role = roles.find(r => r.name.toLowerCase() === (row.roleName || "").toLowerCase());
-    const roleId = role?.id || 1; // Default to basic role if not found
+    if (row.roleName && !role) {
+      errors.push(`Vai trò "${row.roleName}" không tồn tại`);
+    } else if (!row.roleName) {
+      errors.push("Vai trò là bắt buộc");
+    }
+    const roleId = role?.id || null;
 
     // Map Department
     const dept = departments.find(d => d.name.toLowerCase() === (row.departmentName || "").toLowerCase());
+    if (row.departmentName && !dept) {
+      errors.push(`Phòng ban "${row.departmentName}" không tồn tại`);
+    } else if (!row.departmentName) {
+      errors.push("Phòng ban là bắt buộc");
+    }
     const departmentId = dept?.id || null;
 
     // Map Chevron
     const chevron = chevrons.find(c => c.name.toLowerCase() === (row.chevronName || "").toLowerCase());
+    if (row.chevronName && !chevron) {
+      errors.push(`Chức vụ "${row.chevronName}" không tồn tại`);
+    } else if (!row.chevronName) {
+      errors.push("Chức vụ là bắt buộc");
+    }
     const chevronId = chevron?.id || null;
 
-    // Map Status
-    const statusOption = statusOptions.find(s => s.label.toLowerCase() === (row.statusName || "").toLowerCase());
-    const status = statusOption?.value || 1;
+    // Status default to Active (1) as requested
+    const status = 1;
 
     // Map Gender
     const genderOption = Gender.find(g => g.value.toLowerCase() === (row.genderName || "").toLowerCase());
+    if (row.genderName && !genderOption) {
+      errors.push(`Giới tính "${row.genderName}" không hợp lệ (Phải là Nam/Nữ)`);
+    }
     const gender = genderOption?.key || 1;
 
-    // Parse Dates
-    const parseDate = (val: any) => {
+    // Parse Dates with format validation
+    const parseDate = (val: any, fieldLabel: string) => {
       if (!val) return null;
       if (val instanceof Date) return val.toISOString();
-      const d = dayjs(val, "DD/MM/YYYY");
-      return d.isValid() ? d.toISOString() : null;
+      const valStr = String(val).trim();
+
+      // Strict DD/MM/YYYY regex
+      const dateRegex = /^\d{2}\/\d{2}\/\d{4}$/;
+      if (!dateRegex.test(valStr)) {
+        errors.push(`${fieldLabel} phải có định dạng DD/MM/YYYY (VD: 01/01/1990)`);
+        return null;
+      }
+
+      const d = dayjs(valStr, "DD/MM/YYYY", true);
+      if (!d.isValid()) {
+        errors.push(`${fieldLabel} không phải là ngày hợp lệ`);
+        return null;
+      }
+      return d.toISOString();
     };
 
+    const birthday = parseDate(row.birthday, "Ngày sinh");
+    const startDate = parseDate(row.startDate, "Ngày bắt đầu");
+
     return {
-      fullName: row.fullName,
-      username: row.username,
-      password: row.password || "password123",
-      roleId: Number(roleId),
-      email: row.email,
-      departmentId: departmentId ? Number(departmentId) : null,
-      chevronId: chevronId ? Number(chevronId) : null,
-      status: Number(status),
-      gender: Number(gender),
-      phone: String(row.phone || ""),
-      birthday: parseDate(row.birthday),
-      startDate: parseDate(row.startDate)
+      user: {
+        fullName: row.fullName,
+        username: row.username,
+        password: row.password || "password123",
+        roleId: roleId ? Number(roleId) : null,
+        email: row.email,
+        departmentId: departmentId ? Number(departmentId) : null,
+        chevronId: chevronId ? Number(chevronId) : null,
+        status: Number(status),
+        gender: Number(gender),
+        phone: String(row.phone || ""),
+        birthday,
+        startDate
+      },
+      errors
     };
   };
 

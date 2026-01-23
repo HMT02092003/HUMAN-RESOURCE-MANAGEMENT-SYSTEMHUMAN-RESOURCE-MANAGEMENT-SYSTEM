@@ -112,6 +112,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
             case 'overtime':
                 return renderOvertimeApplication(data);
             case 'business-trip':
+            case 'business_trip':
                 return renderBusinessTripApplication(data);
             case 'forgot-check':
                 return renderForgotCheckApplication(data);
@@ -128,10 +129,10 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
         <>
             <Descriptions column={1} bordered size="small">
                 <Descriptions.Item label={<Text><CalendarOutlined /> Ngày bắt đầu</Text>}>
-                    <Text strong>{dayjs(data.startDate).format('DD/MM/YYYY')}</Text>
+                    <Text strong>{parseDate(data.startDate)}</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label={<Text><CalendarOutlined /> Ngày kết thúc</Text>}>
-                    <Text strong>{dayjs(data.endDate).format('DD/MM/YYYY')}</Text>
+                    <Text strong>{parseDate(data.endDate)}</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label={<Text><ClockCircleOutlined /> Loại đơn</Text>}>
                     <Tag color={data.applicationCategory === 'leave' ? 'blue' : 'orange'}>
@@ -139,7 +140,11 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                     </Tag>
                 </Descriptions.Item>
                 <Descriptions.Item label={<Text>Số ngày nghỉ</Text>}>
-                    <Text strong>{dayjs(data.endDate).diff(dayjs(data.startDate), 'day') + 1} ngày</Text>
+                    <Text strong>
+                        {data.startDate && data.endDate
+                            ? dayjs(data.endDate).diff(dayjs(data.startDate), 'day') + 1
+                            : 0} ngày
+                    </Text>
                 </Descriptions.Item>
                 <Descriptions.Item label={<Text><FileTextOutlined /> Lý do</Text>}>
                     <Paragraph style={{ marginBottom: 0 }}>{data.reason || '-'}</Paragraph>
@@ -171,10 +176,10 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
         <>
             <Descriptions column={1} bordered size="small">
                 <Descriptions.Item label={<Text><CalendarOutlined /> Ngày bắt đầu</Text>}>
-                    <Text strong>{dayjs(data.startDate).format('DD/MM/YYYY')}</Text>
+                    <Text strong>{parseDate(data.startDate)}</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label={<Text><CalendarOutlined /> Ngày kết thúc</Text>}>
-                    <Text strong>{dayjs(data.endDate).format('DD/MM/YYYY')}</Text>
+                    <Text strong>{parseDate(data.endDate)}</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label={<Text><EnvironmentOutlined /> Địa điểm</Text>}>
                     <Text strong>{data.destination}</Text>
@@ -298,7 +303,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
         <>
             <Descriptions column={1} bordered size="small">
                 <Descriptions.Item label={<Text><CalendarOutlined /> Ngày làm việc cuối</Text>}>
-                    <Text strong type="danger">{dayjs(data.lastWorkingDate).format('DD/MM/YYYY')}</Text>
+                    <Text strong type="danger">{parseDate(data.lastWorkingDate)}</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label={<Text><FileTextOutlined /> Lý do thôi việc</Text>}>
                     <Text>{data.resignationReason || '-'}</Text>
@@ -342,7 +347,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                                 <Card key={index} size="small" style={{ background: '#f9f9f9' }}>
                                     <Row gutter={16}>
                                         <Col span={8}>
-                                            <Text strong>{dayjs(item.date).format('DD/MM/YYYY')}</Text>
+                                            <Text strong>{parseDate(item.date)}</Text>
                                         </Col>
                                         <Col span={16}>
                                             <Space wrap>
@@ -420,7 +425,7 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                                         <Col xs={24} sm={12}>
                                             <Space direction="vertical" size={0}>
                                                 <Text type="secondary">Người duyệt</Text>
-                                                <Text>{(application.approvedByInfo.fullName).trim()}</Text>
+                                                <Text>{application.approvedByInfo?.fullName?.trim() || 'N/A'}</Text>
                                             </Space>
                                         </Col>
                                         <Col xs={24} sm={12}>

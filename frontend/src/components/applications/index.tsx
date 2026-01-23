@@ -131,13 +131,15 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
     const handleRejectClick = (record: any) => {
         Modal.confirm({
             title: 'Xác nhận từ chối đơn từ',
+            icon: <CloseOutlined style={{ color: '#ff4d4f' }} />,
             content: `Bạn có chắc chắn muốn từ chối đơn từ của ${record.userInfo?.fullName || 'nhân viên này'}?`,
             okText: 'Từ chối',
             okType: 'danger',
             cancelText: 'Hủy',
             onOk: async () => {
                 try {
-                    await applicationService.rejectApplication(record.id, undefined);
+                    // Use bulk API with single ID for consistency and to fix the loading/failure issue
+                    await applicationService.bulkRejectApplications([record.id]);
                     message.success('Từ chối đơn từ thành công');
                     setRefreshTrigger(prev => prev + 1); // Trigger reload
                 } catch (error: any) {
