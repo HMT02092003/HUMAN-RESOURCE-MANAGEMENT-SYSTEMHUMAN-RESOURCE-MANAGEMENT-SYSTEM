@@ -37,6 +37,7 @@ const getStatusText = (statusCode: number | string): string => {
   return status ? status.label : '';
 };
 
+
 // Trigger build: Restored job-service to hrms-network
 // Excel column configuration for user table
 const excelColumns: ExcelColumn[] = [
