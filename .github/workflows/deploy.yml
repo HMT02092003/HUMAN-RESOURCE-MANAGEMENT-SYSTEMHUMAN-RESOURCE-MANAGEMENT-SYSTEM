@@ -42,7 +42,17 @@ jobs:
         $services = @("frontend", "services/api-gateway", "services/auth-service", "services/employee-service", "services/attendance-service", "services/application-service", "services/ai-face-recognition-service", "services/salary-service", "services/job-service", "services/notification-service")
         
         foreach ($svc in $services) {
-            if (Test-Path "./$svc") { Update-File-If-Changed "./$svc/.env.docker" $envSecret }
+            $dockerEnvPath = "./$svc/.env.docker"
+            if (Test-Path $dockerEnvPath) { 
+                Write-Host "   Merging secrets into: $dockerEnvPath"
+                $existingContent = Get-Content $dockerEnvPath -Raw
+                # Ensure we have a newline before appending
+                if ($existingContent -and !$existingContent.EndsWith("`n")) {
+                    $existingContent += "`n"
+                }
+                $mergedContent = $existingContent + $envSecret
+                Update-File-If-Changed $dockerEnvPath $mergedContent
+            }
         }
         Write-Host "--- INJECTION COMPLETED ---"
 

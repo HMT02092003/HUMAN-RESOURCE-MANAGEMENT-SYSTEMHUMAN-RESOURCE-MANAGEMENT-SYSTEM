@@ -5,13 +5,17 @@ import moment from 'moment-timezone';
 import { getDecodedToken } from '../utils/decode-token';
 
 const API_BASE_URL = (() => {
-  if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_API_GATEWAY_URL) {
+  // Always prioritize environment variable
+  if (process.env.NEXT_PUBLIC_API_GATEWAY_URL) {
     return process.env.NEXT_PUBLIC_API_GATEWAY_URL;
   }
+
+  // No hardcoded port fallback. Rely on environment config.
   if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:4000`;
+    console.warn('NEXT_PUBLIC_API_GATEWAY_URL is not defined in environment variables.');
   }
-  return 'http://localhost:4000';
+
+  return '';
 })();
 
 // --- Hàm để xây dựng FormData (copy từ BaseService) ---

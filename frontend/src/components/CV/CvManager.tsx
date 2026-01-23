@@ -48,10 +48,7 @@ const CvManager: React.FC = () => {
 		if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_API_GATEWAY_URL) {
 			return process.env.NEXT_PUBLIC_API_GATEWAY_URL.replace(/\/$/, '');
 		}
-		if (typeof window !== 'undefined') {
-			return `${window.location.protocol}//${window.location.hostname}:4100`;
-		}
-		return 'http://localhost:4100';
+		return '';
 	};
 
 	// Helper: direct Job Service base (used for serving static uploads)
@@ -59,10 +56,7 @@ const CvManager: React.FC = () => {
 		if (typeof window !== 'undefined' && process.env.NEXT_PUBLIC_JOB_SERVICE_URL) {
 			return process.env.NEXT_PUBLIC_JOB_SERVICE_URL.replace(/\/$/, '');
 		}
-		if (typeof window !== 'undefined') {
-			return `${window.location.protocol}//${window.location.hostname}:4111`;
-		}
-		return 'http://localhost:4111';
+		return '';
 	};
 
 	// do not auto-load here; ServerSideTable will call `fetchData`
