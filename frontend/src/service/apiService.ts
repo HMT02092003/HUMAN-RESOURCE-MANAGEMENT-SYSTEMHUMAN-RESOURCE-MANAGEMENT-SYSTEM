@@ -4,19 +4,7 @@ import { message } from 'antd';
 import moment from 'moment-timezone';
 import { getDecodedToken } from '../utils/decode-token';
 
-const API_BASE_URL = (() => {
-  // Always prioritize environment variable
-  if (process.env.NEXT_PUBLIC_API_GATEWAY_URL) {
-    return process.env.NEXT_PUBLIC_API_GATEWAY_URL;
-  }
-
-  // No hardcoded port fallback. Rely on environment config.
-  if (typeof window !== 'undefined') {
-    console.warn('NEXT_PUBLIC_API_GATEWAY_URL is not defined in environment variables.');
-  }
-
-  return '';
-})();
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_GATEWAY_URL || '';
 
 // --- Hàm để xây dựng FormData (copy từ BaseService) ---
 function buildFormData(formData: FormData, data: any, parentKey?: string) {

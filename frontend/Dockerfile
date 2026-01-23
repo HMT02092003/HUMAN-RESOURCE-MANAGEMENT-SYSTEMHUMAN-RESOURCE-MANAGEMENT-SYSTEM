@@ -24,7 +24,14 @@ RUN yarn config set network-timeout 600000 && \
 COPY . .
 
 # Copy Docker environment file (overrides .env.local for Docker builds)
-COPY .env.docker .env.local
+# We handle missing variables via build args in docker-compose
+COPY .env.docker* .env.local
+
+# Allow passing environment variables at build time
+ARG NEXT_PUBLIC_API_GATEWAY_URL
+ARG NEXT_PUBLIC_NOTIFICATION_SERVICE_URL
+ENV NEXT_PUBLIC_API_GATEWAY_URL=$NEXT_PUBLIC_API_GATEWAY_URL
+ENV NEXT_PUBLIC_NOTIFICATION_SERVICE_URL=$NEXT_PUBLIC_NOTIFICATION_SERVICE_URL
 
 # Build Next.js app
 RUN yarn build

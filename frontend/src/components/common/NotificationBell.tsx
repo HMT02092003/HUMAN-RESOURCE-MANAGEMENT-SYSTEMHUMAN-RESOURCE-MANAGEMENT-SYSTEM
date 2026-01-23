@@ -48,8 +48,8 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ userId }) => {
     if (!userId) return;
 
     // Connect directly to notification-service (Socket.io doesn't proxy well through gateway)
-    const notificationServiceUrl = process.env.NEXT_PUBLIC_NOTIFICATION_SERVICE_URL || 'http://localhost:4009';
-    
+    const notificationServiceUrl = process.env.NEXT_PUBLIC_NOTIFICATION_SERVICE_URL || '';
+
     // Get token from cookie or localStorage
     const token = document.cookie
       .split('; ')
@@ -86,7 +86,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ userId }) => {
       console.log('🔔 New notification received:', data);
       setNotifications(prev => [data, ...prev]);
       setUnreadCount(prev => prev + 1);
-      
+
       // Show browser notification if permitted
       if (Notification.permission === 'granted') {
         new Notification(data.title, {
@@ -139,7 +139,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ userId }) => {
   // Mark notification as read
   const handleMarkAsRead = async (notificationId: number, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    
+
     try {
       await jobService.markNotificationAsRead(notificationId);
       setNotifications(prev =>

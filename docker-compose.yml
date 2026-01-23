@@ -72,6 +72,9 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_GATEWAY_URL=http://192.168.1.8:4100
+        - NEXT_PUBLIC_NOTIFICATION_SERVICE_URL=http://192.168.1.8:4110
     container_name: hrms-frontend
     restart: unless-stopped
     ports:
