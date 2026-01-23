@@ -90,24 +90,24 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
       setLoading(true);
       const response = await ApplicationService.getApplicationById(id);
       console.log('📥 Full response:', response);
-      
+
       const applicationData = response.data;
       console.log('📥 Application data:', applicationData);
-      
+
       const data = applicationData.data; // Dữ liệu JSONB trong field 'data'
       console.log('📥 Form data from JSONB:', data);
 
       // Parse dates
       let parsedStartDate = null;
       let parsedEndDate = null;
-      
+
       if (data.startDate) {
         parsedStartDate = dayjs(data.startDate);
         if (parsedStartDate.isValid()) {
           setStartDate(parsedStartDate);
         }
       }
-      
+
       if (data.endDate) {
         parsedEndDate = dayjs(data.endDate);
         if (parsedEndDate.isValid()) {
@@ -174,7 +174,7 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
         });
         messageApi.success("Tạo đơn nghỉ phép thành công!");
       }
-      
+
       router.push("/applications/me");
     } catch (error: any) {
       messageApi.error(error.message || "Đã có lỗi xảy ra khi tạo/cập nhật đơn!");
@@ -193,159 +193,158 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
       {contextHolder}
       {/* Hướng dẫn */}
       <ApplicationGuide type="leave" />
-      
+
       <Spin spinning={loading} tip="Đang tải thông tin đơn từ...">
 
-      <Form
-        form={form}
-        layout="vertical"
-        onFinish={handleSubmit}
-        requiredMark={false}
-      >
-        {/* Loại đơn + Số phép còn lại */}
-        <Row gutter={24}>
-          <Col xs={24} sm={12}>
-            <Form.Item
-              name="applicationCategory"
-              label={<Text strong>Loại đơn</Text>}
-              rules={[{ required: true, message: "Vui lòng chọn loại đơn!" }]}
-              tooltip="Nghỉ phép: Trừ số ngày phép, có lương. Nghỉ không phép: Không trừ phép, không lương"
-            >
-              <Select
-                placeholder="Chọn loại đơn"
-                options={[
-                  { value: "leave", label: "📝 Nghỉ phép (có lương, trừ số ngày phép)" },
-                  { value: "regular", label: "📌 Nghỉ không phép (không lương)" },
-                ]}
-              />
-            </Form.Item>
-          </Col>
-          <Col xs={24} sm={12}>
-            <Card
-              style={{
-                borderRadius: 8,
-                background: "#f6f9ff",
-                textAlign: "center",
-              }}
-            >
-              <Statistic
-                title="Số ngày phép còn lại"
-                value={remainingDays >= 0 ? remainingDays : 0}
-                suffix={`/ ${totalDaysOff}`}
-                valueStyle={{
-                  fontSize: "20px",
-                  fontWeight: "bold",
-                  color: remainingDays < 0 ? "red" : "#1677ff",
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={handleSubmit}
+          requiredMark={false}
+        >
+          {/* Loại đơn + Số phép còn lại */}
+          <Row gutter={24}>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="applicationCategory"
+                label={<Text strong>Loại đơn</Text>}
+                rules={[{ required: true, message: "Vui lòng chọn loại đơn!" }]}
+                tooltip="Nghỉ phép: Trừ số ngày phép, có lương. Nghỉ không phép: Không trừ phép, không lương"
+              >
+                <Select
+                  placeholder="Chọn loại đơn"
+                  options={[
+                    { value: "leave", label: "📝 Nghỉ phép (có lương, trừ số ngày phép)" },
+                    { value: "regular", label: "📌 Nghỉ không phép (không lương)" },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Card
+                style={{
+                  borderRadius: 8,
+                  background: "#f6f9ff",
+                  textAlign: "center",
                 }}
-              />
-            </Card>
-          </Col>
-        </Row>
-
-        {/* Hình thức nghỉ + Thời gian nghỉ */}
-        <Row gutter={24}>
-          <Col xs={24} sm={12}>
-            <Form.Item
-              name="leaveType"
-              label={<Text strong>Hình thức nghỉ</Text>}
-              rules={[{ required: true, message: "Vui lòng chọn hình thức nghỉ!" }]}
-            >
-              <Select
-                placeholder="Chọn hình thức nghỉ"
-                options={[
-                  { value: "personal", label: "🏠 Nghỉ cá nhân" },
-                  { value: "sick", label: "🤒 Nghỉ ốm" },
-                  { value: "vacation", label: "🎉 Nghỉ lễ/tết" },
-                  { value: "other", label: "🔖 Khác" },
-                ]}
-              />
-            </Form.Item>
-          </Col>
-          <Col xs={24} sm={12}>
-            <Form.Item
-              name="dateRange"
-              label={<Text strong>Thời gian nghỉ</Text>}
-              rules={[
-                { required: true, message: "Vui lòng chọn khoảng thời gian nghỉ!" },
-              ]}
-            >
-              <RangePicker
-                disabledDate={disabledDate}
-                onChange={(dates) => {
-                  setStartDate(dates ? dates[0] : null);
-                  setEndDate(dates ? dates[1] : null);
-                }}
-                style={{ width: "100%" }}
-                format="DD/MM/YYYY"
-              />
-            </Form.Item>
-          </Col>
-        </Row>
-
-        {/* Tổng số ngày nghỉ đã chọn */}
-        {usedDays > 0 && (
-          <Row style={{ marginBottom: "24px" }}>
-            <Col span={24}>
-              <Alert
-                message={`Tổng số ngày nghỉ đã chọn: ${usedDays} ngày`}
-                type="info"
-                showIcon
-                style={{ borderRadius: 8 }}
-              />
+              >
+                <Statistic
+                  title="Số ngày phép còn lại"
+                  value={remainingDays >= 0 ? remainingDays : 0}
+                  suffix={`/ ${totalDaysOff}`}
+                  valueStyle={{
+                    fontSize: "20px",
+                    fontWeight: "bold",
+                    color: remainingDays < 0 ? "red" : "#1677ff",
+                  }}
+                />
+              </Card>
             </Col>
           </Row>
-        )}
 
-        {/* Lý do nghỉ */}
-        <Form.Item
-          name="reason"
-          label={<Text strong>Lý do nghỉ</Text>}
-          rules={[{ required: true, message: "Vui lòng nhập lý do nghỉ!" }]}
-        >
-          <TextArea
-            placeholder="Mô tả chi tiết lý do nghỉ..."
-            showCount
-            rows={4}
-          />
-        </Form.Item>
+          {/* Hình thức nghỉ + Thời gian nghỉ */}
+          <Row gutter={24}>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="leaveType"
+                label={<Text strong>Hình thức nghỉ</Text>}
+                rules={[{ required: true, message: "Vui lòng chọn hình thức nghỉ!" }]}
+              >
+                <Select
+                  placeholder="Chọn hình thức nghỉ"
+                  options={[
+                    { value: "personal", label: "🏠 Nghỉ cá nhân" },
+                    { value: "sick", label: "🤒 Nghỉ ốm" },
+                    { value: "other", label: "🔖 Khác" },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="dateRange"
+                label={<Text strong>Thời gian nghỉ</Text>}
+                rules={[
+                  { required: true, message: "Vui lòng chọn khoảng thời gian nghỉ!" },
+                ]}
+              >
+                <RangePicker
+                  disabledDate={disabledDate}
+                  onChange={(dates) => {
+                    setStartDate(dates ? dates[0] : null);
+                    setEndDate(dates ? dates[1] : null);
+                  }}
+                  style={{ width: "100%" }}
+                  format="DD/MM/YYYY"
+                />
+              </Form.Item>
+            </Col>
+          </Row>
 
-        <Divider />
+          {/* Tổng số ngày nghỉ đã chọn */}
+          {usedDays > 0 && (
+            <Row style={{ marginBottom: "24px" }}>
+              <Col span={24}>
+                <Alert
+                  message={`Tổng số ngày nghỉ đã chọn: ${usedDays} ngày`}
+                  type="info"
+                  showIcon
+                  style={{ borderRadius: 8 }}
+                />
+              </Col>
+            </Row>
+          )}
 
-        {/* Nút hành động */}
-        <Row justify="center">
-          <Space size="large">
-            <Button
-              size="large"
-              onClick={onCancel}
-              style={{
-                height: 48,
-                paddingLeft: 32,
-                paddingRight: 32,
-                borderRadius: 8,
-                fontSize: 16,
-                fontWeight: 500,
-              }}
-            >
-              <RollbackOutlined /> Trở lại
-            </Button>
-            <Button
-              type="primary"
-              htmlType="submit"
-              size="large"
-              style={{
-                height: 48,
-                paddingLeft: 32,
-                paddingRight: 32,
-                borderRadius: 8,
-                fontSize: 16,
-                fontWeight: 500,
-              }}
-            >
-              <SaveOutlined /> Lưu
-            </Button>
-          </Space>
-        </Row>
-      </Form>
+          {/* Lý do nghỉ */}
+          <Form.Item
+            name="reason"
+            label={<Text strong>Lý do nghỉ</Text>}
+            rules={[{ required: true, message: "Vui lòng nhập lý do nghỉ!" }]}
+          >
+            <TextArea
+              placeholder="Mô tả chi tiết lý do nghỉ..."
+              showCount
+              rows={4}
+            />
+          </Form.Item>
+
+          <Divider />
+
+          {/* Nút hành động */}
+          <Row justify="center">
+            <Space size="large">
+              <Button
+                size="large"
+                onClick={onCancel}
+                style={{
+                  height: 48,
+                  paddingLeft: 32,
+                  paddingRight: 32,
+                  borderRadius: 8,
+                  fontSize: 16,
+                  fontWeight: 500,
+                }}
+              >
+                <RollbackOutlined /> Trở lại
+              </Button>
+              <Button
+                type="primary"
+                htmlType="submit"
+                size="large"
+                style={{
+                  height: 48,
+                  paddingLeft: 32,
+                  paddingRight: 32,
+                  borderRadius: 8,
+                  fontSize: 16,
+                  fontWeight: 500,
+                }}
+              >
+                <SaveOutlined /> Lưu
+              </Button>
+            </Space>
+          </Row>
+        </Form>
       </Spin>
     </div>
   );
