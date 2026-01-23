@@ -23,36 +23,41 @@ jobs:
         ${{ secrets.ENV_FILE_CONTENT }}
         "@
         
-        function Update-File-If-Changed ($filePath, $newContent) {
-            if (Test-Path $filePath) {
-                $currentContent = Get-Content $filePath -Raw
-                $cleanCurrent = $currentContent -replace "`r`n", "`n" -replace "`n", ""
-                $cleanNew = $newContent -replace "`r`n", "`n" -replace "`n", ""
-                if ($cleanCurrent -eq $cleanNew) {
-                    Write-Host "   Skipping: $filePath"
-                    return
-                }
+        # Hàm update file thông minh
+        function Update-Or-Create-File ($filePath, $newContent) {
+            # Tạo thư mục cha nếu chưa tồn tại
+            $parentDir = Split-Path -Parent $filePath
+            if ($parentDir -and -not (Test-Path $parentDir)) {
+                New-Item -ItemType Directory -Force -Path $parentDir | Out-Null
             }
-            Set-Content -Path $filePath -Value $newContent
-            Write-Host "   Updated: $filePath"
+
+            if (Test-Path $filePath) {
+                # Nếu file tồn tại: Merge nội dung
+                $currentContent = Get-Content $filePath -Raw
+                # Thêm xuống dòng nếu chưa có
+                if ($currentContent -and !$currentContent.EndsWith("`n")) {
+                    $currentContent += "`n"
+                }
+                
+                $mergedContent = $currentContent + $newContent
+                Set-Content -Path $filePath -Value $mergedContent
+                Write-Host "   Merged secrets into: $filePath"
+            } else {
+                # Nếu file KHÔNG tồn tại: Tạo mới
+                Set-Content -Path $filePath -Value $newContent
+                Write-Host "   Created new file: $filePath"
+            }
         }
 
-        Update-File-If-Changed ".env" $envSecret
+        # Cập nhật file .env gốc
+        Update-Or-Create-File ".env" $envSecret
         
+        # Danh sách các folder chứa service cần tạo file .env.docker
         $services = @("frontend", "services/api-gateway", "services/auth-service", "services/employee-service", "services/attendance-service", "services/application-service", "services/ai-face-recognition-service", "services/salary-service", "services/job-service", "services/notification-service")
         
         foreach ($svc in $services) {
             $dockerEnvPath = "./$svc/.env.docker"
-            if (Test-Path $dockerEnvPath) { 
-                Write-Host "   Merging secrets into: $dockerEnvPath"
-                $existingContent = Get-Content $dockerEnvPath -Raw
-                # Ensure we have a newline before appending
-                if ($existingContent -and !$existingContent.EndsWith("`n")) {
-                    $existingContent += "`n"
-                }
-                $mergedContent = $existingContent + $envSecret
-                Update-File-If-Changed $dockerEnvPath $mergedContent
-            }
+            Update-Or-Create-File $dockerEnvPath $envSecret
         }
         Write-Host "--- INJECTION COMPLETED ---"
 
