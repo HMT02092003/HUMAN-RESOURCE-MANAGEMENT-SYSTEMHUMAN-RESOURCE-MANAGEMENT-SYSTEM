@@ -300,21 +300,21 @@ const ShiftConfigurationManagement = () => {
                         Thêm ca mới
                     </Button>
                     {selectedRowKeys.length > 0 && (
-                    <Popconfirm
-                        title="Xóa các cấu hình được chọn?"
-                        description="Bạn có chắc chắn muốn xóa các ca đã chọn?"
-                        onConfirm={() => handleBulkDelete()}
-                        okText="Xóa"
-                        cancelText="Hủy"
-                    >
-                        <Button
-                            type="primary"
-                            danger
-                            icon={<DeleteOutlined />}
+                        <Popconfirm
+                            title="Xóa các cấu hình được chọn?"
+                            description="Bạn có chắc chắn muốn xóa các ca đã chọn?"
+                            onConfirm={() => handleBulkDelete()}
+                            okText="Xóa"
+                            cancelText="Hủy"
                         >
-                            Xóa đã chọn
-                        </Button>
-                    </Popconfirm>
+                            <Button
+                                type="primary"
+                                danger
+                                icon={<DeleteOutlined />}
+                            >
+                                Xóa đã chọn
+                            </Button>
+                        </Popconfirm>
                     )}
                     <ExcelExportButton
                         data={allConfigurations}
@@ -336,10 +336,10 @@ const ShiftConfigurationManagement = () => {
                 refreshTrigger={refreshTrigger}
                 scroll={{ x: "max-content" }}
                 bordered
-                onSelectionChange={(keys, rows) => {
+                onSelectionChange={useCallback((keys: React.Key[], rows: any[]) => {
                     setSelectedRowKeys(keys);
                     setSelectedRows(rows);
-                }}
+                }, [])}
             />
 
             <Modal

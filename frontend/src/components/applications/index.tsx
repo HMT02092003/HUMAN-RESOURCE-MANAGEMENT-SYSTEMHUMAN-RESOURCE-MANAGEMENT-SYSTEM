@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Button, Space, Typography, Empty, message, Tooltip, Tag, Modal, Form, Input } from 'antd';
 import { PlusOutlined, EyeOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, DownloadOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
@@ -39,9 +39,9 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
     const [loading, setLoading] = useState(false);
 
     // Handle data changes from ServerSideTable - use current page data for export
-    const handleDataChange = (data: any[], pagination: { current: number; pageSize: number; total: number }) => {
+    const handleDataChange = useCallback((data: any[], pagination: { current: number; pageSize: number; total: number }) => {
         setCurrentPageData(data);
-    };
+    }, []);
 
     // Excel columns configuration
     const excelColumns: ExcelColumn[] = [
@@ -135,7 +135,7 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
             cancelText: 'Hủy',
             onOk: async () => {
                 try {
-                    await applicationService.rejectApplication(record.id, {});
+                    await applicationService.rejectApplication(record.id, undefined);
                     message.success('Từ chối đơn từ thành công');
                     setRefreshTrigger(prev => prev + 1); // Trigger reload
                 } catch (error: any) {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Button, Space, Modal, message, Row, Col, Tag, Input } from 'antd';
 import { DeleteOutlined, PlusOutlined, FileTextOutlined, SearchOutlined } from '@ant-design/icons';
 import type { InputRef } from 'antd';
@@ -189,19 +189,19 @@ const CvManager: React.FC = () => {
 
 	// Row selection will be handled by ServerSideTable onSelectionChange
 
-  const excelColumns: ExcelColumn[] = [
-    { title: 'Người dùng', dataIndex: 'fullName', width: 25 },
-    { title: 'Email', dataIndex: 'userEmail', width: 25 },
-    { title: 'File CV', dataIndex: 'file_path', width: 35 },
-    { title: 'Ngày tải lên', dataIndex: 'uploaded_at', width: 15, render: (val: any) => val ? dayjs(val).format('DD/MM/YYYY HH:mm') : '' }
-  ];
+	const excelColumns: ExcelColumn[] = [
+		{ title: 'Người dùng', dataIndex: 'fullName', width: 25 },
+		{ title: 'Email', dataIndex: 'userEmail', width: 25 },
+		{ title: 'File CV', dataIndex: 'file_path', width: 35 },
+		{ title: 'Ngày tải lên', dataIndex: 'uploaded_at', width: 15, render: (val: any) => val ? dayjs(val).format('DD/MM/YYYY HH:mm') : '' }
+	];
 
 
 	const handleSelectionChange = (keys: React.Key[], rows: CvWithUser[]) => {
 		setSelectedRowKeys(keys);
 	};
 
-	const fetchData = async (params: any) => {
+	const fetchData = useCallback(async (params: any) => {
 		const res = await jobService.fetchCvs(params);
 		// Normalize response and map userInfo -> user/fullName/userEmail for rendering
 		const body = res?.data ?? res;
@@ -231,7 +231,7 @@ const CvManager: React.FC = () => {
 				total: pagination.total,
 			},
 		};
-	};
+	}, []);
 
 	return (
 		<div>
@@ -270,10 +270,10 @@ const CvManager: React.FC = () => {
 				showSelection
 				onSelectionChange={handleSelectionChange}
 				refreshTrigger={refreshTrigger}
-				onDataChange={(rows, pagination) => {
+				onDataChange={useCallback((rows: any[], pagination: any) => {
 					// keep current page rows for export
 					setExcelData(rows as CvWithUser[]);
-				}}
+				}, [])}
 				scroll={{ x: 800 }}
 			/>
 		</div>

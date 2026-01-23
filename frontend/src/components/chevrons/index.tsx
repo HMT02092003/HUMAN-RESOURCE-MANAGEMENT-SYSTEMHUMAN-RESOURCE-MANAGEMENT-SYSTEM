@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button, ConfigProvider, Tooltip, Space, Modal, message, Grid, Row, Col, Tag } from "antd";
 import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, SearchOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useRouter } from 'next/navigation';
@@ -90,7 +90,7 @@ const Index: React.FC = () => {
   const updatePer: boolean = true;
   const deletePer: boolean = true;
 
-  const loadData = async (params: any) => {
+  const loadData = useCallback(async (params: any) => {
     try {
       const apiParams: any = {
         page: params.page,
@@ -114,9 +114,10 @@ const Index: React.FC = () => {
       message.error('Đã xảy ra lỗi khi tải dữ liệu!');
       return { data: [], total: 0 };
     }
-  };
+  }, []);
 
   const columns: ServerSideColumnType<ChevronData>[] = [
+    // ... (columns definition remains the same)
     {
       title: 'Tên chức vụ',
       dataIndex: 'name',
@@ -214,6 +215,19 @@ const Index: React.FC = () => {
     },
   ];
 
+  const handleDataChange = useCallback((data: any[], pagination: any) => {
+    // Map role names for Excel export
+    const mappedData = data.map((item: any) => ({
+      ...item,
+      role_names: (item.role_ids || [])
+        .map((id: number) => roles.find(r => r.id === id)?.name)
+        .filter(Boolean)
+        .join(', ')
+    }));
+    setChevronData(mappedData);
+    setTotalRecords(pagination?.total || 0);
+  }, [roles]);
+
   const onChangeSelection = (selectedRowKeys: React.Key[]): void => {
     if (selectedRowKeys.length) setHiddenDeleteBtn(false);
     else setHiddenDeleteBtn(true);
@@ -305,18 +319,7 @@ const Index: React.FC = () => {
               showSelection={true}
               onSelectionChange={onChangeSelection}
               refreshTrigger={refreshTrigger}
-              onDataChange={(data, pagination) => {
-                // Map role names for Excel export
-                const mappedData = data.map((item: any) => ({
-                  ...item,
-                  role_names: (item.role_ids || [])
-                    .map((id: number) => roles.find(r => r.id === id)?.name)
-                    .filter(Boolean)
-                    .join(', ')
-                }));
-                setChevronData(mappedData);
-                setTotalRecords(pagination?.total || 0);
-              }}
+              onDataChange={handleDataChange}
             />
           </div>
         </Col>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Table, Button, Modal, Tag, message, Space } from 'antd';
 import { PlusOutlined, DownloadOutlined } from '@ant-design/icons';
 import SalaryService from '@/service/salaryService';
@@ -49,10 +49,10 @@ const SalaryDealsList: React.FC<Props> = ({ userId }) => {
     if (!eff) return 'unknown';
     const today = dayjs().startOf('day');
     const effDate = dayjs(eff).startOf('day');
-    
+
     // Future: effective_from is after today
     if (effDate.isAfter(today)) return 'future';
-    
+
     // Find the current profile: effective_from <= today, sorted desc by effective_from
     const eligibleProfiles = allProfiles
       .filter(p => {
@@ -67,12 +67,12 @@ const SalaryDealsList: React.FC<Props> = ({ userId }) => {
         // If same date, sort by created_at or id desc
         return (b.created_at || b.id) - (a.created_at || a.id);
       });
-    
+
     // The first one in sorted list is current
     if (eligibleProfiles.length > 0 && eligibleProfiles[0].id === allProfiles.find(p => p.effective_from === eff)?.id) {
       return 'current';
     }
-    
+
     // Otherwise it's past
     return 'past';
   };
@@ -140,48 +140,49 @@ const SalaryDealsList: React.FC<Props> = ({ userId }) => {
     }
   ];
 
-  const columns: any[] = [
-    { 
-      title: 'Hiệu lực từ', 
-      dataIndex: 'effective_from', 
-      key: 'effective_from', 
+  const columns: any[] = useMemo(() => [
+    {
+      title: 'Hiệu lực từ',
+      dataIndex: 'effective_from',
+      key: 'effective_from',
       render: (v: any) => v ? dayjs(v).format('DD/MM/YYYY') : '-',
       sorter: (a: any, b: any) => dayjs(a.effective_from).unix() - dayjs(b.effective_from).unix(),
       defaultSortOrder: 'descend' as any,
     },
-    { 
-      title: 'Lương cơ bản', 
-      dataIndex: 'salary', 
-      key: 'salary', 
-      render: (v: any) => Number(v).toLocaleString('vi-VN') + ' đ' 
+    {
+      title: 'Lương cơ bản',
+      dataIndex: 'salary',
+      key: 'salary',
+      render: (v: any) => Number(v).toLocaleString('vi-VN') + ' đ'
     },
-    { 
-      title: 'Mã số thuế', 
-      dataIndex: 'tax_code', 
-      key: 'tax_code', 
-      render: (v: any) => v || '-' 
+    {
+      title: 'Mã số thuế',
+      dataIndex: 'tax_code',
+      key: 'tax_code',
+      render: (v: any) => v || '-'
     },
-    { 
-      title: 'Ngân hàng', 
-      dataIndex: 'bank_info', 
-      key: 'bank_info', 
-      render: (v: any) => v?.bank_name || '-' 
+    {
+      title: 'Ngân hàng',
+      dataIndex: 'bank_info',
+      key: 'bank_info',
+      render: (v: any) => v?.bank_name || '-'
     },
-    { 
-      title: 'Số tài khoản', 
-      dataIndex: 'bank_info', 
-      key: 'bank_account', 
-      render: (v: any) => v?.bank_account || '-' 
+    {
+      title: 'Số tài khoản',
+      dataIndex: 'bank_info',
+      key: 'bank_account',
+      render: (v: any) => v?.bank_account || '-'
     },
-    { 
-      title: 'Phụ cấp', 
-      dataIndex: 'allowances', 
-      key: 'allowances', 
+    {
+      title: 'Phụ cấp',
+      dataIndex: 'allowances',
+      key: 'allowances',
       render: (list: any[]) => {
         if (!list || list.length === 0) return '-';
         return (
           <Space direction="vertical" size={2}>
-            {list.map((a, idx) => {;
+            {list.map((a, idx) => {
+              ;
               return (
                 <Tag key={idx} color={"orange"}>
                   {a.allowance_type_name}: {Number(a.amount || 0).toLocaleString('vi-VN')} đ
@@ -192,9 +193,9 @@ const SalaryDealsList: React.FC<Props> = ({ userId }) => {
         );
       }
     },
-    { 
-      title: 'Trạng thái', 
-      key: 'status', 
+    {
+      title: 'Trạng thái',
+      key: 'status',
       fixed: 'right',
       render: (_: any, rec: any) => {
         const s = getStatus(rec.effective_from, profiles);
@@ -213,7 +214,7 @@ const SalaryDealsList: React.FC<Props> = ({ userId }) => {
       ],
       onFilter: (value: any, rec: any) => getStatus(rec.effective_from, profiles) === value,
     },
-  ];
+  ], [profiles]);
 
   const handleCreate = async (values: any) => {
     try {
@@ -256,21 +257,21 @@ const SalaryDealsList: React.FC<Props> = ({ userId }) => {
         </Space>
       </div>
 
-      <Table 
-        rowKey="id" 
-        loading={loading} 
-        dataSource={profiles} 
-        columns={columns} 
+      <Table
+        rowKey="id"
+        loading={loading}
+        dataSource={profiles}
+        columns={columns}
         pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (total) => `Tổng ${total} bản ghi` }}
         bordered
         scroll={{ x: 'max-content' }}
       />
 
-      <Modal 
-        title="Thêm cấu hình lương mới" 
-        open={showModal} 
-        footer={null} 
-        onCancel={() => setShowModal(false)} 
+      <Modal
+        title="Thêm cấu hình lương mới"
+        open={showModal}
+        footer={null}
+        onCancel={() => setShowModal(false)}
         destroyOnClose
         width={900}
       >

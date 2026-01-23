@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Button, ConfigProvider, Tooltip, Space, Modal, message, Grid, Row, Col, Tag } from "antd";
 import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, SearchOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useRouter } from 'next/navigation';
@@ -85,7 +85,7 @@ const Index: React.FC = () => {
   const deletePer: boolean = true;
 
   // Fetch function cho ServerSideTable
-  const loadData = async (params: any) => {
+  const loadData = useCallback(async (params: any) => {
     try {
       const apiParams: any = {
         page: params.page,
@@ -109,9 +109,22 @@ const Index: React.FC = () => {
       message.error('Đã xảy ra lỗi khi tải dữ liệu!');
       return { data: [], total: 0 };
     }
-  };
+  }, []);
 
-  const columns: ServerSideColumnType<DepartmentData>[] = [
+  const handleDataChange = useCallback((data: any[], pagination: any) => {
+    // Map role names for Excel export
+    const mappedData = data.map((item: any) => ({
+      ...item,
+      role_names: (item.role_ids || [])
+        .map((id: number) => roles.find(r => r.id === id)?.name)
+        .filter(Boolean)
+        .join(', ')
+    }));
+    setDepartmentData(mappedData);
+    setTotalRecords(pagination.total);
+  }, [roles]);
+
+  const columns: ServerSideColumnType<DepartmentData>[] = useMemo(() => [
     {
       title: 'Tên phòng ban',
       dataIndex: 'name',
@@ -199,13 +212,8 @@ const Index: React.FC = () => {
         </ConfigProvider>
       ),
     },
-  ];
+  ], [roles, router, updatePer]);
 
-  const onChangeSelection = (selectedRowKeys: React.Key[]): void => {
-    if (selectedRowKeys.length) setHiddenDeleteBtn(false);
-    else setHiddenDeleteBtn(true);
-    setSelectedIds(selectedRowKeys);
-  };
 
   const showDeleteConfirm = (): void => {
     setIsDeleteModalVisible(true);
@@ -289,24 +297,13 @@ const Index: React.FC = () => {
             defaultSortOrder="desc"
             defaultPageSize={10}
             showSelection={true}
-            onSelectionChange={(keys) => {
+            onSelectionChange={useCallback((keys: React.Key[]) => {
               setSelectedIds(keys);
               setHiddenDeleteBtn(keys.length === 0);
-            }}
+            }, [])}
             refreshTrigger={refreshTrigger}
             showTotal={true}
-            onDataChange={(data, pagination) => {
-              // Map role names for Excel export
-              const mappedData = data.map((item: any) => ({
-                ...item,
-                role_names: (item.role_ids || [])
-                  .map((id: number) => roles.find(r => r.id === id)?.name)
-                  .filter(Boolean)
-                  .join(', ')
-              }));
-              setDepartmentData(mappedData);
-              setTotalRecords(pagination.total);
-            }}
+            onDataChange={handleDataChange}
             scroll={{ x: 'max-content' }}
             rowClassName={(_: any, index: number) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
             size={screens.lg ? 'middle' : 'small'}
@@ -344,7 +341,7 @@ const Index: React.FC = () => {
           }
         }
       `}</style>
-    </div>
+    </div >
   );
 };
 

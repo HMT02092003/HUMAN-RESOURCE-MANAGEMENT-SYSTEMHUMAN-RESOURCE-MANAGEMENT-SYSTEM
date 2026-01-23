@@ -605,7 +605,7 @@ const AttendanceApprovalManagement: React.FC = () => {
           setSelectedRowKeys(keys);
           setSelectedRows(rows);
         }}
-        onDataChange={(data: any[], pagination: any) => {
+        onDataChange={useCallback((data: any[], pagination: any) => {
           // keep the ref updated so export button can use the current page data
           currentTableDataRef.current = Array.isArray(data) ? data : [];
           // also store current filters/pagination for possible full-export later
@@ -614,7 +614,7 @@ const AttendanceApprovalManagement: React.FC = () => {
             page: pagination?.current,
             pageSize: pagination?.pageSize,
           };
-        }}
+        }, [])}
         getCheckboxProps={(record: any) => ({ disabled: Boolean(record?.isApproved), name: `select-${record?.id}` })}
         refreshTrigger={refreshTrigger}
         scroll={{ x: 'max-content' }}

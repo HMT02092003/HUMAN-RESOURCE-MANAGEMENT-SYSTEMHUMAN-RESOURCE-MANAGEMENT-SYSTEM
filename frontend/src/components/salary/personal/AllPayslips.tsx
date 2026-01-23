@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { DatePicker, Button, message, Space, Input, Modal, Descriptions, Row, Col } from 'antd';
 import type { InputRef } from 'antd';
 import type { ColumnType } from 'antd/es/table';
@@ -142,7 +142,7 @@ const AllPayslips: React.FC = () => {
       <ServerSideTable
         columns={columns}
         rowKey={(r: any) => r.id || `${r.user_id}-${r.year}-${r.month}`}
-        fetchData={async (params: any) => {
+        fetchData={useCallback(async (params: any) => {
           // Forward table params to server-side paginated endpoint so backend applies filters/sort/pagination.
           // useServerSideTable already converts *_range -> fieldFrom/fieldTo; pass params through.
           try {
@@ -157,8 +157,8 @@ const AllPayslips: React.FC = () => {
           } catch (e: any) {
             return { data: [], total: 0, page: params.page || 1, pageSize: params.limit || 10 };
           }
-        }}
-        onDataChange={(loadedData) => setData(loadedData)}
+        }, [])}
+        onDataChange={useCallback((loadedData: PayslipDataType[]) => setData(loadedData), [])}
         scroll={{ x: 'max-content' }}
       />
 

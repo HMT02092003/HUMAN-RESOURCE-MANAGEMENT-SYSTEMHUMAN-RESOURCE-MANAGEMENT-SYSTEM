@@ -9,9 +9,9 @@ const API_BASE_URL = (() => {
     return process.env.NEXT_PUBLIC_API_GATEWAY_URL;
   }
   if (typeof window !== 'undefined') {
-    return `${window.location.protocol}//${window.location.hostname}:4100`;
+    return `${window.location.protocol}//${window.location.hostname}:4000`;
   }
-  return 'http://localhost:4100';
+  return 'http://localhost:4000';
 })();
 
 // --- Hàm để xây dựng FormData (copy từ BaseService) ---
@@ -89,7 +89,7 @@ const createApiInstance = () => {
 
   // --- Hàm xử lí Response ---
   instance.interceptors.response.use(
-    (response) => response, 
+    (response) => response,
     async (error) => {
       const originalRequest = error.config;
 
@@ -110,7 +110,7 @@ const createApiInstance = () => {
 
           if (refreshResponse.data.token) {
             Cookies.set('token', refreshResponse.data.token);
-            
+
             const decodedToken = getDecodedToken(refreshResponse.data.token);
             if (decodedToken) {
               if (typeof window !== 'undefined') {
@@ -148,7 +148,7 @@ const createApiInstance = () => {
       const errorMessage = data?.message || data?.error || error.message || 'Có lỗi xảy ra';
       message.error(errorMessage);
 
-      return Promise.reject(error); 
+      return Promise.reject(error);
     }
   );
 

@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Card, 
-  Tabs, 
-  Descriptions, 
-  Tag, 
-  Progress, 
-  Avatar, 
-  Timeline, 
+import {
+  Card,
+  Tabs,
+  Descriptions,
+  Tag,
+  Progress,
+  Avatar,
+  Timeline,
   Spin,
   Row,
   Col,
@@ -60,6 +60,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
   const [statistics, setStatistics] = useState<any>(null);
   const [members, setMembers] = useState<any[]>([]);
   const [timeline, setTimeline] = useState<any[]>([]);
+  const [userScope, setUserScope] = useState<string>('personal');
 
   useEffect(() => {
     loadProjectOverview();
@@ -82,6 +83,9 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
       const response = await jobService.getProjectOverview(projectId);
       const data = response?.data?.project || null;
       setRealProject(data);
+      if (data?.scope) {
+        setUserScope(data.scope);
+      }
     } catch (error) {
       console.error('Failed to load project:', error);
     } finally {
@@ -237,8 +241,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
           <Col xs={24} sm={12} md={8} lg={6} key={member.user_id}>
             <Card hoverable>
               <div style={{ textAlign: 'center' }}>
-                <Avatar 
-                  size={64} 
+                <Avatar
+                  size={64}
                   src={member.avatar}
                   style={{ marginBottom: 12 }}
                 >{!member.avatar && getInitials(member.fullName)}</Avatar>
@@ -263,7 +267,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
         {timeline.map((event: any) => {
           let icon;
           let color;
-          
+
           switch (event.type) {
             case 'milestone':
               icon = <ProjectOutlined />;
@@ -362,15 +366,24 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
   return (
     <div className="project-detail">
       <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
-        <Button 
+        <Button
           icon={<ArrowLeftOutlined />}
           onClick={() => router.back()}
         >
           Quay lại
         </Button>
+        {userScope !== 'personal' && (
+          <Button
+            type="primary"
+            icon={<EditOutlined />}
+            onClick={() => router.push(`/projects/${projectId}/edit`)}
+          >
+            Chỉnh sửa
+          </Button>
+        )}
       </div>
 
-      <Tabs 
+      <Tabs
         defaultActiveKey="overview"
         activeKey={activeTab}
         onChange={setActiveTab}

@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Button, ConfigProvider, message, Space, Tooltip, Modal, Popconfirm, Input, Select, Grid, Row, Col } from 'antd';
 import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, PlusOutlined, KeyOutlined, SearchOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
@@ -45,7 +45,7 @@ const Roles: React.FC = () => {
   const deletePer: boolean = true;
 
   // Fetch function cho ServerSideTable
-  const fetchData = async (params: any) => {
+  const fetchData = useCallback(async (params: any) => {
     try {
       const apiParams: any = {
         page: params.page,
@@ -71,114 +71,108 @@ const Roles: React.FC = () => {
       message.error(error.response?.data?.error || 'Có lỗi xảy ra khi tải dữ liệu');
       return { data: [], total: 0 };
     }
-  };
-    const columns: ServerSideColumnType<Role>[] = [
-      {
-        title: "Tên vai trò",
-        dataIndex: 'name',
-        key: 'name',
-        searchable: true,
-        sortable: true,
-        searchField: 'name',
-        filterType: 'text',
-        width: 200,
-      },
-      {
-        title: "Mô tả vai trò",
-        dataIndex: 'description',
-        key: 'description',
-        searchable: true,
-        sortable: true,
-        searchField: 'description',
-        filterType: 'text',
-        width: 150,
-      },
-      {
-        title: "Ngày tạo",
-        dataIndex: 'createdAt',
-        key: 'createdAt',
-        sortable: true,
-        searchable: false,
-        filterType: 'none',
-        render: (text: Date | string) => formatDate(text),
-        width: 150,
-      },
-      {
-        title: "Phân quyền",
-        dataIndex: 'decentralization',
-        key: "decentralization",
-        width: 150,
-        searchable: false,
-        sortable: false,
-        filterType: 'none',
-        render: (_: any, record: Role) => (
-          <Button
-            onClick={() => router.push(`roles/decentralization/${record.id}`)}
-            type="primary"
-          >
-            <PlusCircleOutlined />
-            Phân quyền
-          </Button>
-        )
-      },
-      {
-        title: <>&nbsp;&nbsp;<SettingOutlined /></>,
-        key: "actions",
-        fixed: 'right' as const,
-        width: 80,
-        searchable: false,
-        sortable: false,
-        filterType: 'none',
-        render: (_: any, record: Role) => (
-          <ConfigProvider
-            theme={{
-              components: {
-                Button: {
-                  colorBgContainer: "transparent",
-                  colorText: "#595959",
-                  colorBorder: "transparent",
-                  borderRadius: 4,
-                  boxShadow: "none",
-                },
-              },
-            }}
-          >
-            <Space size="small">
-              <Tooltip title="Chỉnh sửa">
-                <Button
-                  type="default"
-                  shape="circle"
-                  icon={<EditOutlined />}
-                  size="small"
-                  onClick={() => {
-                    router.push(`roles/edit/${record.id}`);
-                  }}
-                  hidden={!updatePer}
-                />
-              </Tooltip>
-            </Space>
-          </ConfigProvider>
-        ),
-      },
-    ];
-
-    const handleDelete = async () => {
-      try {
-        await roleService.deleteMultipleRoles(selectedRowKeys as any);
-        setSelectedRowKeys([]);
-        setRefreshTrigger(prev => prev + 1);
-        message.success('Xóa vai trò thành công!');
-      } catch (error: any) {
-        message.error(error.response?.data?.error || 'Có lỗi xảy ra khi xóa vai trò');
-      }
-    };
-
-  const rowSelection = {
-    selectedRowKeys,
-    onChange: (newSelectedRowKeys: React.Key[]) => {
-      setSelectedRowKeys(newSelectedRowKeys);
+  }, []);
+  const columns: ServerSideColumnType<Role>[] = useMemo(() => [
+    {
+      title: "Tên vai trò",
+      dataIndex: 'name',
+      key: 'name',
+      searchable: true,
+      sortable: true,
+      searchField: 'name',
+      filterType: 'text',
+      width: 200,
     },
+    {
+      title: "Mô tả vai trò",
+      dataIndex: 'description',
+      key: 'description',
+      searchable: true,
+      sortable: true,
+      searchField: 'description',
+      filterType: 'text',
+      width: 150,
+    },
+    {
+      title: "Ngày tạo",
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      sortable: true,
+      searchable: false,
+      filterType: 'none',
+      render: (text: Date | string) => formatDate(text),
+      width: 150,
+    },
+    {
+      title: "Phân quyền",
+      dataIndex: 'decentralization',
+      key: "decentralization",
+      width: 150,
+      searchable: false,
+      sortable: false,
+      filterType: 'none',
+      render: (_: any, record: Role) => (
+        <Button
+          onClick={() => router.push(`roles/decentralization/${record.id}`)}
+          type="primary"
+        >
+          <PlusCircleOutlined />
+          Phân quyền
+        </Button>
+      )
+    },
+    {
+      title: <>&nbsp;&nbsp;<SettingOutlined /></>,
+      key: "actions",
+      fixed: 'right' as const,
+      width: 80,
+      searchable: false,
+      sortable: false,
+      filterType: 'none',
+      render: (_: any, record: Role) => (
+        <ConfigProvider
+          theme={{
+            components: {
+              Button: {
+                colorBgContainer: "transparent",
+                colorText: "#595959",
+                colorBorder: "transparent",
+                borderRadius: 4,
+                boxShadow: "none",
+              },
+            },
+          }}
+        >
+          <Space size="small">
+            <Tooltip title="Chỉnh sửa">
+              <Button
+                type="default"
+                shape="circle"
+                icon={<EditOutlined />}
+                size="small"
+                onClick={() => {
+                  router.push(`roles/edit/${record.id}`);
+                }}
+                hidden={!updatePer}
+              />
+            </Tooltip>
+          </Space>
+        </ConfigProvider>
+      ),
+    },
+  ], [router, updatePer]);
+
+  const handleDelete = async () => {
+    try {
+      await roleService.deleteMultipleRoles(selectedRowKeys as any);
+      setSelectedRowKeys([]);
+      setRefreshTrigger(prev => prev + 1);
+      message.success('Xóa vai trò thành công!');
+    } catch (error: any) {
+      message.error(error.response?.data?.error || 'Có lỗi xảy ra khi xóa vai trò');
+    }
   };
+
 
   return (
     <div style={{ padding: screens.lg ? 24 : 16 }}>
@@ -245,10 +239,10 @@ const Roles: React.FC = () => {
             defaultSortOrder="desc"
             defaultPageSize={12}
             showSelection={true}
-            onSelectionChange={(keys) => setSelectedRowKeys(keys)}
+            onSelectionChange={useCallback((keys: React.Key[]) => setSelectedRowKeys(keys), [])}
             refreshTrigger={refreshTrigger}
             showTotal={true}
-            onDataChange={(data) => setRoles(data)}
+            onDataChange={useCallback((data: Role[]) => setRoles(data), [])}
             scroll={{ x: 'max-content' }}
             rowClassName={(_: any, index: number) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
             size={screens.lg ? 'middle' : 'small'}

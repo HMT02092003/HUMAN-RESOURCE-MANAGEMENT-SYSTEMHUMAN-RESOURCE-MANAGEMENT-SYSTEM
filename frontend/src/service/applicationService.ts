@@ -140,6 +140,16 @@ const ApplicationService = {
     }
   },
 
+  // Duyệt đơn từ
+  approveApplication: async (id: number) => {
+    try {
+      const response = await api.post(`/api/applications/${id}/approve`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
   // Từ chối nhiều applications cùng lúc
   bulkRejectApplications: async (ids: number[]) => {
     try {
@@ -151,9 +161,10 @@ const ApplicationService = {
   },
 
   // Từ chối application
-  rejectApplication: async (id: number, rejectionData: RejectApplicationRequest) => {
+  rejectApplication: async (id: number, reason?: string) => {
     try {
-      const response = await api.post(`/api/applications/${id}/reject`, rejectionData);
+      // Rejection reason is optional now
+      const response = await api.post(`/api/applications/${id}/reject`, { reason });
       return response.data;
     } catch (error) {
       throw error;

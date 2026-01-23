@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Button, Space, Typography, Empty, message, Tooltip, Tag, Popconfirm } from 'antd';
 import { CheckOutlined, CloseOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, DownloadOutlined } from '@ant-design/icons';
 import shiftService from '@/service/shiftService';
@@ -132,7 +132,7 @@ const ShiftApprovalManagement: React.FC = () => {
             message.success('Duyệt đơn đăng ký thành công');
             setRefreshTrigger(prev => prev + 1);
             // Notify other components (e.g., the user's calendar/list) to refresh
-            try { window.dispatchEvent(new CustomEvent('shifts:updated', { detail: { ids: [id] } })); } catch (e) {}
+            try { window.dispatchEvent(new CustomEvent('shifts:updated', { detail: { ids: [id] } })); } catch (e) { }
         } catch (error: any) {
             message.error(error.response?.data?.message || 'Duyệt đơn thất bại');
         }
@@ -144,7 +144,7 @@ const ShiftApprovalManagement: React.FC = () => {
             await shiftService.bulkApproveSchedules([id], 'reject');
             message.success('Từ chối đơn đăng ký thành công');
             setRefreshTrigger(prev => prev + 1);
-            try { window.dispatchEvent(new CustomEvent('shifts:updated', { detail: { ids: [id] } })); } catch (e) {}
+            try { window.dispatchEvent(new CustomEvent('shifts:updated', { detail: { ids: [id] } })); } catch (e) { }
         } catch (error: any) {
             message.error(error.response?.data?.message || 'Từ chối đơn thất bại');
         }
@@ -162,7 +162,7 @@ const ShiftApprovalManagement: React.FC = () => {
             setSelectedRowKeys([]);
             setSelectedRows([]);
             setRefreshTrigger(prev => prev + 1);
-            try { window.dispatchEvent(new CustomEvent('shifts:updated', { detail: { ids: selectedRowKeys } })); } catch (e) {}
+            try { window.dispatchEvent(new CustomEvent('shifts:updated', { detail: { ids: selectedRowKeys } })); } catch (e) { }
         } catch (error: any) {
             message.error(error.response?.data?.message || 'Duyệt hàng loạt thất bại');
         }
@@ -174,14 +174,14 @@ const ShiftApprovalManagement: React.FC = () => {
             return;
         }
 
-            try {
-                // backend exposes bulkApproveSchedules with action flag
-                await shiftService.bulkApproveSchedules(selectedRowKeys as number[], 'reject');
-                message.success(`Đã từ chối ${selectedRowKeys.length} đơn đăng ký`);
+        try {
+            // backend exposes bulkApproveSchedules with action flag
+            await shiftService.bulkApproveSchedules(selectedRowKeys as number[], 'reject');
+            message.success(`Đã từ chối ${selectedRowKeys.length} đơn đăng ký`);
             setSelectedRowKeys([]);
             setSelectedRows([]);
             setRefreshTrigger(prev => prev + 1);
-            try { window.dispatchEvent(new CustomEvent('shifts:updated', { detail: { ids: selectedRowKeys } })); } catch (e) {}
+            try { window.dispatchEvent(new CustomEvent('shifts:updated', { detail: { ids: selectedRowKeys } })); } catch (e) { }
         } catch (error: any) {
             message.error(error.response?.data?.message || 'Từ chối hàng loạt thất bại');
         }
@@ -349,17 +349,15 @@ const ShiftApprovalManagement: React.FC = () => {
         }
     ], []);
 
-    const rowSelection = {
-        selectedRowKeys,
-        onChange: (selectedRowKeys: React.Key[], selectedRows: any[]) => {
-            setSelectedRowKeys(selectedRowKeys);
-            setSelectedRows(selectedRows);
-        },
-        getCheckboxProps: (record: any) => ({
-            disabled: record.status !== 'pending',
-            name: record.id,
-        }),
-    };
+    const handleSelectionChange = useCallback((keys: React.Key[], rows: any[]) => {
+        setSelectedRowKeys(keys);
+        setSelectedRows(rows);
+    }, []);
+
+    const getCheckboxProps = useCallback((record: any) => ({
+        disabled: record.status !== 'pending',
+        name: record.id,
+    }), []);
 
     return (
         <div style={{ padding: '0px' }}>
@@ -423,17 +421,15 @@ const ShiftApprovalManagement: React.FC = () => {
                     )}
                 </Space>
             </div>
-{/* Table */}
+            {/* Table */}
             <ServerSideTable
                 columns={columns}
                 fetchData={shiftService.getSchedulesForApproval}
                 rowKey="id"
                 // enable selection behavior by providing callbacks/props
-                onSelectionChange={(keys, rows) => {
-                    setSelectedRowKeys(keys);
-                    setSelectedRows(rows as any[]);
-                }}
-                getCheckboxProps={(record: any) => ({ disabled: record.status !== 'pending', name: record.id })}
+                onSelectionChange={handleSelectionChange}
+                getCheckboxProps={getCheckboxProps}
+                showSelection={true}
                 defaultPageSize={10}
                 scroll={{ x: 'auto' }}
                 bordered

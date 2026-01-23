@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Card,
   Button,
@@ -152,7 +152,7 @@ const ProjectExpenses: React.FC<ProjectExpensesProps> = ({ projectId, project })
     }).format(amount || 0);
   };
 
-  const fetchData = async (params: any) => {
+  const fetchData = useCallback(async (params: any) => {
     const response = await jobService.getProjectExpenses(projectId, {
       ...params,
       search: searchText || undefined,
@@ -164,7 +164,7 @@ const ProjectExpenses: React.FC<ProjectExpensesProps> = ({ projectId, project })
     }
 
     return response;
-  };
+  }, [projectId, searchText]);
 
   const columns: ColumnsType<any> = [
     {

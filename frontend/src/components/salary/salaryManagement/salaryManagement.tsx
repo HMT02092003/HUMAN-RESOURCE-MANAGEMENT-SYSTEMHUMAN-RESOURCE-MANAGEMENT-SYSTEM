@@ -344,10 +344,10 @@ const SalaryManagement: React.FC = () => {
         defaultSortOrder="desc"
         defaultPageSize={25}
         refreshTrigger={refreshTrigger}
-        onDataChange={(data, pagination) => {
+        onDataChange={useCallback((data: any[], pagination: any) => {
           setTableData(data);
           setTotalRecords(pagination.total);
-        }}
+        }, [])}
         scroll={{ x: 'max-content' }}
         bordered
       />

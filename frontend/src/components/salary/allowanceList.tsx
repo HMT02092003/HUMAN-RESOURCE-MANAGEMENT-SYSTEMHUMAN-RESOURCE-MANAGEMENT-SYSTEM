@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Button, message, Space, Row, Col, Modal } from 'antd';
 import salaryService from '@/service/salaryService';
 import { useRouter } from 'next/navigation';
@@ -28,7 +28,7 @@ const AdminAllowanceList: React.FC = () => {
 
   const { confirm } = Modal;
 
-  const fetchData = async (params: TableQueryParams) => {
+  const fetchData = useCallback(async (params: TableQueryParams) => {
     try {
       const res = await salaryService.listAllowanceTypes(params);
       // Normalize response - backend returns { data, total, pagination }
@@ -40,7 +40,7 @@ const AdminAllowanceList: React.FC = () => {
       message.error('Không thể tải danh sách phụ cấp');
       return { data: [], total: 0 };
     }
-  };
+  }, []);
 
   const handleEdit = (id: number) => {
     router.push(`/salary/allowances/edit/${id}`);
@@ -114,7 +114,7 @@ const AdminAllowanceList: React.FC = () => {
         { value: true, label: 'Có' },
         { value: false, label: 'Không' }
       ],
-      render: (_: any, r: AllowanceType) => r.is_taxable ? 'Có' : 'Không' 
+      render: (_: any, r: AllowanceType) => r.is_taxable ? 'Có' : 'Không'
     },
     {
       title: 'Mô tả',
@@ -126,12 +126,12 @@ const AdminAllowanceList: React.FC = () => {
       searchPlaceholder: 'Tìm theo mô tả...'
     },
     {
-      title: 'Hành động', 
+      title: 'Hành động',
       key: 'actions',
       filterType: 'none',
       sortable: false,
       render: (_: any, record: AllowanceType) => (
-        <div style={{display:"flex", justifyItems:"row"}}>
+        <div style={{ display: "flex", justifyItems: "row" }}>
           <Button type="text" onClick={() => handleEdit(record.id)}><EditOutlined /></Button>
           <Button type="text" danger onClick={() => handleDeleteOne(record.id)}><DeleteOutlined /></Button>
         </div>
@@ -151,22 +151,22 @@ const AdminAllowanceList: React.FC = () => {
     if (selectedRows.length > 0) {
       return;
     }
-    
+
     try {
       setLoading(true);
       // Fetch all data for export (no pagination)
       const res = await salaryService.getAllowanceTypes();
       const allData = res?.data || res || [];
-      
+
       // Create a temporary ExcelExportButton with all data
       const ExcelJS = require('exceljs');
       const { saveAs } = require('file-saver');
-      
+
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Sheet1');
-      
+
       let currentRow = 1;
-      
+
       // Add title
       const titleRow = worksheet.getRow(currentRow);
       titleRow.getCell(1).value = 'DANH SÁCH PHỤ CẤP';
@@ -175,7 +175,7 @@ const AdminAllowanceList: React.FC = () => {
       titleRow.height = 30;
       worksheet.mergeCells(currentRow, 1, currentRow, excelColumns.length);
       currentRow++;
-      
+
       // Add description
       const descRow = worksheet.getRow(currentRow);
       descRow.getCell(1).value = `Xuất ngày ${dayjs().format('DD/MM/YYYY')}`;
@@ -184,7 +184,7 @@ const AdminAllowanceList: React.FC = () => {
       descRow.height = 20;
       worksheet.mergeCells(currentRow, 1, currentRow, excelColumns.length);
       currentRow += 2;
-      
+
       // Add headers
       const headerRow = worksheet.getRow(currentRow);
       excelColumns.forEach((col, index) => {
@@ -200,7 +200,7 @@ const AdminAllowanceList: React.FC = () => {
       });
       headerRow.height = 25;
       currentRow++;
-      
+
       // Add data
       allData.forEach((record: any, recordIndex: number) => {
         const dataRow = worksheet.getRow(currentRow);
@@ -216,12 +216,12 @@ const AdminAllowanceList: React.FC = () => {
         });
         currentRow++;
       });
-      
+
       // Set column widths
       excelColumns.forEach((col, index) => {
         worksheet.getColumn(index + 1).width = col.width || 15;
       });
-      
+
       // Generate and download
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -258,8 +258,8 @@ const AdminAllowanceList: React.FC = () => {
               buttonStyle={{ backgroundColor: '#52c41a', borderColor: '#52c41a', color: '#fff' }}
             />
           ) : (
-            <Button 
-              icon={<DownloadOutlined />} 
+            <Button
+              icon={<DownloadOutlined />}
               onClick={handleExportExcel}
               loading={loading}
               style={{ backgroundColor: '#52c41a', borderColor: '#52c41a', color: '#fff' }}

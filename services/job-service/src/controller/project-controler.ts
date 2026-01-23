@@ -24,7 +24,6 @@ import { analyzeTaskTimeline, validateTaskDependencies } from '../services/gemin
 import * as kpiService from '../services/kpiService.ts';
 import { getUserData, getUserId } from '../utils/getUserData.js';
 import { notifyProjectMembers } from '../integrations/NotificationService.ts';
-import { notifyProjectMembers } from '../integrations/NotificationService.ts';
 
 
 SkillModel.knex(knex);
@@ -251,6 +250,11 @@ export class ProjectController {
                         );
                 });
 
+            // If scope is 'personal' (Employee role), only show 'active' (In Progress) and 'completed' projects
+            if (scopeResult.scope === 'personal') {
+                baseQuery.whereIn('projects.status', ['active', 'completed']);
+            }
+
             // Apply text/name filter
             if (qName) {
                 baseQuery.whereILike('projects.name', `%${qName}%`);
@@ -425,6 +429,21 @@ export class ProjectController {
                 return;
             }
 
+            // Check scope
+            const headerAuth = (req.headers.authorization as string) || null;
+            const cookieToken = (req as any).cookies?.token;
+            const authHeader = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : null);
+            if (!authHeader) {
+                res.status(401).json({ success: false, message: 'No token provided' });
+                return;
+            }
+
+            const scopeResult = await AuthService.checkUserScope('projects', authHeader, getUserData(req));
+            if (!scopeResult?.hasAccess || scopeResult.scope === 'personal') {
+                res.status(403).json({ success: false, message: 'Forbidden: Employees cannot delete projects' });
+                return;
+            }
+
             await knex.transaction(async (trx) => {
                 // Insert a 'deleted' timeline event for each project id (best-effort)
                 try {
@@ -476,6 +495,25 @@ export class ProjectController {
                 return;
             }
 
+            // Check scope for Employees (personal scope)
+            const headerAuth = (req.headers.authorization as string) || null;
+            const cookieToken = (req as any).cookies?.token;
+            const authHeader = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : null);
+            if (authHeader) {
+                try {
+                    const scopeResult = await AuthService.checkUserScope('projects', authHeader, getUserData(req));
+                    if (scopeResult.scope === 'personal') {
+                        // Employees can only view 'active' (In Progress) and 'completed' projects
+                        if (project.status !== 'active' && project.status !== 'completed') {
+                            res.status(403).json({ success: false, message: 'Forbidden: You do not have permission to view this project' });
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[Project Controller] Failed to check scope for getProjectById:', e);
+                }
+            }
+
             // Collect user IDs to fetch from auth service
             const userIdsSet = new Set<number>();
             if (project.manager_id) userIdsSet.add(Number(project.manager_id));
@@ -495,9 +533,7 @@ export class ProjectController {
             const userIds = Array.from(userIdsSet).filter(Boolean);
 
             // Fetch users from auth service
-            const headerAuth = (req.headers.authorization as string) || null;
-            const cookieToken = (req as any).cookies?.token;
-            const authHeader = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : null);
+            // (variables headerAuth, cookieToken, authHeader are already declared above)
 
             let userBulkData: any[] = [];
             if (userIds.length && authHeader) {
@@ -544,6 +580,21 @@ export class ProjectController {
             const idNum = Number(id);
             if (Number.isNaN(idNum)) {
                 res.status(400).json({ success: false, message: 'Invalid project id' });
+                return;
+            }
+
+            // Check scope
+            const headerAuth = (req.headers.authorization as string) || null;
+            const cookieToken = (req as any).cookies?.token;
+            const authHeader = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : null);
+            if (!authHeader) {
+                res.status(401).json({ success: false, message: 'No token provided' });
+                return;
+            }
+
+            const scopeResult = await AuthService.checkUserScope('projects', authHeader, getUserData(req));
+            if (!scopeResult?.hasAccess || scopeResult.scope === 'personal') {
+                res.status(403).json({ success: false, message: 'Forbidden: Employees cannot update projects' });
                 return;
             }
 
@@ -1202,7 +1253,7 @@ export class ProjectController {
                 res.status(401).json({ error: 'Unauthorized - User ID not found or invalid in request' });
                 return;
             }
-            
+
             console.log(`[createTaskWithAnalysis] userId=${userId}`);
 
             // Normalize required_skills: convert object to array if needed (before validation)
@@ -1241,8 +1292,8 @@ export class ProjectController {
 
             const trx = await transaction.start(knex);
 
-                // Note: Removed restriction that only project managers can assign tasks.
-                // Assignment by creators to other users is now allowed.
+            // Note: Removed restriction that only project managers can assign tasks.
+            // Assignment by creators to other users is now allowed.
 
             try {
                 // ============ STEP 1: VALIDATE DEPENDENCIES ============
@@ -1486,7 +1537,7 @@ export class ProjectController {
                     } catch (err) {
                         console.error('[Task Create] Failed to fetch creator name:', err);
                     }
-                    
+
                     // Get assignee name if assigned
                     let assigneeText = '';
                     if (payload.assigned_to_user_id) {
@@ -1505,7 +1556,7 @@ export class ProjectController {
                             assigneeText = ` và giao cho User ${payload.assigned_to_user_id}`;
                         }
                     }
-                    
+
                     const priorityText: Record<string, string> = {
                         'low': 'Độ ưu tiên thấp',
                         'medium': 'Độ ưu tiên trung bình',
@@ -1514,10 +1565,10 @@ export class ProjectController {
                     };
                     const priority = priorityText[task.priority || 'medium'] || task.priority;
                     const dueDate = task.due_date ? `Deadline: ${dayjs(task.due_date).format('DD/MM/YYYY')}` : '';
-                    
+
                     notifyProjectMembers(
                         task.project_id,
-                        userId, // Exclude người tạo task
+                        userId ?? null, // Exclude người tạo task
                         {
                             title: `🆕 Task mới: ${task.title}`,
                             content: `Task "​${task.title}"​ đã được tạo bởi ${creatorName}${assigneeText}. ${priority}${dueDate ? '. ' + dueDate : ''}`,
@@ -1743,12 +1794,12 @@ export class ProjectController {
             }
 
             const userId = getUserId(req);
-            
+
             if (!userId || isNaN(userId)) {
                 console.error('[updateTaskStatus] Invalid userId:', { userId, userData: getUserData(req) });
-                res.status(401).json({ 
-                    error: 'Unauthorized', 
-                    message: 'User ID not found or invalid in request' 
+                res.status(401).json({
+                    error: 'Unauthorized',
+                    message: 'User ID not found or invalid in request'
                 });
                 return;
             }
@@ -1769,22 +1820,22 @@ export class ProjectController {
 
             // Authorization: only assignee or project manager can update task status
             const isAssignee = task.assignee_id && Number(task.assignee_id) === Number(userId);
-            
+
             // Check if user is project manager (2 ways: by manager_id OR by role in members)
             // Way 1: Check project.manager_id
             const project = await ProjectModel.query().findById(Number(project_id));
             const isProjectOwner = project && Number(project.manager_id) === Number(userId);
-            
+
             // Way 2: Check role in project_members
             const pmRecord = await ProjectMemberModel.query()
                 .where('project_id', Number(project_id))
                 .andWhere('user_id', Number(userId))
                 .first();
-            
+
             const hasManagerRole = !!pmRecord && typeof pmRecord.role === 'string' && /manager|project|quản|ql|trưởng|admin|administrator|pm/i.test(pmRecord.role);
-            
+
             const isManager = !!(isProjectOwner || hasManagerRole);
-            
+
             console.log(`[Project Controller] Authorization check for task ${task_id}:`, {
                 userId: userId,
                 assignee_id: task.assignee_id,
@@ -1796,10 +1847,10 @@ export class ProjectController {
                 isManager: isManager,
                 allowed: isAssignee || isManager
             });
-            
+
             if (!isAssignee && !isManager) {
-                res.status(403).json({ 
-                    error: 'Không có quyền', 
+                res.status(403).json({
+                    error: 'Không có quyền',
                     message: 'Chỉ người được giao hoặc quản lý dự án mới có thể cập nhật trạng thái công việc',
                     details: {
                         userId: userId,
@@ -1816,29 +1867,29 @@ export class ProjectController {
 
             // Validate status transition
             const currentStatus = task.status;
-            
+
             // Logic: todo -> in_progress -> pending_approval -> done
             // Không được phép skip status
             if (currentStatus === 'todo' && status === 'done') {
-                res.status(400).json({ 
-                    error: 'Invalid status transition', 
-                    message: 'Task must go through in_progress before done' 
+                res.status(400).json({
+                    error: 'Invalid status transition',
+                    message: 'Task must go through in_progress before done'
                 });
                 return;
             }
 
             if (currentStatus === 'todo' && status === 'pending_approval') {
-                res.status(400).json({ 
-                    error: 'Invalid status transition', 
-                    message: 'Task must go through in_progress before pending_approval' 
+                res.status(400).json({
+                    error: 'Invalid status transition',
+                    message: 'Task must go through in_progress before pending_approval'
                 });
                 return;
             }
 
             if (currentStatus === 'in_progress' && status === 'done') {
-                res.status(400).json({ 
-                    error: 'Invalid status transition', 
-                    message: 'Task must go through pending_approval before done. User should click "Complete" button.' 
+                res.status(400).json({
+                    error: 'Invalid status transition',
+                    message: 'Task must go through pending_approval before done. User should click "Complete" button.'
                 });
                 return;
             }
@@ -1887,10 +1938,10 @@ export class ProjectController {
                 description: `Task "${task.title}" đã được cập nhật trạng thái từ ${currentStatus} thành ${status}`,
                 user_id: task.assignee_id || null,
                 event_time: dayjs().toISOString(),
-                metadata: { 
-                    task_id: updatedTask.task_id, 
+                metadata: {
+                    task_id: updatedTask.task_id,
                     old_status: currentStatus,
-                    new_status: status 
+                    new_status: status
                 }
             } as any);
 
@@ -1901,17 +1952,17 @@ export class ProjectController {
                 'pending_approval': '🟡 Chờ duyệt',
                 'done': '✅ Hoàn thành'
             };
-            
+
             const statusEmoji: Record<string, string> = {
                 'todo': '⚪',
                 'in_progress': '🔵',
                 'pending_approval': '🟡',
                 'done': '✅'
             };
-            
-            const oldStatusText = statusText[currentStatus] || currentStatus;
-            const newStatusText = statusText[status] || status;
-            
+
+            const oldStatusText = currentStatus ? (statusText[currentStatus] || currentStatus) : 'Không xác định';
+            const newStatusText = status ? (statusText[status] || status) : 'Không xác định';
+
             // Get updater name
             let updaterName = 'Một thành viên';
             try {
@@ -1927,12 +1978,12 @@ export class ProjectController {
             } catch (err) {
                 console.error('[Task Status Update] Failed to fetch updater name:', err);
             }
-            
+
             notifyProjectMembers(
                 Number(project_id),
-                userId, // Exclude người cập nhật
+                userId ?? null, // Exclude người cập nhật
                 {
-                    title: `${statusEmoji[status] || '🔄'} Cập nhật trạng thái: ${task.title}`,
+                    title: `${(status && statusEmoji[status]) || '🔄'} Cập nhật trạng thái: ${task.title}`,
                     content: `Task "​${task.title}"​ chuyển từ ${oldStatusText} → ${newStatusText} bởi ${updaterName}`,
                     type: 'TASK_STATUS_UPDATED',
                     data: {
@@ -2503,11 +2554,11 @@ export class ProjectController {
             if (payload.assignee_id !== undefined) changedFields.push('người thực hiện');
             if (payload.priority !== undefined) changedFields.push('độ ưu tiên');
             if (payload.due_date !== undefined) changedFields.push('deadline');
-            
-            const changedText = changedFields.length > 0 
+
+            const changedText = changedFields.length > 0
                 ? `: ${changedFields.join(', ')}`
                 : '';
-            
+
             // Get updater name
             let updaterName = 'Một thành viên';
             try {
@@ -2523,10 +2574,10 @@ export class ProjectController {
             } catch (err) {
                 console.error('[Task Update] Failed to fetch updater name:', err);
             }
-            
+
             notifyProjectMembers(
                 Number(project_id),
-                userId, // Exclude người cập nhật
+                userId ?? null, // Exclude người cập nhật
                 {
                     title: `✏️ Cập nhật task: ${updatedTask.title}`,
                     content: `Task "​${updatedTask.title}"​ đã cập nhật${changedText} bởi ${updaterName}`,
@@ -2635,7 +2686,21 @@ export class ProjectController {
                 return;
             }
 
-            console.log(`[Project Controller] Getting overview for project ${project_id}`);
+            // Check scope
+            const headerAuth = (req.headers.authorization as string) || null;
+            const cookieToken = (req as any).cookies?.token;
+            const authHeader = headerAuth || (cookieToken ? `Bearer ${cookieToken}` : null);
+            let userScope = 'personal';
+            if (authHeader) {
+                try {
+                    const scopeResult = await AuthService.checkUserScope('projects', authHeader, getUserData(req));
+                    userScope = scopeResult.scope;
+                } catch (e) {
+                    console.warn('[Project Controller] Failed to check scope for overview:', e);
+                }
+            }
+
+            console.log(`[Project Controller] Getting overview for project ${project_id}, scope=${userScope}`);
 
             // Get project details
             const project = await ProjectModel.query().findById(Number(project_id));
@@ -2671,7 +2736,8 @@ export class ProjectController {
                     ...project,
                     progress,
                     member_count: Number(memberCountResult?.count || 0),
-                    task_statistics: taskStats
+                    task_statistics: taskStats,
+                    scope: userScope
                 }
             });
         } catch (error: any) {
@@ -2691,9 +2757,9 @@ export class ProjectController {
     static getProjectExpenses: RequestHandler = async (req: Request, res: Response): Promise<void> => {
         try {
             const { project_id } = req.params;
-            const { 
-                status, 
-                category, 
+            const {
+                status,
+                category,
                 page = '1',
                 pageSize = '10',
                 sortField = 'expense_date',
@@ -2727,7 +2793,7 @@ export class ProjectController {
 
             // Apply search (title or description)
             if (search && typeof search === 'string' && search.trim()) {
-                query = query.where(function() {
+                query = query.where(function () {
                     this.where('title', 'ilike', `%${search}%`)
                         .orWhere('description', 'ilike', `%${search}%`);
                 });
@@ -2821,9 +2887,9 @@ export class ProjectController {
             const { title, description, amount, category, expense_date, status, metadata } = req.body;
 
             if (!title || !amount || !category || !expense_date) {
-                res.status(400).json({ 
-                    error: 'Missing required fields', 
-                    required: ['title', 'amount', 'category', 'expense_date'] 
+                res.status(400).json({
+                    error: 'Missing required fields',
+                    required: ['title', 'amount', 'category', 'expense_date']
                 });
                 return;
             }
@@ -3000,9 +3066,9 @@ export class ProjectController {
 
             // Check if user is project manager
             if (project.manager_id !== userId) {
-                res.status(403).json({ 
-                    error: 'Forbidden', 
-                    message: 'Chỉ quản lý dự án mới có quyền duyệt chi tiêu!' 
+                res.status(403).json({
+                    error: 'Forbidden',
+                    message: 'Chỉ quản lý dự án mới có quyền duyệt chi tiêu!'
                 });
                 return;
             }
@@ -3079,9 +3145,9 @@ export class ProjectController {
 
             // Check if user is project manager
             if (project.manager_id !== userId) {
-                res.status(403).json({ 
-                    error: 'Forbidden', 
-                    message: 'Chỉ quản lý dự án mới có quyền từ chối chi tiêu!' 
+                res.status(403).json({
+                    error: 'Forbidden',
+                    message: 'Chỉ quản lý dự án mới có quyền từ chối chi tiêu!'
                 });
                 return;
             }
@@ -3168,9 +3234,9 @@ export class ProjectController {
             }
 
             if (task.status !== 'pending_approval') {
-                res.status(400).json({ 
-                    error: 'Task is not pending approval', 
-                    message: `Current status: ${task.status}` 
+                res.status(400).json({
+                    error: 'Task is not pending approval',
+                    message: `Current status: ${task.status}`
                 });
                 return;
             }
@@ -3272,9 +3338,9 @@ export class ProjectController {
             }
 
             if (task.status !== 'pending_approval') {
-                res.status(400).json({ 
-                    error: 'Task is not pending approval', 
-                    message: `Current status: ${task.status}` 
+                res.status(400).json({
+                    error: 'Task is not pending approval',
+                    message: `Current status: ${task.status}`
                 });
                 return;
             }
@@ -3330,26 +3396,26 @@ export class ProjectController {
             // );
 
             // if (!kpi) {
-                // Tính KPI mới nếu chưa có
-                // TODO: calculateAndSaveUserKpiForAllPeriods method not implemented yet
-                // const calculated = await kpiService.calculateAndSaveUserKpiForAllPeriods(
-                //     Number(user_id),
-                //     projectIdNum
-                // );
+            // Tính KPI mới nếu chưa có
+            // TODO: calculateAndSaveUserKpiForAllPeriods method not implemented yet
+            // const calculated = await kpiService.calculateAndSaveUserKpiForAllPeriods(
+            //     Number(user_id),
+            //     projectIdNum
+            // );
 
-                // res.json({
-                //     success: true,
-                //     data: calculated[periodType],
-                //     message: 'KPI calculated'
-                // });
-                // return;
+            // res.json({
+            //     success: true,
+            //     data: calculated[periodType],
+            //     message: 'KPI calculated'
+            // });
+            // return;
             // }
 
             // res.json({
             //     success: true,
             //     data: kpi
             // });
-            
+
             // Temporary response until methods are implemented
             res.json({
                 success: false,
@@ -3403,7 +3469,7 @@ export class ProjectController {
             const { user_id, project_id, task_id } = req.body;
 
             if (!user_id) {
-                res.status(400).json({ 
+                res.status(400).json({
                     error: 'user_id is required',
                     message: 'Vui lòng cung cấp user_id để tính KPI'
                 });
@@ -3426,13 +3492,13 @@ export class ProjectController {
                     console.log(`- Due Date: ${taskInfo.due_date}`);
                     console.log(`- Completed At: ${taskInfo.completed_at}`);
                     console.log(`- Approved At: ${taskInfo.approved_at}`);
-                    
+
                     // Phân tích task này
                     if (taskInfo.completed_at && taskInfo.due_date) {
                         const completedAt = dayjs(taskInfo.completed_at);
                         const dueDate = dayjs(taskInfo.due_date);
                         const delayDays = completedAt.diff(dueDate, 'day', true);
-                        
+
                         console.log(`\n[TEST] Phân tích task:`);
                         if (delayDays <= 0) {
                             console.log(`✅ Task VƯỢT TIẾN ĐỘ: Hoàn thành SỚM ${Math.abs(delayDays).toFixed(1)} ngày`);
@@ -3558,8 +3624,8 @@ export class ProjectController {
             });
         } catch (error: any) {
             console.error('[TEST KPI] Error:', error);
-            res.status(500).json({ 
-                error: 'Failed to calculate test KPI', 
+            res.status(500).json({
+                error: 'Failed to calculate test KPI',
                 details: error.message,
                 message: 'Lỗi khi tính KPI - kiểm tra console logs'
             });
@@ -3605,7 +3671,7 @@ export class ProjectController {
             // Determine time period
             const targetMonth = month ? Number(month) : dayjs().month() + 1;
             const targetYear = year ? Number(year) : dayjs().year();
-            
+
             const periodStart = dayjs(`${targetYear}-${String(targetMonth).padStart(2, '0')}-01`).startOf('month');
             const periodEnd = periodStart.endOf('month');
 
@@ -3704,11 +3770,11 @@ export class ProjectController {
                 });
 
                 // Calculate KPI score: (early + on_time) / total_done * 100
-                const kpiScore = totalDone > 0 
+                const kpiScore = totalDone > 0
                     ? Math.round((countEarly + countOnTime) / totalDone * 100)
                     : 0;
 
-                const avgDelayHours = countLate > 0 
+                const avgDelayHours = countLate > 0
                     ? Math.round(totalDelayHours / countLate * 10) / 10
                     : 0;
 
@@ -3717,9 +3783,9 @@ export class ProjectController {
 
                 // Get overdue tasks (not done yet but past due_date)
                 const now = dayjs();
-                const overdueTasks = userTasks.filter(t => 
-                    t.status !== 'done' && 
-                    t.due_date && 
+                const overdueTasks = userTasks.filter(t =>
+                    t.status !== 'done' &&
+                    t.due_date &&
                     dayjs(t.due_date).isBefore(now)
                 ).length;
 
@@ -3751,7 +3817,7 @@ export class ProjectController {
             let filteredMembers = memberStats;
             if (search && typeof search === 'string' && search.trim()) {
                 const searchLower = search.trim().toLowerCase();
-                filteredMembers = memberStats.filter(m => 
+                filteredMembers = memberStats.filter(m =>
                     m.name.toLowerCase().includes(searchLower) ||
                     m.email.toLowerCase().includes(searchLower)
                 );
@@ -3837,8 +3903,8 @@ export class ProjectController {
             });
         } catch (error: any) {
             console.error('[GET KPI Report] Error:', error);
-            res.status(500).json({ 
-                error: 'Failed to get KPI report', 
+            res.status(500).json({
+                error: 'Failed to get KPI report',
                 details: error.message
             });
         }
@@ -3895,9 +3961,9 @@ export class ProjectController {
             });
         } catch (error: any) {
             console.error('[Get All Users KPI] Error:', error);
-            res.status(500).json({ 
-                error: 'Failed to get KPI data', 
-                details: error.message 
+            res.status(500).json({
+                error: 'Failed to get KPI data',
+                details: error.message
             });
         }
     };
@@ -3930,9 +3996,9 @@ export class ProjectController {
             });
         } catch (error: any) {
             console.error('[Get User KPI Summary] Error:', error);
-            res.status(500).json({ 
-                error: 'Failed to get user KPI summary', 
-                details: error.message 
+            res.status(500).json({
+                error: 'Failed to get user KPI summary',
+                details: error.message
             });
         }
     };
@@ -3978,9 +4044,9 @@ export class ProjectController {
             });
         } catch (error: any) {
             console.error('[Get User Project KPI] Error:', error);
-            res.status(500).json({ 
-                error: 'Failed to get user project KPI details', 
-                details: error.message 
+            res.status(500).json({
+                error: 'Failed to get user project KPI details',
+                details: error.message
             });
         }
     };

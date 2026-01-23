@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Button, Tooltip, ConfigProvider, Modal, message, Tag, Row, Col, Grid, Typography } from 'antd';
 import {
   PlusCircleOutlined,
@@ -135,7 +135,7 @@ const UserTable = () => {
   const viewPer = true;
 
   // 🔥 Fetch function để dùng với ServerSideTable
-  const fetchUsers = async (params: any) => {
+  const fetchUsers = useCallback(async (params: any) => {
     try {
       // Xử lý date range params
       const apiParams: any = { ...params };
@@ -186,7 +186,7 @@ const UserTable = () => {
       message.error(data?.message || data?.error || error.message || 'Có lỗi xảy ra khi tải người dùng!');
       return { data: [], total: 0 };
     }
-  };
+  }, []);
 
   const handleDelete = async () => {
     try {
@@ -212,19 +212,8 @@ const UserTable = () => {
     setIsDeleteModalVisible(false);
   };
 
-  const onSelectChange = (newSelectedRowKeys: React.Key[]) => {
-    setSelectedRowKeys(newSelectedRowKeys);
-  };
 
-  const rowSelection = {
-    selectedRowKeys,
-    onChange: onSelectChange,
-    getCheckboxProps: (record: any) => ({
-      disabled: record.id === 1,
-    }),
-  };
-
-  const columns: ServerSideColumnType<any>[] = [
+  const columns: ServerSideColumnType<any>[] = useMemo(() => [
     {
       title: "ID",
       dataIndex: "id",
@@ -467,7 +456,7 @@ const UserTable = () => {
         </ConfigProvider>
       ),
     },
-  ];
+  ], [viewPer, updatePer, router]);
 
   // column-specific search handled via getColumnSearchProps and handleColumnSearch
 
@@ -544,14 +533,14 @@ const UserTable = () => {
             defaultSortOrder="desc"
             defaultPageSize={10}
             showSelection={true}
-            onSelectionChange={(keys) => setSelectedRowKeys(keys)}
-            getCheckboxProps={(record: any) => ({ disabled: record.id === 1 })}
+            onSelectionChange={useCallback((keys: React.Key[]) => setSelectedRowKeys(keys), [])}
+            getCheckboxProps={useCallback((record: any) => ({ disabled: record.id === 1 }), [])}
             refreshTrigger={refreshTrigger}
             showTotal={true}
-            onDataChange={(data, pagination) => {
+            onDataChange={useCallback((data: any[], pagination: any) => {
               setUserData(data);
               setTotalRecords(pagination.total);
-            }}
+            }, [])}
             scroll={{ x: 'max-content' }}
             rowClassName={(record: any, index: number) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
             size={screens.lg ? 'middle' : 'small'}

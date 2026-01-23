@@ -53,16 +53,17 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
     defaultPageSize,
     refreshTrigger,
   });
+  const { onDataChange } = props as any;
   // call onDataChange when data or pagination changes so parent can access current page data
   React.useEffect(() => {
-    if (typeof (props as any).onDataChange === 'function') {
+    if (typeof onDataChange === 'function') {
       try {
-        (props as any).onDataChange(data, tableState.pagination);
+        onDataChange(data, tableState.pagination);
       } catch (err) {
         console.warn('onDataChange callback error', err);
       }
     }
-  }, [data, tableState.pagination, props]);
+  }, [data, tableState.pagination, onDataChange]);
 
   const createFilterDropdown = (
     column: ServerSideColumnType<T>,
@@ -156,7 +157,7 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
       case 'date': {
         return ({ confirm }: any) => {
           let localDate = currentValue ? dayjs(currentValue) : null;
-          
+
           return (
             <div style={{ padding: 8, minWidth: 200 }}>
               <DatePicker
@@ -200,8 +201,8 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
         const parsedRange = rangeValue?.split(',');
 
         return ({ confirm }: any) => {
-          let localDates: [dayjs.Dayjs, dayjs.Dayjs] | undefined = parsedRange 
-            ? [dayjs(parsedRange[0]), dayjs(parsedRange[1])] 
+          let localDates: [dayjs.Dayjs, dayjs.Dayjs] | undefined = parsedRange
+            ? [dayjs(parsedRange[0]), dayjs(parsedRange[1])]
             : undefined;
 
           return (
@@ -362,7 +363,7 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
           );
         };
       }
-      
+
       default:
         return undefined;
     }
@@ -430,9 +431,9 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
 
 
   const handleTableChange = (pagination: any, _filters: any, sorter: any) => {
-    
+
     if (pagination.current !== tableState.pagination.current ||
-        pagination.pageSize !== tableState.pagination.pageSize) {
+      pagination.pageSize !== tableState.pagination.pageSize) {
       handlePaginationChange(pagination.current, pagination.pageSize);
     }
 
@@ -481,24 +482,24 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
   const effectiveGetCheckboxProps = getCheckboxProps
     ? getCheckboxProps
     : onSelectionChange
-    ? undefined
-    : (record: T) => ({ disabled: true });
+      ? undefined
+      : (record: T) => ({ disabled: true });
 
   const rowSelection = showSelection
     ? {
-        selectedRowKeys,
-        onChange: (keys: React.Key[], rows: T[]) => {
-          handleSelectionChange(keys, rows);
-          onSelectionChange?.(keys, rows);
-        },
-        getCheckboxProps: effectiveGetCheckboxProps as any,
-      }
+      selectedRowKeys,
+      onChange: (keys: React.Key[], rows: T[]) => {
+        handleSelectionChange(keys, rows);
+        onSelectionChange?.(keys, rows);
+      },
+      getCheckboxProps: effectiveGetCheckboxProps as any,
+    }
     : undefined;
 
   return (
     // Debug: log the pagination props passed to AntD Table on each render
     <>
-      
+
       <Table<T>
         {...restProps}
         columns={finalColumns}

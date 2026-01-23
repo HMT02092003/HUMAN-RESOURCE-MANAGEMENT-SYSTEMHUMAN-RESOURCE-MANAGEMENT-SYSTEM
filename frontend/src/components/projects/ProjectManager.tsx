@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button, Space, Tag, Progress, Avatar, Modal, message } from 'antd';
 import { PlusOutlined, EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { ServerSideTable } from '@/components/common/ServerSideTable';
@@ -35,6 +35,7 @@ const ProjectManager: React.FC = () => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [selectedRows, setSelectedRows] = useState<any[]>([]);
+  const [userScope, setUserScope] = useState<string | null>(null);
 
   // ServerSideTable will trigger fetchData; no immediate load here
 
@@ -46,7 +47,7 @@ const ProjectManager: React.FC = () => {
   };
 
   // fetchData will be used by ServerSideTable
-  const fetchData = async (params: any) => {
+  const fetchData = useCallback(async (params: any) => {
     setLoading(true);
     try {
       // Backend expects 0-based page index. Convert 1-based `page` to 0-based for API if necessary
@@ -138,6 +139,10 @@ const ProjectManager: React.FC = () => {
         } as Project;
       });
 
+      if (body?.scope) {
+        setUserScope(body.scope);
+      }
+
       return {
         data: mapped,
         total: totalCount,
@@ -153,7 +158,7 @@ const ProjectManager: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleViewDetail = (projectId: string) => {
     router.push(`/projects/${projectId}`);
@@ -391,19 +396,23 @@ const ProjectManager: React.FC = () => {
             onClick={() => handleViewDetail(record.id)}
           >
           </Button>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-          </Button>
-          <Button
-            type="link"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => handleDelete(record)}
-          >
-          </Button>
+          {userScope !== 'personal' && (
+            <>
+              <Button
+                type="link"
+                icon={<EditOutlined />}
+                onClick={() => handleEdit(record)}
+              >
+              </Button>
+              <Button
+                type="link"
+                danger
+                icon={<DeleteOutlined />}
+                onClick={() => handleDelete(record)}
+              >
+              </Button>
+            </>
+          )}
         </Space>
       ),
     },
@@ -422,13 +431,15 @@ const ProjectManager: React.FC = () => {
   return (
     <div>
       <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <Button
-          icon={<PlusOutlined />}
-          type="primary"
-          onClick={handleCreate}
-        >
-          Tạo dự án mới
-        </Button>
+        {userScope !== 'personal' && (
+          <Button
+            icon={<PlusOutlined />}
+            type="primary"
+            onClick={handleCreate}
+          >
+            Tạo dự án mới
+          </Button>
+        )}
         {selectedRowKeys && selectedRowKeys.length > 0 && (
           <Button danger ghost onClick={deleteSelected} style={{ borderColor: '#ff4d4f' }}>
             Xóa ({selectedRowKeys.length})
@@ -451,9 +462,9 @@ const ProjectManager: React.FC = () => {
           setSelectedRowKeys(keys);
           setSelectedRows(rows);
         }}
-        onDataChange={(data, pagination) => {
+        onDataChange={useCallback((data: any, pagination: any) => {
           setExcelData(data as Project[]);
-        }}
+        }, [])}
         defaultPageSize={10}
         refreshTrigger={refreshTrigger}
         bordered

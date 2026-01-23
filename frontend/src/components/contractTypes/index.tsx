@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button, ConfigProvider, Space, Tooltip, Modal, message, Grid, Row, Col } from "antd";
 import { PlusCircleOutlined, DeleteOutlined, EditOutlined, SettingOutlined, SearchOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useRouter } from "next/navigation";
@@ -97,7 +97,7 @@ const Index: React.FC = () => {
   const updatePer: boolean = true;
   const deletePer: boolean = true;
 
-  const loadData = async (params: any) => {
+  const loadData = useCallback(async (params: any) => {
     try {
       const apiParams: any = {
         page: params.page,
@@ -121,7 +121,7 @@ const Index: React.FC = () => {
       message.error('Đã xảy ra lỗi khi tải dữ liệu!');
       return { data: [], total: 0 };
     }
-  };
+  }, []);
 
 
   const columns: ServerSideColumnType<ContractType>[] = [
@@ -230,7 +230,7 @@ const Index: React.FC = () => {
   const handleDelete = async () => {
     try {
       await contractTypeService.deleteMultipleContractTypes(selectedIds);
-      
+
       setSelectedIds([]);
       setHiddenDeleteBtn(true);
       message.success('Xóa thành công!');
@@ -306,10 +306,10 @@ const Index: React.FC = () => {
             }}
             refreshTrigger={refreshTrigger}
             showTotal={true}
-            onDataChange={(data, pagination) => {
+            onDataChange={useCallback((data: any, pagination: any) => {
               setContractTypes(data);
               setTotalRecords(pagination.total);
-            }}
+            }, [])}
             scroll={{ x: 'max-content' }}
             rowClassName={(_: any, index: number) => (index % 2 === 0 ? 'row-even' : 'row-odd')}
             size={screens.lg ? 'middle' : 'small'}

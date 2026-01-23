@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Button, Space, Typography, Empty, message, Tooltip, Tag, Modal, Form, Select, DatePicker, Input, Tabs, Grid } from 'antd';
 import { PlusOutlined, EyeOutlined, DeleteOutlined, EditOutlined, CheckCircleOutlined, ClockCircleOutlined, CloseCircleOutlined, DownloadOutlined, CalendarOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import Calendar from 'react-calendar';
@@ -77,12 +77,12 @@ const ShiftRegistrationManagement = () => {
             if (activeTab === 'calendar') {
                 try {
                     // Load all registrations (all statuses) for calendar view
-                    const response: any = await shiftService.getMyShiftRegistrationsPaginated({ 
-                        page: 1, 
+                    const response: any = await shiftService.getMyShiftRegistrationsPaginated({
+                        page: 1,
                         limit: 10000
                     });
                     console.debug('[ShiftRegistration] loadCalendarData - raw response:', response);
-                    
+
                     let payload: any;
                     if (Array.isArray(response)) {
                         payload = response;
@@ -101,7 +101,7 @@ const ShiftRegistrationManagement = () => {
                     }
 
                     const rows = Array.isArray(payload) ? payload : (payload?.results ?? payload?.data ?? payload?.items ?? []);
-                    console.debug('[ShiftRegistration] loadCalendarData - extracted rows count:', Array.isArray(rows) ? rows.length : 0, 'sample:', Array.isArray(rows) && rows.length ? rows.slice(0,3) : rows);
+                    console.debug('[ShiftRegistration] loadCalendarData - extracted rows count:', Array.isArray(rows) ? rows.length : 0, 'sample:', Array.isArray(rows) && rows.length ? rows.slice(0, 3) : rows);
                     setCalendarRegistrations(Array.isArray(rows) ? rows : []);
                 } catch (error) {
                     console.error('Error loading calendar data:', error);
@@ -127,7 +127,7 @@ const ShiftRegistrationManagement = () => {
         return () => {
             try {
                 window.removeEventListener('shifts:updated', onShiftsUpdated as EventListener);
-            } catch (e) {}
+            } catch (e) { }
         };
     }, []);
 
@@ -258,7 +258,7 @@ const ShiftRegistrationManagement = () => {
         try {
             const values = await bulkForm.validateFields();
             const items = values.scheduleItems || [];
-            
+
             if (items.length === 0) {
                 message.error('Vui lòng thêm ít nhất một ngày để đăng ký');
                 return;
@@ -267,7 +267,7 @@ const ShiftRegistrationManagement = () => {
             // Send each item individually (date + shift_id + notes)
             let successCount = 0;
             let failedCount = 0;
-            
+
             for (const item of items) {
                 try {
                     await shiftService.createShiftRegistration({
@@ -287,7 +287,7 @@ const ShiftRegistrationManagement = () => {
             } else {
                 message.error('Đăng ký ca thất bại');
             }
-            
+
             setBulkModalVisible(false);
             setRefreshTrigger(prev => prev + 1);
         } catch (error: any) {
@@ -416,23 +416,16 @@ const ShiftRegistrationManagement = () => {
         }
     ], [configurations]);
 
-    const rowSelection = {
-        selectedRowKeys,
-        onChange: (selectedRowKeys: React.Key[], selectedRows: any[]) => {
-            setSelectedRowKeys(selectedRowKeys);
-            setSelectedRows(selectedRows);
-        },
-        getCheckboxProps: (record: any) => ({
-            disabled: record.status !== 'pending',
-            name: record.id,
-        }),
-    };
+    // Memoized selection handlers
+    const handleSelectionChange = useCallback((keys: React.Key[], rows: any[]) => {
+        setSelectedRowKeys(keys);
+        setSelectedRows(rows);
+    }, []);
 
-    // Handle date click to show details
-    const handleDateClick = (date: Date) => {
-        setSelectedDate(date);
-        setDetailModalVisible(true);
-    };
+    const getCheckboxProps = useCallback((record: any) => ({
+        disabled: record.status !== 'pending',
+        name: record.id,
+    }), []);
 
     // Create a map for quick lookup
     const registrationMap = useMemo(() => {
@@ -446,6 +439,12 @@ const ShiftRegistrationManagement = () => {
         });
         return map;
     }, [calendarRegistrations]);
+
+    // Handle date click to show details
+    const handleDateClick = (date: Date) => {
+        setSelectedDate(date);
+        setDetailModalVisible(true);
+    };
 
     return (
         <div style={{ padding: '0px' }}>
@@ -506,7 +505,9 @@ const ShiftRegistrationManagement = () => {
                         columns={columns}
                         fetchData={shiftService.getMyShiftRegistrationsPaginated}
                         rowKey="id"
-                        rowSelection={rowSelection}
+                        onSelectionChange={handleSelectionChange}
+                        getCheckboxProps={getCheckboxProps}
+                        showSelection={true}
                         defaultPageSize={10}
                         scroll={{ x: 'auto' }}
                         bordered
@@ -530,39 +531,39 @@ const ShiftRegistrationManagement = () => {
                             locale="vi-VN"
                             tileClassName={({ date, view }) => {
                                 if (view !== 'month') return '';
-                                
+
                                 const dateStr = dayjs(date).format('YYYY-MM-DD');
                                 const registrations = registrationMap.get(dateStr) || [];
-                                
+
                                 if (registrations.length === 0) return '';
-                                
+
                                 // Ưu tiên trạng thái: approved > pending > rejected
                                 const hasApproved = registrations.some(r => r.status === 'approved');
                                 const hasPending = registrations.some(r => r.status === 'pending');
                                 const hasRejected = registrations.some(r => r.status === 'rejected');
-                                
+
                                 if (hasApproved) return 'shift-status-approved';
                                 if (hasPending) return 'shift-status-pending';
                                 if (hasRejected) return 'shift-status-rejected';
-                                
+
                                 return '';
                             }}
                             tileContent={({ date, view }) => {
                                 if (view !== 'month') return null;
-                                
+
                                 const dateStr = dayjs(date).format('YYYY-MM-DD');
                                 const registrations = registrationMap.get(dateStr) || [];
-                                
+
                                 if (registrations.length === 0) return null;
-                                
+
                                 return (
                                     <div className="shift-calendar-cell-content" onClick={() => handleDateClick(date)}>
                                         {registrations.map((reg, index) => (
                                             <div key={reg.id} className="shift-calendar-cell-info">
                                                 <div style={{
                                                     fontSize: isMobile ? 9 : 11,
-                                                    color: reg.status === 'approved' ? '#52c41a' : 
-                                                           reg.status === 'pending' ? '#faad14' : '#ff4d4f',
+                                                    color: reg.status === 'approved' ? '#52c41a' :
+                                                        reg.status === 'pending' ? '#faad14' : '#ff4d4f',
                                                     fontWeight: 600,
                                                     marginBottom: 2
                                                 }}>
@@ -580,7 +581,7 @@ const ShiftRegistrationManagement = () => {
                                 );
                             }}
                         />
-                        
+
                         {/* Legend */}
                         <div style={{
                             marginTop: 16,
@@ -652,7 +653,7 @@ const ShiftRegistrationManagement = () => {
                     >
                         <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
                     </Form.Item>
-                    
+
                     <Form.Item
                         label="Ca làm việc"
                         name="shift_id"
@@ -710,7 +711,7 @@ const ShiftRegistrationManagement = () => {
                                                         if (!value) return;
                                                         const allDates = bulkForm.getFieldValue('scheduleItems') || [];
                                                         const formatted = dayjs(value).format('YYYY-MM-DD');
-                                                        const duplicates = allDates.filter((item: any, idx: number) => 
+                                                        const duplicates = allDates.filter((item: any, idx: number) =>
                                                             idx !== index && item?.date && dayjs(item.date).format('YYYY-MM-DD') === formatted
                                                         );
                                                         if (duplicates.length > 0) {
@@ -790,7 +791,7 @@ const ShiftRegistrationManagement = () => {
                 {selectedDate && (() => {
                     const dateStr = dayjs(selectedDate).format('YYYY-MM-DD');
                     const dayRegistrations = registrationMap.get(dateStr) || [];
-                    
+
                     if (dayRegistrations.length === 0) {
                         return (
                             <Empty
@@ -799,7 +800,7 @@ const ShiftRegistrationManagement = () => {
                             />
                         );
                     }
-                    
+
                     return (
                         <Space direction="vertical" style={{ width: '100%' }} size="middle">
                             {dayRegistrations.map(reg => (
@@ -813,11 +814,11 @@ const ShiftRegistrationManagement = () => {
                                         <Space>
                                             <Text strong style={{ fontSize: 16 }}>{reg.shift_name}</Text>
                                             <Tag color={
-                                                reg.status === 'approved' ? 'green' : 
-                                                reg.status === 'pending' ? 'orange' : 'red'
+                                                reg.status === 'approved' ? 'green' :
+                                                    reg.status === 'pending' ? 'orange' : 'red'
                                             }>
-                                                {reg.status === 'approved' ? 'Đã duyệt' : 
-                                                 reg.status === 'pending' ? 'Chờ duyệt' : 'Từ chối'}
+                                                {reg.status === 'approved' ? 'Đã duyệt' :
+                                                    reg.status === 'pending' ? 'Chờ duyệt' : 'Từ chối'}
                                             </Tag>
                                         </Space>
                                     </div>

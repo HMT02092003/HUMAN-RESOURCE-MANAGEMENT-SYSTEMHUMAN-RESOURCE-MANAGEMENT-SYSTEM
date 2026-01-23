@@ -1122,50 +1122,17 @@ export class ApplicationController {
    * POST /applications/:id/approve
    */
   static async approve(req, res) {
-    const startTime = Date.now();
-    console.log('\n✅ [APPROVE] Starting approval process...');
-
-    // Validate input first (fast)
-    const { id } = req.params;
-
-    const approvedBy = getUserId(req);
-    if (!approvedBy) {
-      return res.status(401).json({
-        success: false,
-        message: 'Người duyệt không được xác thực'
-      });
-    }
-
-    const applicationId = parseInt(id);
-    if (isNaN(applicationId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'ID đơn từ không hợp lệ'
-      });
-    }
-
-    console.log('📍 Request:', { applicationId, approvedBy });
-
     try {
-      // Execute with timeout protection (8 seconds max)
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('TIMEOUT: Xử lý quá lâu')), 8000);
-      });
+      const { id } = req.params;
+      const approvedBy = getUserId(req);
+      if (!approvedBy) {
+        return res.status(401).json({
+          success: false,
+          message: 'Người duyệt không được xác thực'
+        });
+      }
 
-      const approvePromise = (async () => {
-        // Check if exists
-        const app = await ApplicationModel.getApplicationById(applicationId);
-        if (!app) {
-          throw new Error('Không tìm thấy đơn từ');
-        }
-        // Approve
-        return await ApplicationModel.approveApplication(applicationId, approvedBy);
-      })();
-
-      const application = await Promise.race([approvePromise, timeoutPromise]);
-
-      const duration = Date.now() - startTime;
-      console.log(`✅ Application approved successfully in ${duration}ms`);
+      const application = await ApplicationModel.approveApplication(parseInt(id), approvedBy);
 
       return res.json({
         success: true,
@@ -1173,37 +1140,9 @@ export class ApplicationController {
         data: application,
         timestamp: dayjs().format()
       });
-
     } catch (error) {
-      const duration = Date.now() - startTime;
-      console.error(`❌ Error in approve after ${duration}ms:`, error.message);
-
-      // Handle specific errors
-      if (error.message.includes('TIMEOUT')) {
-        return res.status(504).json({
-          success: false,
-          message: 'Hệ thống xử lý quá lâu. Vui lòng thử lại.',
-          timestamp: dayjs().format()
-        });
-      }
-
-      if (error.message.includes('Không tìm thấy')) {
-        return res.status(404).json({
-          success: false,
-          message: error.message,
-          timestamp: dayjs().format()
-        });
-      }
-
-      if (error.message.includes('đã được xử lý')) {
-        return res.status(400).json({
-          success: false,
-          message: error.message,
-          timestamp: dayjs().format()
-        });
-      }
-
-      return res.status(500).json({
+      console.error(`❌ Error in approve:`, error.message);
+      return res.status(400).json({
         success: false,
         message: 'Lỗi khi duyệt đơn từ: ' + error.message,
         timestamp: dayjs().format()
@@ -1299,8 +1238,6 @@ export class ApplicationController {
         });
       }
 
-      console.log(`📝 Bulk rejecting ${ids.length} applications by user ${approvedBy}...`);
-
       const updatedCount = await ApplicationModel.query()
         .whereIn('id', ids)
         .where('status', 0) // Chỉ reject các đơn đang pending
@@ -1316,8 +1253,6 @@ export class ApplicationController {
           message: 'Không có đơn nào được từ chối. Vui lòng kiểm tra lại trạng thái đơn.'
         });
       }
-
-      console.log(`✅ Successfully rejected ${updatedCount} applications`);
 
       res.json({
         success: true,
@@ -1344,7 +1279,6 @@ export class ApplicationController {
    */
   static async reject(req, res) {
     try {
-
       const { id } = req.params;
       const approvedBy = getUserId(req);
 
@@ -1355,10 +1289,7 @@ export class ApplicationController {
         });
       }
 
-      // reject
-      const application = await ApplicationModel.rejectApplication(
-        parseInt(id), approvedBy
-      );
+      const application = await ApplicationModel.rejectApplication(parseInt(id), approvedBy);
 
       res.json({
         success: true,
@@ -1367,6 +1298,7 @@ export class ApplicationController {
         timestamp: dayjs().format()
       });
     } catch (error) {
+      console.error(`❌ Error in reject:`, error.message);
       res.status(400).json({
         success: false,
         message: error.message || 'Có lỗi xảy ra khi từ chối đơn từ',
