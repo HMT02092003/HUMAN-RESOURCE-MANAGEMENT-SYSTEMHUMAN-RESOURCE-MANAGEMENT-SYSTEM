@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation';
 
 export default function HolidayPage() {
     const [userData, setUserData] = useState<any>(null);
-    const [userPermissions, setUserPermissions] = useState<Record<string, string>>({});
+    const [userPermissions, setUserPermissions] = useState<Record<string, number>>({});
     const [loading, setLoading] = useState(true);
     const router = useRouter();
 
@@ -36,9 +36,9 @@ export default function HolidayPage() {
                 // Check if user has permission to view this page
                 // Admin (1) and HR (5) usually have settings permission
                 const permissions = user.role?.permissions || [];
-                const permissionMap: Record<string, string> = {};
+                const permissionMap: Record<string, number> = {};
                 permissions.forEach((p: any) => {
-                    permissionMap[p.key] = p.value.toString();
+                    permissionMap[p.key] = p.value;
                 });
 
                 // Check specifically for settings or root permission
