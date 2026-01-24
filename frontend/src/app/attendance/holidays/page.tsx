@@ -41,9 +41,10 @@ export default function HolidayPage() {
                     permissionMap[p.key] = p.value;
                 });
 
-                // Check specifically for settings or root permission
-                const hasAccess = permissionMap['settings'] || permissionMap['root'];
-                if (!hasAccess && user.roleId !== 1 && user.roleId !== 5) {
+                // Check specifically for holidays or timeAttendance permission
+                const hasAccess = permissionMap['holidays'] || permissionMap['timeAttendance'] || user.roleId === 1;
+
+                if (!hasAccess) {
                     message.error('Bạn không có quyền truy cập trang này');
                     router.push('/unauthorized');
                     return;

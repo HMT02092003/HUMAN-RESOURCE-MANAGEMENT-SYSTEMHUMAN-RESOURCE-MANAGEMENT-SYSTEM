@@ -251,7 +251,7 @@ const UserTable = () => {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           alt="avatar"
-          src={url.startsWith('http') ? url : (url.startsWith('/') ? url : `${process.env.NEXT_PUBLIC_API_GATEWAY_URL || ''}/${url}`)}
+          src={url.startsWith('http') ? url : (url.startsWith('/') ? url : `/${url}`)}
           style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }}
         />
       ) : '-',

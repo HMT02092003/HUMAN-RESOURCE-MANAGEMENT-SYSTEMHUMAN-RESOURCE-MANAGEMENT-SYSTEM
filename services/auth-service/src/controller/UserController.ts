@@ -13,8 +13,11 @@ import { getDecodedToken } from "@/src/utils/decode-token";
 import { getUserData, getUserId } from "@/src/utils/getUserData";
 
 import os from 'os';
+import axios from 'axios';
 import EmployeeService from "../integrations/EmployeeService";
 import AIService from "../integrations/AIService";
+
+const FRONTEND_INTERNAL_URL = 'http://frontend:3001';
 
 function getLocalIpAddress(): string {
   const interfaces = os.networkInterfaces();
@@ -46,8 +49,25 @@ const resolvePhotoAbsolutePath = (storedPath: string): string => {
   return path.join(process.cwd(), normalized);
 };
 
+// Helper function to sync file to Frontend public folder
+const syncAvatarToFrontend = async (buffer: Buffer, fileName: string) => {
+  try {
+    const formData = new FormData();
+    formData.append('file', buffer, { filename: fileName });
+    formData.append('fileName', fileName);
+
+    await axios.post(`${FRONTEND_INTERNAL_URL}/api/upload-avatar`, formData, {
+      headers: formData.getHeaders(),
+      timeout: 5000
+    });
+    console.log(`📡 [SYNC] Avatar synced to FE: ${fileName}`);
+  } catch (error: any) {
+    console.warn(`⚠️ [SYNC] Failed to sync avatar to FE: ${error.message}`);
+  }
+};
+
 // Helper function to handle file upload and save with username into local public
-const handleIdentificationPhotoUpload = (file: any, username: string): string => {
+const handleIdentificationPhotoUpload = async (file: any, username: string): Promise<string> => {
   try {
     // Tạo thư mục identificationPhoto trong local public nếu chưa tồn tại
     const uploadDir = getLocalPublicPath('identificationPhoto');
@@ -67,15 +87,24 @@ const handleIdentificationPhotoUpload = (file: any, username: string): string =>
       fs.unlinkSync(filePath);
     }
 
+    let buffer: Buffer;
+
     // Lưu file mới
     if (file.buffer) {
       // Nếu file có buffer (từ multer memory storage)
-      fs.writeFileSync(filePath, file.buffer);
+      buffer = file.buffer;
+      fs.writeFileSync(filePath, buffer);
     } else if (file.path) {
       // Nếu file được lưu tạm thời (từ multer disk storage)
+      buffer = fs.readFileSync(file.path);
       fs.copyFileSync(file.path, filePath);
       fs.unlinkSync(file.path); // Xóa file tạm
+    } else {
+      throw new Error('No file content found');
     }
+
+    // Sync to FE public folder
+    await syncAvatarToFrontend(buffer, fileName);
 
     // Trả về đường dẫn public phía FE
     return ('/identificationPhoto/' + fileName).replace(/\\/g, '/');
@@ -714,7 +743,7 @@ export const createUser = async (req: Request, res: Response) => {
       const photoFile = req.file || (req as any).files?.identificationPhoto;
       if (photoFile) {
         try {
-          params.identificationPhoto = handleIdentificationPhotoUpload(photoFile, params.username);
+          params.identificationPhoto = await handleIdentificationPhotoUpload(photoFile, params.username);
         } catch (uploadError) {
           return res.status(400).json({
             message: uploadError instanceof Error ? uploadError.message : "Lỗi khi tải ảnh",
@@ -1265,7 +1294,7 @@ export const updateUser = async (req: Request, res: Response) => {
 
           // Lưu ảnh mới với username
           console.log('💾 [UPDATE USER] Saving new photo with username:', updateData.username);
-          updateData.identificationPhoto = handleIdentificationPhotoUpload(photoFile, updateData.username);
+          updateData.identificationPhoto = await handleIdentificationPhotoUpload(photoFile, updateData.username);
           console.log('✅ [UPDATE USER] New photo saved at:', updateData.identificationPhoto);
 
           // Gọi AI service để cập nhật face embedding

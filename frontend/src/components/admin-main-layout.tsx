@@ -642,7 +642,11 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
     };
 
     return (
-        <Layout style={{ minHeight: '100vh' }}>
+        <Layout style={{ minHeight: '100vh', position: 'relative' }}>
+            <div style={{ position: 'fixed', inset: 0, zIndex: 0 }}>
+                <ThreeBackground />
+            </div>
+
             <Sider
                 width={220}
                 style={{
@@ -720,20 +724,20 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                     </div>
                 </Header>
 
-                <Content style={{ flex: 1, position: 'relative' }}>
+                <Content style={{ flex: 1, position: 'relative', zIndex: 1 }}>
                     <div
                         style={{
-                            background: "linear-gradient(to right, rgba(230, 247, 255, 0.8), rgba(106, 218, 255, 0.8))",
+                            background: "linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05))",
+                            backdropFilter: 'blur(10px)',
                             padding: isMobile ? "20px 16px" : "20px 50px",
                             height: isMobile ? "200px" : "250px",
                             marginBottom: isMobile ? "-60px" : "-80px",
                             position: 'relative',
-                            overflow: 'hidden'
+                            overflow: 'hidden',
+                            borderBottom: '1px solid rgba(255, 255, 255, 0.2)'
                         }}
                     >
-                        <div style={{ position: 'absolute', inset: 0, zIndex: -1 }}>
-                            <ThreeBackground />
-                        </div>
+
                         <div
                             style={{
                                 display: "flex",
@@ -745,7 +749,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                         >
                             <div style={{ display: "flex", flexDirection: "column" }}>
                                 <h1 style={{
-                                    color: "#91caff",
+                                    color: "#1890ff",
                                     margin: 0,
                                     fontSize: isMobile ? "24px" : "32px",
                                     fontWeight: "bold",
@@ -754,7 +758,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                                     {pageTitle}
                                 </h1>
                                 <p style={{
-                                    color: "#8c8c8c",
+                                    color: "#595959",
                                     margin: 0,
                                     fontSize: isMobile ? "14px" : "16px",
                                     marginTop: isMobile ? "8px" : "12px",
@@ -796,11 +800,14 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                         <div
                             style={{
                                 padding: isMobile ? 16 : 24,
-                                background: colorBgContainer,
+                                background: 'white',
                                 borderRadius: borderRadiusLG,
                                 margin: isMobile ? "0" : "0 24px",
                                 maxWidth: isMobile ? "100%" : "none",
-                                width: isMobile ? "100%" : "auto"
+                                width: isMobile ? "100%" : "auto",
+                                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+                                border: '1px solid rgba(255, 255, 255, 0.3)',
+                                minHeight: 'calc(100vh - 300px)'
                             }}
                         >
                             {children}
@@ -848,7 +855,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                         <Descriptions.Item label="Ảnh nhận diện" span={2}>
                             {userProfile.identificationPhoto ? (
                                 <img
-                                    src={userProfile.identificationPhoto.startsWith('http') ? userProfile.identificationPhoto : (userProfile.identificationPhoto.startsWith('/') ? userProfile.identificationPhoto : `${process.env.NEXT_PUBLIC_API_GATEWAY_URL || ''}/${userProfile.identificationPhoto}`)}
+                                    src={userProfile.identificationPhoto.startsWith('http') ? userProfile.identificationPhoto : (userProfile.identificationPhoto.startsWith('/') ? userProfile.identificationPhoto : `/${userProfile.identificationPhoto}`)}
                                     alt="Avatar"
                                     style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: '50%' }}
                                 />
