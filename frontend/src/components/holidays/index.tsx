@@ -169,16 +169,16 @@ const HolidayManagement = () => {
     ];
 
     return (
-        <div style={{ padding: '24px' }}>
-            <Card
-                title={
-                    <Space>
-                        <CalendarOutlined style={{ color: '#1890ff' }} />
-                        <span>Quản lý ngày nghỉ lễ</span>
+        <div style={{ padding: '0' }}>
+            <Row justify="space-between" align="middle" style={{ marginBottom: 24 }}>
+                <Col>
+                    <Space size="middle">
+                        <CalendarOutlined style={{ color: '#1890ff', fontSize: 24 }} />
+                        <Title level={4} style={{ margin: 0 }}>Quản lý ngày nghỉ lễ</Title>
                     </Space>
-                }
-                extra={
-                    <Space>
+                </Col>
+                <Col>
+                    <Space size="middle">
                         <DatePicker
                             picker="year"
                             value={dayjs().year(currentYear)}
@@ -193,23 +193,23 @@ const HolidayManagement = () => {
                             Thêm ngày lễ
                         </Button>
                     </Space>
-                }
-            >
-                <div style={{ marginBottom: 16 }}>
-                    <Text type="secondary">
-                        Cấu hình các ngày nghỉ lễ quốc gia và của công ty. Các ngày này sẽ được đánh dấu trên bảng chấm công
-                        và tính lương làm thêm giờ theo hệ số ngày lễ (thường là 300%).
-                    </Text>
-                </div>
+                </Col>
+            </Row>
 
-                <Table
-                    columns={columns}
-                    dataSource={holidays}
-                    rowKey="id"
-                    loading={loading}
-                    pagination={{ pageSize: 12 }}
-                />
-            </Card>
+            <div style={{ marginBottom: 24 }}>
+                <Text type="secondary">
+                    Cấu hình các ngày nghỉ lễ quốc gia và của công ty. Các ngày này sẽ được đánh dấu trên bảng chấm công
+                    và tính lương làm thêm giờ theo hệ số ngày lễ (thường là 300%).
+                </Text>
+            </div>
+
+            <Table
+                columns={columns}
+                dataSource={holidays}
+                rowKey="id"
+                loading={loading}
+                pagination={{ pageSize: 12 }}
+            />
 
             <Modal
                 title={editingHoliday ? 'Chỉnh sửa ngày lễ' : 'Thêm ngày lễ mới'}

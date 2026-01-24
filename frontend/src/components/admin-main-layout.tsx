@@ -25,6 +25,7 @@ import type { MenuProps } from 'antd';
 import { Breadcrumb, Layout, Menu, theme, Avatar, Dropdown, Modal, Button, Descriptions, message, Grid, Form, Input, Spin } from 'antd';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import TopBarProgress from 'react-topbar-progress-indicator';
 import { decodePermissions } from '@/utils/decode-permisison';
 import LoadingProgress from '@/components/LoadingProgress';
@@ -38,6 +39,10 @@ import dayjs from 'dayjs';
 import constantConfig from "@/config/constant";
 
 const { statusOptions, TypeOfStatusSalary } = constantConfig;
+
+const ThreeBackground = dynamic(() => import('@/components/ui/ThreeBackground'), {
+    ssr: false,
+});
 
 const { Header, Content, Footer, Sider } = Layout;
 
@@ -446,6 +451,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
         if (pathname.startsWith('/applications')) return ['applications_parent'];
 
         if (pathname === '/attendance/approval') return ['attendanceApproval'];
+        if (pathname === '/attendance/holidays') return ['holidays'];
         if (pathname === '/attendance') return ['attendance'];
         if (pathname.startsWith('/attendance')) return ['attendance_parent'];
 
@@ -714,15 +720,20 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                     </div>
                 </Header>
 
-                <Content style={{ flex: 1 }}>
+                <Content style={{ flex: 1, position: 'relative' }}>
                     <div
                         style={{
-                            background: "linear-gradient(to right, #e6f7ff, rgb(106, 218, 255))",
+                            background: "linear-gradient(to right, rgba(230, 247, 255, 0.8), rgba(106, 218, 255, 0.8))",
                             padding: isMobile ? "20px 16px" : "20px 50px",
                             height: isMobile ? "200px" : "250px",
                             marginBottom: isMobile ? "-60px" : "-80px",
+                            position: 'relative',
+                            overflow: 'hidden'
                         }}
                     >
+                        <div style={{ position: 'absolute', inset: 0, zIndex: -1 }}>
+                            <ThreeBackground />
+                        </div>
                         <div
                             style={{
                                 display: "flex",
@@ -784,9 +795,12 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                     <LoadingProgress>
                         <div
                             style={{
-                                padding: isMobile ? "16px 0" : "24px 0",
-                                width: "100%",
-                                minHeight: "100%"
+                                padding: isMobile ? 16 : 24,
+                                background: colorBgContainer,
+                                borderRadius: borderRadiusLG,
+                                margin: isMobile ? "0" : "0 24px",
+                                maxWidth: isMobile ? "100%" : "none",
+                                width: isMobile ? "100%" : "auto"
                             }}
                         >
                             {children}
@@ -834,7 +848,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                         <Descriptions.Item label="Ảnh nhận diện" span={2}>
                             {userProfile.identificationPhoto ? (
                                 <img
-                                    src={userProfile.identificationPhoto.startsWith('/') ? `${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${userProfile.identificationPhoto}` : userProfile.identificationPhoto}
+                                    src={userProfile.identificationPhoto.startsWith('http') ? userProfile.identificationPhoto : (userProfile.identificationPhoto.startsWith('/') ? userProfile.identificationPhoto : `${process.env.NEXT_PUBLIC_API_GATEWAY_URL || ''}/${userProfile.identificationPhoto}`)}
                                     alt="Avatar"
                                     style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: '50%' }}
                                 />
