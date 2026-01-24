@@ -2,7 +2,7 @@ name: Deploy Optimized (Auto-Clean)
 
 on:
   push:
-    branches: [ "deployment" ]
+    branches: [ "deployment_v1" ]
 
 jobs:
   deploy:
