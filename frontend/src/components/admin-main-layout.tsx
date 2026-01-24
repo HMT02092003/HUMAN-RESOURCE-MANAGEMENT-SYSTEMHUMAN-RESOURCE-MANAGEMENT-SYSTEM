@@ -163,8 +163,9 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         [
             getItem('Bảng chấm công', 'attendance', <CalendarOutlined />, 'timeAttendance'),
             getItem('Duyệt bảng chấm công', 'attendanceApproval', <CheckCircleOutlined />, 'timeAttendance', 'approve'),
+            getItem('Quản lý ngày lễ', 'holidays', <CalendarOutlined />, 'settings'), // Dùng permission settings hoặc root
         ],
-        ['timeAttendance']
+        ['timeAttendance', 'settings']
     ),
 
     // Cài đặt hệ thống
@@ -473,6 +474,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                 break;
             case 'attendanceApproval':
                 router.push('/attendance/approval');
+                break;
+            case 'holidays':
+                router.push('/attendance/holidays');
                 break;
             case 'departments':
                 router.push('/departments');

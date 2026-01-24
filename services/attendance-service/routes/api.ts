@@ -4,12 +4,12 @@
  * No authentication middleware needed at service level
  */
 import { Router, Request, Response } from 'express';
-import { 
-  getAllMonthlyAttendance, 
-  getUserMonthlyFull, 
-  recordAttendance, 
+import {
+  getAllMonthlyAttendance,
+  getUserMonthlyFull,
+  recordAttendance,
   approveMonthlyAttendance,
-  approveAllByMonth, 
+  approveAllByMonth,
   calculateAndSaveMonthly,
   bulkCalculateMonthly,
   updateForgotCheck,
@@ -22,8 +22,8 @@ import {
   updateSettings,
   updateSettingByKey,
   getSettingByKey,
-}  from '../src/controller/SettingsController.js';
-import { getHolidays } from '../src/controller/HolidayController';
+} from '../src/controller/SettingsController.js';
+import { getHolidays, createHoliday, updateHoliday, deleteHoliday } from '../src/controller/HolidayController';
 import { ShiftController } from '../src/controller/ShiftController.js';
 import { getDashboardStats } from '../src/controller/DashboardController';
 
@@ -32,7 +32,7 @@ const router = Router();
 // small helper: wrap async controller methods so their Promise<Response> doesn't confuse Express typings
 const wrap = (fn: any) => {
   return (req: Request, res: Response, next: any) => {
-    Promise.resolve(fn(req, res)).then(() => {}).catch(next);
+    Promise.resolve(fn(req, res)).then(() => { }).catch(next);
   };
 };
 
@@ -133,20 +133,20 @@ router.post('/calculate-standard-working-days', (req: Request, res: Response, ne
         res.status(400).json({ error: 'Missing month parameter (format: YYYY-MM)' });
         return;
       }
-      
+
       const [year, monthNum] = month.split('-').map(Number);
       if (!year || !monthNum || monthNum < 1 || monthNum > 12) {
         res.status(400).json({ error: 'Invalid month format. Use YYYY-MM' });
         return;
       }
-      
+
       // Import helper
       const { calculateStandardWorkingDaysInMonth } = await import('../src/services/attendance/WorkingDaysHelper');
       const standardWorkingDays = await calculateStandardWorkingDaysInMonth(month);
-      
+
       // minimal log for operations invoked by other services
       console.log('Calculated standard working days', { month, standardWorkingDays });
-      
+
       res.json({ standardWorkingDays });
     } catch (error: any) {
       console.error('❌ [attendance-service] Error calculating standard working days:', error);
@@ -274,6 +274,18 @@ router.post('/schedules/:id/reject', noCache, wrap(ShiftController.rejectSchedul
 // ===================================
 router.get('/holidays', async (req: Request, res: Response) => {
   await getHolidays(req, res);
+});
+
+router.post('/holidays', async (req: Request, res: Response) => {
+  await createHoliday(req, res);
+});
+
+router.put('/holidays/:id', async (req: Request, res: Response) => {
+  await updateHoliday(req, res);
+});
+
+router.delete('/holidays/:id', async (req: Request, res: Response) => {
+  await deleteHoliday(req, res);
 });
 
 export default router;

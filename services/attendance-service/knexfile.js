@@ -29,12 +29,12 @@ const knexConfig = {
       password: DB_PASSWORD || '123456'
     },
     pool: { min: 2, max: 10 },
-    migrations: { 
-      tableName: 'knex_migrations', 
-      directory: './databases/migrations' 
+    migrations: {
+      tableName: 'knex_migrations',
+      directory: './databases/migrations'
     },
-    seeds: { 
-      directory: './databases/seeds' 
+    seeds: {
+      directory: './databases/seeds'
     }
   },
   production: {
@@ -47,9 +47,12 @@ const knexConfig = {
       password: DB_PASSWORD || '123456'
     },
     pool: { min: 2, max: 10 },
-    migrations: { 
-      tableName: 'knex_migrations', 
-      directory: './databases/migrations' 
+    migrations: {
+      tableName: 'knex_migrations',
+      directory: './databases/migrations'
+    },
+    seeds: {
+      directory: './databases/seeds'
     }
   }
 };

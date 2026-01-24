@@ -132,10 +132,10 @@ class AttendanceService {
         params: { year, month }
       });
       console.log('📥 Raw monthly-full response:', response.data);
-      
+
       const fullData = response.data.success ? response.data.data : null;
       console.log('✅ Parsed monthly-full data:', fullData);
-      
+
       return fullData;
     } catch (error) {
       console.error('❌ Error fetching user monthly attendance full:', error);
@@ -151,7 +151,7 @@ class AttendanceService {
         params: { month }
       });
       console.log('📥 Daily attendance export response:', response.data);
-      
+
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching daily attendance for export:', error);
@@ -160,14 +160,14 @@ class AttendanceService {
   }
 
   // 📊 API: Lấy TẤT CẢ bảng duyệt theo scope (cho xuất Excel) - KHÔNG PHÂN TRANG
-  async getMonthlySummariesForExport(params?: { month?: string; [key: string]: any }): Promise<any> {
+  async getMonthlySummariesForExport(params?: { month?: string;[key: string]: any }): Promise<any> {
     try {
       console.log('📊 Calling monthly-summaries-export API:', '/api/attendance/monthly-summaries-export', params);
       const response = await apiService.get('/api/attendance/monthly-summaries-export', {
         params
       });
       console.log('📥 Monthly summaries export response:', response.data);
-      
+
       return response.data;
     } catch (error) {
       console.error('❌ Error fetching monthly summaries for export:', error);
@@ -221,7 +221,7 @@ class AttendanceService {
 
   async getAllMonthlyAttendance(params: any): Promise<{ results: any[]; total: number }> {
     try {
-      const response = await apiService.get('/api/attendance/approve-monthly', { params });  
+      const response = await apiService.get('/api/attendance/approve-monthly', { params });
       if (response.data.success) {
         return response.data.data;
       } else {
@@ -234,9 +234,9 @@ class AttendanceService {
   }
 
   // Fetch monthly summaries filtered by scope with server-side filtering/sorting
-  async getMonthlySummariesByScope(params: { 
-    permissionKey?: string; 
-    page?: number; 
+  async getMonthlySummariesByScope(params: {
+    permissionKey?: string;
+    page?: number;
     pageSize?: number;
     sort?: string;
     order?: 'asc' | 'desc';
@@ -256,8 +256,8 @@ class AttendanceService {
   // Generate payslip for a user from their profile (calls salary-service)
   async generatePayslipFromProfile(userId: number, year: number, month: number) {
     try {
-    // send empty object instead of `null` so axios doesn't serialize to the literal JSON "null"
-    const response = await apiService.post(`/api/salary/payslips/generate-from-profile/${userId}`, {}, { params: { year, month } });
+      // send empty object instead of `null` so axios doesn't serialize to the literal JSON "null"
+      const response = await apiService.post(`/api/salary/payslips/generate-from-profile/${userId}`, {}, { params: { year, month } });
       if (response.data && (response.status === 201 || response.data)) {
         return response.data;
       }
@@ -287,6 +287,49 @@ class AttendanceService {
     } catch (error: any) {
       console.error('Error fetching setting by key:', error);
       throw new Error(error.response?.data?.message || error.message || 'Lỗi khi lấy setting');
+    }
+  }
+
+  // Holiday management
+  async getHolidays(year?: number, month?: number): Promise<any[]> {
+    try {
+      const response = await apiService.get('/api/attendance/holidays', {
+        params: { year, month }
+      });
+      return response.data.data || [];
+    } catch (error: any) {
+      console.error('Error fetching holidays:', error);
+      throw new Error(error.response?.data?.message || 'Lỗi khi lấy danh sách ngày lễ');
+    }
+  }
+
+  async createHoliday(data: any): Promise<any> {
+    try {
+      const response = await apiService.post('/api/attendance/holidays', data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error creating holiday:', error);
+      throw new Error(error.response?.data?.message || 'Lỗi khi tạo ngày lễ');
+    }
+  }
+
+  async updateHoliday(id: number, data: any): Promise<any> {
+    try {
+      const response = await apiService.put(`/api/attendance/holidays/${id}`, data);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error updating holiday:', error);
+      throw new Error(error.response?.data?.message || 'Lỗi khi cập nhật ngày lễ');
+    }
+  }
+
+  async deleteHoliday(id: number): Promise<any> {
+    try {
+      const response = await apiService.delete(`/api/attendance/holidays/${id}`);
+      return response.data;
+    } catch (error: any) {
+      console.error('Error deleting holiday:', error);
+      throw new Error(error.response?.data?.message || 'Lỗi khi xóa ngày lễ');
     }
   }
 }

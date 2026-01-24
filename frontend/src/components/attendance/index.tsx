@@ -90,10 +90,10 @@ const AttendanceSimplePage = () => {
   });
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
-  
+
   // OT rate từ settings (mặc định 1.5)
   const [otRate, setOtRate] = useState<number>(1.5);
-  
+
   // Shifts và schedules cho hiển thị lịch ca
   const [shifts, setShifts] = useState<any[]>([]);
   const [schedules, setSchedules] = useState<any[]>([]);
@@ -191,7 +191,7 @@ const AttendanceSimplePage = () => {
         const currentMonth = currentDate.getMonth() + 1;
         const fromDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
         const toDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${new Date(currentYear, currentMonth, 0).getDate()}`;
-        
+
         const schedulesRes = await shiftService.getMyShiftRegistrations({
           status: 'approved',
           fromDate,
@@ -683,11 +683,23 @@ const AttendanceSimplePage = () => {
                 }
 
                 return (
-                  <div className="calendar-cell-content" onClick={() => handleDateClick(date)}>
+                  <div className="calendar-cell-content" onClick={() => handleDateClick(date)} style={{ position: 'relative' }}>
+                    {/* ✨ Icon đặc điểm nhận biết ngày nghỉ lễ */}
+                    {isHoliday && (
+                      <div style={{
+                        position: 'absolute',
+                        top: -4,
+                        right: -4,
+                        zIndex: 1
+                      }}>
+                        <TrophyOutlined style={{ color: '#faad14', fontSize: isMobile ? 12 : 14 }} title={holidayName} />
+                      </div>
+                    )}
+
                     {/* ✨ Ưu tiên hiển thị: Công tác > Nghỉ phép > Nghỉ không phép > Chấm công > Tên ngày lễ (nếu không có gì) */}
                     {dailyDetail && dailyDetail.status === 'business_trip' ? (
                       // Công tác: chữ tím (nền xanh nếu là ngày lễ)
-                <div style={{
+                      <div style={{
                         textAlign: 'center',
                         padding: '2px',
                         fontSize: isMobile ? 9 : 11,
@@ -695,10 +707,10 @@ const AttendanceSimplePage = () => {
                         fontWeight: 500
                       }}>
                         Công tác
-                </div>
+                      </div>
                     ) : dailyDetail && dailyDetail.status === 'approved_leave' ? (
                       // Nghỉ phép: chữ vàng cam (nền xanh nếu là ngày lễ)
-                <div style={{
+                      <div style={{
                         textAlign: 'center',
                         padding: '2px',
                         fontSize: isMobile ? 9 : 11,
@@ -706,10 +718,10 @@ const AttendanceSimplePage = () => {
                         fontWeight: 500
                       }}>
                         Nghỉ phép
-                </div>
+                      </div>
                     ) : dailyDetail && dailyDetail.status === 'absent' && isPastOrToday ? (
                       // Nghỉ không phép: chỉ hiển thị cho ngày <= hôm nay
-                <div style={{
+                      <div style={{
                         textAlign: 'center',
                         padding: '2px',
                         fontSize: isMobile ? 9 : 11,
@@ -717,10 +729,10 @@ const AttendanceSimplePage = () => {
                         fontWeight: 500
                       }}>
                         Nghỉ
-                </div>
+                      </div>
                     ) : attendance ? (
                       // Có chấm công: hiển thị giờ vào - giờ ra (nền xanh nếu là ngày lễ)
-                <div className="calendar-cell-info">
+                      <div className="calendar-cell-info">
                         {(attendance.effectiveOtWorkingUnit > 0 || attendance.otWorkingUnit > 0 || attendance.overtime > 0) && (
                           <div style={{ color: '#d97706', fontSize: isMobile ? 9 : 11, fontWeight: 'bold' }}>
                             +{(attendance.effectiveOtWorkingUnit || (attendance.otWorkingUnit || (attendance.overtime / 8)) * otRate).toFixed(2)}
@@ -729,10 +741,10 @@ const AttendanceSimplePage = () => {
                         <div style={{ color: hasTimePenalty ? '#ff4d4f' : '#666', fontSize: isMobile ? 9 : 11 }}>
                           {attendance.checkInTime || '--:--'} - {attendance.checkOutTime || '--:--'}
                         </div>
-                </div>
+                      </div>
                     ) : isHoliday ? (
                       // ✨ Ngày lễ không có chấm công/công tác/nghỉ phép → hiển thị tên ngày lễ
-                <div style={{
+                      <div style={{
                         textAlign: 'center',
                         padding: '2px',
                         fontSize: isMobile ? 9 : 11,
@@ -740,7 +752,7 @@ const AttendanceSimplePage = () => {
                         fontWeight: 600
                       }}>
                         {holidayName}
-                </div>
+                      </div>
                     ) : null}
                   </div>
                 );
@@ -835,7 +847,7 @@ const AttendanceSimplePage = () => {
                       marginRight: 8,
                       position: 'relative'
                     }}>
-                <Text style={{
+                      <Text style={{
                         position: 'absolute',
                         top: '50%',
                         left: '50%',
@@ -869,9 +881,9 @@ const AttendanceSimplePage = () => {
         {/* Stats Section - 30% */}
         <Col xs={24} lg={7} style={{ height: '100vh', overflowY: 'auto' }}>
           {/* New redesigned MonthlyStatsCard component */}
-          <MonthlyStatsCard 
-            monthlyStats={monthlyStats} 
-            otRate={otRate} 
+          <MonthlyStatsCard
+            monthlyStats={monthlyStats}
+            otRate={otRate}
             isMobile={isMobile}
             defaultShift={defaultShift}
           />
@@ -927,474 +939,474 @@ const AttendanceSimplePage = () => {
                   <div style={{
                     padding: 16,
                     background: '#fffbe6',
-                          borderRadius: 8,
-                          border: '1px solid #ffe58f',
-                          marginBottom: 16
-                        }}>
-                          <div style={{ textAlign: 'center', marginBottom: 12 }}>
-                            <CheckCircleOutlined style={{ fontSize: 32, color: '#faad14' }} />
-                          </div>
-                          <Title level={5} style={{ textAlign: 'center', color: '#faad14', margin: 0 }}>
-                            Nghỉ phép
-                          </Title>
-                          <Paragraph style={{ textAlign: 'center', margin: '8px 0 0 0', color: '#8c8c8c' }}>
-                            {dailyDetail.statusText || 'Nghỉ phép'}
-                          </Paragraph>
-
-                          {/* Hiển thị loại nghỉ phép */}
-                          {(() => {
-                            // Prefer applicationCategory from leave object data when present
-                            const leaveObj = dailyDetail.leaveData?.leave ?? (dailyDetail.leaveData?.leaveApplications && dailyDetail.leaveData.leaveApplications[0]);
-                            const appCategory = leaveObj?.data?.applicationCategory ?? leaveObj?.data?.application_category ?? undefined;
-                            // Map applicationCategory to leaveConfig key: assume 'regular' means unpaid else 'leave' as paid
-                            const cfgKey = appCategory === 'regular' ? 'regular' : (appCategory === 'paid' ? 'leave' : (dailyDetail.leaveData?.leaveType || 'leave'));
-                            const effectiveLeaveConfig = constants.LeaveTypeConfig[cfgKey as keyof typeof constants.LeaveTypeConfig] ?? leaveConfig;
-                            return (
-                              <div style={{
-                                marginTop: 12,
-                                padding: 12,
-                                background: effectiveLeaveConfig.hasSalary ? '#f6ffed' : '#fff2e8',
-                                borderRadius: 6,
-                                border: effectiveLeaveConfig.hasSalary ? '1px solid #b7eb8f' : '1px solid #ffd591'
-                              }}>
-                                <div style={{ textAlign: 'center' }}>
-                                  <Text strong style={{
-                                    fontSize: 14,
-                                    color: effectiveLeaveConfig.hasSalary ? '#52c41a' : '#fa8c16'
-                                  }}>
-                                    {effectiveLeaveConfig.label}
-                                  </Text>
-                                </div>
-                                <div style={{ textAlign: 'center', marginTop: 8 }}>
-                                  <Tag color={effectiveLeaveConfig.hasSalary ? 'success' : 'warning'} style={{ fontSize: 12 }}>
-                                    {effectiveLeaveConfig.hasSalary ? '✓ Có lương' : '✗ Không lương'}
-                                  </Tag>
-                                </div>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                </div>
-                    );
-                  }
-
-                  // Case 2: Công tác
-                  if (dailyDetail.status === 'business_trip' && dailyDetail.businessTripData) {
-                    return (
-                <div>
-                        <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#f9f0ff', borderRadius: 8 }}>
-                          <CalendarOutlined style={{ fontSize: 18, color: '#722ed1', marginRight: 8 }} />
-                          <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline', color: '#722ed1' }}>
-                            {formatDate(dateStr)}
-                          </Title>
-                        </div>
-
-                        <div style={{
-                          padding: 16,
-                          background: '#f9f0ff',
-                          borderRadius: 8,
-                          border: '1px solid #d3adf7',
-                          marginBottom: 16
-                        }}>
-                          <div style={{ textAlign: 'center', marginBottom: 12 }}>
-                            <CalendarOutlined style={{ fontSize: 32, color: '#722ed1' }} />
-                          </div>
-                          <Title level={5} style={{ textAlign: 'center', color: '#722ed1', margin: 0 }}>
-                            Công tác
-                          </Title>
-
-                          {/* Địa điểm công tác, lý do và chi tiết đơn (nếu có) */}
-                          {(() => {
-                            const tripObj = dailyDetail.businessTripData?.businessTrip ?? (dailyDetail.businessTripData?.businessTripApplications && dailyDetail.businessTripData.businessTripApplications[0]);
-                            const tripDestination = dailyDetail.businessTripData?.businessTripDestination ?? tripObj?.data?.destination ?? tripObj?.data?.location ?? undefined;
-                            const tripReason = dailyDetail.businessTripData?.businessTripInfo ?? tripObj?.data?.reason ?? tripObj?.data?.title ?? undefined;
-
-                            return (
-                              <>
-                                {tripDestination && (
-                                  <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 6 }}>
-                                    <Text strong style={{ display: 'block', marginBottom: 8, color: '#722ed1' }}>
-                                      <EnvironmentOutlined style={{ marginRight: 6 }} />
-                                      Địa điểm:
-                                    </Text>
-                                    <Text style={{ fontSize: 14, color: '#262626' }}>{tripDestination}</Text>
-                                  </div>
-                                )}
-
-                                {tripReason && (
-                                  <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 6 }}>
-                                    <Text strong style={{ display: 'block', marginBottom: 8, color: '#722ed1' }}>
-                                      <FileTextOutlined style={{ marginRight: 6 }} />
-                                      Lý do:
-                                    </Text>
-                                    <Text style={{ fontSize: 13, color: '#595959' }}>{tripReason}</Text>
-                                  </div>
-                                )}
-
-                                {tripObj && (
-                                  <div style={{ marginTop: 12, padding: 12, background: '#ffffff', borderRadius: 6, border: '1px dashed #f0f0f0' }}>
-                                    <Text strong style={{ display: 'block', marginBottom: 8, color: '#404040' }}>
-                                      <InfoCircleOutlined style={{ marginRight: 6 }} />
-                                      Chi tiết đơn công tác
-                                    </Text>
-                                    <div style={{ fontSize: 13, color: '#595959', marginBottom: 8 }}>
-                                      <div><strong>ID:</strong> {tripObj.id}</div>
-                                      <div><strong>Loại:</strong> {tripObj.type}</div>
-                                      <div>
-                                        <strong>Thời gian:</strong>{' '}
-                                        {tripObj.data?.startDate ? dayjs(tripObj.data.startDate).format('YYYY-MM-DD') : ''}
-                                        {tripObj.data?.endDate ? ` → ${dayjs(tripObj.data.endDate).format('YYYY-MM-DD')}` : ''}
-                                      </div>
-                                      {tripObj.data?.destination && <div><strong>Địa điểm:</strong> {tripObj.data.destination}</div>}
-                                      {tripObj.approvedBy !== undefined && <div><strong>Duyệt bởi:</strong> {tripObj.approvedBy}</div>}
-                                      {tripObj.approvedDate && <div><strong>Ngày duyệt:</strong> {dayjs(tripObj.approvedDate).format('YYYY-MM-DD')}</div>}
-                                    </div>
-
-                                    {/* Pretty-print full object for debugging / full detail */}
-                                    <div style={{ marginTop: 8, background: '#fafafa', padding: 12, borderRadius: 6, overflow: 'auto', maxHeight: 320 }}>
-                                      <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, margin: 0 }}>
-{JSON.stringify(tripObj, null, 2)}
-                                      </pre>
-                                    </div>
-                                  </div>
-                                )}
-                              </>
-                            );
-                          })()}
-
-                          <div style={{ marginTop: 16, padding: 12, background: '#f6ffed', borderRadius: 6, border: '1px solid #b7eb8f' }}>
-                            <Text style={{ fontSize: 12, color: '#52c41a', display: 'block', textAlign: 'center' }}>
-                              <CheckCircleOutlined style={{ marginRight: 6 }} />
-                              Ngày công tác được tính công
-                            </Text>
-                          </div>
-                        </div>
-                </div>
-                    );
-                  }
-
-                  // Case 3: Nghỉ không phép
-                  if (dailyDetail.status === 'absent') {
-                    return (
-                <div>
-                        <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#fff1f0', borderRadius: 8 }}>
-                          <CloseCircleOutlined style={{ fontSize: 18, color: '#ff4d4f', marginRight: 8 }} />
-                          <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline', color: '#ff4d4f' }}>
-                            {formatDate(dateStr)}
-                          </Title>
-                        </div>
-
-                        <div style={{
-                          padding: 16,
-                          background: '#fff1f0',
-                          borderRadius: 8,
-                          border: '1px solid #ffccc7',
-                          marginBottom: 16
-                        }}>
-                          <div style={{ textAlign: 'center', marginBottom: 12 }}>
-                            <CloseCircleOutlined style={{ fontSize: 32, color: '#ff4d4f' }} />
-                          </div>
-                          <Title level={5} style={{ textAlign: 'center', color: '#ff4d4f', margin: 0 }}>
-                            Vắng mặt
-                          </Title>
-                          <Paragraph style={{ textAlign: 'center', margin: '8px 0 0 0', color: '#8c8c8c' }}>
-                            {dailyDetail.statusText || 'Nghỉ không phép'}
-                          </Paragraph>
-
-                          {dailyDetail.unauthorizedAbsencePenalty > 0 && (
-                            <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 6, border: '1px solid #ffa39e' }}>
-                              <Text strong style={{ display: 'block', marginBottom: 8, color: '#ff4d4f' }}>
-                                <ExclamationCircleOutlined style={{ marginRight: 6 }} />
-                                Phạt:
-                              </Text>
-                              <Text style={{ fontSize: 16, color: '#ff4d4f', fontWeight: 600 }}>
-                                {dailyDetail.unauthorizedAbsencePenalty.toLocaleString('vi-VN')}đ
-                              </Text>
-                            </div>
-                          )}
-                        </div>
-                </div>
-                    );
-                  }
-
-                  // Case 4: Weekend
-                  if (dailyDetail.status === 'weekend') {
-                    return (
-                <div>
-                        <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#fafafa', borderRadius: 8 }}>
-                          <CalendarOutlined style={{ fontSize: 18, color: '#8c8c8c', marginRight: 8 }} />
-                          <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline', color: '#8c8c8c' }}>
-                            {formatDate(dateStr)}
-                          </Title>
-                        </div>
-
-                        <div style={{
-                          padding: 16,
-                          background: '#fafafa',
-                          borderRadius: 8,
-                          border: '1px solid #d9d9d9',
-                          marginBottom: 16
-                        }}>
-                          <div style={{ textAlign: 'center', marginBottom: 12 }}>
-                            <CalendarOutlined style={{ fontSize: 32, color: '#8c8c8c' }} />
-                          </div>
-                          <Title level={5} style={{ textAlign: 'center', color: '#8c8c8c', margin: 0 }}>
-                            Cuối tuần
-                          </Title>
-                          <Paragraph style={{ textAlign: 'center', margin: '8px 0 0 0', color: '#8c8c8c' }}>
-                            {dailyDetail.dayName}
-                          </Paragraph>
-
-                          {/* Nếu có chấm công vào cuối tuần thì hiển thị */}
-                          {selectedDateData && (
-                            <div style={{ marginTop: 16, padding: 12, background: '#e6f7ff', borderRadius: 6, border: '1px solid #91d5ff' }}>
-                              <Text strong style={{ display: 'block', marginBottom: 8, color: '#1890ff', textAlign: 'center' }}>
-                                <CheckCircleOutlined style={{ marginRight: 6 }} />
-                                Có chấm công
-                              </Text>
-                              <div style={{ textAlign: 'center' }}>
-                                <Text style={{ fontSize: 14 }}>
-                                  {selectedDateData.checkInTime} - {selectedDateData.checkOutTime}
-                                </Text>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                </div>
-                    );
-                  }
-                }
-
-                // Case 5: Có chấm công bình thường (working day)
-                return selectedDateData ? (
-                  <div>
-                    <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#fafafa', borderRadius: 8 }}>
-                <CalendarOutlined style={{ fontSize: 18, color: '#1890ff', marginRight: 8 }} />
-                <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline' }}>{formatDate(selectedDateData.date)}</Title>
+                    borderRadius: 8,
+                    border: '1px solid #ffe58f',
+                    marginBottom: 16
+                  }}>
+                    <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                      <CheckCircleOutlined style={{ fontSize: 32, color: '#faad14' }} />
                     </div>
+                    <Title level={5} style={{ textAlign: 'center', color: '#faad14', margin: 0 }}>
+                      Nghỉ phép
+                    </Title>
+                    <Paragraph style={{ textAlign: 'center', margin: '8px 0 0 0', color: '#8c8c8c' }}>
+                      {dailyDetail.statusText || 'Nghỉ phép'}
+                    </Paragraph>
 
-                    {/* Ca làm việc section */}
-                    <div style={{ marginBottom: 16, padding: 12, background: shiftForDate ? '#e6f7ff' : '#f5f5f5', borderRadius: 8, border: shiftForDate ? '1px solid #91d5ff' : '1px solid #d9d9d9' }}>
-                      <Row gutter={[12, 8]} align="middle">
-                        <Col span={24}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <ScheduleOutlined style={{ marginRight: 8, color: shiftForDate ? '#1890ff' : '#8c8c8c', fontSize: 16 }} />
-                            <Text strong style={{ fontSize: isMobile ? 13 : 14, color: shiftForDate ? '#1890ff' : '#8c8c8c' }}>
-                              Ca làm việc: {shiftForDate?.name || 'Hành chính'}
-                            </Text>
-                          </div>
-                          {shiftForDate && (
-                            <div style={{ textAlign: 'center', marginTop: 4 }}>
-                              <Text style={{ fontSize: 12, color: '#595959' }}>
-                                ({shiftForDate.start_time} - {shiftForDate.end_time})
-                              </Text>
-                            </div>
-                          )}
-                        </Col>
-                      </Row>
-                    </div>
-
-                    {/* Thời gian section */}
-                    <div style={{ marginBottom: 16 }}>
-                <Row gutter={[12, 8]} style={{ marginBottom: 8 }}>
-                        <Col span={24}>
-                          <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#595959' }}>
-                            <ClockCircleOutlined style={{ marginRight: 6 }} />
-                            Thời gian làm việc
-                          </Text>
-                        </Col>
-                </Row>
-                <Row gutter={[12, 8]}>
-                        <Col xs={12} sm={12}>
-                          <div style={{ textAlign: 'center', padding: 8, background: '#f6ffed', borderRadius: 6, border: '1px solid #b7eb8f' }}>
-                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#52c41a', display: 'block' }}>Vào làm</Text>
-                            <Text strong style={{ fontSize: isMobile ? 14 : 16, color: '#52c41a' }}>
-                              {selectedDateData.checkInTime || '--:--'}
-                            </Text>
-                          </div>
-                        </Col>
-                        <Col xs={12} sm={12}>
-                          <div style={{ textAlign: 'center', padding: 8, background: '#fff7e6', borderRadius: 6, border: '1px solid #ffd591' }}>
-                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#d48806', display: 'block' }}>Tan làm</Text>
-                            <Text strong style={{ fontSize: isMobile ? 14 : 16, color: '#d48806' }}>
-                              {selectedDateData.checkOutTime || '--:--'}
-                            </Text>
-                          </div>
-                        </Col>
-                </Row>
-                    </div>
-
-                    {/* Thống kê section */}
-                    <div style={{ marginBottom: 16 }}>
-                <Row gutter={[12, 8]} style={{ marginBottom: 8 }}>
-                        <Col span={24}>
-                          <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#595959' }}>
-                            <FieldTimeOutlined style={{ marginRight: 6 }} />
-                            Thống kê
-                          </Text>
-                        </Col>
-                </Row>
-                <Row gutter={[8, 8]}>
-                        <Col xs={12} sm={12}>
-                          <div style={{ textAlign: 'center', padding: 8, background: '#e6f7ff', borderRadius: 6, border: '1px solid #91d5ff' }}>
-                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#1890ff', display: 'block' }}>Tổng giờ</Text>
-                            <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#1890ff' }}>
-                              {selectedDateData.totalHours}h
-                            </Text>
-                          </div>
-                        </Col>
-                        <Col xs={12} sm={12}>
-                          <div style={{ textAlign: 'center', padding: 8, background: '#f9f0ff', borderRadius: 6, border: '1px solid #d3adf7' }}>
-                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#722ed1', display: 'block' }}>Làm thêm</Text>
-                            <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#722ed1' }}>
-                              {selectedDateData.overtime}h
-                            </Text>
-                          </div>
-                        </Col>
-                        <Col xs={12} sm={12}>
-                          <div style={{ textAlign: 'center', padding: 8, background: '#fff1f0', borderRadius: 6, border: '1px solid #ffccc7' }}>
-                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#ff4d4f', display: 'block' }}>Muộn</Text>
-                            <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#ff4d4f' }}>
-                              {selectedDateData.lateMinutes}p
-                            </Text>
-                          </div>
-                        </Col>
-                        <Col xs={12} sm={12}>
-                          <div style={{ textAlign: 'center', padding: 8, background: '#fff2e8', borderRadius: 6, border: '1px solid #ffd591' }}>
-                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#fa8c16', display: 'block' }}>Sớm</Text>
-                            <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#fa8c16' }}>
-                              {selectedDateData.earlyDepartureMinutes}p
-                            </Text>
-                          </div>
-                        </Col>
-                        {/* ✨ NEW: Working Units */}
-                        <Col xs={12} sm={12}>
-                          <div style={{ textAlign: 'center', padding: 8, background: '#fff7e6', borderRadius: 6, border: '1px solid #ffd591' }}>
-                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#d48806', display: 'block' }}>Số công</Text>
-                            <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#d48806' }}>
-                              {((selectedDateData as any).dailyWorkingUnit || (selectedDateData as any).totalWorkingUnit || 0).toFixed(2)}
-                            </Text>
-                          </div>
-                        </Col>
-                        <Col xs={12} sm={12}>
-                          <div style={{ textAlign: 'center', padding: 8, background: '#fff1f0', borderRadius: 6, border: '1px solid #ffccc7' }}>
-                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#cf1322', display: 'block' }}>Công OT (đã nhân hệ số)</Text>
-                            <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#cf1322' }}>
-                              {((selectedDateData as any).effectiveOtWorkingUnit || (selectedDateData as any).otWorkingUnit || 0).toFixed(2)}
-                            </Text>
-                          </div>
-                        </Col>
-                </Row>
-                    </div>
-
-                    {selectedDateData.overtime > 0 ? (
-                <div style={{ marginBottom: 16 }}>
-                        <Row gutter={[12, 8]} style={{ marginBottom: 8 }}>
-                          <Col span={24}>
-                            <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#595959' }}>
-                              <InfoCircleOutlined style={{ marginRight: 6 }} />
-                              Thông tin tăng ca
-                            </Text>
-                          </Col>
-                        </Row>
-                        <Row gutter={[8, 8]}>
-                          <Col xs={12} sm={12}>
-                            <div style={{ textAlign: 'center', padding: 8, background: '#f9f0ff', borderRadius: 6, border: '1px solid #d3adf7' }}>
-                              <Text style={{ fontSize: isMobile ? 10 : 11, color: '#722ed1', display: 'block' }}>Thời gian tăng ca</Text>
-                              <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#722ed1' }}>
-                                {selectedDateData.overtime || 0} h
-                              </Text>
-                            </div>
-                          </Col>
-                          <Col xs={12} sm={12}>
-                            <div style={{ textAlign: 'center', padding: 8, background: '#e6fffb', borderRadius: 6, border: '1px solid #87e8de' }}>
-                              <Text style={{ fontSize: isMobile ? 10 : 11, color: '#13c2c2', display: 'block' }}>Lương tăng ca</Text>
-                              <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#13c2c2' }}>
-                                {formatVND(selectedDateData.otSalary || 0)}đ
-                              </Text>
-                            </div>
-                          </Col>
-                        </Row>
-                </div>
-                    ) : null}
-
-                    {/* Thông tin tiền phạt cho ngày này */}
-                    {(selectedDateData.lateArrivalPenalty > 0 || selectedDateData.earlyLeavePenalty > 0) && (
-                <div style={{
-                        background: '#fff2f0',
-                        padding: isMobile ? 12 : 16,
-                        borderRadius: 8,
-                        border: '1px solid #ffccc7',
-                        marginBottom: 16
-                      }}>
-                        <Row style={{ marginBottom: 12 }}>
-                          <Col span={24} style={{ textAlign: 'center' }}>
-                            <DollarOutlined style={{ fontSize: isMobile ? 16 : 18, color: '#ff4d4f', marginRight: 8 }} />
-                            <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#ff4d4f' }}>Tiền phạt ngày này</Text>
-                          </Col>
-                        </Row>
-                        <Row gutter={[8, 8]}>
-                          {selectedDateData.lateArrivalPenalty > 0 && (
-                            <Col xs={24} sm={12}>
-                              <div style={{
-                                textAlign: 'center',
-                                padding: isMobile ? 8 : 12,
-                                background: 'white',
-                                borderRadius: 6,
-                                border: '1px solid #ffccc7'
-                              }}>
-                                <WarningOutlined style={{ fontSize: isMobile ? 14 : 16, color: '#ff4d4f', marginBottom: 4 }} />
-                                <div>
-                                  <Text style={{ fontSize: isMobile ? 10 : 11, color: '#8c8c8c', display: 'block' }}>Phạt đi muộn</Text>
-                                  <Text strong style={{ color: '#ff4d4f', fontSize: isMobile ? 12 : 14 }}>
-                                    {selectedDateData.lateArrivalPenalty.toLocaleString('vi-VN')}đ
-                                  </Text>
-                                </div>
-                              </div>
-                            </Col>
-                          )}
-                          {selectedDateData.earlyLeavePenalty > 0 && (
-                            <Col xs={24} sm={12}>
-                              <div style={{
-                                textAlign: 'center',
-                                padding: isMobile ? 8 : 12,
-                                background: 'white',
-                                borderRadius: 6,
-                                border: '1px solid #ffccc7'
-                              }}>
-                                <ExclamationCircleOutlined style={{ fontSize: isMobile ? 14 : 16, color: '#fa8c16', marginBottom: 4 }} />
-                                <div>
-                                  <Text style={{ fontSize: isMobile ? 10 : 11, color: '#8c8c8c', display: 'block' }}>Phạt về sớm</Text>
-                                  <Text strong style={{ color: '#fa8c16', fontSize: isMobile ? 12 : 14 }}>
-                                    {selectedDateData.earlyLeavePenalty.toLocaleString('vi-VN')}đ
-                                  </Text>
-                                </div>
-                              </div>
-                            </Col>
-                          )}
-                        </Row>
+                    {/* Hiển thị loại nghỉ phép */}
+                    {(() => {
+                      // Prefer applicationCategory from leave object data when present
+                      const leaveObj = dailyDetail.leaveData?.leave ?? (dailyDetail.leaveData?.leaveApplications && dailyDetail.leaveData.leaveApplications[0]);
+                      const appCategory = leaveObj?.data?.applicationCategory ?? leaveObj?.data?.application_category ?? undefined;
+                      // Map applicationCategory to leaveConfig key: assume 'regular' means unpaid else 'leave' as paid
+                      const cfgKey = appCategory === 'regular' ? 'regular' : (appCategory === 'paid' ? 'leave' : (dailyDetail.leaveData?.leaveType || 'leave'));
+                      const effectiveLeaveConfig = constants.LeaveTypeConfig[cfgKey as keyof typeof constants.LeaveTypeConfig] ?? leaveConfig;
+                      return (
                         <div style={{
                           marginTop: 12,
-                          paddingTop: 12,
-                          borderTop: '1px solid #ffccc7',
-                          textAlign: 'center'
+                          padding: 12,
+                          background: effectiveLeaveConfig.hasSalary ? '#f6ffed' : '#fff2e8',
+                          borderRadius: 6,
+                          border: effectiveLeaveConfig.hasSalary ? '1px solid #b7eb8f' : '1px solid #ffd591'
                         }}>
-                          <Text style={{ fontSize: isMobile ? 11 : 12, color: '#8c8c8c' }}>Tổng cộng</Text>
+                          <div style={{ textAlign: 'center' }}>
+                            <Text strong style={{
+                              fontSize: 14,
+                              color: effectiveLeaveConfig.hasSalary ? '#52c41a' : '#fa8c16'
+                            }}>
+                              {effectiveLeaveConfig.label}
+                            </Text>
+                          </div>
+                          <div style={{ textAlign: 'center', marginTop: 8 }}>
+                            <Tag color={effectiveLeaveConfig.hasSalary ? 'success' : 'warning'} style={{ fontSize: 12 }}>
+                              {effectiveLeaveConfig.hasSalary ? '✓ Có lương' : '✗ Không lương'}
+                            </Tag>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              );
+            }
+
+            // Case 2: Công tác
+            if (dailyDetail.status === 'business_trip' && dailyDetail.businessTripData) {
+              return (
+                <div>
+                  <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#f9f0ff', borderRadius: 8 }}>
+                    <CalendarOutlined style={{ fontSize: 18, color: '#722ed1', marginRight: 8 }} />
+                    <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline', color: '#722ed1' }}>
+                      {formatDate(dateStr)}
+                    </Title>
+                  </div>
+
+                  <div style={{
+                    padding: 16,
+                    background: '#f9f0ff',
+                    borderRadius: 8,
+                    border: '1px solid #d3adf7',
+                    marginBottom: 16
+                  }}>
+                    <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                      <CalendarOutlined style={{ fontSize: 32, color: '#722ed1' }} />
+                    </div>
+                    <Title level={5} style={{ textAlign: 'center', color: '#722ed1', margin: 0 }}>
+                      Công tác
+                    </Title>
+
+                    {/* Địa điểm công tác, lý do và chi tiết đơn (nếu có) */}
+                    {(() => {
+                      const tripObj = dailyDetail.businessTripData?.businessTrip ?? (dailyDetail.businessTripData?.businessTripApplications && dailyDetail.businessTripData.businessTripApplications[0]);
+                      const tripDestination = dailyDetail.businessTripData?.businessTripDestination ?? tripObj?.data?.destination ?? tripObj?.data?.location ?? undefined;
+                      const tripReason = dailyDetail.businessTripData?.businessTripInfo ?? tripObj?.data?.reason ?? tripObj?.data?.title ?? undefined;
+
+                      return (
+                        <>
+                          {tripDestination && (
+                            <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 6 }}>
+                              <Text strong style={{ display: 'block', marginBottom: 8, color: '#722ed1' }}>
+                                <EnvironmentOutlined style={{ marginRight: 6 }} />
+                                Địa điểm:
+                              </Text>
+                              <Text style={{ fontSize: 14, color: '#262626' }}>{tripDestination}</Text>
+                            </div>
+                          )}
+
+                          {tripReason && (
+                            <div style={{ marginTop: 12, padding: 12, background: '#fff', borderRadius: 6 }}>
+                              <Text strong style={{ display: 'block', marginBottom: 8, color: '#722ed1' }}>
+                                <FileTextOutlined style={{ marginRight: 6 }} />
+                                Lý do:
+                              </Text>
+                              <Text style={{ fontSize: 13, color: '#595959' }}>{tripReason}</Text>
+                            </div>
+                          )}
+
+                          {tripObj && (
+                            <div style={{ marginTop: 12, padding: 12, background: '#ffffff', borderRadius: 6, border: '1px dashed #f0f0f0' }}>
+                              <Text strong style={{ display: 'block', marginBottom: 8, color: '#404040' }}>
+                                <InfoCircleOutlined style={{ marginRight: 6 }} />
+                                Chi tiết đơn công tác
+                              </Text>
+                              <div style={{ fontSize: 13, color: '#595959', marginBottom: 8 }}>
+                                <div><strong>ID:</strong> {tripObj.id}</div>
+                                <div><strong>Loại:</strong> {tripObj.type}</div>
+                                <div>
+                                  <strong>Thời gian:</strong>{' '}
+                                  {tripObj.data?.startDate ? dayjs(tripObj.data.startDate).format('YYYY-MM-DD') : ''}
+                                  {tripObj.data?.endDate ? ` → ${dayjs(tripObj.data.endDate).format('YYYY-MM-DD')}` : ''}
+                                </div>
+                                {tripObj.data?.destination && <div><strong>Địa điểm:</strong> {tripObj.data.destination}</div>}
+                                {tripObj.approvedBy !== undefined && <div><strong>Duyệt bởi:</strong> {tripObj.approvedBy}</div>}
+                                {tripObj.approvedDate && <div><strong>Ngày duyệt:</strong> {dayjs(tripObj.approvedDate).format('YYYY-MM-DD')}</div>}
+                              </div>
+
+                              {/* Pretty-print full object for debugging / full detail */}
+                              <div style={{ marginTop: 8, background: '#fafafa', padding: 12, borderRadius: 6, overflow: 'auto', maxHeight: 320 }}>
+                                <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, margin: 0 }}>
+                                  {JSON.stringify(tripObj, null, 2)}
+                                </pre>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+
+                    <div style={{ marginTop: 16, padding: 12, background: '#f6ffed', borderRadius: 6, border: '1px solid #b7eb8f' }}>
+                      <Text style={{ fontSize: 12, color: '#52c41a', display: 'block', textAlign: 'center' }}>
+                        <CheckCircleOutlined style={{ marginRight: 6 }} />
+                        Ngày công tác được tính công
+                      </Text>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+
+            // Case 3: Nghỉ không phép
+            if (dailyDetail.status === 'absent') {
+              return (
+                <div>
+                  <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#fff1f0', borderRadius: 8 }}>
+                    <CloseCircleOutlined style={{ fontSize: 18, color: '#ff4d4f', marginRight: 8 }} />
+                    <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline', color: '#ff4d4f' }}>
+                      {formatDate(dateStr)}
+                    </Title>
+                  </div>
+
+                  <div style={{
+                    padding: 16,
+                    background: '#fff1f0',
+                    borderRadius: 8,
+                    border: '1px solid #ffccc7',
+                    marginBottom: 16
+                  }}>
+                    <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                      <CloseCircleOutlined style={{ fontSize: 32, color: '#ff4d4f' }} />
+                    </div>
+                    <Title level={5} style={{ textAlign: 'center', color: '#ff4d4f', margin: 0 }}>
+                      Vắng mặt
+                    </Title>
+                    <Paragraph style={{ textAlign: 'center', margin: '8px 0 0 0', color: '#8c8c8c' }}>
+                      {dailyDetail.statusText || 'Nghỉ không phép'}
+                    </Paragraph>
+
+                    {dailyDetail.unauthorizedAbsencePenalty > 0 && (
+                      <div style={{ marginTop: 16, padding: 12, background: '#fff', borderRadius: 6, border: '1px solid #ffa39e' }}>
+                        <Text strong style={{ display: 'block', marginBottom: 8, color: '#ff4d4f' }}>
+                          <ExclamationCircleOutlined style={{ marginRight: 6 }} />
+                          Phạt:
+                        </Text>
+                        <Text style={{ fontSize: 16, color: '#ff4d4f', fontWeight: 600 }}>
+                          {dailyDetail.unauthorizedAbsencePenalty.toLocaleString('vi-VN')}đ
+                        </Text>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
+            // Case 4: Weekend
+            if (dailyDetail.status === 'weekend') {
+              return (
+                <div>
+                  <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#fafafa', borderRadius: 8 }}>
+                    <CalendarOutlined style={{ fontSize: 18, color: '#8c8c8c', marginRight: 8 }} />
+                    <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline', color: '#8c8c8c' }}>
+                      {formatDate(dateStr)}
+                    </Title>
+                  </div>
+
+                  <div style={{
+                    padding: 16,
+                    background: '#fafafa',
+                    borderRadius: 8,
+                    border: '1px solid #d9d9d9',
+                    marginBottom: 16
+                  }}>
+                    <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                      <CalendarOutlined style={{ fontSize: 32, color: '#8c8c8c' }} />
+                    </div>
+                    <Title level={5} style={{ textAlign: 'center', color: '#8c8c8c', margin: 0 }}>
+                      Cuối tuần
+                    </Title>
+                    <Paragraph style={{ textAlign: 'center', margin: '8px 0 0 0', color: '#8c8c8c' }}>
+                      {dailyDetail.dayName}
+                    </Paragraph>
+
+                    {/* Nếu có chấm công vào cuối tuần thì hiển thị */}
+                    {selectedDateData && (
+                      <div style={{ marginTop: 16, padding: 12, background: '#e6f7ff', borderRadius: 6, border: '1px solid #91d5ff' }}>
+                        <Text strong style={{ display: 'block', marginBottom: 8, color: '#1890ff', textAlign: 'center' }}>
+                          <CheckCircleOutlined style={{ marginRight: 6 }} />
+                          Có chấm công
+                        </Text>
+                        <div style={{ textAlign: 'center' }}>
+                          <Text style={{ fontSize: 14 }}>
+                            {selectedDateData.checkInTime} - {selectedDateData.checkOutTime}
+                          </Text>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+          }
+
+          // Case 5: Có chấm công bình thường (working day)
+          return selectedDateData ? (
+            <div>
+              <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#fafafa', borderRadius: 8 }}>
+                <CalendarOutlined style={{ fontSize: 18, color: '#1890ff', marginRight: 8 }} />
+                <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline' }}>{formatDate(selectedDateData.date)}</Title>
+              </div>
+
+              {/* Ca làm việc section */}
+              <div style={{ marginBottom: 16, padding: 12, background: shiftForDate ? '#e6f7ff' : '#f5f5f5', borderRadius: 8, border: shiftForDate ? '1px solid #91d5ff' : '1px solid #d9d9d9' }}>
+                <Row gutter={[12, 8]} align="middle">
+                  <Col span={24}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <ScheduleOutlined style={{ marginRight: 8, color: shiftForDate ? '#1890ff' : '#8c8c8c', fontSize: 16 }} />
+                      <Text strong style={{ fontSize: isMobile ? 13 : 14, color: shiftForDate ? '#1890ff' : '#8c8c8c' }}>
+                        Ca làm việc: {shiftForDate?.name || 'Hành chính'}
+                      </Text>
+                    </div>
+                    {shiftForDate && (
+                      <div style={{ textAlign: 'center', marginTop: 4 }}>
+                        <Text style={{ fontSize: 12, color: '#595959' }}>
+                          ({shiftForDate.start_time} - {shiftForDate.end_time})
+                        </Text>
+                      </div>
+                    )}
+                  </Col>
+                </Row>
+              </div>
+
+              {/* Thời gian section */}
+              <div style={{ marginBottom: 16 }}>
+                <Row gutter={[12, 8]} style={{ marginBottom: 8 }}>
+                  <Col span={24}>
+                    <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#595959' }}>
+                      <ClockCircleOutlined style={{ marginRight: 6 }} />
+                      Thời gian làm việc
+                    </Text>
+                  </Col>
+                </Row>
+                <Row gutter={[12, 8]}>
+                  <Col xs={12} sm={12}>
+                    <div style={{ textAlign: 'center', padding: 8, background: '#f6ffed', borderRadius: 6, border: '1px solid #b7eb8f' }}>
+                      <Text style={{ fontSize: isMobile ? 10 : 11, color: '#52c41a', display: 'block' }}>Vào làm</Text>
+                      <Text strong style={{ fontSize: isMobile ? 14 : 16, color: '#52c41a' }}>
+                        {selectedDateData.checkInTime || '--:--'}
+                      </Text>
+                    </div>
+                  </Col>
+                  <Col xs={12} sm={12}>
+                    <div style={{ textAlign: 'center', padding: 8, background: '#fff7e6', borderRadius: 6, border: '1px solid #ffd591' }}>
+                      <Text style={{ fontSize: isMobile ? 10 : 11, color: '#d48806', display: 'block' }}>Tan làm</Text>
+                      <Text strong style={{ fontSize: isMobile ? 14 : 16, color: '#d48806' }}>
+                        {selectedDateData.checkOutTime || '--:--'}
+                      </Text>
+                    </div>
+                  </Col>
+                </Row>
+              </div>
+
+              {/* Thống kê section */}
+              <div style={{ marginBottom: 16 }}>
+                <Row gutter={[12, 8]} style={{ marginBottom: 8 }}>
+                  <Col span={24}>
+                    <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#595959' }}>
+                      <FieldTimeOutlined style={{ marginRight: 6 }} />
+                      Thống kê
+                    </Text>
+                  </Col>
+                </Row>
+                <Row gutter={[8, 8]}>
+                  <Col xs={12} sm={12}>
+                    <div style={{ textAlign: 'center', padding: 8, background: '#e6f7ff', borderRadius: 6, border: '1px solid #91d5ff' }}>
+                      <Text style={{ fontSize: isMobile ? 10 : 11, color: '#1890ff', display: 'block' }}>Tổng giờ</Text>
+                      <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#1890ff' }}>
+                        {selectedDateData.totalHours}h
+                      </Text>
+                    </div>
+                  </Col>
+                  <Col xs={12} sm={12}>
+                    <div style={{ textAlign: 'center', padding: 8, background: '#f9f0ff', borderRadius: 6, border: '1px solid #d3adf7' }}>
+                      <Text style={{ fontSize: isMobile ? 10 : 11, color: '#722ed1', display: 'block' }}>Làm thêm</Text>
+                      <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#722ed1' }}>
+                        {selectedDateData.overtime}h
+                      </Text>
+                    </div>
+                  </Col>
+                  <Col xs={12} sm={12}>
+                    <div style={{ textAlign: 'center', padding: 8, background: '#fff1f0', borderRadius: 6, border: '1px solid #ffccc7' }}>
+                      <Text style={{ fontSize: isMobile ? 10 : 11, color: '#ff4d4f', display: 'block' }}>Muộn</Text>
+                      <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#ff4d4f' }}>
+                        {selectedDateData.lateMinutes}p
+                      </Text>
+                    </div>
+                  </Col>
+                  <Col xs={12} sm={12}>
+                    <div style={{ textAlign: 'center', padding: 8, background: '#fff2e8', borderRadius: 6, border: '1px solid #ffd591' }}>
+                      <Text style={{ fontSize: isMobile ? 10 : 11, color: '#fa8c16', display: 'block' }}>Sớm</Text>
+                      <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#fa8c16' }}>
+                        {selectedDateData.earlyDepartureMinutes}p
+                      </Text>
+                    </div>
+                  </Col>
+                  {/* ✨ NEW: Working Units */}
+                  <Col xs={12} sm={12}>
+                    <div style={{ textAlign: 'center', padding: 8, background: '#fff7e6', borderRadius: 6, border: '1px solid #ffd591' }}>
+                      <Text style={{ fontSize: isMobile ? 10 : 11, color: '#d48806', display: 'block' }}>Số công</Text>
+                      <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#d48806' }}>
+                        {((selectedDateData as any).dailyWorkingUnit || (selectedDateData as any).totalWorkingUnit || 0).toFixed(2)}
+                      </Text>
+                    </div>
+                  </Col>
+                  <Col xs={12} sm={12}>
+                    <div style={{ textAlign: 'center', padding: 8, background: '#fff1f0', borderRadius: 6, border: '1px solid #ffccc7' }}>
+                      <Text style={{ fontSize: isMobile ? 10 : 11, color: '#cf1322', display: 'block' }}>Công OT (đã nhân hệ số)</Text>
+                      <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#cf1322' }}>
+                        {((selectedDateData as any).effectiveOtWorkingUnit || (selectedDateData as any).otWorkingUnit || 0).toFixed(2)}
+                      </Text>
+                    </div>
+                  </Col>
+                </Row>
+              </div>
+
+              {selectedDateData.overtime > 0 ? (
+                <div style={{ marginBottom: 16 }}>
+                  <Row gutter={[12, 8]} style={{ marginBottom: 8 }}>
+                    <Col span={24}>
+                      <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#595959' }}>
+                        <InfoCircleOutlined style={{ marginRight: 6 }} />
+                        Thông tin tăng ca
+                      </Text>
+                    </Col>
+                  </Row>
+                  <Row gutter={[8, 8]}>
+                    <Col xs={12} sm={12}>
+                      <div style={{ textAlign: 'center', padding: 8, background: '#f9f0ff', borderRadius: 6, border: '1px solid #d3adf7' }}>
+                        <Text style={{ fontSize: isMobile ? 10 : 11, color: '#722ed1', display: 'block' }}>Thời gian tăng ca</Text>
+                        <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#722ed1' }}>
+                          {selectedDateData.overtime || 0} h
+                        </Text>
+                      </div>
+                    </Col>
+                    <Col xs={12} sm={12}>
+                      <div style={{ textAlign: 'center', padding: 8, background: '#e6fffb', borderRadius: 6, border: '1px solid #87e8de' }}>
+                        <Text style={{ fontSize: isMobile ? 10 : 11, color: '#13c2c2', display: 'block' }}>Lương tăng ca</Text>
+                        <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#13c2c2' }}>
+                          {formatVND(selectedDateData.otSalary || 0)}đ
+                        </Text>
+                      </div>
+                    </Col>
+                  </Row>
+                </div>
+              ) : null}
+
+              {/* Thông tin tiền phạt cho ngày này */}
+              {(selectedDateData.lateArrivalPenalty > 0 || selectedDateData.earlyLeavePenalty > 0) && (
+                <div style={{
+                  background: '#fff2f0',
+                  padding: isMobile ? 12 : 16,
+                  borderRadius: 8,
+                  border: '1px solid #ffccc7',
+                  marginBottom: 16
+                }}>
+                  <Row style={{ marginBottom: 12 }}>
+                    <Col span={24} style={{ textAlign: 'center' }}>
+                      <DollarOutlined style={{ fontSize: isMobile ? 16 : 18, color: '#ff4d4f', marginRight: 8 }} />
+                      <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#ff4d4f' }}>Tiền phạt ngày này</Text>
+                    </Col>
+                  </Row>
+                  <Row gutter={[8, 8]}>
+                    {selectedDateData.lateArrivalPenalty > 0 && (
+                      <Col xs={24} sm={12}>
+                        <div style={{
+                          textAlign: 'center',
+                          padding: isMobile ? 8 : 12,
+                          background: 'white',
+                          borderRadius: 6,
+                          border: '1px solid #ffccc7'
+                        }}>
+                          <WarningOutlined style={{ fontSize: isMobile ? 14 : 16, color: '#ff4d4f', marginBottom: 4 }} />
                           <div>
-                            <Text strong style={{ color: '#ff4d4f', fontSize: isMobile ? 16 : 18 }}>
-                              {(selectedDateData.lateArrivalPenalty + selectedDateData.earlyLeavePenalty).toLocaleString('vi-VN')}đ
+                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#8c8c8c', display: 'block' }}>Phạt đi muộn</Text>
+                            <Text strong style={{ color: '#ff4d4f', fontSize: isMobile ? 12 : 14 }}>
+                              {selectedDateData.lateArrivalPenalty.toLocaleString('vi-VN')}đ
                             </Text>
                           </div>
                         </div>
-                </div>
+                      </Col>
                     )}
+                    {selectedDateData.earlyLeavePenalty > 0 && (
+                      <Col xs={24} sm={12}>
+                        <div style={{
+                          textAlign: 'center',
+                          padding: isMobile ? 8 : 12,
+                          background: 'white',
+                          borderRadius: 6,
+                          border: '1px solid #ffccc7'
+                        }}>
+                          <ExclamationCircleOutlined style={{ fontSize: isMobile ? 14 : 16, color: '#fa8c16', marginBottom: 4 }} />
+                          <div>
+                            <Text style={{ fontSize: isMobile ? 10 : 11, color: '#8c8c8c', display: 'block' }}>Phạt về sớm</Text>
+                            <Text strong style={{ color: '#fa8c16', fontSize: isMobile ? 12 : 14 }}>
+                              {selectedDateData.earlyLeavePenalty.toLocaleString('vi-VN')}đ
+                            </Text>
+                          </div>
+                        </div>
+                      </Col>
+                    )}
+                  </Row>
+                  <div style={{
+                    marginTop: 12,
+                    paddingTop: 12,
+                    borderTop: '1px solid #ffccc7',
+                    textAlign: 'center'
+                  }}>
+                    <Text style={{ fontSize: isMobile ? 11 : 12, color: '#8c8c8c' }}>Tổng cộng</Text>
+                    <div>
+                      <Text strong style={{ color: '#ff4d4f', fontSize: isMobile ? 16 : 18 }}>
+                        {(selectedDateData.lateArrivalPenalty + selectedDateData.earlyLeavePenalty).toLocaleString('vi-VN')}đ
+                      </Text>
+                    </div>
                   </div>
-                ) : (
-                  <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                    <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>Không có dữ liệu chấm công cho ngày này</Text>
-                  </div>
-                );
-              })()}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <Text type="secondary" style={{ fontSize: isMobile ? 12 : 14 }}>Không có dữ liệu chấm công cho ngày này</Text>
+            </div>
+          );
+        })()}
       </Modal>
     </div>
   );

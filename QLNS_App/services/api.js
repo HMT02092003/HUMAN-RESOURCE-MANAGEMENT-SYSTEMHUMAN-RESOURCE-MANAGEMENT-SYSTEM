@@ -15,28 +15,34 @@ const api = axios.create({
     baseURL: API_BASE_URL,
     headers: {
         'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true', // Bỏ qua trang cảnh báo của Ngrok
     },
     timeout: 10000, // 10 seconds timeout
 });
 
+// Biến để theo dõi nếu đang sử dụng fallback
+let isUsingFallback = false;
+
 // Request interceptor
 api.interceptors.request.use(
     async (config) => {
+        // Nếu đã xác định Ngrok lỗi, tự động đổi baseURL sang LAN cho các request sau
+        if (isUsingFallback && config.baseURL.includes('ngrok-free.dev')) {
+            const lanUrl = process.env.EXPO_PUBLIC_API_GATEWAY_URL || 'http://192.168.1.8:4100/api';
+            config.baseURL = lanUrl;
+            console.log('🔄 [API] Auto-fallback to LAN:', config.baseURL);
+        }
+
         console.log('📤 [API REQUEST]', config.method.toUpperCase(), config.url);
-        
+
         const token = await AuthTokenManager.getAccessToken();
         if (token) {
-            console.log('🔑 [API] Token found, length:', token.length);
             config.headers.Authorization = `Bearer ${token}`;
-        } else {
-            console.warn('⚠️ [API] No token found for request');
         }
-        
-        console.log('📤 [API] Full URL:', config.baseURL + config.url);
+
         return config;
     },
     (error) => {
-        console.error('❌ [API REQUEST ERROR]', error);
         return Promise.reject(error);
     }
 );
@@ -44,59 +50,36 @@ api.interceptors.request.use(
 // Response interceptor
 api.interceptors.response.use(
     (response) => {
-        console.log('✅ [API RESPONSE]', response.config.method.toUpperCase(), response.config.url, '- Status:', response.status);
         return response;
     },
     async (error) => {
         const originalRequest = error.config;
-        
-        console.error('❌ [API ERROR]', originalRequest?.method?.toUpperCase(), originalRequest?.url);
-        console.error('❌ [API ERROR] Status:', error.response?.status);
-        console.error('❌ [API ERROR] Message:', error.response?.data?.message || error.message);
 
-        // Nếu lỗi 401 và chưa retry
+        // LOGIC FALLBACK: Nếu lỗi kết nối (không có response hoặc timeout) khi đang dùng Ngrok
+        if (!error.response && originalRequest.baseURL.includes('ngrok-free.dev')) {
+            console.warn('⚠️ [API] Ngrok connection failed, trying fallback to LAN...');
+
+            const lanUrl = process.env.EXPO_PUBLIC_API_GATEWAY_URL || 'http://192.168.1.8:4100/api';
+            originalRequest.baseURL = lanUrl;
+            isUsingFallback = true; // Đánh dấu để các request sau dùng luôn LAN
+
+            // Thử lại request với URL LAN
+            return api(originalRequest);
+        }
+
+        // Lỗi 401 xử lý như cũ
         if (error.response?.status === 401 && !originalRequest._retry) {
-            console.log('🔄 [API] Token expired, attempting refresh...');
             originalRequest._retry = true;
-
             try {
-                // Thử refresh token
-                console.log('🔄 [API] Calling AuthTokenManager.refreshAccessToken()...');
                 const newToken = await AuthTokenManager.refreshAccessToken();
-
                 if (newToken) {
-                    console.log('✅ [API] Token refreshed successfully, retrying original request');
-                    // Update header cho request cũ và gọi lại
                     originalRequest.headers.Authorization = `Bearer ${newToken}`;
                     return api(originalRequest);
-                } else {
-                    console.error('❌ [API] refreshAccessToken returned null/undefined');
                 }
             } catch (refreshError) {
-                // Refresh thất bại -> Logout
-                console.error('❌ [API] Session expired, refresh failed:', refreshError.message);
                 await AuthTokenManager.clearTokens();
-                
-                // Thông báo cho người dùng và chuyển về màn hình login
-                Alert.alert(
-                    'Phiên đăng nhập hết hạn',
-                    'Vui lòng đăng nhập lại',
-                    [{ 
-                        text: 'OK', 
-                        onPress: () => {
-                            // Reset navigation to Login screen
-                            // Note: This requires NavigationContainer ref to be available
-                            // For now, just clear tokens - user will be auto-redirected by AuthContext
-                        }
-                    }]
-                );
-                
-                // Return a rejected promise with a specific error that AuthContext can catch
-                return Promise.reject({
-                    ...error,
-                    tokenExpired: true,
-                    needsReauth: true
-                });
+                Alert.alert('Phiên đăng nhập hết hạn', 'Vui lòng đăng nhập lại');
+                return Promise.reject({ ...error, needsReauth: true });
             }
         }
 

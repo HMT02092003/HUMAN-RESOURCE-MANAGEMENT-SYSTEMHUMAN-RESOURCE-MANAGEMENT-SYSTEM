@@ -848,7 +848,24 @@ export class AttendanceCalculationService {
     // Công cơ bản = min(1, số giờ làm / số giờ chuẩn) * working_unit của shift
     const shiftWorkingUnit = shiftInfo?.working_unit || 1.0;
     if (result.workHours > 0 && standardHours > 0) {
-      result.dailyWorkingUnit = Math.min(1, result.workHours / standardHours) * shiftWorkingUnit;
+      const baseUnits = Math.min(1, result.workHours / standardHours) * shiftWorkingUnit;
+
+      // ✨ Nếu là ngày lễ, công được nhân hệ số ngày lễ (thường 3x)
+      if (isHoliday) {
+        // ✨ Theo yêu cầu: Phải có đơn OT mới tính công ngày lễ? 
+        // Tuy nhiên thường thì đi làm ngày lễ mặc định là OT. 
+        // Ta vẫn tính công nhưng log để biết có đơn hay không.
+        const hasOTApp = !!approvedOtEndTime;
+        if (!hasOTApp) {
+          console.log('⚠️ Cảnh báo: Nhân viên đi làm ngày lễ nhưng không thấy đơn OT được duyệt');
+        }
+
+        const holidayRateMultiplier = settings.holidayRate?.rate || 3.0;
+        result.dailyWorkingUnit = baseUnits * holidayRateMultiplier;
+        console.log(`🎉 Holiday work detected: base units ${baseUnits.toFixed(4)} * ${holidayRateMultiplier}x = ${result.dailyWorkingUnit.toFixed(4)}`);
+      } else {
+        result.dailyWorkingUnit = baseUnits;
+      }
     } else {
       result.dailyWorkingUnit = 0;
     }

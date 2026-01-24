@@ -73,8 +73,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_API_GATEWAY_URL=http://192.168.1.8:4100
-        - NEXT_PUBLIC_NOTIFICATION_SERVICE_URL=http://192.168.1.8:4110
+        - NEXT_PUBLIC_API_GATEWAY_URL=/api
+        - NEXT_PUBLIC_NOTIFICATION_SERVICE_URL=/
     container_name: hrms-frontend
     restart: unless-stopped
     ports:
@@ -82,8 +82,8 @@ services:
     environment:
       - PORT=3001
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_GATEWAY_URL=http://192.168.1.8:4100
-      - NEXT_PUBLIC_NOTIFICATION_SERVICE_URL=http://192.168.1.8:4110
+      - NEXT_PUBLIC_API_GATEWAY_URL=/api
+      - NEXT_PUBLIC_NOTIFICATION_SERVICE_URL=/
     depends_on:
       - api-gateway
     networks:
@@ -165,7 +165,7 @@ services:
       - SMTP_HOST=smtp.gmail.com
       - SMTP_PORT=465
       # URLs
-      - FRONTEND_URL=http://192.168.1.8:3001
+      - FRONTEND_URL=https://virgilio-wolfish-nonracially.ngrok-free.dev
       - EMPLOYEE_SERVICE_URL=http://employee-service:4102
       - AI_SERVICE_URL=http://ai-face-recognition-service:4106
       - API_GATEWAY_URL=http://api-gateway:4100
@@ -537,6 +537,43 @@ services:
           memory: 512M
         reservations:
           memory: 256M
+
+  # --------------------------------------------------------------------------
+  # Nginx - Reverse Proxy for both Frontend and Backend
+  # --------------------------------------------------------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: hrms-nginx
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8080:80" # Local access: http://localhost:8080
+    depends_on:
+      - frontend
+      - api-gateway
+    networks:
+      - hrms-network
+
+  # --------------------------------------------------------------------------
+  # Ngrok - Tunnel for public access (Both Mobile and Web)
+  # --------------------------------------------------------------------------
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: hrms-ngrok-tunnel
+    restart: unless-stopped
+    command:
+      - "http"
+      - "--domain=virgilio-wolfish-nonracially.ngrok-free.dev"
+      - "nginx:80" # Trỏ vào Nginx thay vì chỉ api-gateway
+    environment:
+      - NGROK_AUTHTOKEN=38YqLD61qmRQS0fyIDitgv8D92p_oD8UdrnroV6j9jjvn5kv
+    ports:
+      - "4041:4040"
+    depends_on:
+      - nginx
+    networks:
+      - hrms-network
 
 # ============================================================================
 # NETWORKS - Internal communication
