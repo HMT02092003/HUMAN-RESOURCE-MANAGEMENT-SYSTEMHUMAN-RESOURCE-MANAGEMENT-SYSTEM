@@ -34,16 +34,28 @@ export default function HolidayPage() {
                 const user = await userService.getUserDetail(userId);
 
                 // Check if user has permission to view this page
-                // Admin (1) and HR (5) usually have settings permission
-                const permissions = user.role?.permissions || [];
+                // Role-based check first (Admin and HR)
+                const isAdminOrHR = user.roleId === 1 || user.roleId === 5;
+
+                // Extract permissions from user details or fallback to token
+                let permissions = user.role?.permissions || [];
                 const permissionMap: Record<string, string> = {};
-                permissions.forEach((p: any) => {
-                    permissionMap[p.key] = p.value.toString();
-                });
+
+                if (permissions.length > 0) {
+                    permissions.forEach((p: any) => {
+                        permissionMap[p.key] = p.value.toString();
+                    });
+                } else if (decoded.user?.permissions) {
+                    // Fallback to token permissions
+                    Object.entries(decoded.user.permissions).forEach(([key, value]) => {
+                        permissionMap[key] = String(value);
+                    });
+                }
 
                 // Check specifically for settings or root permission
-                const hasAccess = permissionMap['settings'] || permissionMap['root'];
-                if (!hasAccess && user.roleId !== 1 && user.roleId !== 5) {
+                const hasAccess = permissionMap['settings'] || permissionMap['root'] || isAdminOrHR;
+
+                if (!hasAccess) {
                     message.error('Bạn không có quyền truy cập trang này');
                     router.push('/unauthorized');
                     return;

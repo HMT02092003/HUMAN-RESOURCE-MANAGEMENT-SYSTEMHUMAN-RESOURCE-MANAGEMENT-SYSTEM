@@ -393,6 +393,12 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                 return [item];
             }
 
+            // ✅ Admin always has access to all menus
+            if (userData?.roleId === 1) {
+                console.log(`  👑 User is Admin - allowing access to "${item.label}"`);
+                return [item];
+            }
+
             const permissionValue = userPermissions[permissionKey];
             console.log(`  🔑 Single permission check for "${permissionKey}":`, permissionValue);
 
@@ -405,6 +411,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
             try {
                 const decodedPermission = decodePermissions(parseInt(permissionValue));
                 const hasReadPermission = decodedPermission.read === true;
+
+                // Special case: if value is 1, maybe it was intended as read? 
+                // But for now strict check:
                 console.log(`  📖 Has read permission:`, hasReadPermission);
                 console.log(`  ${hasReadPermission ? '✅ ALLOWED' : '❌ DENIED'}`);
                 return hasReadPermission ? [item] : [];
@@ -418,14 +427,32 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
     // Cập nhật Menu Items khi Permissions thay đổi
     useEffect(() => {
         console.log('🎨 [ADMIN-LAYOUT] ===== FILTERING MENU ITEMS =====');
-        console.log('🔒 User permissions received:', userPermissions);
-        console.log('📊 Permissions count:', userPermissions ? Object.keys(userPermissions).length : 0);
 
-        if (userPermissions && Object.keys(userPermissions).length > 0) {
-            console.log('✅ [ADMIN-LAYOUT] User has permissions - filtering menu...');
+        let finalPermissions = { ...userPermissions };
+
+        // Fallback: If permissions are empty, try to decode from token
+        if (!finalPermissions || Object.keys(finalPermissions).length === 0) {
+            console.log('🔍 [ADMIN-LAYOUT] No permissions in props, attempting to decode from token...');
+            const token = Cookies.get('token');
+            if (token) {
+                const decoded = getDecodedToken(token);
+                const tokenPerms = decoded?.user?.permissions;
+                if (tokenPerms) {
+                    Object.entries(tokenPerms).forEach(([key, value]) => {
+                        finalPermissions[key] = String(value);
+                    });
+                    console.log('✅ [ADMIN-LAYOUT] Found permissions in token:', finalPermissions);
+                }
+            }
+        }
+
+        console.log('🔒 Final user permissions for filtering:', finalPermissions);
+        console.log('📊 Permissions count:', Object.keys(finalPermissions).length);
+
+        if (Object.keys(finalPermissions).length > 0) {
+            console.log('✅ [ADMIN-LAYOUT] Filtering menu with permissions...');
             const filteredItems = filterMenuItems(baseMenuItemsList);
             console.log('📋 Filtered menu items count:', filteredItems.length);
-            console.log('📝 Filtered menu keys:', filteredItems.map(item => item.key));
             updateMenuItemsState(filteredItems);
         } else {
             console.warn('⚠️ [ADMIN-LAYOUT] No permissions found - showing only dashboard');

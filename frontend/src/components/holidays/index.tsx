@@ -178,21 +178,13 @@ const HolidayManagement = () => {
                     </Space>
                 }
                 extra={
-                    <Space>
-                        <DatePicker
-                            picker="year"
-                            value={dayjs().year(currentYear)}
-                            onChange={(date) => date && setCurrentYear(date.year())}
-                            allowClear={false}
-                        />
-                        <Button
-                            type="primary"
-                            icon={<PlusOutlined />}
-                            onClick={handleAdd}
-                        >
-                            Thêm ngày lễ
-                        </Button>
-                    </Space>
+                    <Button
+                        type="primary"
+                        icon={<PlusOutlined />}
+                        onClick={handleAdd}
+                    >
+                        Thêm ngày lễ
+                    </Button>
                 }
             >
                 <div style={{ marginBottom: 16 }}>

@@ -31,9 +31,12 @@ function getLocalIpAddress(): string {
 const API_GATEWAY_URL = process.env.API_GATEWAY_URL || `http://localhost:${process.env.API_GATEWAY_PORT || 4000}`;
 const { Gender, statusOptions, Relationship } = constantConfig;
 
-// Resolve absolute path for local public directory
+// Resolve absolute path for local public directory - Updated to point to frontend public
 const getLocalPublicPath = (...segments: string[]): string => {
-  return path.resolve(process.cwd(), "public", ...segments);
+  // Use the path provided by the user: E:\DO_AN_TOT_NGHIEP\HUMAN-RESOURCE-MANAGEMENT-SYSTEMHUMAN-RESOURCE-MANAGEMENT-SYSTEM\frontend\public\identificationPhoto
+  // We'll try to resolve it relative to the current service if it's not provided in ENV
+  const frontendPublicPath = process.env.FRONTEND_PUBLIC_PATH || path.resolve(process.cwd(), "..", "..", "frontend", "public");
+  return path.resolve(frontendPublicPath, ...segments);
 };
 
 // Map stored URL path to absolute filesystem path
@@ -49,8 +52,11 @@ const resolvePhotoAbsolutePath = (storedPath: string): string => {
 // Helper function to handle file upload and save with username into local public
 const handleIdentificationPhotoUpload = (file: any, username: string): string => {
   try {
-    // Tạo thư mục identificationPhoto trong local public nếu chưa tồn tại
+    // Thư mục identificationPhoto đích (trong frontend/public)
     const uploadDir = getLocalPublicPath('identificationPhoto');
+
+    console.log('[auth-service] Saving identification photo to:', uploadDir);
+
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -64,7 +70,11 @@ const handleIdentificationPhotoUpload = (file: any, username: string): string =>
 
     // Nếu file đã tồn tại, xóa file cũ
     if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+      try {
+        fs.unlinkSync(filePath);
+      } catch (e) {
+        console.warn('Could not delete existing file:', filePath);
+      }
     }
 
     // Lưu file mới
@@ -74,14 +84,14 @@ const handleIdentificationPhotoUpload = (file: any, username: string): string =>
     } else if (file.path) {
       // Nếu file được lưu tạm thời (từ multer disk storage)
       fs.copyFileSync(file.path, filePath);
-      fs.unlinkSync(file.path); // Xóa file tạm
+      // fs.unlinkSync(file.path); // Xóa file tạm - Cẩn thận khi dùng copyFileSync xong unlink
     }
 
-    // Trả về đường dẫn public phía FE
+    // Trả về đường dẫn public phía FE (không đổi để Next.js hiển thị được)
     return ('/identificationPhoto/' + fileName).replace(/\\/g, '/');
   } catch (error) {
     console.error('Error handling identification photo upload:', error);
-    throw new Error('Lỗi khi lưu ảnh đại diện');
+    throw new Error('Lỗi khi lưu ảnh đại diện vào thư mục frontend');
   }
 };
 
@@ -1375,7 +1385,7 @@ export const updateUser = async (req: Request, res: Response) => {
         if (fs.existsSync(oldPhotoPath)) {
           const fileExtension = path.extname(existingUser.identificationPhoto);
           const newFileName = `${updateData.username}${fileExtension}`;
-          const newPhotoPath = getFrontendPublicPath('identificationPhoto', newFileName);
+          const newPhotoPath = getLocalPublicPath('identificationPhoto', newFileName);
 
           // Copy file với tên mới
           fs.copyFileSync(oldPhotoPath, newPhotoPath);
