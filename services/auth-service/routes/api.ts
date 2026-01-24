@@ -50,23 +50,14 @@ const router = Router();
 // Enhanced multer setup with better error handling
 const createUploadMiddleware = () => {
   // Ensure upload directory exists
-  const uploadPath = path.resolve(process.cwd(), 'public', 'uploads', 'identificationPhoto');
+  const uploadPath = path.resolve(process.cwd(), 'public', 'identificationPhoto');
   try {
     fs.mkdirSync(uploadPath, { recursive: true });
   } catch (error: any) {
     console.warn('Warning: Could not create upload directory:', error?.message || 'Unknown error');
   }
 
-  const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-      cb(null, uploadPath);
-    },
-    filename: (req: Request, file, cb) => {
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-      const ext = path.extname(file.originalname);
-      cb(null, `${uniqueSuffix}${ext}`);
-    }
-  });
+  const storage = multer.memoryStorage(); // Switch to memory storage to let UserController handle renaming
 
   const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
   const imageOnlyFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
@@ -148,24 +139,14 @@ const uploadRoutes = [
   {
     method: 'post',
     path: '/users',
-    handler: (req: Request, res: Response) => {
-      if ((req as any).file) {
-        req.body.identificationPhoto = `/uploads/identificationPhoto/${(req as any).file.filename}`;
-      }
-      createUser(req, res);
-    },
+    handler: createUser,
     auth: true,
     upload: true
   },
   {
     method: 'put',
     path: '/users/:id',
-    handler: (req: Request, res: Response) => {
-      if ((req as any).file) {
-        req.body.identificationPhoto = `/uploads/identificationPhoto/${(req as any).file.filename}`;
-      }
-      updateUser(req, res);
-    },
+    handler: updateUser,
     auth: true,
     upload: true
   },

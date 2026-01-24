@@ -117,6 +117,11 @@ const ROUTE_CONFIG = [
   {
     path: '/uploads',
     target: 'auth',
+    pathRewrite: { '^/uploads': '' }
+  },
+  {
+    path: '/identificationPhoto',
+    target: 'auth',
     pathRewrite: false
   }
 ];

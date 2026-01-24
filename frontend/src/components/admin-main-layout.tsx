@@ -69,7 +69,7 @@ interface AdminMainLayoutProps {
     breadcrumbItems?: BreadcrumbItem[];
     pageTitle?: string;
     pageDescription?: string;
-    userPermissions?: Record<string, string>;
+    userPermissions?: Record<string, number>;
 }
 
 // Hàm getItem linh hoạt với tham số tùy chọn
@@ -163,9 +163,9 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         [
             getItem('Bảng chấm công', 'attendance', <CalendarOutlined />, 'timeAttendance'),
             getItem('Duyệt bảng chấm công', 'attendanceApproval', <CheckCircleOutlined />, 'timeAttendance', 'approve'),
-            getItem('Quản lý ngày lễ', 'holidays', <CalendarOutlined />, 'settings'), // Dùng permission settings hoặc root
+            getItem('Quản lý ngày lễ', 'holidays', <CalendarOutlined />, 'holidays'),
         ],
-        ['timeAttendance', 'settings']
+        ['timeAttendance', 'holidays']
     ),
 
     // Cài đặt hệ thống
@@ -298,13 +298,13 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                     console.log(`  🔑 Permission key "${key}":`, permissionValue);
 
                     // ✅ Kiểm tra kỹ hơn: value phải tồn tại và không phải null/undefined
-                    if (permissionValue === undefined || permissionValue === null || permissionValue === '') {
+                    if (permissionValue === undefined || permissionValue === null) {
                         console.log(`  ❌ Permission "${key}" is undefined/null/empty`);
                         return false;
                     }
 
                     try {
-                        const hasRead = decodePermissions(parseInt(permissionValue)).read;
+                        const hasRead = decodePermissions(permissionValue).read;
                         console.log(`  📖 Has read permission for "${key}":`, hasRead);
                         return hasRead;
                     } catch (e) {
@@ -346,10 +346,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                     return [];
                 }
 
-                const hasParentPermission = userPermissions[parentPermissionKey] &&
+                const hasParentPermission = userPermissions[parentPermissionKey] !== undefined &&
                     userPermissions[parentPermissionKey] !== null &&
-                    userPermissions[parentPermissionKey] !== '' &&
-                    decodePermissions(parseInt(userPermissions[parentPermissionKey] as string)).read;
+                    decodePermissions(userPermissions[parentPermissionKey]).read;
 
                 if (hasParentPermission) {
                     return [{ ...item, children: [] }];
@@ -367,10 +366,10 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
 
                 const permVal = userPermissions[permKey];
                 // ✅ Kiểm tra kỹ hơn
-                if (permVal === undefined || permVal === null || permVal === '') return [];
+                if (permVal === undefined || permVal === null) return [];
 
                 try {
-                    const decoded = decodePermissions(parseInt(permVal));
+                    const decoded = decodePermissions(permVal);
                     // Phải có cả quyền READ và quyền được yêu cầu (approve/create/update/delete)
                     if (!decoded.read || !decoded[item.requirePermission]) return [];
                     return [item];
@@ -397,13 +396,13 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
             console.log(`  🔑 Single permission check for "${permissionKey}":`, permissionValue);
 
             // ✅ Kiểm tra kỹ hơn
-            if (permissionValue === undefined || permissionValue === null || permissionValue === '') {
-                console.log(`  ❌ Permission value is undefined/null/empty - denying access`);
+            if (permissionValue === undefined || permissionValue === null) {
+                console.log(`  ❌ Permission value is undefined/null - denying access`);
                 return [];
             }
 
             try {
-                const decodedPermission = decodePermissions(parseInt(permissionValue));
+                const decodedPermission = decodePermissions(permissionValue);
                 const hasReadPermission = decodedPermission.read === true;
                 console.log(`  📖 Has read permission:`, hasReadPermission);
                 console.log(`  ${hasReadPermission ? '✅ ALLOWED' : '❌ DENIED'}`);
@@ -785,12 +784,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                     <LoadingProgress>
                         <div
                             style={{
-                                padding: isMobile ? 16 : 24,
-                                background: colorBgContainer,
-                                borderRadius: borderRadiusLG,
-                                margin: isMobile ? "0" : "0 24px",
-                                maxWidth: isMobile ? "100%" : "none",
-                                width: isMobile ? "100%" : "auto"
+                                padding: isMobile ? "16px 0" : "24px 0",
+                                width: "100%",
+                                minHeight: "100%"
                             }}
                         >
                             {children}
