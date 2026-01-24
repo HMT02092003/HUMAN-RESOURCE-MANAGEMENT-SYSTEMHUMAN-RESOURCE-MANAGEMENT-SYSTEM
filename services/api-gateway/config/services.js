@@ -41,7 +41,10 @@ const ROUTE_CONFIG = [
   {
     path: '/jobs',
     target: 'job',
-    pathRewrite: { '^/jobs': '/api' },
+    pathRewrite: {
+      '^/jobs': '/api',
+      '^/': '/api/'  // Fallback for when prefix is stripped by Express
+    },
     handleMultipart: true
   },
   {

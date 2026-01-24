@@ -31,12 +31,9 @@ function getLocalIpAddress(): string {
 const API_GATEWAY_URL = process.env.API_GATEWAY_URL || `http://localhost:${process.env.API_GATEWAY_PORT || 4000}`;
 const { Gender, statusOptions, Relationship } = constantConfig;
 
-// Resolve absolute path for local public directory - Updated to point to frontend public
+// Resolve absolute path for local public directory
 const getLocalPublicPath = (...segments: string[]): string => {
-  // Use the path provided by the user: E:\DO_AN_TOT_NGHIEP\HUMAN-RESOURCE-MANAGEMENT-SYSTEMHUMAN-RESOURCE-MANAGEMENT-SYSTEM\frontend\public\identificationPhoto
-  // We'll try to resolve it relative to the current service if it's not provided in ENV
-  const frontendPublicPath = process.env.FRONTEND_PUBLIC_PATH || path.resolve(process.cwd(), "..", "..", "frontend", "public");
-  return path.resolve(frontendPublicPath, ...segments);
+  return path.resolve(process.cwd(), "public", ...segments);
 };
 
 // Map stored URL path to absolute filesystem path

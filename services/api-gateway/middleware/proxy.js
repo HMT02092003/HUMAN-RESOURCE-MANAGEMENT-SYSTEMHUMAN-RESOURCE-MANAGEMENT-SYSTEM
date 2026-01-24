@@ -48,7 +48,7 @@ const createOptimizedProxy = (target, fallbackTarget = null, pathRewrite = false
 
       console.log('\n🌐🌐🌐 ===== API GATEWAY PROXY ===== 🌐🌐🌐');
       console.log('📍 Original URL:', req.originalUrl);
-      console.log('📍 Target:', actualTarget);
+      console.log('📍 Proxy to:', actualTarget + proxyReq.path);
       console.log('📍 Method:', req.method);
       console.log('🌐🌐🌐 ================================\n');
 

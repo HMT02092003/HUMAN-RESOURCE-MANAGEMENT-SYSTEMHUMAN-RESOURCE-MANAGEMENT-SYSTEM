@@ -152,6 +152,8 @@ services:
       # Hot reload support
       - ./services/auth-service:/app
       - /app/node_modules
+      # Shared volume for identification photos
+      - identification-photos:/app/public/identificationPhoto
     environment:
       - PORT=4101
       - NODE_ENV=production
@@ -330,6 +332,8 @@ services:
       # Model cache and uploads
       - ai-models:/app/models
       - ai-uploads:/app/uploads
+      # Shared volume for identification photos
+      - identification-photos:/app/public/identificationPhoto
       # Hot reload for Python (optional, but helpful for dev)
       - ./services/ai-face-recognition-service/app:/app/app
     depends_on:
@@ -547,6 +551,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - identification-photos:/usr/share/nginx/html/identificationPhoto:ro
     ports:
       - "8080:80" # Local access: http://localhost:8080
     depends_on:
@@ -595,3 +600,5 @@ volumes:
     name: hrms-ai-models
   ai-uploads:
     name: hrms-ai-uploads
+  identification-photos:
+    name: hrms-identification-photos
