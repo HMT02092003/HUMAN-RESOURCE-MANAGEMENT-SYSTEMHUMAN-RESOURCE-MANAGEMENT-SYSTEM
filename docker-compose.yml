@@ -73,8 +73,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_API_GATEWAY_URL=/api
-        - NEXT_PUBLIC_NOTIFICATION_SERVICE_URL=/
+        - NEXT_PUBLIC_API_GATEWAY_URL=
+        - NEXT_PUBLIC_NOTIFICATION_SERVICE_URL=
     container_name: hrms-frontend
     restart: unless-stopped
     ports:
@@ -82,8 +82,8 @@ services:
     environment:
       - PORT=3001
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_GATEWAY_URL=/api
-      - NEXT_PUBLIC_NOTIFICATION_SERVICE_URL=/
+      - NEXT_PUBLIC_API_GATEWAY_URL=
+      - NEXT_PUBLIC_NOTIFICATION_SERVICE_URL=
     depends_on:
       - api-gateway
     networks:
@@ -567,7 +567,7 @@ services:
       - "--domain=virgilio-wolfish-nonracially.ngrok-free.dev"
       - "nginx:80" # Trỏ vào Nginx thay vì chỉ api-gateway
     environment:
-      - NGROK_AUTHTOKEN=38YqLD61qmRQS0fyIDitgv8D92p_oD8UdrnroV6j9jjvn5kv
+      - NGROK_AUTHTOKEN=38YqLD61qmRQS0fylDitgv8D92p_oD8UdrnroV6j9jjvn5kv
     ports:
       - "4041:4040"
     depends_on:
