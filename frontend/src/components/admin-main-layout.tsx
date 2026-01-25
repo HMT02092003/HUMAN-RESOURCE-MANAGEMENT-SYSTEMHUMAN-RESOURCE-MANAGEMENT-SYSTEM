@@ -732,8 +732,12 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
 
                         <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" arrow>
                             <div style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                <Avatar style={{ backgroundColor: color, verticalAlign: 'middle' }} size="default">
-                                    {getUserInitials(userData?.user?.username || 'User')}
+                                <Avatar
+                                    src={getPhotoUrl(userData?.user?.identificationPhoto)}
+                                    style={{ backgroundColor: color, verticalAlign: 'middle' }}
+                                    size="default"
+                                >
+                                    {!userData?.user?.identificationPhoto && getUserInitials(userData?.user?.username || 'User')}
                                 </Avatar>
                                 <span style={{ marginLeft: 8, display: isMobile ? 'none' : 'inline' }}>
                                     Hi, {userData?.user?.username || 'User'}

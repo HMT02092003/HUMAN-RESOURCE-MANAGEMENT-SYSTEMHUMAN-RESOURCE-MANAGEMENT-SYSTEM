@@ -10,12 +10,18 @@ export const getPhotoUrl = (photoPath: string | null | undefined): string => {
         return photoPath;
     }
 
-    // Get gateway URL from environment
-    const gatewayUrl = process.env.NEXT_PUBLIC_API_GATEWAY_URL || '';
-
-    // Ensure we don't have double slashes if gatewayUrl has trailing slash or photoPath has leading slash
-    const cleanGatewayUrl = gatewayUrl.endsWith('/') ? gatewayUrl.slice(0, -1) : gatewayUrl;
     const cleanPhotoPath = photoPath.startsWith('/') ? photoPath : `/${photoPath}`;
 
+    // For web browser, using root-relative paths is most reliable when behind a proxy (Nginx/Ngrok)
+    // This allows the browser to request from the same host/port the page is served from.
+    if (typeof window !== 'undefined') {
+        return cleanPhotoPath;
+    }
+
+    // Server-side or fallback: Get gateway URL from environment
+    const gatewayUrl = process.env.NEXT_PUBLIC_API_GATEWAY_URL || '';
+    if (!gatewayUrl) return cleanPhotoPath;
+
+    const cleanGatewayUrl = gatewayUrl.endsWith('/') ? gatewayUrl.slice(0, -1) : gatewayUrl;
     return `${cleanGatewayUrl}${cleanPhotoPath}`;
 };
