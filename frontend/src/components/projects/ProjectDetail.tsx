@@ -28,6 +28,7 @@ import { Project, ProjectStatistics, TimelineEvent, Task } from '@/types/project
 import { projectService } from '@/service/projectService';
 import jobService from '@/service/jobService';
 import ProjectStatisticsComponent from './projectTab/ProjectStatistics';
+import { getPhotoUrl } from '@/utils/photo';
 import TaskBoard from './projectTab/TaskBoard';
 import ProjectExpenses from './ProjectExpenses';
 import dayjs from 'dayjs';
@@ -222,7 +223,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
           </Descriptions.Item>
           <Descriptions.Item label="Quản lý dự án">
             <Space>
-              <Avatar src={realProject.manager_id?.identificationPhoto}>{!realProject.manager_id?.identificationPhoto && getInitials(realProject.manager_id?.fullName || realProject.manager_id?.username)}</Avatar>
+              <Avatar src={getPhotoUrl(realProject.manager_id?.identificationPhoto)}>{!realProject.manager_id?.identificationPhoto && getInitials(realProject.manager_id?.fullName || realProject.manager_id?.username)}</Avatar>
               {realProject.manager_id?.fullName || realProject.manager_id?.username} - {realProject.manager_id?.role || 'Manager'}
             </Space>
           </Descriptions.Item>
@@ -243,7 +244,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
               <div style={{ textAlign: 'center' }}>
                 <Avatar
                   size={64}
-                  src={member.avatar}
+                  src={getPhotoUrl(member.avatar)}
                   style={{ marginBottom: 12 }}
                 >{!member.avatar && getInitials(member.fullName)}</Avatar>
                 <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>
@@ -300,7 +301,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({ projectId }) => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {user && user.id && (
                     <>
-                      <Avatar size="small" src={user.avatar}>{!user.avatar && getInitials(user.fullName)}</Avatar>
+                      <Avatar size="small" src={getPhotoUrl(user.avatar)}>{!user.avatar && getInitials(user.fullName)}</Avatar>
                       <span style={{ fontSize: 12, color: '#999' }}>
                         {user.fullName} • {dayjs(event.timestamp).format('DD/MM/YYYY HH:mm')}
                       </span>

@@ -36,6 +36,7 @@ import { getDecodedToken } from '@/utils/decode-token';
 import userService from '@/service/userService';
 import dayjs from 'dayjs';
 import constantConfig from "@/config/constant";
+import { getPhotoUrl } from '@/utils/photo';
 
 const { statusOptions, TypeOfStatusSalary } = constantConfig;
 
@@ -865,7 +866,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                         <Descriptions.Item label="Ảnh nhận diện" span={2}>
                             {userProfile.identificationPhoto ? (
                                 <img
-                                    src={userProfile.identificationPhoto.startsWith('/') ? `${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${userProfile.identificationPhoto}` : userProfile.identificationPhoto}
+                                    src={getPhotoUrl(userProfile.identificationPhoto)}
                                     alt="Avatar"
                                     style={{ width: 100, height: 100, objectFit: 'cover', borderRadius: '50%' }}
                                 />

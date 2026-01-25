@@ -14,6 +14,7 @@ import dayjs from 'dayjs';
 import jobService from '@/service/jobService';
 import { ExcelExportButton } from '@/components/common/ExcelExport';
 import type { ExcelColumn } from '@/components/common/ExcelExport';
+import { getPhotoUrl } from '@/utils/photo';
 
 const statusColors = {
   planning: 'blue',
@@ -317,7 +318,7 @@ const ProjectManager: React.FC = () => {
 
         return (
           <Space>
-            <Avatar src={avatar} size="small">{!avatar && getInitials(name)}</Avatar>
+            <Avatar src={getPhotoUrl(avatar)} size="small">{!avatar && getInitials(name)}</Avatar>
             <span>{name}</span>
           </Space>
         );
@@ -337,7 +338,7 @@ const ProjectManager: React.FC = () => {
               const name = raw?.fullName ?? raw?.full_name ?? raw?.name ?? raw?.username ?? `User ${raw?.id ?? idx}`;
               const avatar = raw?.avatar ?? raw?.avatar_url ?? raw?.profile_picture ?? raw?.photo ?? null;
               const id = raw?.id ?? member.id ?? `m-${idx}`;
-              return <Avatar key={id} src={avatar}>{!avatar && getInitials(name)}</Avatar>;
+              return <Avatar key={id} src={getPhotoUrl(avatar)}>{!avatar && getInitials(name)}</Avatar>;
             })}
           </Avatar.Group>
         );

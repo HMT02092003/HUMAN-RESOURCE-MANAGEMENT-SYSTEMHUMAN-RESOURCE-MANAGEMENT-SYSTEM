@@ -11,6 +11,7 @@ import constantConfig from "@/config/constant";
 import { roleService } from "@/service/roleService";
 import { departmentService } from "@/service/departmentService";
 import { chevronService } from "@/service/chevronService";
+import { getPhotoUrl } from '@/utils/photo';
 
 dayjs.extend(customParseFormat);
 
@@ -146,9 +147,7 @@ const UserForm: React.FC<UserFormProps> = ({
         identificationPhoto: (() => {
           const photo = initialValues.identificationPhoto;
           if (typeof photo === 'string' && photo) {
-            const url = photo.startsWith('/')
-              ? photo
-              : `${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${photo}`;
+            const url = getPhotoUrl(photo);
             return [{ uid: '-1', name: 'identificationPhoto', status: 'done', url }];
           }
           return [];

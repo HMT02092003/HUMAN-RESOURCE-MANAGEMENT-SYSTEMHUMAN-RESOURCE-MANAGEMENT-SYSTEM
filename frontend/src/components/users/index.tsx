@@ -19,6 +19,7 @@ import { ServerSideTable } from '@/components/common/ServerSideTable';
 import type { ServerSideColumnType } from '@/components/common/ServerSideTable';
 import { usePermission } from "@/hooks/usePermission";
 import CheckPermission from "@/components/common/CheckPermission";
+import { getPhotoUrl } from '@/utils/photo';
 
 const { statusOptions, Gender } = constantConfig;
 
@@ -251,7 +252,7 @@ const UserTable = () => {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           alt="avatar"
-          src={url.startsWith('/') ? url : `${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${url}`}
+          src={getPhotoUrl(url)}
           style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }}
         />
       ) : '-',

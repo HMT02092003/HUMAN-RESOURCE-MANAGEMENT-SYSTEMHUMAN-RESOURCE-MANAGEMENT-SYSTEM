@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import constantConfig from '@/config/constant';
 import { ExcelExportButton } from '@/components/common/ExcelExport';
 import type { ExcelColumn } from '@/components/common/ExcelExport';
+import { getPhotoUrl } from '@/utils/photo';
 
 // Use shared constants to avoid mapping mismatches
 const { Gender, Relationship } = constantConfig;
@@ -75,9 +76,7 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           alt="avatar"
-          src={userData.identificationPhoto.startsWith('/')
-            ? userData.identificationPhoto
-            : `${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${userData.identificationPhoto}`}
+          src={getPhotoUrl(userData.identificationPhoto)}
           style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 8 }}
         />
       ) : '-',
@@ -154,9 +153,7 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 alt="avatar"
-                src={userData.identificationPhoto.startsWith('/')
-                  ? userData.identificationPhoto
-                  : `${process.env.NEXT_PUBLIC_API_GATEWAY_URL}${userData.identificationPhoto}`}
+                src={getPhotoUrl(userData.identificationPhoto)}
                 style={{ width: '100%', maxWidth: 240, height: 240, objectFit: 'cover', borderRadius: 8 }}
               />
             ) : (
@@ -200,8 +197,8 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
           title="Thông tin gia đình"
         />
         <ExcelExportButton
-          data={userData?.profileFamily?.map((member: FamilyMember, index: number) => ({ 
-            name: member.fullName, 
+          data={userData?.profileFamily?.map((member: FamilyMember, index: number) => ({
+            name: member.fullName,
             relationship: getRelationshipLabel(member.relationship),
             birthday: member.birthday ? dayjs(member.birthday).format('DD/MM/YYYY') : '-',
             dependent: member.dependent ? 'Có' : 'Không'
