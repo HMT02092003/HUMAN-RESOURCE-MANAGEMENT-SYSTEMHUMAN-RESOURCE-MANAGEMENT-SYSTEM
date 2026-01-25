@@ -166,32 +166,22 @@ export const getAllUsers = async (req: any, res: Response) => {
     const authToken = token ? `Bearer ${token}` : undefined;
     const currentUserData = getUserData(req);
 
-    const usersWithDetails = await Promise.all(result.results.map(async (user: any) => {
-      let department = null;
-      let chevron = null;
+    // Optimized: Fetch all departments and chevrons once
+    const [allDepartments, allChevrons] = await Promise.all([
+      EmployeeService.getAllDepartments(authToken, currentUserData),
+      EmployeeService.getAllChevrons(authToken, currentUserData)
+    ]);
 
-      try {
-        if (user.departmentId) {
-          department = await EmployeeService.getDepartmentById(user.departmentId, authToken, currentUserData);
-        }
-      } catch (e: any) {
-        console.error(`Error fetching department ${user.departmentId}:`, e.message || 'Unknown error');
-      }
-
-      try {
-        if (user.chevronId) {
-          chevron = await EmployeeService.getChevronDetail(user.chevronId, authToken, currentUserData);
-        }
-      } catch (e: any) {
-        console.error(`Error fetching chevron ${user.chevronId}:`, e.message || 'Unknown error');
-      }
+    const usersWithDetails = result.results.map((user: any) => {
+      const department = allDepartments.find((d: any) => d.id === user.departmentId) || null;
+      const chevron = allChevrons.find((c: any) => c.id === user.chevronId) || null;
 
       return {
         ...user,
         department,
         chevron,
       };
-    }));
+    });
 
     result.results = usersWithDetails;
 
@@ -394,29 +384,21 @@ export const getAllUsersAll = async (req: any, res: Response) => {
     console.log('getAllUsersAll - query result:', result.results?.length, 'total:', result.total);
 
     // Enrich with department and chevron details (reuse token/authToken/currentUserData from above)
-    const usersWithDetails = await Promise.all((result.results || []).map(async (user: any) => {
-      let department = null;
-      let chevron = null;
-      try {
-        if (user.departmentId) {
-          department = await EmployeeService.getDepartmentById(user.departmentId, authToken, currentUserData);
-        }
-      } catch (e: any) {
-        console.error(`Error fetching department ${user.departmentId}:`, e.message || 'Unknown error');
-      }
-      try {
-        if (user.chevronId) {
-          chevron = await EmployeeService.getChevronDetail(user.chevronId, authToken, currentUserData);
-        }
-      } catch (e: any) {
-        console.error(`Error fetching chevron ${user.chevronId}:`, e.message || 'Unknown error');
-      }
+    // Optimized: Fetch all departments and chevrons once
+    const [allDepartments, allChevrons] = await Promise.all([
+      EmployeeService.getAllDepartments(authToken, currentUserData),
+      EmployeeService.getAllChevrons(authToken, currentUserData)
+    ]);
+
+    const usersWithDetails = (result.results || []).map((user: any) => {
+      const department = allDepartments.find((d: any) => d.id === user.departmentId) || null;
+      const chevron = allChevrons.find((c: any) => c.id === user.chevronId) || null;
       return {
         ...user,
         department,
         chevron,
       };
-    }));
+    });
 
     // Return paginated response
     return res.status(200).json({
@@ -454,29 +436,21 @@ export const getAllUsersAllForSelect = async (req: any, res: Response) => {
     const authToken = token ? `Bearer ${token}` : undefined;
     const currentUserData = getUserData(req);
 
-    const usersWithDetails = await Promise.all(users.map(async (user: any) => {
-      let department = null;
-      let chevron = null;
-      try {
-        if (user.departmentId) {
-          department = await EmployeeService.getDepartmentById(user.departmentId, authToken, currentUserData);
-        }
-      } catch (e: any) {
-        console.error(`Error fetching department ${user.departmentId}:`, e.message || 'Unknown error');
-      }
-      try {
-        if (user.chevronId) {
-          chevron = await EmployeeService.getChevronDetail(user.chevronId, authToken, currentUserData);
-        }
-      } catch (e: any) {
-        console.error(`Error fetching chevron ${user.chevronId}:`, e.message || 'Unknown error');
-      }
+    // Optimized: Fetch metadata in bulk
+    const [allDepartments, allChevrons] = await Promise.all([
+      EmployeeService.getAllDepartments(authToken, currentUserData),
+      EmployeeService.getAllChevrons(authToken, currentUserData)
+    ]);
+
+    const usersWithDetails = users.map((user: any) => {
+      const department = allDepartments.find((d: any) => d.id === user.departmentId) || null;
+      const chevron = allChevrons.find((c: any) => c.id === user.chevronId) || null;
       return {
         ...user,
         department,
         chevron,
       };
-    }));
+    });
 
     return res.status(200).json(usersWithDetails);
   } catch (error) {

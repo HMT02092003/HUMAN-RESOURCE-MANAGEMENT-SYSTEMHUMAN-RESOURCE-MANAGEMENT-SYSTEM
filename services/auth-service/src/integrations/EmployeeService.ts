@@ -5,7 +5,7 @@ const API_GATEWAY_URL = process.env.API_GATEWAY_URL || `http://localhost:${proce
 
 class EmployeeService {
   /**
-   * Get all departments
+   * Get all departments (Full list for mapping)
    */
   static async getAllDepartments(authToken?: string, userData?: any): Promise<any[]> {
     try {
@@ -13,8 +13,9 @@ class EmployeeService {
       if (authToken) headers['Authorization'] = authToken;
       if (userData) headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
 
+      // ✨ Use /all/departments for faster, non-paginated access without complex role mapping
       const response = await axios.get(
-        `${EMPLOYEE_SERVICE_URL}/api/departments`,
+        `${EMPLOYEE_SERVICE_URL}/api/all/departments`,
         { headers }
       );
       return response.data?.data || response.data || [];
@@ -25,7 +26,7 @@ class EmployeeService {
   }
 
   /**
-   * Get all chevrons
+   * Get all chevrons (Full list for mapping)
    */
   static async getAllChevrons(authToken?: string, userData?: any): Promise<any[]> {
     try {
@@ -33,8 +34,9 @@ class EmployeeService {
       if (authToken) headers['Authorization'] = authToken;
       if (userData) headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
 
+      // ✨ Use /all/chevrons for faster, non-paginated access
       const response = await axios.get(
-        `${EMPLOYEE_SERVICE_URL}/api/chevrons`,
+        `${EMPLOYEE_SERVICE_URL}/api/all/chevrons`,
         { headers }
       );
       return response.data?.data || response.data || [];

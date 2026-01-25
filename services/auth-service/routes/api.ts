@@ -49,8 +49,8 @@ const router = Router();
 
 // Enhanced multer setup with better error handling
 const createUploadMiddleware = () => {
-  // Ensure upload directory exists
-  const uploadPath = path.resolve(process.cwd(), 'public', 'uploads', 'identificationPhoto');
+  // Ensure upload directory exists - Unify to public/identificationPhoto
+  const uploadPath = path.resolve(process.cwd(), 'public', 'identificationPhoto');
   try {
     fs.mkdirSync(uploadPath, { recursive: true });
   } catch (error: any) {
@@ -150,7 +150,7 @@ const uploadRoutes = [
     path: '/users',
     handler: (req: Request, res: Response) => {
       if ((req as any).file) {
-        req.body.identificationPhoto = `/uploads/identificationPhoto/${(req as any).file.filename}`;
+        req.body.identificationPhoto = `/identificationPhoto/${(req as any).file.filename}`;
       }
       createUser(req, res);
     },
@@ -162,7 +162,7 @@ const uploadRoutes = [
     path: '/users/:id',
     handler: (req: Request, res: Response) => {
       if ((req as any).file) {
-        req.body.identificationPhoto = `/uploads/identificationPhoto/${(req as any).file.filename}`;
+        req.body.identificationPhoto = `/identificationPhoto/${(req as any).file.filename}`;
       }
       updateUser(req, res);
     },

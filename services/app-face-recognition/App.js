@@ -6,6 +6,8 @@ import EnhancedCameraViewV2 from './components/EnhancedCameraViewV2';
 import AttendanceConfirmation from './components/AttendanceConfirmation';
 import AuthTokenManager from './services/AuthTokenManager';
 
+import apiConfig from './config/apiConfig';
+
 export default function App() {
   const [capturedImage, setCapturedImage] = useState(null);
   const [recognitionResult, setRecognitionResult] = useState(null);
@@ -16,6 +18,9 @@ export default function App() {
   React.useEffect(() => {
     (async () => {
       try {
+        // Initialize API Config (Check Network Connectivity)
+        await apiConfig.initialize();
+
         console.log('🔐 [APP] Checking for existing token...');
         const token = await AuthTokenManager.getAccessToken();
         if (token) {
@@ -50,11 +55,11 @@ export default function App() {
   const handleCapture = (imageUri, aiResult) => {
     setCapturedImage(imageUri);
     setRecognitionResult(aiResult);
-    
+
     // Hiển thị kết quả nhận diện
     if (aiResult) {
       console.log('Recognition Result:', aiResult);
-      
+
       // Bạn có thể thêm logic để hiển thị thông tin nhận diện
       // Ví dụ: tên nhân viên, trạng thái chấm công, v.v.
     }
@@ -72,7 +77,7 @@ export default function App() {
     <SafeAreaProvider>
       <View style={styles.container}>
         <StatusBar style="light" />
-        
+
         {
           (() => {
             if (authLoading) return null;
