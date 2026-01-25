@@ -32,7 +32,7 @@ class RabbitMQManager {
    */
   getConnectionURLs() {
     const urls = [];
-    
+
     // 1. CloudAMQP (Ưu tiên cao nhất nếu có)
     if (process.env.CLOUDAMQP_URL) {
       urls.push({
@@ -84,12 +84,12 @@ class RabbitMQManager {
     for (const config of urls) {
       try {
         console.log(`\n⏳ Đang thử kết nối: ${config.name}...`);
-        
+
         this.connection = await amqp.connect(config.url, {
           heartbeat: 60,
           timeout: 10000 // 10s timeout
         });
-        
+
         this.channel = await this.connection.createChannel();
         this.isConnected = true;
         this.mode = config.mode;
@@ -101,7 +101,7 @@ class RabbitMQManager {
 
         // Setup event listeners
         this.setupEventListeners();
-        
+
         // Setup queues
         await this.setupQueues();
 
@@ -117,7 +117,7 @@ class RabbitMQManager {
     console.log('🔄 Chuyển sang SYNC FALLBACK MODE (xử lý đồng bộ)');
     this.mode = 'sync-fallback';
     this.isConnected = false;
-    
+
     return false;
   }
 
@@ -172,7 +172,7 @@ class RabbitMQManager {
 
     this.reconnectAttempts++;
     console.log(`🔄 Thử kết nối lại (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-    
+
     setTimeout(async () => {
       await this.connect();
     }, this.reconnectDelay);
@@ -186,8 +186,8 @@ class RabbitMQManager {
     // Nếu đang ở sync-fallback mode hoặc không kết nối
     if (this.mode === 'sync-fallback' || !this.isConnected || !this.channel) {
       console.log('⚠️  Sync Fallback: Sẽ xử lý đồng bộ');
-      return { 
-        success: true, 
+      return {
+        success: true,
         mode: 'sync-fallback',
         message: 'RabbitMQ không khả dụng, sử dụng xử lý đồng bộ'
       };
@@ -212,8 +212,8 @@ class RabbitMQManager {
     } catch (error) {
       console.error(`❌ Lỗi gửi message: ${error.message}`);
       console.log('🔄 Fallback: Chuyển sang xử lý đồng bộ');
-      return { 
-        success: true, 
+      return {
+        success: true,
         mode: 'sync-fallback',
         message: 'Lỗi RabbitMQ, sử dụng xử lý đồng bộ'
       };
@@ -227,8 +227,8 @@ class RabbitMQManager {
   async saveToDatabaseFallback(queueName, data) {
     try {
       // Import database ở đây để tránh circular dependency
-      const knex = (await import('../lib/database.js')).default;
-      
+      const knex = (await import('../lib/Databases/Connection.ts')).default;
+
       const inserted = await knex('task_queue').insert({
         queue_name: queueName,
         payload: JSON.stringify(data),
@@ -238,11 +238,11 @@ class RabbitMQManager {
       }).returning('*');
 
       console.log(`💾 Đã lưu task vào database (ID: ${inserted[0]?.id})`);
-      
-      return { 
-        success: true, 
+
+      return {
+        success: true,
         mode: 'database_fallback',
-        taskId: inserted[0]?.id 
+        taskId: inserted[0]?.id
       };
 
     } catch (error) {
@@ -262,7 +262,7 @@ class RabbitMQManager {
 
     try {
       await this.channel.prefetch(1); // Chỉ xử lý 1 message tại 1 thời điểm
-      
+
       console.log(`👂 Đang lắng nghe queue: ${queueName}`);
 
       this.channel.consume(queueName, async (msg) => {
@@ -281,10 +281,10 @@ class RabbitMQManager {
 
         } catch (error) {
           console.error('❌ Lỗi xử lý message:', error.message);
-          
+
           // Retry logic: Nếu lỗi, gửi lại vào queue (max 3 lần)
           const retryCount = (msg.properties.headers?.['x-retry-count'] || 0) + 1;
-          
+
           if (retryCount < 3) {
             console.log(`🔄 Retry lần ${retryCount}...`);
             this.channel.sendToQueue(queueName, msg.content, {

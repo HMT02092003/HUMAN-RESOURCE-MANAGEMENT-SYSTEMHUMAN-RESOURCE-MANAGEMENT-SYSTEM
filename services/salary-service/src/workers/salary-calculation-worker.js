@@ -45,10 +45,35 @@ class SalaryCalculationWorker {
 
     // Kết nối RabbitMQ trước khi lắng nghe queue
     console.log('🔌 Đang kết nối RabbitMQ...');
-    const connected = await rabbitmqManager.connect();
-    
+
+    let connected = false;
+    let retryCount = 0;
+    const maxRetries = 5;
+
+    while (!connected && retryCount < maxRetries) {
+      connected = await rabbitmqManager.connect();
+      if (!connected) {
+        retryCount++;
+        console.log(`⚠️  Không kết nối được RabbitMQ. Thử lại lần ${retryCount}/${maxRetries} sau 5 giây...`);
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+    }
+
     if (!connected) {
-      console.log('⚠️  Không kết nối được RabbitMQ, bỏ qua worker mode');
+      console.log('⚠️  Không kết nối được RabbitMQ sau các lần thử ban đầu.');
+      console.log('⏳ Sẽ giữ worker chạy và retry ngầm mỗi 30 giây...');
+
+      setInterval(async () => {
+        if (!rabbitmqManager.isConnected) {
+          console.log('🔄 Thử kết nối lại RabbitMQ (Background)...');
+          const reconnected = await rabbitmqManager.connect();
+          if (reconnected) {
+            console.log('✅ Đã kết nối thành công RabbitMQ!');
+            await rabbitmqManager.consumeQueue('salary_calculation_queue', this.handleSalaryCalculation.bind(this));
+            console.log('✅ Worker đã sẵn sàng xử lý message!');
+          }
+        }
+      }, 30000);
       return;
     }
 
@@ -74,7 +99,7 @@ class SalaryCalculationWorker {
     console.log(`🎯 RequestedBy: ${requestedBy}, forceRecalculate: ${!!forceRecalculate}`);
 
     try {
-      const monthStr = `${year}-${String(month).padStart(2,'0')}`;
+      const monthStr = `${year}-${String(month).padStart(2, '0')}`;
 
       // Xóa bảng lương cũ nếu forceRecalculate
       if (forceRecalculate) {
@@ -89,7 +114,7 @@ class SalaryCalculationWorker {
       // Gọi service tính toán đầy đủ
       console.log('💼 Đang gọi PayslipCalculationService để tính lương đầy đủ...');
       const result = await PayslipCalculationService.calculateAndInsertPayslipsForMonth(monthStr, { authToken });
-      
+
       console.log('\n' + '='.repeat(60));
       console.log(`📊 KẾT QUẢ TÍNH LƯƠNG THÁNG ${month}/${year}`);
       console.log(`✅ Thành công: ${result.inserted || 0}`);
@@ -107,15 +132,15 @@ class SalaryCalculationWorker {
         try {
           let notificationContent = `Đã hoàn thành tính lương tháng ${month}/${year}.\n`;
           notificationContent += `✅ Thành công: ${result.inserted || 0} nhân viên\n`;
-          
+
           if (result.skipped > 0) {
             notificationContent += `⏭️ Đã bỏ qua: ${result.skipped} (đã tồn tại)\n`;
           }
-          
+
           if (result.usersWithoutContracts?.length > 0) {
             notificationContent += `⚠️ ${result.usersWithoutContracts.length} nhân viên không có hợp đồng hiệu lực\n`;
           }
-          
+
           if (result.usersWithoutSalaryProfile?.length > 0) {
             notificationContent += `⚠️ ${result.usersWithoutSalaryProfile.length} nhân viên chưa có cấu hình lương\n`;
           }
@@ -196,9 +221,9 @@ class SalaryCalculationWorker {
 
     const [inserted] = await knex('monthly_payslips').insert(insertData).returning('*');
     const payslipId = inserted?.id || inserted[0]?.id;
-    
+
     console.log(`💵 Tổng lương: ${calculationResult.total_salary?.toLocaleString() || 0} VNĐ`);
-    
+
     return payslipId;
   }
 
@@ -213,7 +238,7 @@ class SalaryCalculationWorker {
     try {
       const url = `${ATTENDANCE_SERVICE_URL}/user/${employeeId}/monthly-full`;
       console.log(`🔗 Calling attendance API: ${url}?year=${year}&month=${month}`);
-      
+
       const response = await axios.get(url, {
         params: { year, month },
         timeout: 10000
@@ -280,7 +305,7 @@ class SalaryCalculationWorker {
     try {
       const url = `${AI_SERVICE_URL}/calculate-salary`;
       console.log(`🤖 Calling AI Service: ${url}`);
-      
+
       const response = await axios.post(url, {
         employee_id: data.employeeId,
         base_salary: data.salaryProfile.base_salary,
@@ -304,7 +329,7 @@ class SalaryCalculationWorker {
     } catch (error) {
       console.error('❌ AI Service không khả dụng:', error.message);
       console.log('🔄 Fallback: Tính lương theo công thức cơ bản');
-      
+
       // Fallback: Tính lương đơn giản khi AI không hoạt động hoặc endpoint không tồn tại
       return this.calculateSalaryBasic(data);
     }
@@ -315,21 +340,21 @@ class SalaryCalculationWorker {
    */
   calculateSalaryBasic(data) {
     const { salaryProfile, attendanceData } = data;
-    
+
     const baseSalary = parseFloat(salaryProfile.base_salary);
     const workingDays = attendanceData.working_days;
     const standardDays = 22;
-    
+
     // Lương theo ngày công
     const salaryPerDay = baseSalary / standardDays;
     const actualSalary = salaryPerDay * workingDays;
-    
+
     // Phụ cấp
     const allowances = parseFloat(salaryProfile.allowances || 0);
-    
+
     // Overtime
     const overtimePay = attendanceData.overtime_hours * (salaryPerDay / 8) * 1.5;
-    
+
     // Tổng lương
     const totalSalary = actualSalary + allowances + overtimePay;
 
@@ -393,7 +418,7 @@ class SalaryCalculationWorker {
             try {
               await knex('task_queue')
                 .where('id', task.id)
-                .update({ 
+                .update({
                   status: 'processing',
                   processed_at: new Date()
                 });
@@ -403,7 +428,7 @@ class SalaryCalculationWorker {
 
               await knex('task_queue')
                 .where('id', task.id)
-                .update({ 
+                .update({
                   status: 'completed',
                   completed_at: new Date()
                 });
@@ -413,7 +438,7 @@ class SalaryCalculationWorker {
 
               await knex('task_queue')
                 .where('id', task.id)
-                .update({ 
+                .update({
                   status: 'pending',
                   retry_count: task.retry_count + 1,
                   error_message: error.message
