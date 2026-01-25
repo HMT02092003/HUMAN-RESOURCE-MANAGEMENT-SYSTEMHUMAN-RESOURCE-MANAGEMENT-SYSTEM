@@ -596,7 +596,7 @@ export const importUsers = async (req: Request, res: Response) => {
         }
 
         // Hash password
-        params.password = await bcrypt.hash(params.password, 10);
+        params.password = await bcrypt.hash(String(params.password), 10);
 
         // Add createdBy
         if (auth && auth.id) {

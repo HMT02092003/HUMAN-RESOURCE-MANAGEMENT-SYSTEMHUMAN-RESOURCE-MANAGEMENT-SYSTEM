@@ -36,7 +36,14 @@ function AppNavigator() {
   );
 }
 
+import { determineBestApiUrl } from './services/apiConfig';
+
 export default function App() {
+  React.useEffect(() => {
+    // Trigger API URL check on app launch
+    determineBestApiUrl();
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>

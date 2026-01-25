@@ -14,29 +14,65 @@ import Constants from 'expo-constants';
 /**
  * Static Ngrok Domain for public access
  */
+// State to store the working URL
+let activeBaseUrl = null;
+
 export const NGROK_URL = 'https://virgilio-wolfish-nonracially.ngrok-free.dev/api';
 
 /**
- * Lấy API Base URL từ biến môi trường hoặc fallback sang Ngrok
+ * Determine the best API URL by testing connection
+ * Priority: NGROK -> ENV/Local
+ */
+export const determineBestApiUrl = async () => {
+  const envUrl = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
+  const localUrl = envUrl || 'http://localhost:4100/api';
+
+  console.log('🔄 [APIConfig] Checking API connections...');
+
+  // 1. Try Ngrok first
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+    // Check health endpoint (remove /api if present then add /health) or just /health relative to root
+    // Our NGROK_URL has /api at the end, so we need to go up one level
+    const healthUrl = `${NGROK_URL.replace(/\/api$/, '')}/health`;
+
+    console.log(`Checking Ngrok: ${healthUrl}`);
+    const response = await fetch(healthUrl, {
+      method: "GET",
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      console.log('✅ [APIConfig] Connected to Public NGROK');
+      activeBaseUrl = NGROK_URL;
+      return activeBaseUrl;
+    }
+  } catch (e) {
+    console.warn('⚠️ [APIConfig] Ngrok unreachable:', e.message);
+  }
+
+  // 2. Fallback to Local
+  console.log(`🏠 [APIConfig] Fallback to Local URL: ${localUrl}`);
+  activeBaseUrl = localUrl;
+  return activeBaseUrl;
+};
+
+/**
+ * Get the current active API Base URL
+ * Prefers determined URL, falls back to Ngrok then Local
  */
 export const getApiBaseUrl = () => {
-  const lanUrl = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
+  if (activeBaseUrl) return activeBaseUrl;
 
-  // Mặc định ưu tiên sử dụng Ngrok nếu đang build để test bên ngoài
-  // Bạn có thể đổi thứ tự này nếu muốn mặc định chạy LAN khi ở nhà
-  const primaryUrl = NGROK_URL;
-  const secondaryUrl = lanUrl || 'http://192.168.1.8:4100/api';
-
-  console.log('\n╔═══════════════════════════════════════════════════════╗');
-  console.log('║  📡 API Endpoint Configuration                        ║');
-  console.log('╚═══════════════════════════════════════════════════════╝');
-  console.log('🔗 Primary (Ngrok):', primaryUrl);
-  console.log('🏠 Secondary (LAN):', secondaryUrl);
-
-  // Ở bước này ta chỉ trả về Primary, việc fallback sẽ được xử lý ở tầng Service nếu cần
-  // Hoặc ta có thể trả về một logic thông minh hơn.
-  // Tuy nhiên theo yêu cầu của bạn, tôi sẽ trả về Ngrok làm mặc định.
-  return primaryUrl;
+  // Default initial return while checking (or if check hasn't run)
+  // We default to NGROK as requested, but if determineBestApiUrl hasn't finished, 
+  // it might fail. Ideally the app should wait for determination.
+  // For now, return NGROK_URL as default.
+  return NGROK_URL;
 };
 
 /**
