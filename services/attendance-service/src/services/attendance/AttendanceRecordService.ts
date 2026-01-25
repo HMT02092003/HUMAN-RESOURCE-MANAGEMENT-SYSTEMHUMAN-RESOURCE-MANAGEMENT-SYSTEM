@@ -13,7 +13,7 @@ dayjs.extend(timezone);
 
 export async function recordAttendance(userId: number, time: string, token?: string, userData?: any): Promise<any> {
   try {
-    const date = dayjs(time).format('YYYY-MM-DD');
+    const date = dayjs(time).tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
 
     const existingRecord = await TimeAttendanceModel.query().where('userId', userId).where('date', date).first();
 
@@ -61,10 +61,10 @@ export async function recordAttendance(userId: number, time: string, token?: str
 
     // ✨ Truyền shift và OT times vào calculateAttendance
     const calculation = await AttendanceCalculationService.calculateAttendance(
-      record.checkInTime, 
-      record.checkOutTime, 
-      date, 
-      userId, 
+      record.checkInTime,
+      record.checkOutTime,
+      date,
+      userId,
       token,
       otEndTime, // OT end time (ISO string hoặc undefined)
       undefined, // isHoliday - sẽ được tính trong calculateAttendance
@@ -93,12 +93,12 @@ export async function recordAttendance(userId: number, time: string, token?: str
       earlyLeavePenalty: calculation.earlyLeavePenaltyAmount
       // ✅ REMOVED: otMinutes and otSalary (deprecated columns)
     };
-    
+
     console.log('💾 Saving record', { recordId: record.id, dailyTotalWorkHours: updateData.dailyTotalWorkHours, otWorkingUnit: updateData.otWorkingUnit, totalWorkingUnit: updateData.totalWorkingUnit });
     console.log('🔑 OT info', { hasApprovedOT: !!overtimeApp, otStartTime: otStartTime ? dayjs(otStartTime).tz('Asia/Ho_Chi_Minh').format('HH:mm:ss') : null, otEndTime: otEndTime ? dayjs(otEndTime).tz('Asia/Ho_Chi_Minh').format('HH:mm:ss') : null });
-    
+
     const updatedRecord = await TimeAttendanceModel.query().patchAndFetchById(record.id, updateData);
-    
+
     console.log(`✅ [recordAttendance] Record updated`, { id: updatedRecord.id, otWorkingUnit: updatedRecord.otWorkingUnit, totalWorkingUnit: updatedRecord.totalWorkingUnit });
 
     // Recalculate and upsert monthly summary for this user/month
@@ -110,10 +110,10 @@ export async function recordAttendance(userId: number, time: string, token?: str
       console.error(`❌ [attendance] Failed to update monthly summary:`, monthlyErr);
     }
 
-    return { 
-      type: isCheckIn ? 'check_in' : 'check_out', 
-      record: updatedRecord, 
-      calculation, 
+    return {
+      type: isCheckIn ? 'check_in' : 'check_out',
+      record: updatedRecord,
+      calculation,
       hasOvertimeApproval: !!overtimeApp,
       shift // ✨ Trả về thông tin shift cho FE
     };
@@ -122,4 +122,3 @@ export async function recordAttendance(userId: number, time: string, token?: str
     throw error;
   }
 }
-    

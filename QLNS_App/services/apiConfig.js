@@ -17,62 +17,60 @@ import Constants from 'expo-constants';
 // State to store the working URL
 let activeBaseUrl = null;
 
-export const NGROK_URL = 'https://virgilio-wolfish-nonracially.ngrok-free.dev/api';
-
 /**
  * Determine the best API URL by testing connection
- * Priority: NGROK -> ENV/Local
+ * Priority: NGROK (Public) -> ENV (LAN)
  */
 export const determineBestApiUrl = async () => {
-  const envUrl = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
-  const localUrl = envUrl || 'http://localhost:4100/api';
+  const ngrokUrl = process.env.EXPO_PUBLIC_NGROK_URL;
+  const lanUrl = process.env.EXPO_PUBLIC_API_GATEWAY_URL || 'http://localhost:4100/api';
 
   console.log('🔄 [APIConfig] Checking API connections...');
+  console.log(`📍 Public candidate: ${ngrokUrl || 'None'}`);
+  console.log(`📍 LAN candidate: ${lanUrl}`);
 
-  // 1. Try Ngrok first
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+  // 1. Try Ngrok first (Public)
+  if (ngrokUrl) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout is enough for health check
 
-    // Check health endpoint (remove /api if present then add /health) or just /health relative to root
-    // Our NGROK_URL has /api at the end, so we need to go up one level
-    const healthUrl = `${NGROK_URL.replace(/\/api$/, '')}/health`;
+      // Check health endpoint
+      const healthUrl = `${ngrokUrl.replace(/\/api$/, '')}/health`;
 
-    console.log(`Checking Ngrok: ${healthUrl}`);
-    const response = await fetch(healthUrl, {
-      method: "GET",
-      signal: controller.signal
-    });
+      console.log(`Checking Ngrok: ${healthUrl}`);
+      const response = await fetch(healthUrl, {
+        method: "GET",
+        signal: controller.signal
+      });
 
-    clearTimeout(timeoutId);
+      clearTimeout(timeoutId);
 
-    if (response.ok) {
-      console.log('✅ [APIConfig] Connected to Public NGROK');
-      activeBaseUrl = NGROK_URL;
-      return activeBaseUrl;
+      if (response.ok) {
+        console.log('✅ [APIConfig] Connected to Public NGROK');
+        activeBaseUrl = ngrokUrl;
+        return activeBaseUrl;
+      }
+    } catch (e) {
+      console.warn('⚠️ [APIConfig] Ngrok unreachable:', e.message);
     }
-  } catch (e) {
-    console.warn('⚠️ [APIConfig] Ngrok unreachable:', e.message);
   }
 
-  // 2. Fallback to Local
-  console.log(`🏠 [APIConfig] Fallback to Local URL: ${localUrl}`);
-  activeBaseUrl = localUrl;
+  // 2. Fallback to LAN
+  console.log(`🏠 [APIConfig] Fallback to LAN URL: ${lanUrl}`);
+  activeBaseUrl = lanUrl;
   return activeBaseUrl;
 };
 
 /**
  * Get the current active API Base URL
- * Prefers determined URL, falls back to Ngrok then Local
+ * Prefers determined URL, falls back to Ngrok then LAN
  */
 export const getApiBaseUrl = () => {
   if (activeBaseUrl) return activeBaseUrl;
 
-  // Default initial return while checking (or if check hasn't run)
-  // We default to NGROK as requested, but if determineBestApiUrl hasn't finished, 
-  // it might fail. Ideally the app should wait for determination.
-  // For now, return NGROK_URL as default.
-  return NGROK_URL;
+  // Default initial return while checking
+  return process.env.EXPO_PUBLIC_NGROK_URL || process.env.EXPO_PUBLIC_API_GATEWAY_URL || 'http://localhost:4100/api';
 };
 
 /**

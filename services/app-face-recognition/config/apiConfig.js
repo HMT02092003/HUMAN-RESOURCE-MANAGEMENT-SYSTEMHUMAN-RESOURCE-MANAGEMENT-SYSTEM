@@ -17,42 +17,28 @@ class APIConfig {
   }
 
   /**
-   * Determine best URL by checking connectivity
-   * Priority: NGROK -> ENV -> Localhost
+   * Determine best URL
+   * Strictly uses LAN IP from .env as per requirements
    */
   async determineBestUrl() {
     const envUrl = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
-    const localCandidates = [
-      envUrl,
-      'http://192.168.1.8:4100', // Common local IP from your env
-      'http://localhost:4100'
-    ].filter(Boolean);
 
-    console.log('🔄 [APIConfig] Testing connections...');
+    if (envUrl) {
+      const cleanBase = envUrl.replace(/\/api$/, '');
+      console.log(`📡 [APIConfig] Using API URL from .env: ${cleanBase}`);
 
-    // 1. Try Ngrok
-    if (await this.checkConnection(this.NGROK_URL)) {
-      console.log('✅ [APIConfig] Selected Public NGROK');
-      this._baseURL = this.NGROK_URL;
-      return;
-    }
-
-    // 2. Try Local Candidates
-    for (const url of localCandidates) {
-      // Create clean base URL (no /api suffix for health check usually, but here we treat base as strictly root or /api?) 
-      // Looking at getGatewayURL logic: `baseUrl.replace(/\/api$/, '')`
-      // So let's clean it first.
-      const cleanBase = url.replace(/\/api$/, '');
+      // Still good practice to check if it's reachable
       if (await this.checkConnection(cleanBase)) {
-        console.log(`✅ [APIConfig] Selected Local: ${cleanBase}`);
-        this._baseURL = cleanBase;
-        return;
+        console.log('✅ [APIConfig] Connection successful');
+      } else {
+        console.warn('⚠️ [APIConfig] Connection test failed, but using .env URL as requested.');
       }
-    }
 
-    // 3. Last resort: Default to Ngrok if everything fails (or whatever was default)
-    console.warn('⚠️ [APIConfig] All connections failed. Defaulting to Ngrok.');
-    this._baseURL = this.NGROK_URL;
+      this._baseURL = cleanBase;
+    } else {
+      console.error('❌ [APIConfig] EXPO_PUBLIC_API_GATEWAY_URL not found in .env');
+      this._baseURL = 'http://192.168.1.8:4100'; // Fallback to a default if missing
+    }
   }
 
   async checkConnection(baseUrl) {
@@ -78,9 +64,8 @@ class APIConfig {
   getGatewayURL() {
     if (this._baseURL) return this._baseURL;
 
-    // If not initialized yet (should call initialize() at app start),
-    // default to Ngrok temporarily to avoid blocking immediate sync calls
-    return this.NGROK_URL;
+    // Fallback if not initialized
+    return (process.env.EXPO_PUBLIC_API_GATEWAY_URL || 'http://192.168.1.8:4100').replace(/\/api$/, '');
   }
 
   /**

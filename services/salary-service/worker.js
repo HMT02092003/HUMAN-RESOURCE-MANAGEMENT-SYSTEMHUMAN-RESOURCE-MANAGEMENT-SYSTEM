@@ -20,6 +20,17 @@ dotenv.config();
 
 import SalaryCalculationWorker from './src/workers/salary-calculation-worker.js';
 
+// Global error handlers to prevent worker from "dying" silently
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('😱 [FATAL] Unhandled Rejection at:', promise, 'reason:', reason);
+  // Log but don't exit to keep Docker container alive if possible
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('😱 [FATAL] Uncaught Exception:', err);
+  process.exit(1); // Restart via Docker
+});
+
 console.log('');
 console.log('╔════════════════════════════════════════════════════════╗');
 console.log('║  🚀 STARTING SALARY CALCULATION WORKER                ║');
@@ -32,12 +43,12 @@ console.log('');
   try {
     const worker = new SalaryCalculationWorker();
     await worker.start();
-    
+
     console.log('');
     console.log('✅ Salary Calculation Worker is running');
     console.log('⏸️  Press Ctrl+C to stop');
     console.log('');
-    
+
   } catch (error) {
     console.error('❌ Failed to start worker:', error);
     process.exit(1);

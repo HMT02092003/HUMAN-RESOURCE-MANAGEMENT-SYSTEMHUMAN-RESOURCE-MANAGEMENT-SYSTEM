@@ -9,7 +9,7 @@ class AttendanceService {
   static async getMonthlyAttendanceByMonth(year: number, month: number, authToken?: string, userData?: any): Promise<any> {
     try {
       const headers: any = { 'Content-Type': 'application/json' };
-      if (authToken) headers['Authorization'] = authToken;
+      if (authToken) headers['Authorization'] = authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`;
       if (userData) {
         headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
         headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
@@ -33,7 +33,7 @@ class AttendanceService {
   static async getUserMonthlyFull(userId: number, year: number, month: number, authToken?: string, userData?: any): Promise<any> {
     try {
       const headers: any = { 'Content-Type': 'application/json' };
-      if (authToken) headers['Authorization'] = authToken;
+      if (authToken) headers['Authorization'] = authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`;
       if (userData) {
         headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
         headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);
@@ -56,7 +56,7 @@ class AttendanceService {
   static async calculateStandardWorkingDays(year: number, month: number, authToken?: string, userData?: any): Promise<any> {
     try {
       const headers: any = { 'Content-Type': 'application/json' };
-      if (authToken) headers['Authorization'] = authToken;
+      if (authToken) headers['Authorization'] = authToken.startsWith('Bearer ') ? authToken : `Bearer ${authToken}`;
       if (userData) {
         headers['x-user-data'] = Buffer.from(JSON.stringify(userData)).toString('base64');
         headers['x-user-id'] = String(userData.sub || userData.user?.id || userData.id);

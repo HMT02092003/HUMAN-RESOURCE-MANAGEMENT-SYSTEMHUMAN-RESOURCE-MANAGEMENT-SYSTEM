@@ -229,6 +229,10 @@ exports.seed = async function (knex) {
     let monthRecords = 0;
     let monthStats = { present: 0, leave: 0, businessTrip: 0, absent: 0, ot: 0 };
 
+    // Lấy ngày hiện tại để giới hạn seed
+    const today = new Date('2026-01-26');
+    const todayStr = today.toISOString().split('T')[0];
+
     for (const userId of userIds) {
       // Init monthly data
       const key = `${userId}-${monthStr}`;
@@ -256,6 +260,9 @@ exports.seed = async function (knex) {
       };
 
       for (const date of workdays) {
+        // Chỉ seed đến ngày hiện tại
+        if (date > todayStr) continue;
+
         const appKey = `${userId}-${date}`;
 
         // Check các trường hợp đặc biệt từ applications
@@ -440,10 +447,10 @@ exports.seed = async function (knex) {
       totalEarlyLeavePenalty: d.totalEarlyLeavePenalty,
       totalUnauthorizedAbsencePenalty: d.totalUnauthorizedAbsencePenalty,
       totalPenalty: d.totalPenalty,
-      isApproved: false,
-      approvedBy: null,
-      approvedAt: null,
-      notes: null,
+      isApproved: d.month.startsWith('2025'), // Tự động duyệt các tháng năm 2025
+      approvedBy: d.month.startsWith('2025') ? 1 : null,
+      approvedAt: d.month.startsWith('2025') ? new Date() : null,
+      notes: d.month.startsWith('2025') ? 'Auto-approved by seed' : null,
       created_at: new Date(),
       updated_at: new Date()
     };

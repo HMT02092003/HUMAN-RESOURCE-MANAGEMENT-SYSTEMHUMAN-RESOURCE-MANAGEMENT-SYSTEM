@@ -28,7 +28,7 @@ api.interceptors.request.use(
     async (config) => {
         // Nếu đã xác định Ngrok lỗi, tự động đổi baseURL sang LAN cho các request sau
         if (isUsingFallback && config.baseURL.includes('ngrok-free.dev')) {
-            const lanUrl = process.env.EXPO_PUBLIC_API_GATEWAY_URL || 'http://192.168.1.8:4100/api';
+            const lanUrl = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
             config.baseURL = lanUrl;
             console.log('🔄 [API] Auto-fallback to LAN:', config.baseURL);
         }
@@ -59,7 +59,7 @@ api.interceptors.response.use(
         if (!error.response && originalRequest.baseURL.includes('ngrok-free.dev')) {
             console.warn('⚠️ [API] Ngrok connection failed, trying fallback to LAN...');
 
-            const lanUrl = process.env.EXPO_PUBLIC_API_GATEWAY_URL || 'http://192.168.1.8:4100/api';
+            const lanUrl = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
             originalRequest.baseURL = lanUrl;
             isUsingFallback = true; // Đánh dấu để các request sau dùng luôn LAN
 
