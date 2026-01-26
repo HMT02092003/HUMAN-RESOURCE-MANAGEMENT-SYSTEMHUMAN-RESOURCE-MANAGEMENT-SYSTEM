@@ -10,10 +10,16 @@ export const getPhotoUrl = (photoPath: string | null | undefined): string => {
         return photoPath;
     }
 
-    const cleanPhotoPath = photoPath.startsWith('/') ? photoPath : `/${photoPath}`;
+    // Determine the base path. 
+    // If it's just a filename (no slashes), we assume it's in the identificationPhoto folder.
+    let cleanPhotoPath = photoPath;
+    if (!photoPath.includes('/') && !photoPath.includes('\\')) {
+        cleanPhotoPath = `/identificationPhoto/${photoPath}`;
+    } else {
+        cleanPhotoPath = photoPath.startsWith('/') ? photoPath : `/${photoPath}`;
+    }
 
     // For web browser, using root-relative paths is most reliable when behind a proxy (Nginx/Ngrok)
-    // This allows the browser to request from the same host/port the page is served from.
     if (typeof window !== 'undefined') {
         return cleanPhotoPath;
     }
