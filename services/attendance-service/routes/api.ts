@@ -15,7 +15,8 @@ import {
   updateForgotCheck,
   getTimeAttendancesController,
   getDailyAttendanceForExport,
-  getMonthlySummariesForExport
+  getMonthlySummariesForExport,
+  getDailyAttendanceByScope
 } from '../src/controller/AttendanceController';
 import {
   getSettings,
@@ -65,6 +66,12 @@ router.get('/user/:userId/monthly-full', async (req: Request, res: Response) => 
 // GET /api/attendance/daily-attendance-export?month=2025-12
 router.get('/daily-attendance-export', async (req: Request, res: Response) => {
   await getDailyAttendanceForExport(req, res);
+});
+
+// API: Lấy bảng chấm công hàng ngày theo scope (cho Monitors)
+// GET /api/attendance/daily-attendance-by-scope
+router.get('/daily-attendance-by-scope', async (req: Request, res: Response) => {
+  await getDailyAttendanceByScope(req, res);
 });
 
 // API: Lấy TẤT CẢ bảng duyệt theo scope (cho xuất Excel) - KHÔNG PHÂN TRANG

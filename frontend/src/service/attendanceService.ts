@@ -332,6 +332,27 @@ class AttendanceService {
       throw new Error(error.response?.data?.message || 'Lỗi khi xóa ngày lễ');
     }
   }
+
+  // Fetch daily attendance filtered by scope
+  async getDailyAttendanceByScope(params: {
+    permissionKey?: string;
+    start?: string;
+    end?: string;
+    page?: number;
+    pageSize?: number;
+    sort?: string;
+    order?: 'asc' | 'desc';
+    [key: string]: any;
+  }) {
+    try {
+      const response = await apiService.get('/api/attendance/daily-attendance-by-scope', { params });
+      if (response.data.success) return response.data as { results: any[]; total: number; page: number; pageSize: number };
+      throw new Error(response.data.message || 'Không thể lấy dữ liệu');
+    } catch (error: any) {
+      console.error('Error fetching daily attendance by scope:', error);
+      throw new Error(error.response?.data?.message || error.message || 'Lỗi khi lấy dữ liệu');
+    }
+  }
 }
 
 export const attendanceService = new AttendanceService();

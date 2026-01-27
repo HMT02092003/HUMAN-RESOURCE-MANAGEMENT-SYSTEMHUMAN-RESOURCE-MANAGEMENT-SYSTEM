@@ -448,15 +448,6 @@ const AttendanceApprovalManagement: React.FC = () => {
       width: 100
     },
     {
-      title: 'OT (lương)',
-      dataIndex: 'totalOvertimeSalary',
-      key: 'totalOvertimeSalary',
-      searchField: 'totalOvertimeSalary',
-      sortable: true,
-      filterType: 'number',
-      width: 130
-    },
-    {
       title: 'Phạt muộn',
       dataIndex: 'totalLatePenalty',
       key: 'totalLatePenalty',

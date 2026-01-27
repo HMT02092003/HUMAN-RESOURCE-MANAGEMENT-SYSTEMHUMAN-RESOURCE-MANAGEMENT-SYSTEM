@@ -146,14 +146,14 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         <FileTextOutlined />,
         [
             getItem('Đơn từ cá nhân', 'myApplications', <ProfileOutlined />, 'applications'),
-            getItem('Quản lí đơn từ', 'manageApplications', <ReadOutlined />, 'applications', 'approve'),
+            getItem('Quản lí đơn từ', 'manageApplications', <ReadOutlined />, 'manage_applications', 'approve'),
             // Shift-related menu items now require specific permissions
             // Employees need create+read for registration; leaders/HR/Admin have broader scopes
             getItem('Đăng ký ca', 'shiftRegistration', <CalendarOutlined />, 'shiftRegistration', 'create'),
             getItem('Duyệt đơn đăng ký ca', 'shiftApproval', <CheckCircleOutlined />, 'shiftApproval', 'approve'),
             getItem('Cấu hình ca', 'shiftConfiguration', <SettingOutlined />, 'shiftConfiguration', 'read'),
         ],
-        ['applications']
+        ['applications', 'manage_applications', 'shiftRegistration', 'shiftApproval', 'shiftConfiguration']
     ),
 
     // Chấm công - menu cha với các submenu
@@ -163,10 +163,11 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         <CalendarOutlined />,
         [
             getItem('Bảng chấm công', 'attendance', <CalendarOutlined />, 'timeAttendance'),
+            getItem('Chấm công hàng ngày', 'dailyAttendance', <CalendarOutlined />, 'dailyAttendance'),
             getItem('Duyệt bảng chấm công', 'attendanceApproval', <CheckCircleOutlined />, 'timeAttendance', 'approve'),
-            getItem('Quản lý ngày lễ', 'holidays', <CalendarOutlined />, 'settings'), // Dùng permission settings hoặc root
+            getItem('Quản lý ngày lễ', 'holidays', <CalendarOutlined />, 'holidays'), // Phải dùng đúng key 'holidays' trong DB
         ],
-        ['timeAttendance', 'settings']
+        ['timeAttendance', 'dailyAttendance', 'holidays']
     ),
 
     // Cài đặt hệ thống
@@ -475,6 +476,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
         if (pathname.startsWith('/applications')) return ['applications_parent'];
 
         if (pathname === '/attendance/approval') return ['attendanceApproval'];
+        if (pathname === '/attendance/daily') return ['dailyAttendance'];
         if (pathname === '/attendance') return ['attendance'];
         if (pathname.startsWith('/attendance')) return ['attendance_parent'];
 
@@ -499,6 +501,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                 break;
             case 'attendance':
                 router.push('/attendance');
+                break;
+            case 'dailyAttendance':
+                router.push('/attendance/daily');
                 break;
             case 'attendanceApproval':
                 router.push('/attendance/approval');

@@ -35,6 +35,7 @@ export default {
     client: 'pg',
     connection: dbConfig,
     pool: { min: 2, max: 10 },
-    migrations: { directory: './databases/migrations' }
+    migrations: { directory: './databases/migrations' },
+    seeds: { directory: './databases/seeds' }
   }
 };

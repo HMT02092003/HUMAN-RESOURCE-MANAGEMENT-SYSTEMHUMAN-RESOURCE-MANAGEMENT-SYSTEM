@@ -229,8 +229,8 @@ exports.seed = async function (knex) {
     let monthRecords = 0;
     let monthStats = { present: 0, leave: 0, businessTrip: 0, absent: 0, ot: 0 };
 
-    // Lấy ngày hiện tại để giới hạn seed
-    const today = new Date('2026-01-26');
+    // Force seed until end of Feb 2026
+    const today = new Date('2026-02-28');
     const todayStr = today.toISOString().split('T')[0];
 
     for (const userId of userIds) {
@@ -308,8 +308,8 @@ exports.seed = async function (knex) {
           continue;
         }
 
-        // CASE 3: Random nghỉ không phép (3% mỗi ngày)
-        if (Math.random() < 0.03) {
+        // CASE 3: Random nghỉ không phép (5% mỗi ngày)
+        if (Math.random() < 0.05) {
           monthlyData[key].unauthorizedAbsenceDays++;
           monthlyData[key].totalUnauthorizedAbsencePenalty += 200000; // Phạt 200k/ngày vắng không phép
           monthlyData[key].totalPenalty += 200000;
@@ -317,7 +317,19 @@ exports.seed = async function (knex) {
           continue;
         }
 
-        // CASE 4: Đi làm bình thường
+        // CASE 4: Đi làm bình thường (Check OT trước khi generate time)
+        let otHoursRecord = 0;
+        let isRandomOT = !hasOT && !hasLeave && !hasBusinessTrip && Math.random() < 0.15; // 15% random OT chance
+
+        if (hasOT) {
+          const otData = overtimeMap.get(appKey);
+          otHoursRecord = otData.totalHours || 0;
+        } else if (isRandomOT) {
+          // Random OT: 1.5 - 4 hours
+          otHoursRecord = 1.5 + Math.random() * 2.5;
+          otHoursRecord = Math.round(otHoursRecord * 10) / 10;
+        }
+
         // Kiểm tra forgot-check để điều chỉnh thời gian
         let times;
         if (hasForgotCheck) {
@@ -345,19 +357,40 @@ exports.seed = async function (knex) {
           times = generateDayTimes();
         }
 
+        // Adjust checkOutTime if OT exists
+        if (otHoursRecord > 0) {
+          // Base checkout is around 18:00. Add OT hours.
+          // If generated checkout is already late, keep it or extend it.
+          // Simplification: Set checkout to 18:00 + OT hours + random minutes
+          const baseEndHour = 18;
+          const extraHours = Math.floor(otHoursRecord);
+          const extraMinutes = Math.floor((otHoursRecord - extraHours) * 60) + Math.floor(Math.random() * 15);
+
+          let finalHour = baseEndHour + extraHours;
+          let finalMinute = extraMinutes; // Could be > 60
+
+          if (finalMinute >= 60) {
+            finalHour += Math.floor(finalMinute / 60);
+            finalMinute = finalMinute % 60;
+          }
+
+          if (finalHour > 23) finalHour = 23; // cap at midnight
+
+          times.checkOutHour = finalHour;
+          times.checkOutMinute = finalMinute;
+          times.checkOutTime = `${String(finalHour).padStart(2, '0')}:${String(finalMinute).padStart(2, '0')}:00`;
+        }
+
+
         const workHours = calculateWorkHours(times.checkInHour, times.checkInMinute, times.checkOutHour, times.checkOutMinute);
         const { lateMinutes, earlyMinutes, latePenalty, earlyPenalty } = calculateLateness(times.checkInHour, times.checkInMinute, times.checkOutHour, times.checkOutMinute);
 
         // Tính công: 1 công nếu làm >= 4h
         let dailyWorkingUnit = workHours >= 4 ? 1 : 0.5;
-        let otWorkingUnit = 0;
-        let otHoursRecord = 0;
+        let otWorkingUnit = otHoursRecord / 8; // Mỗi 8h OT = 1 công OT
 
-        // CASE 5: Có đơn OT được duyệt
-        if (hasOT) {
-          const otData = overtimeMap.get(appKey);
-          otHoursRecord = otData.totalHours || 0;
-          otWorkingUnit = otHoursRecord / 8; // Mỗi 8h OT = 1 công OT
+        // CASE 5: Cập nhật thống kê OT
+        if (otHoursRecord > 0) {
           monthlyData[key].totalOvertimeHours += otHoursRecord;
           monthlyData[key].totalOtWorkingUnits += otWorkingUnit;
           monthStats.ot++;

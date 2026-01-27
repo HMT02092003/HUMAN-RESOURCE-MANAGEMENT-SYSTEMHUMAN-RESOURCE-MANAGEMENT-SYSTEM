@@ -261,29 +261,29 @@ const SalaryManagement: React.FC = () => {
       width: 160,
       render: (text: any) => formatDate(text),
     },
-    {
-      title: 'Trạng thái',
-      dataIndex: 'status',
-      key: 'status',
-      searchField: 'status',
-      sortable: true,
-      filterType: 'select',
-      filterOptions: [
-        { value: '1', label: 'Nháp' },
-        { value: '2', label: 'Hoàn thành' }
-      ],
-      fixed: 'right',
-      width: 130,
-      render: (status: any) => {
-        const key = typeof status === 'number' ? status : Number(status);
-        const label = TypeOfStatusSalary[key as keyof typeof TypeOfStatusSalary] || 'Không xác định';
-        return (
-          <Tag color={key === 1 ? "red" : 'green'}>
-            {label}
-          </Tag>
-        );
-      },
-    },
+    // {
+    //   title: 'Trạng thái',
+    //   dataIndex: 'status',
+    //   key: 'status',
+    //   searchField: 'status',
+    //   sortable: true,
+    //   filterType: 'select',
+    //   filterOptions: [
+    //     { value: '1', label: 'Nháp' },
+    //     { value: '2', label: 'Hoàn thành' }
+    //   ],
+    //   fixed: 'right',
+    //   width: 130,
+    //   render: (status: any) => {
+    //     const key = typeof status === 'number' ? status : Number(status);
+    //     const label = TypeOfStatusSalary[key as keyof typeof TypeOfStatusSalary] || 'Không xác định';
+    //     return (
+    //       <Tag color={key === 1 ? "red" : 'green'}>
+    //         {label}
+    //       </Tag>
+    //     );
+    //   },
+    // },
   ];
 
   // Kiểm tra xem có người dùng không hợp lệ không

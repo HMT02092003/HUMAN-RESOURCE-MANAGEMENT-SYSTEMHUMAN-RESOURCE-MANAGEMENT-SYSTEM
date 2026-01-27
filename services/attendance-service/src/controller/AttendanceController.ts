@@ -1002,3 +1002,123 @@ export const getTimeAttendancesController = async (req: Request, res: Response) 
     });
   }
 };
+
+/**
+ * API: Lấy dữ liệu chấm công hàng ngày theo scope (Flat list with filters & pagination)
+ * GET /api/attendance/daily-attendance-by-scope
+ * Query: start (YYYY-MM-DD), end (YYYY-MM-DD), page, pageSize, sort, order, ...
+ */
+export const getDailyAttendanceByScope = async (req: Request, res: Response) => {
+  try {
+    const { start, end, page = 1, pageSize = 20, sort, order = 'desc', permissionKey = 'dailyAttendance', ...filters } = req.query;
+
+    if (!start || !end) {
+      return res.status(400).json({ success: false, message: 'Start and End dates are required' });
+    }
+
+    // Auth & Scope Check
+    let token = req.cookies?.['token'];
+    if (!token && req.headers.authorization) {
+      token = req.headers.authorization.replace('Bearer ', '');
+    }
+    if (!token) return res.status(401).json({ success: false, message: 'Unauthorized' });
+
+    const userData = getUserData(req);
+    const CheckScopeService = (await import('../services/CheckScopeService')).default;
+
+    const scopeResult = await CheckScopeService.checkUserScope(permissionKey as string, token, userData);
+
+    if (!scopeResult.hasAccess) {
+      return res.status(403).json({ success: false, message: 'Forbidden' });
+    }
+
+    let allowedUserIds = scopeResult.userIds;
+
+    // Apply Search/Filter on Users (FullName, Department)
+    // If fullName is searched handled via CheckScopeService.searchUsers or we fetch all in scope and filter in memory if list small?
+    // CheckScopeService.searchUsers is global search. We need intersection.
+    if (filters['fullName'] || filters['departmentName'] || filters['q']) {
+      const searchTerm = (filters['fullName'] || filters['departmentName'] || filters['q']) as string;
+      // Search users
+      const matchedUsers = await CheckScopeService.searchUsers(searchTerm, token);
+      const matchedIds = matchedUsers.map(u => u.id);
+
+      if (allowedUserIds.length > 0) {
+        // Intersect
+        allowedUserIds = allowedUserIds.filter(id => matchedIds.includes(id));
+      } else if (scopeResult.scope === 'global') {
+        // Admin sorting globally
+        allowedUserIds = matchedIds;
+      }
+
+      // If intersection empty, return empty
+      if (allowedUserIds.length === 0) {
+        return res.json({ success: true, results: [], total: 0, page: Number(page), pageSize: Number(pageSize) });
+      }
+    }
+
+    // Build Query
+    let query = TimeAttendanceModel.query()
+      .whereBetween('date', [start as string, end as string]);
+
+    if (scopeResult.scope === 'personal') {
+      const decoded = getDecodedToken(token);
+      query = query.where('userId', Number(decoded?.sub));
+    } else if (allowedUserIds.length > 0) {
+      query = query.whereIn('userId', allowedUserIds);
+    } else if (scopeResult.scope !== 'global' && allowedUserIds.length === 0) {
+      // Restricted scope but no user IDs found/assigned
+      return res.json({ success: true, results: [], total: 0, page: Number(page), pageSize: Number(pageSize) });
+    }
+
+    // Sort logic
+    // Sort by userId, date by default
+    // If sort by fullName requested, we can't easily sort in DB.
+    // We ignore sort by fullName for now in DB query, and sorting will affect `userId`.
+    // Or we accept `date` sort.
+
+    if (sort === 'date' || !sort) {
+      query = query.orderBy('date', order as 'asc' | 'desc');
+    } else if (sort === 'userId') {
+      query = query.orderBy('userId', order as 'asc' | 'desc');
+    } else {
+      // Fallback for unknown sort fields typically handled by client or ignored
+      query = query.orderBy('date', 'desc');
+    }
+
+
+    // Pagination
+    const p = Math.max(0, Number(page) - 1);
+    const ps = Number(pageSize);
+    const result = await query.page(p, ps);
+
+    // Fetch user details for the page results
+    const pageUserIds = [...new Set(result.results.map(r => r.userId))];
+    const users = await CheckScopeService.getUsersByIds(pageUserIds, token);
+    const usersMap = new Map(users.map(u => [u.id, u]));
+
+    // Flatten result
+    const flatten = result.results.map((r: any) => {
+      const user = usersMap.get(r.userId);
+      return {
+        ...r,
+        fullName: user?.fullName || `User ${r.userId}`,
+        department: user?.department,
+        position: user?.chevron?.name || user?.jobTitle,
+        shiftName: r.shiftId ? 'Ca đã đăng ký' : 'Hành chính' // Simplification
+      };
+    });
+
+    res.json({
+      success: true,
+      results: flatten,
+      total: result.total,
+      page: Number(page),
+      pageSize: ps
+    });
+
+  } catch (error: any) {
+    console.error('Error in getDailyAttendanceByScope:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
