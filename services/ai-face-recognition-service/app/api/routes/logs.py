@@ -9,7 +9,7 @@ from app.api.deps import get_current_user
 
 router = APIRouter()
 
-@router.get("/logs")
+@router.get("")
 def get_attendance_logs(
     db: Session = Depends(get_db),
     page: int = 1,
