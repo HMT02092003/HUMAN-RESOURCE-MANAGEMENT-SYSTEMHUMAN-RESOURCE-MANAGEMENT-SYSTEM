@@ -51,30 +51,27 @@ class AttendanceLog(Base):
     __tablename__ = "attendance_logs"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, nullable=False, index=True)
+    user_id = Column(Integer, nullable=True, index=True) # Nullable for unknown users
+    username = Column(String(100), nullable=True)
     checkin_time = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    
-    # Which face type was matched (MASTER, MASK, GLASSES)
-    matched_by_type = Column(String(20), nullable=True, index=True)
-    
-    # Similarity score (0-1)
-    similarity_score = Column(Float, nullable=True)
-    
-    # Recognition type: check_in or check_out
-    recognition_type = Column(String(20), nullable=False, index=True)
     
     # Snapshot image for evidence
     image_snapshot_url = Column(String(500), nullable=True)
     
-    status = Column(String(20), default="success", index=True)
-    notes = Column(Text, nullable=True)
+    # Recognition type: check_in or check_out
+    recognition_type = Column(String(50), nullable=False, index=True)
     
-    # Deprecated fields (keep for backward compatibility)
-    username = Column(String(100), nullable=True)
-    confidence_score = Column(Integer, nullable=True)
-    image_path = Column(String(500), nullable=True)
-    face_location = Column(JSON, nullable=True)
-    timestamp = Column(DateTime(timezone=True), nullable=True)
+    # Status: recognized, not_recognized, spoof, etc.
+    status = Column(String(50), default="success", index=True)
+    
+    # Technical details
+    matched_by_type = Column(String(50), nullable=True) # MASTER, MASK, etc.
+    similarity_score = Column(Float, nullable=True) # 0.0 - 1.0
+    
+    # Optional notes
+    notes = Column(Text, nullable=True)
+
+    # Removed: confidence_score (redundant), image_path, face_location, timestamp
 
 # Dependency to get database session
 def get_db():

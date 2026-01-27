@@ -31,14 +31,6 @@ const DailyAttendanceMonitor: React.FC = () => {
     // Columns for checking daily attendance
     const columns: ServerSideColumnType<any>[] = [
         {
-            title: 'Mã NV',
-            dataIndex: 'userId',
-            key: 'userId',
-            width: 80,
-            sortable: true,
-            fixed: 'left',
-        },
-        {
             title: 'Họ và tên',
             dataIndex: 'fullName',
             key: 'fullName',
@@ -87,29 +79,44 @@ const DailyAttendanceMonitor: React.FC = () => {
         },
         {
             title: 'Trạng thái',
-            dataIndex: 'status',
-            key: 'status',
-            width: 140,
+            key: 'status_summary',
+            width: 120,
             render: (_: any, record: any) => {
-                // Determine status logic based on fields
-                let color = 'default';
-                let text = 'Chưa chấm công';
-
-                // Prioritize calculation results
-                if (record.checkInTime && record.checkOutTime) {
-                    if (record.lateMinutes > 0 && record.earlyDepartureMinutes > 0) {
-                        return <Tag color="volcano">Muộn & Sớm</Tag>;
-                    }
-                    if (record.lateMinutes > 0) return <Tag color="warning">Đi muộn</Tag>;
-                    if (record.earlyDepartureMinutes > 0) return <Tag color="warning">Về sớm</Tag>;
-                    return <Tag color="success">Đúng giờ</Tag>;
-                } else if (record.checkInTime) {
-                    return <Tag color="processing">Đang làm việc</Tag>;
-                } else {
-                    // Could be absent or future
-                    // Simple check: if date < today -> Absent
-                    return <Tag color="default">Chưa chấm công</Tag>;
+                if (!record.checkInTime) return <Tag color="default">Chưa chấm công</Tag>;
+                if (!record.checkOutTime) return <Tag color="processing">Đang làm việc</Tag>;
+                return <Tag color="blue">Hoàn thành</Tag>;
+            }
+        },
+        {
+            title: 'Đi muộn',
+            key: 'lateStatus',
+            width: 130,
+            render: (_: any, record: any) => {
+                if (record.lateMinutes > 0) {
+                    return (
+                        <Space direction="vertical" size={0}>
+                            <Tag color="volcano">Muộn</Tag>
+                            <span style={{ fontSize: '12px', color: '#d4380d' }}>{record.lateMinutes} phút</span>
+                        </Space>
+                    );
                 }
+                return record.checkInTime ? <Tag color="success">Đúng giờ</Tag> : '-';
+            }
+        },
+        {
+            title: 'Về sớm',
+            key: 'earlyStatus',
+            width: 130,
+            render: (_: any, record: any) => {
+                if (record.earlyDepartureMinutes > 0) {
+                    return (
+                        <Space direction="vertical" size={0}>
+                            <Tag color="warning">Sớm</Tag>
+                            <span style={{ fontSize: '12px', color: '#d46b08' }}>{record.earlyDepartureMinutes} phút</span>
+                        </Space>
+                    );
+                }
+                return record.checkOutTime ? <Tag color="success">Đúng giờ</Tag> : '-';
             }
         },
         {

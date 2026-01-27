@@ -164,10 +164,11 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         [
             getItem('Bảng chấm công', 'attendance', <CalendarOutlined />, 'timeAttendance'),
             getItem('Chấm công hàng ngày', 'dailyAttendance', <CalendarOutlined />, 'dailyAttendance'),
+            getItem('Lịch sử chấm công (AI)', 'attendanceHistory', <ClockCircleOutlined />, 'attendance_history'),
             getItem('Duyệt bảng chấm công', 'attendanceApproval', <CheckCircleOutlined />, 'timeAttendance', 'approve'),
             getItem('Quản lý ngày lễ', 'holidays', <CalendarOutlined />, 'holidays'), // Phải dùng đúng key 'holidays' trong DB
         ],
-        ['timeAttendance', 'dailyAttendance', 'holidays']
+        ['timeAttendance', 'dailyAttendance', 'holidays', 'attendance_history']
     ),
 
     // Cài đặt hệ thống
@@ -477,6 +478,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
 
         if (pathname === '/attendance/approval') return ['attendanceApproval'];
         if (pathname === '/attendance/daily') return ['dailyAttendance'];
+        if (pathname === '/attendance/history') return ['attendanceHistory'];
         if (pathname === '/attendance') return ['attendance'];
         if (pathname.startsWith('/attendance')) return ['attendance_parent'];
 
@@ -504,6 +506,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                 break;
             case 'dailyAttendance':
                 router.push('/attendance/daily');
+                break;
+            case 'attendanceHistory':
+                router.push('/attendance/history');
                 break;
             case 'attendanceApproval':
                 router.push('/attendance/approval');

@@ -80,15 +80,23 @@ class InsightFaceRecognitionService:
             ).all()
 
             if not db_embeddings:
+                # Save snapshot even if no embeddings
+                upload_dir = settings.UPLOAD_DIR or './uploads'
+                os.makedirs(upload_dir, exist_ok=True)
+                snapshot_filename = f"log_{uuid.uuid4().hex}.jpg"
+                snapshot_path = os.path.join(upload_dir, snapshot_filename)
+                cv2.imwrite(snapshot_path, img)
+                snapshot_url = f"/uploads/{snapshot_filename}"
+
                 # No embeddings in DB
                 log = AttendanceLog(
                     user_id=0,
                     username='unknown',
                     recognition_type=recognition_type,
-                    confidence_score=0,
                     similarity_score=0.0,
                     matched_by_type='NONE',
-                    status='no_embeddings'
+                    status='no_embeddings',
+                    image_snapshot_url=snapshot_url
                 )
                 db.add(log)
                 db.commit()
@@ -98,7 +106,8 @@ class InsightFaceRecognitionService:
                     "success": False,
                     "error": "NO_EMBEDDINGS",
                     "message": "Chưa có dữ liệu khuôn mặt trong hệ thống",
-                    "recognition_log_id": log.id
+                    "recognition_log_id": log.id,
+                    "image_snapshot_url": snapshot_url
                 }
 
             # Compare with all embeddings (in-memory)
@@ -122,6 +131,14 @@ class InsightFaceRecognitionService:
                     logger.error(f"Error comparing with embedding {db_emb.id}: {e}")
                     continue
 
+            # Save snapshot image
+            upload_dir = settings.UPLOAD_DIR or './uploads'
+            os.makedirs(upload_dir, exist_ok=True)
+            snapshot_filename = f"log_{uuid.uuid4().hex}.jpg"
+            snapshot_path = os.path.join(upload_dir, snapshot_filename)
+            cv2.imwrite(snapshot_path, img)
+            snapshot_url = f"/uploads/{snapshot_filename}"
+
             # Check if best match passes threshold
             if best_match and best_similarity >= threshold:
                 status = 'recognized'
@@ -131,10 +148,10 @@ class InsightFaceRecognitionService:
                     user_id=best_match.user_id,
                     username=best_match.username,
                     recognition_type=recognition_type,
-                    confidence_score=int(best_similarity * 100),
                     similarity_score=best_similarity,
                     matched_by_type='MASTER',
-                    status=status
+                    status=status,
+                    image_snapshot_url=snapshot_url
                 )
                 db.add(log)
                 db.commit()
@@ -151,7 +168,8 @@ class InsightFaceRecognitionService:
                         },
                         "confidence": best_similarity,
                         "similarity": best_similarity,
-                        "recognition_log_id": log.id
+                        "recognition_log_id": log.id,
+                        "image_snapshot_url": snapshot_url
                     }
                 }
             else:
@@ -160,10 +178,10 @@ class InsightFaceRecognitionService:
                     user_id=0,
                     username='unknown',
                     recognition_type=recognition_type,
-                    confidence_score=int(best_similarity * 100) if best_match else 0,
                     similarity_score=best_similarity if best_match else 0.0,
                     matched_by_type='NONE',
-                    status='unrecognized'
+                    status='unrecognized',
+                    image_snapshot_url=snapshot_url
                 )
                 db.add(log)
                 db.commit()
@@ -173,7 +191,8 @@ class InsightFaceRecognitionService:
                     "success": False,
                     "error": "NOT_RECOGNIZED",
                     "message": f"Không nhận diện được (điểm tương đồng: {best_similarity:.2f})",
-                    "recognition_log_id": log.id
+                    "recognition_log_id": log.id,
+                    "image_snapshot_url": snapshot_url
                 }
 
         except Exception as e:

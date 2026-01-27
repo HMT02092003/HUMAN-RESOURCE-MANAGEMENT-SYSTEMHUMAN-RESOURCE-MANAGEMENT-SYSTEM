@@ -96,6 +96,8 @@ app.add_middleware(
 # Mount static files for uploads
 if os.path.exists("uploads"):
     app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+    # Support Gateway routing: /api/ai/uploads -> /api/uploads
+    app.mount("/api/uploads", StaticFiles(directory="uploads"), name="api_uploads")
 
 # Health check endpoint
 @app.get("/health")
@@ -134,6 +136,14 @@ app.include_router(
     batch_registration.router,
     prefix="/api/v1/batch",
     tags=["Batch Registration"]
+)
+
+# Include Logs API
+from app.api.routes import logs
+app.include_router(
+    logs.router,
+    prefix="/api/logs",
+    tags=["Logs"]
 )
 
 # Global exception handler

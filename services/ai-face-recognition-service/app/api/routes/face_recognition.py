@@ -94,7 +94,9 @@ async def register_face(
 @router.post("/recognize-face", response_model=FaceRecognitionResponse)
 async def recognize_face(
     image: UploadFile = File(..., description="Image to recognize"),
-    recognition_type: str = Form(..., description="Type of recognition: check_in or check_out"),
+    # recognition_type: str = Form(..., description="Type of recognition: check_in or check_out")
+    # For compatibility, we keep receiving the form field but will force usage or just log as check_time
+    recognition_type: str = Form(default="check_time", description="Deprecated, will be saved as check_time"),
     validation_mode: str = Form(default="normal", description="Validation mode: 'strict' for full checks, 'normal' for basic checks only"),
     baseline_yaw: str = Form(default="0", description="Baseline yaw from step1 (optional)"),
     baseline_roll: str = Form(default="0", description="Baseline roll from step1 (optional)"),
@@ -112,6 +114,9 @@ async def recognize_face(
     3. Face Recognition
     """
     try:
+        # Override to check_time as per new requirement
+        recognition_type = "check_time"
+
         # Validate file type
         if not image.content_type.startswith('image/'):
             raise HTTPException(
@@ -119,12 +124,9 @@ async def recognize_face(
                 detail="File must be an image"
             )
         
-        # Validate recognition type
-        if recognition_type not in ["check_in", "check_out"]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="recognition_type must be 'check_in' or 'check_out'"
-            )
+        # Removed legacy check_in/check_out validation
+        
+        # Validate validation mode (support 'normal', 'strict' and 'challenge')
         
         # Validate validation mode (support 'normal', 'strict' and 'challenge')
         if validation_mode not in ["normal", "strict", "challenge"]:
