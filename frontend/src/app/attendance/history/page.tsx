@@ -8,7 +8,7 @@ const attendanceHistoryPermission = 'attendance_history';
 
 const AttendanceHistoryPage = () => {
     return (
-        <CheckPermission requiredPermission={attendanceHistoryPermission}>
+        <CheckPermission permissionKey={attendanceHistoryPermission}>
             <AttendanceHistory />
         </CheckPermission>
     );
