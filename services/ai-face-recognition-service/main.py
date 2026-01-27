@@ -140,10 +140,17 @@ app.include_router(
 
 # Include Logs API
 from app.api.routes import logs
+# Mount at /api/logs (Standard)
 app.include_router(
     logs.router,
     prefix="/api/logs",
     tags=["Logs"]
+)
+# Mount at /logs (For Gateway stripping cases)
+app.include_router(
+    logs.router,
+    prefix="/logs",
+    tags=["Logs (Direct)"]
 )
 
 # Global exception handler

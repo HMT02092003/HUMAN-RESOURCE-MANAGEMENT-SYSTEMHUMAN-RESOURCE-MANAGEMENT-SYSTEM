@@ -34,9 +34,12 @@ const AttendanceHistory: React.FC = () => {
 
     const API_BASE_URL = process.env.NEXT_PUBLIC_API_GATEWAY_URL || '';
 
-    // Fetch all users to map departments
+    // Fetch all users to map departments (Only for Admin/HR/Leader)
     useEffect(() => {
         const fetchUsers = async () => {
+            // Only fetch for Admin (1), Leader (3), HR (5). Skip for Employee (2) or others
+            if (!user || user.roleId === 2) return;
+
             try {
                 // Fetch a large number of users to map departments
                 const res: any = await userService.getAllUsers({ page: 1, pageSize: 1000 });
@@ -49,11 +52,12 @@ const AttendanceHistory: React.FC = () => {
                     setUserMap(map);
                 }
             } catch (err) {
-                console.error("Error fetching users map", err);
+                // Silent error to prevent UI clutter if permission denied
+                console.warn("Could not fetch user list for mapping", err);
             }
         };
         fetchUsers();
-    }, []);
+    }, [user]);
 
     const fetchLogs = useCallback(async () => {
         setLoading(true);
