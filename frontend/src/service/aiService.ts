@@ -9,11 +9,14 @@ export interface AttendanceLog {
     recognition_type: string;
     status: string;
     similarity_score: number;
+    confidence: number;
     matched_by_type: string;
     notes?: string;
+    fullName?: string;
     department?: {
         id: number;
         name: string;
+        description?: string;
     };
     user_info?: any;
 }

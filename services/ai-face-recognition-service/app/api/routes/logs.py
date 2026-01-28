@@ -140,7 +140,9 @@ def get_attendance_logs(
         query = query.filter(AttendanceLog.username.ilike(f"%{search_name}%"))
 
     if search_time:
-         query = query.filter(func.to_char(AttendanceLog.checkin_time, 'HH24:MI:SS').ilike(f"%{search_time}%"))
+         # Truncate to HH:MM to allow minute-level search even if SS is provided
+         clean_time = search_time[:5]
+         query = query.filter(func.to_char(AttendanceLog.checkin_time, 'HH24:MI:SS').ilike(f"%{clean_time}%"))
 
     # 5. Sort & Paginate
     total = query.count()
@@ -158,9 +160,7 @@ def get_attendance_logs(
         # Enrich with User Info
         u_info = user_map.get(log.user_id, {})
         log_dict['department'] = u_info.get('department', {})
-        # Flatten structure or keep as is? Frontend expects userMap[id].department.name
-        # Here we embed it directly.
-        # Frontend needs to be updated to read `item.department.name` directly instead of looking up map.
+        log_dict['fullName'] = u_info.get('fullName', '') or log.username
         
         enriched_logs.append(log_dict)
 

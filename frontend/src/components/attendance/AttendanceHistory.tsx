@@ -198,7 +198,9 @@ const AttendanceHistory: React.FC = () => {
                                 <Card.Meta
                                     title={
                                         <div style={{ display: 'flex', flexDirection: 'column', fontSize: 14 }}>
-                                            <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.username}>{item.username}</span>
+                                            <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.fullName || item.username}>
+                                                {item.fullName || item.username}
+                                            </span>
                                             <Text type="secondary" style={{ fontSize: 11 }}>
                                                 <ApartmentOutlined /> {deptName}
                                             </Text>
