@@ -67,14 +67,30 @@ class MultiAngleFaceService:
             return ""
 
     def process_image_for_registration(self, image_bytes: bytes) -> Dict[str, Any]:
-        """Process image to extract face embedding"""
+        """Process image to extract face embedding with quality checks"""
         try:
             # Decode image
             nparr = np.frombuffer(image_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             
             if img is None:
-                return {"success": False, "message": "Không thể đọc ảnh"}
+                return {"success": False, "message": "Không thể đọc dữ liệu ảnh"}
+
+            # --- QUALITY CHECKS (Kiểm tra chất lượng ảnh) ---
+            # 1. Check Brightness (Độ sáng)
+            hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+            brightness = np.mean(hsv[:, :, 2])
+            if brightness < 40: # Quá tối
+                return {"success": False, "message": "Ảnh quá tối. Vui lòng bật thêm đèn hoặc di chuyển đến nơi sáng hơn."}
+            if brightness > 220: # Quá sáng (cháy sáng)
+                return {"success": False, "message": "Ảnh bị chói sáng. Vui lòng tránh nguồn sáng mạnh phía sau."}
+                
+            # 2. Check Blur (Độ mờ - Laplacian variance)
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
+            if blur_score < 100: # Threshold mờ
+                return {"success": False, "message": "Ảnh bị mờ. Vui lòng giữ yên camera và lau sạch ống kính."}
+            # -----------------------------------------------
 
             # Import here to avoid circular dependency
             from app.services.face_recognition_service import face_recognizer
@@ -85,7 +101,7 @@ class MultiAngleFaceService:
             faces = face_recognizer.app.get(img)
             
             if not faces or len(faces) == 0:
-                return {"success": False, "message": "Không tìm thấy khuôn mặt"}
+                return {"success": False, "message": "Không tìm thấy khuôn mặt nào. Vui lòng nhìn thẳng vào camera."}
             
             # Get largest face
             face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
@@ -250,6 +266,7 @@ class MultiAngleFaceService:
             
         except Exception as e:
             logger.error(f"Error in recognize_face: {e}", exc_info=True)
+            db.rollback() 
             return {
                 "success": False,
                 "message": f"Lỗi hệ thống: {str(e)}"
