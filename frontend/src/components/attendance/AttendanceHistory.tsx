@@ -81,7 +81,12 @@ const AttendanceHistory: React.FC = () => {
 
     const getImageUrl = (url: string) => {
         if (!url) return '';
-        return `${API_BASE_URL}/api/ai${url}`;
+        if (url.startsWith('http')) return url;
+
+        // Fix double /ai/ai path issue: normalize path
+        // Ensure we don't duplicate /ai prefix if data is old
+        const cleanPath = url.startsWith('/ai/') ? url.substring(3) : url;
+        return `${API_BASE_URL}/api/ai${cleanPath}`;
     };
 
     const handleCardClick = (log: AttendanceLog) => {
@@ -93,18 +98,18 @@ const AttendanceHistory: React.FC = () => {
         <div style={{ padding: 24, background: '#fff', borderRadius: 8 }}>
             <div style={{ marginBottom: 24 }}>
                 <Row gutter={[16, 16]} align="middle" justify="space-between">
-                    <Col>
+                    <Col xs={24} md={12}>
                         <Title level={4} style={{ margin: 0 }}>Lịch sử chấm công (AI)</Title>
                     </Col>
-                    <Col>
-                        <Space wrap>
+                    <Col xs={24} md={12} style={{ textAlign: 'right' }}>
+                        <Space wrap style={{ justifyContent: 'flex-end', width: '100%' }}>
                             <Input
                                 placeholder="Tìm theo tên..."
                                 prefix={<UserOutlined />}
                                 value={searchName}
                                 onChange={e => setSearchName(e.target.value)}
                                 onPressEnter={fetchLogs}
-                                style={{ width: 150 }}
+                                style={{ width: 140 }}
                             />
                             <Input
                                 placeholder="Tìm phòng ban..."
@@ -112,13 +117,14 @@ const AttendanceHistory: React.FC = () => {
                                 value={searchDept}
                                 onChange={e => setSearchDept(e.target.value)}
                                 onPressEnter={fetchLogs}
-                                style={{ width: 150 }}
+                                style={{ width: 140 }}
                             />
                             <TimePicker
                                 placeholder="Giờ check..."
                                 value={searchTime}
                                 onChange={setSearchTime}
-                                style={{ width: 120 }}
+                                format="HH:mm"
+                                style={{ width: 100 }}
                             />
                             <RangePicker
                                 value={dateRange}
@@ -129,10 +135,10 @@ const AttendanceHistory: React.FC = () => {
                                     }
                                 }}
                                 format="DD/MM/YYYY"
-                                style={{ width: 240 }}
+                                style={{ width: 220 }}
                             />
-                            <Button type="primary" icon={<SearchOutlined />} onClick={fetchLogs}>Tìm</Button>
-                            <Button icon={<ReloadOutlined />} onClick={fetchLogs}>Làm mới</Button>
+                            <Button type="primary" icon={<SearchOutlined />} onClick={fetchLogs} />
+                            <Button icon={<ReloadOutlined />} onClick={fetchLogs} />
                         </Space>
                     </Col>
                 </Row>
@@ -169,25 +175,30 @@ const AttendanceHistory: React.FC = () => {
                                 hoverable
                                 onClick={() => handleCardClick(item)}
                                 cover={
-                                    <div style={{ height: 200, overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#f0f2f5' }}>
+                                    <div style={{ height: 180, overflow: 'hidden', display: 'flex', justifyContent: 'center', alignItems: 'center', background: '#f0f2f5', position: 'relative' }}>
                                         {item.image_snapshot_url ? (
                                             <Image
                                                 alt="snapshot"
                                                 src={getImageUrl(item.image_snapshot_url)}
                                                 style={{ objectFit: 'cover', height: '100%', width: '100%' }}
                                                 preview={false}
+                                                fallback="https://via.placeholder.com/200?text=Error"
                                             />
                                         ) : (
                                             <UserOutlined style={{ fontSize: 48, color: '#ccc' }} />
                                         )}
+                                        {/* Status badge checks */}
+                                        <div style={{ position: 'absolute', top: 8, right: 8 }}>
+                                            {item.similarity_score > 0.8 && <Tag color="green">{(item.similarity_score * 100).toFixed(0)}%</Tag>}
+                                        </div>
                                     </div>
                                 }
-                                bodyStyle={{ padding: 12 }}
+                                bodyStyle={{ padding: '10px 12px' }}
                             >
                                 <Card.Meta
                                     title={
                                         <div style={{ display: 'flex', flexDirection: 'column', fontSize: 14 }}>
-                                            <span style={{ fontWeight: 600 }}>{item.username}</span>
+                                            <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.username}>{item.username}</span>
                                             <Text type="secondary" style={{ fontSize: 11 }}>
                                                 <ApartmentOutlined /> {deptName}
                                             </Text>
@@ -196,12 +207,12 @@ const AttendanceHistory: React.FC = () => {
                                     description={
                                         <Space direction="vertical" size={2} style={{ width: '100%', marginTop: 8 }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                                                <Space><ClockCircleOutlined /> <Text strong>{dayjs(item.checkin_time).format('HH:mm:ss')}</Text></Space>
+                                                <Space><ClockCircleOutlined /> <Text strong>{dayjs(item.checkin_time).format('HH:mm')}</Text></Space>
                                                 <span>{dayjs(item.checkin_time).format('DD/MM')}</span>
                                             </div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
                                                 {getStatusTag(item.status)}
-                                                <Tag color="cyan">Check Time</Tag>
+                                                <Tag color="cyan" style={{ fontSize: 10, margin: 0 }}>Check In</Tag>
                                             </div>
                                         </Space>
                                     }

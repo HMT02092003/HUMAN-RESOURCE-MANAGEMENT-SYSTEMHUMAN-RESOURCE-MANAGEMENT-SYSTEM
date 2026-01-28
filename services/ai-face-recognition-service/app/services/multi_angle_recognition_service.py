@@ -57,7 +57,7 @@ class MultiAngleFaceService:
             
             if os.path.exists(file_absolute_path) and os.path.getsize(file_absolute_path) > 0:
                 logger.info(f"📸 Snapshot saved successfully: {filename}")
-                return f"/ai/uploads/{filename}"
+                return f"/uploads/{filename}"
             else:
                 logger.error(f"❌ File write verification failed: {file_absolute_path}")
                 return ""
@@ -157,6 +157,7 @@ class MultiAngleFaceService:
             
         except Exception as e:
             logger.error(f"Error searching face: {e}")
+            db.rollback() # Ensure transaction is clean even if search fails
             return None
 
     def register_multiple_poses(self, db: Session, user_id: int, username: str, images: Dict[str, bytes]) -> Dict[str, Any]:
