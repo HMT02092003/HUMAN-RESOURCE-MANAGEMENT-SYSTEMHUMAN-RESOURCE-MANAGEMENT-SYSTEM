@@ -22,12 +22,9 @@ import json
 
 from app.core.config import settings
 from app.core.database import FaceEmbedding, AttendanceLog
+from app.core.recognition_constants import recognition_settings
 
 logger = logging.getLogger(__name__)
-
-# Default thresholds for L2 distance (lower is better)
-MATCH_THRESHOLD = 1.1
-SAFE_THRESHOLD = 0.9
 
 class MultiAngleFaceService:
     """Service for multi-angle face recognition (eKYC standard)"""
@@ -67,7 +64,7 @@ class MultiAngleFaceService:
             return ""
 
     def process_image_for_registration(self, image_bytes: bytes) -> Dict[str, Any]:
-        """Process image to extract face embedding with quality checks"""
+        """Process image to extract face embedding with configurable quality checks"""
         try:
             # Decode image
             nparr = np.frombuffer(image_bytes, np.uint8)
@@ -76,21 +73,32 @@ class MultiAngleFaceService:
             if img is None:
                 return {"success": False, "message": "Không thể đọc dữ liệu ảnh"}
 
-            # --- QUALITY CHECKS (Kiểm tra chất lượng ảnh) ---
-            # 1. Check Brightness (Độ sáng)
+            # --- CONFIGURABLE QUALITY CHECKS ---
+            # 1. Check Brightness
             hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
             brightness = np.mean(hsv[:, :, 2])
-            if brightness < 40: # Quá tối
-                return {"success": False, "message": "Ảnh quá tối. Vui lòng bật thêm đèn hoặc di chuyển đến nơi sáng hơn."}
-            if brightness > 220: # Quá sáng (cháy sáng)
-                return {"success": False, "message": "Ảnh bị chói sáng. Vui lòng tránh nguồn sáng mạnh phía sau."}
+            
+            if brightness < recognition_settings.MIN_BRIGHTNESS:
+                return {
+                    "success": False, 
+                    "message": f"Ảnh quá tối ({int(brightness)}/255). Vui lòng bật thêm đèn."
+                }
+            if brightness > recognition_settings.MAX_BRIGHTNESS:
+                return {
+                    "success": False, 
+                    "message": f"Ảnh quá sáng ({int(brightness)}/255). Tránh nguồn sáng mạnh phía sau."
+                }
                 
-            # 2. Check Blur (Độ mờ - Laplacian variance)
+            # 2. Check Blur
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             blur_score = cv2.Laplacian(gray, cv2.CV_64F).var()
-            if blur_score < 100: # Threshold mờ
-                return {"success": False, "message": "Ảnh bị mờ. Vui lòng giữ yên camera và lau sạch ống kính."}
-            # -----------------------------------------------
+            
+            if blur_score < recognition_settings.MIN_BLUR_SCORE:
+                return {
+                    "success": False, 
+                    "message": f"Ảnh bị mờ (Score: {int(blur_score)}). Vui lòng giữ chắc tay."
+                }
+            # -----------------------------------
 
             # Import here to avoid circular dependency
             from app.services.face_recognition_service import face_recognizer
@@ -101,7 +109,7 @@ class MultiAngleFaceService:
             faces = face_recognizer.app.get(img)
             
             if not faces or len(faces) == 0:
-                return {"success": False, "message": "Không tìm thấy khuôn mặt nào. Vui lòng nhìn thẳng vào camera."}
+                return {"success": False, "message": "Không tìm thấy khuôn mặt nào."}
             
             # Get largest face
             face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
@@ -121,43 +129,52 @@ class MultiAngleFaceService:
             return {"success": False, "message": f"Lỗi xử lý ảnh: {str(e)}"}
 
     def search_face(self, db: Session, embedding: List[float], threshold: float) -> Dict[str, Any]:
-        """Search for best matching face in database using pgvector"""
+        """Search for best matching face using configuration"""
         try:
             from sqlalchemy import select, cast
             from pgvector.sqlalchemy import Vector
             
+            logger.info(f"🔍 Searching... Threshold={threshold}")
+
             # Search using L2 distance
-            # Use 'embedding_vector' (correct column name) instead of 'face_embedding'
-            # Explicitly cast to Vector(512) to handle cases where DB column is defined as Text
+            # Explicitly cast to Vector(512)
             distance_expr = cast(FaceEmbedding.embedding_vector, Vector(512)).l2_distance(embedding)
             
+            # Get closest match regardless of threshold first to debug
             stmt = select(FaceEmbedding, distance_expr.label('distance')).order_by(distance_expr).limit(1)
             
             result = db.execute(stmt).first()
             
             if not result:
+                logger.warning("⚠️ Database empty or no match candidates")
                 return None
                 
             match_obj, distance = result
+            distance = float(distance)
             
+            logger.info(f"👀 Closest: {match_obj.username} (ID: {match_obj.user_id}) - Dist: {distance:.4f}")
+
             if distance > threshold:
+                logger.info(f"❌ Rejected: Dist {distance:.4f} > Threshold {threshold}")
                 return None
                 
-            confidence = max(0, (2.0 - distance) / 2.0) * 100
+            # Use centralized confidence calculation
+            confidence = recognition_settings.calculate_confidence(distance)
+            logger.info(f"✅ Accepted: {match_obj.username} - Conf: {confidence:.2f}%")
             
             return {
                 "user_id": match_obj.user_id,
                 "username": match_obj.username,
                 "full_name": getattr(match_obj, 'username', ''),
                 "matched_pose": getattr(match_obj, 'face_type', 'unknown'),
-                "distance": float(distance),
-                "confidence": float(confidence),
-                "is_safe_match": distance < SAFE_THRESHOLD
+                "distance": distance,
+                "confidence": confidence,
+                "is_safe_match": distance < recognition_settings.SAFE_THRESHOLD
             }
             
         except Exception as e:
             logger.error(f"Error searching face: {e}")
-            db.rollback() # Ensure transaction is clean even if search fails
+            db.rollback() 
             return None
 
     def register_multiple_poses(self, db: Session, user_id: int, username: str, images: Dict[str, bytes]) -> Dict[str, Any]:
@@ -170,10 +187,10 @@ class MultiAngleFaceService:
         db: Session,
         image_bytes: bytes,
         recognition_type: str,
-        threshold: float = MATCH_THRESHOLD
+        threshold: float = recognition_settings.MATCH_THRESHOLD
     ) -> Dict[str, Any]:
         """
-        Nhận diện khuôn mặt từ ảnh
+        Nhận diện khuôn mặt với threshold mặc định từ config
         """
         try:
             # Save snapshot first
