@@ -32,8 +32,7 @@ SAFE_THRESHOLD = 0.9
 class MultiAngleFaceService:
     """Service for multi-angle face recognition (eKYC standard)"""
     
-    @staticmethod
-    def _save_snapshot(image_bytes: bytes) -> str:
+    def _save_snapshot(self, image_bytes: bytes) -> str:
         """Save image snapshot directly to uploads directory"""
         try:
             if not image_bytes:
@@ -41,7 +40,6 @@ class MultiAngleFaceService:
                 return ""
 
             # Resolve upload directory
-            # Use strict 'uploads' folder in current working directory to ensure Nginx mapping works
             base_dir = os.getcwd()
             upload_dir = os.path.join(base_dir, 'uploads')
             
@@ -53,13 +51,12 @@ class MultiAngleFaceService:
             filename = f"log_{uuid.uuid4().hex}.jpg"
             file_absolute_path = os.path.join(upload_dir, filename)
             
-            # Write bytes directly (more robust than cv2 decode/encode)
+            # Write bytes directly
             with open(file_absolute_path, "wb") as f:
                 f.write(image_bytes)
             
             if os.path.exists(file_absolute_path) and os.path.getsize(file_absolute_path) > 0:
-                logger.info(f"📸 Snapshot saved successfully: {file_absolute_path} (Size: {len(image_bytes)} bytes)")
-                # Return URL path with /ai prefix for Gateway routing compatibility
+                logger.info(f"📸 Snapshot saved successfully: {filename}")
                 return f"/ai/uploads/{filename}"
             else:
                 logger.error(f"❌ File write verification failed: {file_absolute_path}")
@@ -69,8 +66,7 @@ class MultiAngleFaceService:
             logger.error(f"❌ Failed to save snapshot: {e}", exc_info=True)
             return ""
 
-    @staticmethod
-    def process_image_for_registration(image_bytes: bytes) -> Dict[str, Any]:
+    def process_image_for_registration(self, image_bytes: bytes) -> Dict[str, Any]:
         """Process image to extract face embedding"""
         try:
             # Decode image
@@ -108,8 +104,7 @@ class MultiAngleFaceService:
             logger.error(f"Error processing image: {e}")
             return {"success": False, "message": f"Lỗi xử lý ảnh: {str(e)}"}
 
-    @staticmethod
-    def search_face(db: Session, embedding: List[float], threshold: float) -> Dict[str, Any]:
+    def search_face(self, db: Session, embedding: List[float], threshold: float) -> Dict[str, Any]:
         """Search for best matching face in database using pgvector"""
         try:
             from sqlalchemy import select
@@ -128,15 +123,12 @@ class MultiAngleFaceService:
             if distance > threshold:
                 return None
                 
-            # Convert distance to confidence (approximate)
-            # L2 distance range [0, 2] for normalized vectors
-            # 0 -> 100%, 2 -> 0%
             confidence = max(0, (2.0 - distance) / 2.0) * 100
             
             return {
                 "user_id": match_obj.user_id,
                 "username": match_obj.username,
-                "full_name": getattr(match_obj, 'username', ''), # Fallback
+                "full_name": getattr(match_obj, 'username', ''),
                 "matched_pose": getattr(match_obj, 'face_type', 'unknown'),
                 "distance": float(distance),
                 "confidence": float(confidence),
@@ -147,14 +139,13 @@ class MultiAngleFaceService:
             logger.error(f"Error searching face: {e}")
             return None
 
-    @staticmethod
-    def register_multiple_poses(db: Session, user_id: int, username: str, images: Dict[str, bytes]) -> Dict[str, Any]:
+    def register_multiple_poses(self, db: Session, user_id: int, username: str, images: Dict[str, bytes]) -> Dict[str, Any]:
         """Register multiple poses (unused but kept for interface compatibility)"""
         return {"success": False, "message": "Method not implemented in this simplified version"}
 
 
-    @staticmethod
     def recognize_face(
+        self,
         db: Session,
         image_bytes: bytes,
         recognition_type: str,
@@ -165,11 +156,10 @@ class MultiAngleFaceService:
         """
         try:
             # Save snapshot first
-            snapshot_url = MultiAngleFaceService._save_snapshot(image_bytes)
-             # _save_snapshot handles logging
+            snapshot_url = self._save_snapshot(image_bytes)
             
             # Extract embedding from image
-            process_result = MultiAngleFaceService.process_image_for_registration(image_bytes)
+            process_result = self.process_image_for_registration(image_bytes)
             
             if not process_result["success"]:
                 # Log failed attempt
@@ -194,7 +184,7 @@ class MultiAngleFaceService:
             embedding = process_result["embedding"]
             
             # Search in database
-            match = MultiAngleFaceService.search_face(db, embedding, threshold)
+            match = self.search_face(db, embedding, threshold)
             
             if not match:
                 # Log unknown face

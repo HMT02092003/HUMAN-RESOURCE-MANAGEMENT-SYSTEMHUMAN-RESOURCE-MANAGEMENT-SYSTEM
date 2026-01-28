@@ -147,6 +147,13 @@ app.include_router(
     tags=["Logs"]
 )
 
+# Mount at /ai/api/logs (For Gateway Pass-through)
+app.include_router(
+    logs.router,
+    prefix="/ai/api/logs",
+    tags=["Logs (Gateway Path)"]
+)
+
 # Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
