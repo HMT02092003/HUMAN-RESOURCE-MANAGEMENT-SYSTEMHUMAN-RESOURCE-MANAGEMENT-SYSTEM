@@ -146,12 +146,6 @@ app.include_router(
     prefix="/api/logs",
     tags=["Logs"]
 )
-# Mount at /logs (For Gateway stripping cases)
-app.include_router(
-    logs.router,
-    prefix="/logs",
-    tags=["Logs (Direct)"]
-)
 
 # Global exception handler
 @app.exception_handler(Exception)

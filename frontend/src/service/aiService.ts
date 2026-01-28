@@ -38,8 +38,8 @@ export const aiService = {
         search_dept?: string;
         search_time?: string;
     }) => {
-        // Calls /api/ai/logs via Gateway
-        const response = await apiService.get<AttendanceLogsResponse>('/ai/logs', { params });
+        // Calls /api/ai/api/logs via Gateway -> Service /api/logs
+        const response = await apiService.get<AttendanceLogsResponse>('/ai/api/logs', { params });
         return response.data;
     }
 };

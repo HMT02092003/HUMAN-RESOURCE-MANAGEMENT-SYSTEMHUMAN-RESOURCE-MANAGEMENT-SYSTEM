@@ -30,29 +30,61 @@ class InsightFaceRecognitionService:
         await asyncio.sleep(0)
         return face_recognizer
 
+    @staticmethod
+    def _save_snapshot(image_bytes: bytes) -> str:
+        """Save image snapshot directly to uploads directory (Robust)"""
+        try:
+            if not image_bytes:
+                logger.error("❌ _save_snapshot: Empty image bytes")
+                return ""
+
+            # Resolve upload directory
+            base_dir = os.getcwd()
+            upload_dir = os.path.join(base_dir, 'uploads')
+            
+            if not os.path.exists(upload_dir):
+                logger.info(f"📁 Creating upload directory: {upload_dir}")
+                os.makedirs(upload_dir, exist_ok=True)
+            
+            # Generate filename
+            filename = f"log_{uuid.uuid4().hex}.jpg"
+            file_absolute_path = os.path.join(upload_dir, filename)
+            
+            # Write bytes directly
+            with open(file_absolute_path, "wb") as f:
+                f.write(image_bytes)
+            
+            if os.path.exists(file_absolute_path) and os.path.getsize(file_absolute_path) > 0:
+                logger.info(f"📸 Snapshot saved: {file_absolute_path}")
+                return f"/ai/uploads/{filename}"
+            else:
+                logger.error(f"❌ File write verification failed: {file_absolute_path}")
+                return ""
+
+        except Exception as e:
+            logger.error(f"❌ Failed to save snapshot: {e}", exc_info=True)
+            return ""
+
     async def recognize_face(self, image_bytes: bytes, recognition_type: str, db, threshold: float = None):
         """
         Recognize face from image bytes and compare with DB embeddings.
-        
-        This method:
-        1. Decodes image
-        2. Detects and extracts face embedding
-        3. Loads all embeddings from DB (JSON format)
-        4. Compares using cosine similarity
-        5. Returns best match if above threshold
         """
         try:
+            # Save snapshot first (robustly)
+            snapshot_url = self._save_snapshot(image_bytes)
+            
             if threshold is None:
                 threshold = 0.6  # Default threshold
             
-            # Decode image
+            # Decode image for recognition processing
             nparr = np.frombuffer(image_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             if img is None:
                 return {
                     "success": False,
                     "error": "INVALID_IMAGE",
-                    "message": "Không thể đọc ảnh"
+                    "message": "Không thể đọc ảnh",
+                    "image_snapshot_url": snapshot_url
                 }
 
             # Process face
@@ -62,7 +94,8 @@ class InsightFaceRecognitionService:
                 return {
                     "success": False,
                     "error": "NO_FACE_DETECTED",
-                    "message": result.message or "Không phát hiện khuôn mặt"
+                    "message": result.message or "Không phát hiện khuôn mặt",
+                    "image_snapshot_url": snapshot_url
                 }
 
             # Get embedding vector
@@ -71,7 +104,8 @@ class InsightFaceRecognitionService:
                 return {
                     "success": False,
                     "error": "NO_EMBEDDING",
-                    "message": "Không thể trích xuất đặc trưng khuôn mặt"
+                    "message": "Không thể trích xuất đặc trưng khuôn mặt",
+                    "image_snapshot_url": snapshot_url
                 }
 
             # Load all active embeddings from DB
@@ -80,14 +114,6 @@ class InsightFaceRecognitionService:
             ).all()
 
             if not db_embeddings:
-                # Save snapshot even if no embeddings
-                upload_dir = settings.UPLOAD_DIR or './uploads'
-                os.makedirs(upload_dir, exist_ok=True)
-                snapshot_filename = f"log_{uuid.uuid4().hex}.jpg"
-                snapshot_path = os.path.join(upload_dir, snapshot_filename)
-                cv2.imwrite(snapshot_path, img)
-                snapshot_url = f"/uploads/{snapshot_filename}"
-
                 # No embeddings in DB
                 log = AttendanceLog(
                     user_id=0,
@@ -130,14 +156,6 @@ class InsightFaceRecognitionService:
                 except Exception as e:
                     logger.error(f"Error comparing with embedding {db_emb.id}: {e}")
                     continue
-
-            # Save snapshot image
-            upload_dir = settings.UPLOAD_DIR or './uploads'
-            os.makedirs(upload_dir, exist_ok=True)
-            snapshot_filename = f"log_{uuid.uuid4().hex}.jpg"
-            snapshot_path = os.path.join(upload_dir, snapshot_filename)
-            cv2.imwrite(snapshot_path, img)
-            snapshot_url = f"/uploads/{snapshot_filename}"
 
             # Check if best match passes threshold
             if best_match and best_similarity >= threshold:
