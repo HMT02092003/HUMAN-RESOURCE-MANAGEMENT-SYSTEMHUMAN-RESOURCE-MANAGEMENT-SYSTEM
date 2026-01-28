@@ -42,10 +42,12 @@ class FaceRecognitionResponse(BaseModel):
 
 class AttendanceLogBase(BaseModel):
     """Base attendance log schema"""
-    user_id: int = Field(..., description="User ID")
-    username: str = Field(..., description="Username", max_length=100)
+    user_id: Optional[int] = Field(None, description="User ID") # Optional for unknown
+    username: Optional[str] = Field(None, description="Username", max_length=100)
     recognition_type: str = Field(..., description="Type of recognition")
-    confidence_score: float = Field(..., description="Confidence score")
+    # Make confidence_score optional as it's deprecated
+    confidence_score: Optional[float] = Field(None, description="Confidence score (Deprecated)")
+    similarity_score: Optional[float] = Field(None, description="Similarity score (0-1)")
     status: Optional[str] = Field("success", description="Recognition status")
 
 class AttendanceLogCreate(AttendanceLogBase):
@@ -58,7 +60,9 @@ class AttendanceLogResponse(AttendanceLogBase):
     """Attendance log response schema"""
     id: int
     face_location: Optional[dict]
-    timestamp: datetime
+    checkin_time: Optional[datetime] = None # Maps to DB column
+    timestamp: Optional[datetime] = None # For backward compatibility
+    image_snapshot_url: Optional[str] = None
     notes: Optional[str]
     
     class Config:
