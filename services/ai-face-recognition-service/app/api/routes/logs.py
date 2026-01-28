@@ -77,33 +77,52 @@ def get_attendance_logs(
                  raise HTTPException(status_code=403, detail="Forbidden")
             user_id = requester_id
 
-    # 2. Fetch Users (if needed for Dept search or Enrichment)
+    # 2. Fetch Users (Always fetch if token present to support Mapping & filtering)
     users_list = []
     user_map = {}
     
-    # Only fetch if we have a token (authenticated) and likely need it
     if token:
         users_list = fetch_users_from_auth(token)
         for u in users_list:
             user_map[u.get('id')] = u
 
-    # 3. Handle Department Search Filter
-    # If searching by Department, find matching User IDs first
-    dept_user_ids = []
-    filter_by_dept = False
+    # 3. Handle Advanced Filters (Name / Dept) via User List
+    target_user_ids = set()
+    is_filtering_users = False
     
-    if search_dept and users_list:
-        filter_by_dept = True
-        s_dept_lower = search_dept.lower()
-        for u in users_list:
-            dept = u.get('department', {})
-            # Department might be object or ID. Assuming object with name based on frontend usage
-            dept_name = dept.get('name', '') if isinstance(dept, dict) else str(dept)
-            if s_dept_lower in dept_name.lower():
-                dept_user_ids.append(u.get('id'))
+    if search_name or search_dept:
+        is_filtering_users = True
+        s_name_lower = search_name.lower().strip() if search_name else None
+        s_dept_lower = search_dept.lower().strip() if search_dept else None
         
-        # If no users found for this department, logs should be empty
-        if not dept_user_ids:
+        for u in users_list:
+            is_match = True
+            
+            # 1. Filter by Name (FullName OR Username)
+            if s_name_lower:
+                u_full = str(u.get('fullName', '') or '').lower()
+                u_user = str(u.get('username', '') or '').lower()
+                if s_name_lower not in u_full and s_name_lower not in u_user:
+                    is_match = False
+            
+            # 2. Filter by Department
+            if is_match and s_dept_lower:
+                dept = u.get('department')
+                # Department logic: could be dict with 'name' or just ID or string
+                dept_name = ''
+                if isinstance(dept, dict):
+                    dept_name = dept.get('name', '')
+                elif isinstance(dept, str):
+                    dept_name = dept
+                
+                if s_dept_lower not in str(dept_name).lower():
+                    is_match = False
+            
+            if is_match:
+                target_user_ids.add(u.get('id'))
+        
+        # If filters active but no users match, return empty immediately
+        if not target_user_ids:
             return {
                 "success": True, 
                 "data": [], 
@@ -132,17 +151,15 @@ def get_attendance_logs(
     if user_id:
         query = query.filter(AttendanceLog.user_id == user_id)
     
-    # Apply Department Filter
-    if filter_by_dept:
-        query = query.filter(AttendanceLog.user_id.in_(dept_user_ids))
+    # Apply User ID Filter from Name/Dept search
+    if is_filtering_users:
+        query = query.filter(AttendanceLog.user_id.in_(target_user_ids))
 
-    if search_name:
-        query = query.filter(AttendanceLog.username.ilike(f"%{search_name}%"))
-
+    # Apply Time Filter (Frontend sends UTC, DB is UTC - Direct Compare)
     if search_time:
-         # Truncate to HH:MM to allow minute-level search even if SS is provided
+         # Truncate to HH:MM
          clean_time = search_time[:5]
-         query = query.filter(func.to_char(AttendanceLog.checkin_time, 'HH24:MI:SS').ilike(f"%{clean_time}%"))
+         query = query.filter(func.to_char(AttendanceLog.checkin_time, 'HH24:MI').ilike(f"%{clean_time}%"))
 
     # 5. Sort & Paginate
     total = query.count()
@@ -159,8 +176,14 @@ def get_attendance_logs(
         
         # Enrich with User Info
         u_info = user_map.get(log.user_id, {})
-        log_dict['department'] = u_info.get('department', {})
-        log_dict['fullName'] = u_info.get('fullName', '') or log.username
+        
+        # Map Department
+        raw_dept = u_info.get('department')
+        # Ensure it's an object if possible, default to empty dict
+        log_dict['department'] = raw_dept if isinstance(raw_dept, dict) else {'name': str(raw_dept) if raw_dept else ''}
+        
+        # Map FullName
+        log_dict['fullName'] = u_info.get('fullName') or log.username
         
         enriched_logs.append(log_dict)
 

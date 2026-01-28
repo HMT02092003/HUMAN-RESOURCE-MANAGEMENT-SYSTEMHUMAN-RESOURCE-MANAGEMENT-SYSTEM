@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, DatePicker, Row, Col, Typography, Tag, List, Modal, Descriptions, Image, Button, message, Space, Input, TimePicker } from 'antd';
 import { ReloadOutlined, UserOutlined, ClockCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, SearchOutlined, ApartmentOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+dayjs.extend(utc);
 import { aiService, AttendanceLog } from '@/service/aiService';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -41,7 +43,7 @@ const AttendanceHistory: React.FC = () => {
                 user_id: user?.roleId === 2 ? user.id : undefined,
                 search_name: searchName || undefined,
                 search_dept: searchDept || undefined,
-                search_time: searchTime ? searchTime.format('HH:mm:ss') : undefined
+                search_time: searchTime ? searchTime.utc().format('HH:mm') : undefined
             });
             if (res.success) {
                 setLogs(res.data);
