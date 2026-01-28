@@ -14,7 +14,8 @@ from fastapi.responses import JSONResponse
 import uvicorn
 
 from app.core.config import settings
-from app.core.database import engine, Base
+from app.core.database import engine, Base, SessionLocal
+from sqlalchemy import text
 from app.api.routes import face_recognition
 # Enhanced Face Recognition with Anti-Spoofing
 from app.api.routes import enhanced_face_recognition
@@ -41,11 +42,23 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting AI Face Recognition Service...")
     
     # Create database tables
+    # Create database tables
     try:
+        # Enable pgvector extension
+        db = SessionLocal()
+        try:
+            db.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            db.commit()
+            logger.info("✅ pgvector extension enabled successfully")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to enable pgvector extension: {e}")
+        finally:
+            db.close()
+
         Base.metadata.create_all(bind=engine)
         logger.info("✅ Database tables created successfully")
     except Exception as e:
-        logger.error(f"❌ Failed to create database tables: {e}")
+        logger.error(f"❌ Failed to setup database: {e}")
     
     # Initialize AI models (InsightFace Manual ONNX: Detection + Alignment + Recognition)
     try:
