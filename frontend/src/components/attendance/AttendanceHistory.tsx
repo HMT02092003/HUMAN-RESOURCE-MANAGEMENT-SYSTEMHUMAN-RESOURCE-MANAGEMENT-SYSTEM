@@ -5,7 +5,6 @@ import { Card, DatePicker, Row, Col, Typography, Tag, List, Modal, Descriptions,
 import { ReloadOutlined, UserOutlined, ClockCircleOutlined, CheckCircleOutlined, CloseCircleOutlined, SearchOutlined, ApartmentOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { aiService, AttendanceLog } from '@/service/aiService';
-import userService from '@/service/userService';
 import { useAuth } from '@/hooks/useAuth';
 
 const { RangePicker } = DatePicker;
@@ -25,69 +24,23 @@ const AttendanceHistory: React.FC = () => {
     const [searchDept, setSearchDept] = useState('');
     const [searchTime, setSearchTime] = useState<dayjs.Dayjs | null>(null);
 
-    // User Data for Mapping (Dept, etc.)
-    const [userMap, setUserMap] = useState<Record<number, any>>({});
-
     // Modal state
     const [selectedLog, setSelectedLog] = useState<AttendanceLog | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     const API_BASE_URL = process.env.NEXT_PUBLIC_API_GATEWAY_URL || '';
 
-    // Fetch all users to map departments (Only for Admin/HR/Leader)
-    useEffect(() => {
-        const fetchUsers = async () => {
-            // Only fetch for Admin (1), Leader (3), HR (5). Skip for Employee (2) or others
-            if (!user || user.roleId === 2) return;
-
-            try {
-                // Fetch a large number of users to map departments
-                const res: any = await userService.getAllUsers({ page: 1, pageSize: 1000 });
-                const userList = res.results || res.data || [];
-                if (userList) {
-                    const map: Record<number, any> = {};
-                    userList.forEach((u: any) => {
-                        map[u.id] = u;
-                    });
-                    setUserMap(map);
-                }
-            } catch (err) {
-                // Silent error to prevent UI clutter if permission denied
-                console.warn("Could not fetch user list for mapping", err);
-            }
-        };
-        fetchUsers();
-    }, [user]);
-
     const fetchLogs = useCallback(async () => {
         setLoading(true);
         try {
-            // Logic for Dept Filter: Find user IDs that match the department name
-            let filterUserIds: number[] | undefined = undefined;
-            if (searchDept) {
-                const matchingIds: number[] = [];
-                Object.values(userMap).forEach((u: any) => {
-                    if (u.department?.name?.toLowerCase().includes(searchDept.toLowerCase())) {
-                        matchingIds.push(u.id);
-                    }
-                });
-                if (matchingIds.length > 0) {
-                    filterUserIds = matchingIds;
-                } else {
-                    // Search Dept entered but no users found -> Force empty result?
-                    // Or send dummy ID -1
-                    filterUserIds = [-1];
-                }
-            }
-
             const res = await aiService.getAttendanceLogs({
                 page,
                 page_size: pageSize,
                 start_date: dateRange[0]?.format('YYYY-MM-DD'),
                 end_date: dateRange[1]?.format('YYYY-MM-DD'),
                 user_id: user?.roleId === 2 ? user.id : undefined,
-                user_ids: filterUserIds,
                 search_name: searchName || undefined,
+                search_dept: searchDept || undefined,
                 search_time: searchTime ? searchTime.format('HH:mm:ss') : undefined
             });
             if (res.success) {
@@ -100,13 +53,11 @@ const AttendanceHistory: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [page, pageSize, dateRange, user, searchName, searchDept, searchTime, userMap]);
+    }, [page, pageSize, dateRange, user, searchName, searchDept, searchTime]);
 
     useEffect(() => {
-        if (user && Object.keys(userMap).length > 0) { // Wait for userMap slightly to avoid double fetch if possible, or just fetch
-            fetchLogs();
-        } else if (user) {
-            // Fetch anyway if userMap is taking too long or empty
+        // Fetch logs when user is available.
+        if (user) {
             fetchLogs();
         }
     }, [fetchLogs, user]);
@@ -210,8 +161,7 @@ const AttendanceHistory: React.FC = () => {
                     showSizeChanger: true
                 }}
                 renderItem={(item) => {
-                    const userInfo = userMap[item.user_id];
-                    const deptName = userInfo?.department?.name || '---';
+                    const deptName = item.department?.name || '---';
 
                     return (
                         <List.Item>
@@ -289,7 +239,7 @@ const AttendanceHistory: React.FC = () => {
                                     {selectedLog.user_id}
                                 </Descriptions.Item>
                                 <Descriptions.Item label="Phòng ban">
-                                    {userMap[selectedLog.user_id]?.department?.name || 'N/A'}
+                                    {selectedLog.department?.name || 'N/A'}
                                 </Descriptions.Item>
                                 <Descriptions.Item label="Thời gian check">
                                     {dayjs(selectedLog.checkin_time).format('DD/MM/YYYY HH:mm:ss')}

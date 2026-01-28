@@ -11,6 +11,11 @@ export interface AttendanceLog {
     similarity_score: number;
     matched_by_type: string;
     notes?: string;
+    department?: {
+        id: number;
+        name: string;
+    };
+    user_info?: any;
 }
 
 export interface AttendanceLogsResponse {
@@ -30,6 +35,7 @@ export const aiService = {
         user_id?: number;
         user_ids?: number[];
         search_name?: string;
+        search_dept?: string;
         search_time?: string;
     }) => {
         // Calls /api/ai/logs via Gateway

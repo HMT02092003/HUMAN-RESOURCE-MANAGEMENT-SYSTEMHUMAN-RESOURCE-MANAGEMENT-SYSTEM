@@ -319,7 +319,6 @@ class MultiAngleFaceService:
                     user_id=0,
                     username='unknown',
                     recognition_type=recognition_type,
-                    confidence_score=0,
                     similarity_score=0.0,
                     status='validation_failed',
                     notes=process_result["message"]
@@ -343,7 +342,6 @@ class MultiAngleFaceService:
                     user_id=0,
                     username='unknown',
                     recognition_type=recognition_type,
-                    confidence_score=0,
                     similarity_score=0.0,
                     status='unknown_face',
                     notes='Không tìm thấy khuôn mặt khớp trong hệ thống'
@@ -361,7 +359,6 @@ class MultiAngleFaceService:
                 user_id=match["user_id"],
                 username=match["username"],
                 recognition_type=recognition_type,
-                confidence_score=int(match["confidence"]),
                 similarity_score=match["confidence"] / 100.0,
                 matched_by_type=match["matched_pose"],
                 status='recognized',

@@ -544,14 +544,14 @@ async def confirm_attendance(
         user_match = {
             'user_id': recognition_log.user_id,
             'username': recognition_log.username,
-            'confidence_score': recognition_log.confidence_score
+            'confidence_score': recognition_log.similarity_score
         }
         
         # Send to attendance service
         attendance_result = service._send_to_attendance_service(
             user_match, 
             recognition_log.recognition_type, 
-            recognition_log.confidence_score
+            recognition_log.similarity_score
         )
         
         # Update recognition log status
@@ -570,8 +570,8 @@ async def confirm_attendance(
                     "user_id": recognition_log.user_id,
                     "username": recognition_log.username,
                     "recognition_type": recognition_log.recognition_type,
-                    "confidence_score": recognition_log.confidence_score,
-                    "timestamp": recognition_log.timestamp.isoformat(),
+                    "confidence_score": recognition_log.similarity_score,
+                    "timestamp": recognition_log.checkin_time.isoformat(),
                     "attendance_result": attendance_result
                 }
             }
