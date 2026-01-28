@@ -12,9 +12,22 @@ Chiến lược:
 
 import os
 import uuid
-from app.core.config import settings
+from typing import Dict, Any, List
+import logging
+from fastapi import UploadFile
+from sqlalchemy.orm import Session
+import numpy as np
+import cv2
+import json
 
-# ... (Previous imports)
+from app.core.config import settings
+from app.core.database import FaceEmbedding, AttendanceLog
+
+logger = logging.getLogger(__name__)
+
+# Default thresholds for L2 distance (lower is better)
+MATCH_THRESHOLD = 1.1
+SAFE_THRESHOLD = 0.9
 
 class MultiAngleFaceService:
     """Service for multi-angle face recognition (eKYC standard)"""
