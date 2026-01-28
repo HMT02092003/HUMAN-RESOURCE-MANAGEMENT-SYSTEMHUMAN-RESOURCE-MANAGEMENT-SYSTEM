@@ -24,7 +24,7 @@ const ensureJwtSecret = () => {
  */
 export const gatewayAuth = (req, res, next) => {
   const secret = ensureJwtSecret(); // Check on first request
-  
+
   const authHeader = req.headers['authorization'] || req.headers['Authorization'];
   let token = null;
 
@@ -34,7 +34,13 @@ export const gatewayAuth = (req, res, next) => {
     // Also support cookie-based auth
     token = req.cookies['token'];
   }
-  
+
+  // SKIP AUTH for AI Face Recognition endpoints (public access for device/kiosk)
+  if (req.path.startsWith('/api/ai')) {
+    console.log(`⏩ Skipping gateway auth for public AI path: ${req.path}`);
+    return next();
+  }
+
   if (!token) {
     // No token, pass through. Downstream services will handle 401 if auth is required.
     return next();
@@ -42,28 +48,28 @@ export const gatewayAuth = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, secret);
-    
+
     console.log('✅ Gateway JWT verified. User:', decoded.sub || decoded.id);
-    
+
     // Inject user data into headers
     // Use Base64 encoding to avoid invalid characters in HTTP headers
     // Services will need to decode: Buffer.from(header, 'base64').toString('utf8')
-    
+
     if (decoded.sub) {
       req.headers['x-user-id'] = String(decoded.sub);
     }
-    
+
     if (decoded.roleId) {
       req.headers['x-user-role-id'] = String(decoded.roleId);
     }
-    
+
     // Pass the full decoded token data as Base64-encoded JSON string
     // This avoids HTTP header character restrictions (newlines, special chars, etc)
     const userDataJson = JSON.stringify(decoded);
     req.headers['x-user-data'] = Buffer.from(userDataJson).toString('base64');
 
     // Also keep the original Authorization header for backward compatibility
-    
+
     console.log(`🔐 Gateway Auth: User ${decoded.sub} (Role: ${decoded.roleId}) authenticated.`);
 
   } catch (err) {

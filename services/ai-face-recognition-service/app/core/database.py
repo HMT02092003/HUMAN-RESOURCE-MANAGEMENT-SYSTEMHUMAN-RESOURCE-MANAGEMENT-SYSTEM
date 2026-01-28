@@ -33,9 +33,9 @@ class FaceEmbedding(Base):
     user_id = Column(Integer, nullable=False, index=True)
     username = Column(String(100), nullable=False, index=True)  # Employee code
     
-    # Store vector as JSON string (512 floats) for easy debugging
-    # Production: use BLOB or pgvector
-    embedding_vector = Column(Text, nullable=False)
+    # Store vector using pgvector (512 dimensions for Buffalo_L)
+    # Was Text, changing to Vector to enable l2_distance method
+    embedding_vector = Column(Vector(512), nullable=False)
     
     # Face type: MASTER (averaged clean vector), MASK (with mask), GLASSES (with glasses)
     face_type = Column(String(20), default='MASTER', index=True)

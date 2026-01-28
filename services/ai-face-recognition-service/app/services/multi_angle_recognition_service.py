@@ -107,10 +107,14 @@ class MultiAngleFaceService:
     def search_face(self, db: Session, embedding: List[float], threshold: float) -> Dict[str, Any]:
         """Search for best matching face in database using pgvector"""
         try:
-            from sqlalchemy import select
+            from sqlalchemy import select, cast
+            from pgvector.sqlalchemy import Vector
             
             # Search using L2 distance
-            distance_expr = FaceEmbedding.face_embedding.l2_distance(embedding)
+            # Use 'embedding_vector' (correct column name) instead of 'face_embedding'
+            # Explicitly cast to Vector(512) to handle cases where DB column is defined as Text
+            distance_expr = cast(FaceEmbedding.embedding_vector, Vector(512)).l2_distance(embedding)
+            
             stmt = select(FaceEmbedding, distance_expr.label('distance')).order_by(distance_expr).limit(1)
             
             result = db.execute(stmt).first()
