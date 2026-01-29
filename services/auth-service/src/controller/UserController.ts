@@ -1920,29 +1920,28 @@ export const getUsersByIds = async (req: Request, res: Response) => {
       .whereIn('id', numericUserIds)
       .where('status', 1); // Only active users
 
-    // Enrich each user with department and chevron details by calling employee-service through gateway
+    // Optimized: Fetch all metadata once instead of per-user
     const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
     const headers: any = {};
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const usersWithDetails = await Promise.all(users.map(async (user: any) => {
-      let department = null;
-      let chevron = null;
-      try {
-        if (user.departmentId) {
-          department = await EmployeeService.getDepartmentById(user.departmentId, headers['Authorization']);
-        }
-      } catch (e: any) {
-        console.error(`Error fetching department ${user.departmentId}:`, e?.message || e);
-      }
+    let allDepartments: any[] = [];
+    let allChevrons: any[] = [];
 
-      try {
-        if (user.chevronId) {
-          chevron = await EmployeeService.getChevronDetail(user.chevronId, headers['Authorization']);
-        }
-      } catch (e: any) {
-        console.error(`Error fetching chevron ${user.chevronId}:`, e?.message || e);
-      }
+    try {
+      const [depts, chevs] = await Promise.all([
+        EmployeeService.getAllDepartments(headers['Authorization']),
+        EmployeeService.getAllChevrons(headers['Authorization'])
+      ]);
+      allDepartments = depts;
+      allChevrons = chevs;
+    } catch (e: any) {
+      console.error("Error fetching bulk metadata:", e?.message);
+    }
+
+    const usersWithDetails = users.map((user: any) => {
+      const department = allDepartments.find((d: any) => Number(d.id) === Number(user.departmentId)) || null;
+      const chevron = allChevrons.find((c: any) => Number(c.id) === Number(user.chevronId)) || null;
 
       return {
         ...user,
@@ -1952,7 +1951,7 @@ export const getUsersByIds = async (req: Request, res: Response) => {
         position: chevron?.name || null,
         jobTitle: chevron?.name || null
       };
-    }));
+    });
 
     return res.status(200).json({
       success: true,
@@ -1968,6 +1967,7 @@ export const getUsersByIds = async (req: Request, res: Response) => {
     });
   }
 };
+
 
 /**
  * Search users by name with department and chevron enrichment
