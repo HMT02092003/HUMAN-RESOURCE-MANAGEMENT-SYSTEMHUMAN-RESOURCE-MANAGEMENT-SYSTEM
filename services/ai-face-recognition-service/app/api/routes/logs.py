@@ -177,13 +177,30 @@ def get_attendance_logs(
         # Enrich with User Info
         u_info = user_map.get(log.user_id, {})
         
-        # Map Department
+        # 1. Map Department
         raw_dept = u_info.get('department')
-        # Ensure it's an object if possible, default to empty dict
-        log_dict['department'] = raw_dept if isinstance(raw_dept, dict) else {'name': str(raw_dept) if raw_dept else ''}
+        dept_obj = {'name': ''}
         
-        # Map FullName
-        log_dict['fullName'] = u_info.get('fullName') or log.username
+        if isinstance(raw_dept, dict):
+             dept_name = raw_dept.get('name') or raw_dept.get('dept_name') or raw_dept.get('description') or ''
+             dept_obj = {'name': dept_name}
+        elif raw_dept:
+             # If it's a string or ID, just show it
+             dept_obj = {'name': str(raw_dept)}
+             
+        log_dict['department'] = dept_obj
+        
+        # 2. Map FullName (Robust checks for different naming conventions)
+        full_name = u_info.get('fullName') or u_info.get('full_name') or u_info.get('name')
+        
+        if not full_name:
+             # Fallback: Combine First + Last Name
+             first = u_info.get('firstName') or u_info.get('first_name') or ''
+             last = u_info.get('lastName') or u_info.get('last_name') or ''
+             if first or last:
+                 full_name = f"{first} {last}".strip()
+        
+        log_dict['fullName'] = full_name or log.username
         
         enriched_logs.append(log_dict)
 
