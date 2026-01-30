@@ -5,6 +5,7 @@ from typing import List, Optional, Dict, Any
 from datetime import date, datetime, timedelta
 import requests
 import logging
+import os
 
 from app.core.database import get_db, AttendanceLog
 from app.api.deps import get_current_user
@@ -79,11 +80,13 @@ def get_attendance_logs(
     user_map = {}
     if user_ids_to_fetch:
         try:
-            base_url = settings.API_GATEWAY_URL if hasattr(settings, 'API_GATEWAY_URL') else "http://localhost:4000"
-            # Fallback to direct service if needed
+            base_url = settings.API_GATEWAY_URL if hasattr(settings, 'API_GATEWAY_URL') else "http://api-gateway:4100"
+            auth_service_url = os.getenv('AUTH_SERVICE_URL', 'http://auth-service:4101')
+            
+            # Use Gateway first, then direct service
             urls_to_try = [
                 f"{base_url}/api/auth/users/bulk",
-                "http://localhost:4001/api/users/bulk"
+                f"{auth_service_url}/api/users/bulk"
             ]
             
             payload = {"userIds": user_ids_to_fetch}

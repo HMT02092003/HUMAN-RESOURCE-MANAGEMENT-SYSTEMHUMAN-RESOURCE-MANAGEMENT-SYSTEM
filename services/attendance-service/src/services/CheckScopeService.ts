@@ -17,7 +17,7 @@ class CheckScopeService {
     permissionKey: string,
     token: string,
     userData?: any
-  ): Promise<{ hasAccess: boolean; userIds: number[]; scope: string }> {
+  ): Promise<{ hasAccess: boolean; userIds: number[]; scope: string; error?: string }> {
     try {
       const url = `${AUTH_SERVICE_URL}/api/users/check-scope`;
 
@@ -58,18 +58,23 @@ class CheckScopeService {
       };
 
     } catch (error: any) {
+      let errorMsg = 'Unknown scope check error';
       if (error.response) {
         console.error('[CheckScopeService] auth service error', { status: error.response.status, data: error.response.data });
+        errorMsg = error.response.data?.message || `Auth Service returned ${error.response.status}`;
       } else if (error.request) {
         console.error('[CheckScopeService] no response from auth service, request made');
+        errorMsg = 'No response from Auth Service';
       } else {
         console.error('[CheckScopeService] request setup error:', error.message);
+        errorMsg = error.message;
       }
 
       return {
         hasAccess: false,
         scope: 'personal',
-        userIds: []
+        userIds: [],
+        error: errorMsg
       };
     }
   }

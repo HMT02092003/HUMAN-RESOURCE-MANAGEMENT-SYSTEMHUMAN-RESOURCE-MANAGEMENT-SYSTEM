@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import { 
-  Card, 
-  Avatar, 
-  Text, 
-  IconButton, 
-  useTheme, 
+import {
+  Card,
+  Avatar,
+  Text,
+  IconButton,
+  useTheme,
   Menu,
   Divider,
   FAB,
@@ -14,6 +14,7 @@ import {
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import CardListWithInfiniteScroll from '../../components/CardListWithInfiniteScroll';
+import CheckPermission from '../../components/CheckPermission';
 
 // TODO: Create ContractService.js when real API is available
 const ContractService = {
@@ -41,15 +42,15 @@ const ContractListScreen = ({ navigation }) => {
   const fetchContracts = async (params) => {
     try {
       console.log('📄 [ContractList] Fetching contracts with params:', params);
-      
+
       // Get all contracts (replace with paginated API when available)
       const allContracts = await ContractService.getAllContracts();
-      
+
       // Client-side search
       let filtered = allContracts;
       if (params.search) {
         const searchLower = params.search.toLowerCase();
-        filtered = allContracts.filter(contract => 
+        filtered = allContracts.filter(contract =>
           contract.employee?.toLowerCase().includes(searchLower) ||
           contract.type?.toLowerCase().includes(searchLower)
         );
@@ -60,9 +61,9 @@ const ContractListScreen = ({ navigation }) => {
       const end = start + params.pageSize;
       const results = filtered.slice(start, end);
 
-      return { 
-        results, 
-        total: filtered.length 
+      return {
+        results,
+        total: filtered.length
       };
     } catch (error) {
       console.error('❌ [ContractList] Error fetching contracts:', error);
@@ -177,13 +178,13 @@ const ContractListScreen = ({ navigation }) => {
               <Text style={styles.employeeName} numberOfLines={1}>
                 {item.employee || 'N/A'}
               </Text>
-              
+
               {/* Contract Type */}
               <View style={styles.infoRow}>
-                <MaterialCommunityIcons 
-                  name="briefcase" 
-                  size={14} 
-                  color={getContractTypeColor(item.type)} 
+                <MaterialCommunityIcons
+                  name="briefcase"
+                  size={14}
+                  color={getContractTypeColor(item.type)}
                 />
                 <Text style={styles.infoText}>{item.type}</Text>
               </View>
@@ -198,10 +199,10 @@ const ContractListScreen = ({ navigation }) => {
 
               {/* Status */}
               <View style={styles.infoRow}>
-                <MaterialCommunityIcons 
-                  name={item.status === 'active' ? 'check-circle' : 'close-circle'} 
-                  size={14} 
-                  color={getStatusColor(item.status)} 
+                <MaterialCommunityIcons
+                  name={item.status === 'active' ? 'check-circle' : 'close-circle'}
+                  size={14}
+                  color={getStatusColor(item.status)}
                 />
                 <Text style={[styles.infoText, { color: getStatusColor(item.status) }]}>
                   {getStatusText(item.status)}
@@ -234,42 +235,49 @@ const ContractListScreen = ({ navigation }) => {
                   <Text style={styles.menuItemText}>Xem chi tiết</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.menuItemRow}
-                  onPress={() => {
-                    setVisibleMenuId(null);
-                    Alert.alert('Chức năng', 'Chỉnh sửa hợp đồng');
-                  }}
-                >
-                  <MaterialCommunityIcons name="pencil-outline" size={18} color="#595959" style={styles.menuIcon} />
-                  <Text style={styles.menuItemText}>Chỉnh sửa</Text>
-                </TouchableOpacity>
-
-                {item.status === 'active' && (
+                <CheckPermission permissionKey="contracts" requiredType="update">
                   <TouchableOpacity
                     style={styles.menuItemRow}
                     onPress={() => {
                       setVisibleMenuId(null);
-                      Alert.alert('Chức năng', 'Gia hạn hợp đồng');
+                      Alert.alert('Chức năng', 'Chỉnh sửa hợp đồng');
                     }}
                   >
-                    <MaterialCommunityIcons name="refresh" size={18} color="#52c41a" style={styles.menuIcon} />
-                    <Text style={[styles.menuItemText, { color: '#52c41a' }]}>Gia hạn</Text>
+                    <MaterialCommunityIcons name="pencil-outline" size={18} color="#595959" style={styles.menuIcon} />
+                    <Text style={styles.menuItemText}>Chỉnh sửa</Text>
                   </TouchableOpacity>
-                )}
+                </CheckPermission>
 
-                <Divider />
+                <CheckPermission permissionKey="contracts" requiredType="update">
+                  {item.status === 'active' && (
+                    <TouchableOpacity
+                      style={styles.menuItemRow}
+                      onPress={() => {
+                        setVisibleMenuId(null);
+                        Alert.alert('Chức năng', 'Gia hạn hợp đồng');
+                      }}
+                    >
+                      <MaterialCommunityIcons name="refresh" size={18} color="#52c41a" style={styles.menuIcon} />
+                      <Text style={[styles.menuItemText, { color: '#52c41a' }]}>Gia hạn</Text>
+                    </TouchableOpacity>
+                  )}
+                </CheckPermission>
 
-                <TouchableOpacity
-                  style={styles.menuItemRow}
-                  onPress={() => {
-                    setVisibleMenuId(null);
-                    handleDeleteContract(item.id, item.employee);
-                  }}
-                >
-                  <MaterialCommunityIcons name="delete-outline" size={18} color="#ff4d4f" style={styles.menuIcon} />
-                  <Text style={[styles.menuItemText, { color: '#ff4d4f' }]}>Xóa</Text>
-                </TouchableOpacity>
+                <CheckPermission permissionKey="contracts" requiredType="delete">
+                  <>
+                    <Divider />
+                    <TouchableOpacity
+                      style={styles.menuItemRow}
+                      onPress={() => {
+                        setVisibleMenuId(null);
+                        handleDeleteContract(item.id, item.employee);
+                      }}
+                    >
+                      <MaterialCommunityIcons name="delete-outline" size={18} color="#ff4d4f" style={styles.menuIcon} />
+                      <Text style={[styles.menuItemText, { color: '#ff4d4f' }]}>Xóa</Text>
+                    </TouchableOpacity>
+                  </>
+                </CheckPermission>
               </Menu>
             </View>
           </View>
@@ -322,12 +330,14 @@ const ContractListScreen = ({ navigation }) => {
       />
 
       {/* FAB - Add Contract */}
-      <FAB
-        icon="plus"
-        style={styles.fab}
-        onPress={() => Alert.alert('Chức năng', 'Thêm hợp đồng mới')}
-        color="#fff"
-      />
+      <CheckPermission permissionKey="contracts" requiredType="create">
+        <FAB
+          icon="plus"
+          style={styles.fab}
+          onPress={() => Alert.alert('Chức năng', 'Thêm hợp đồng mới')}
+          color="#fff"
+        />
+      </CheckPermission>
     </View>
   );
 };

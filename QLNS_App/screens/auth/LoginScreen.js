@@ -8,6 +8,8 @@ import {
   Dimensions,
   Image,
   ImageBackground,
+  TouchableOpacity,
+  LayoutAnimation,
 } from 'react-native';
 import {
   TextInput,
@@ -20,27 +22,33 @@ import {
   DefaultTheme,
   Surface,
   ActivityIndicator,
+  IconButton,
 } from 'react-native-paper';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useAuth } from '../../services/AuthContext';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
-// Sea blue enhanced theme
+// Premium Sea Blue Theme
 const theme = {
   ...DefaultTheme,
+  roundness: 20,
   colors: {
     ...DefaultTheme.colors,
-    primary: '#0077BE', // Sea blue
-    secondary: '#00A8CC', // Lighter sea blue
-    accent: '#40C4FF', // Bright blue
-    background: '#E6F7FF', // Light sea blue background
+    primary: '#0F172A', // Deep Navy
+    secondary: '#38BDF8', // Sky Blue
+    accent: '#0EA5E9', // Deep Sky Blue
+    background: '#F8FAFC', // Very light gray-blue
     surface: '#FFFFFF',
-    text: '#003366', // Dark blue text
-    placeholder: '#66B2FF', // Muted blue
-    error: '#e74c3c', // Red for errors
+    text: '#1E293B',
+    placeholder: '#64748B',
+    error: '#EF4444',
   },
 };
+
+const BACKGROUND_IMAGE = 'https://images.unsplash.com/photo-1519750783826-e2420f4d687f?auto=format&fit=crop&q=80&w=1000';
 
 function LoginScreenContent({ navigation }) {
   const [username, setUsername] = useState('');
@@ -49,12 +57,10 @@ function LoginScreenContent({ navigation }) {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const paperTheme = useTheme();
-  
-  // Sử dụng AuthContext để quản lý auth state
+
   const { login } = useAuth();
 
   const handleLogin = async () => {
-    // Validation giống web
     if (!username.trim()) {
       setError('Vui lòng nhập tên đăng nhập!');
       return;
@@ -74,14 +80,8 @@ function LoginScreenContent({ navigation }) {
     setLoading(true);
 
     try {
-      console.log('🔐 [LoginScreen] Attempting login...');
-      // Gọi login từ AuthContext - nó sẽ tự động update auth state
       await login(username, password);
-      console.log('✅ [LoginScreen] Login successful - AuthContext will handle navigation');
-      // Không cần navigate thủ công - AuthContext sẽ tự động chuyển màn hình
     } catch (err) {
-      console.error('❌ [LoginScreen] Login failed:', err);
-      // Prefer server message when available
       const message = err?.message || err?.response?.data?.error || err?.response?.data?.message || 'Đăng nhập thất bại';
       setError(message);
     } finally {
@@ -91,103 +91,132 @@ function LoginScreenContent({ navigation }) {
 
   return (
     <>
-      <StatusBar style="dark" />
-      {/* Use ImageBackground for the full screen */}
-      <ImageBackground source={{ uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAJ/6y2gAAAAASUVORK5CYII=' }} style={styles.backgroundImage}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardView}
+      <StatusBar style="light" />
+      <ImageBackground
+        source={{ uri: BACKGROUND_IMAGE }}
+        style={styles.backgroundImage}
+        blurRadius={Platform.OS === 'ios' ? 1 : 0.5}
+      >
+        <LinearGradient
+          colors={['rgba(15, 23, 42, 0.4)', 'rgba(15, 23, 42, 0.6)']}
+          style={styles.gradientOverlay}
         >
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardView}
           >
-            <Surface style={styles.card} elevation={6}>
-              {/* Title */}
-              <Title style={styles.title}>Đăng nhập</Title>
-
-              {/* Subtitle */}
-              <Paragraph style={styles.subtitle}>Vui lòng đăng nhập vào tài khoản của bạn</Paragraph>
-
-              {/* Error Message */}
-              {error ? (
-                <HelperText type="error" visible={true} style={styles.errorText}>
-                  {error}
-                </HelperText>
-              ) : null}
-
-              {/* Inputs container */}
-              <View style={{ width: '100%' }}>
-                {/* Username Input */}
-                <TextInput
-                  label="Tên đăng nhập"
-                  value={username}
-                  onChangeText={(text) => {
-                    setUsername(text);
-                    setError('');
-                  }}
-                  mode="outlined"
-                  left={<TextInput.Icon icon="account" />}
-                  style={styles.input}
-                  outlineColor="transparent"
-                  activeOutlineColor={paperTheme.colors.primary}
-                  disabled={loading}
-                  autoCapitalize="none"
-                  autoCorrect={false}
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.logoAndHeader}>
+                <Image
+                  source={require('../../assets/logo.png')}
+                  style={styles.logoImage}
+                  resizeMode="contain"
                 />
-
-                {/* Password Input */}
-                <TextInput
-                  label="Mật khẩu"
-                  value={password}
-                  onChangeText={(text) => {
-                    setPassword(text);
-                    setError('');
-                  }}
-                  mode="outlined"
-                  left={<TextInput.Icon icon="lock" />}
-                  right={
-                    <TextInput.Icon
-                      icon={showPassword ? 'eye-off' : 'eye'}
-                      onPress={() => setShowPassword(!showPassword)}
-                    />
-                  }
-                  secureTextEntry={!showPassword}
-                  style={styles.input}
-                  outlineColor="transparent"
-                  activeOutlineColor={paperTheme.colors.primary}
-                  disabled={loading}
-                  autoCapitalize="none"
-                />
-
-                <Button
-                  mode="contained"
-                  onPress={handleLogin}
-                  loading={loading}
-                  disabled={loading}
-                  style={styles.loginButton}
-                  contentStyle={styles.loginButtonContent}
-                  labelStyle={styles.loginButtonLabel}
-                  buttonColor={paperTheme.colors.primary}
-                >
-                  {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
-                </Button>
-
-                <Button
-                  mode="text"
-                  onPress={() => navigation.navigate('ForgotPassword')}
-                  disabled={loading}
-                  style={styles.forgotButton}
-                  labelStyle={styles.forgotButtonLabel}
-                >
-                  Quên mật khẩu?
-                </Button>
+                <Title style={styles.headerTitle}>HRM SYSTEM</Title>
+                <Paragraph style={styles.headerSubtitle}>Quản trị nhân sự thông minh</Paragraph>
               </View>
-            </Surface>
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </ImageBackground>
+
+              <Surface style={styles.card} elevation={0}>
+                <View style={styles.cardHeader}>
+                  <Title style={styles.cardTitle}>Đăng Nhập</Title>
+                  <View style={styles.titleUnderline} />
+                </View>
+
+                {error ? (
+                  <View style={styles.errorContainer}>
+                    <MaterialCommunityIcons name="alert-circle" size={20} color="#EF4444" />
+                    <Paragraph style={styles.errorText}>{error}</Paragraph>
+                  </View>
+                ) : null}
+
+                <View style={styles.form}>
+                  <TextInput
+                    label="Tên đăng nhập"
+                    value={username}
+                    onChangeText={(text) => {
+                      setUsername(text);
+                      if (error) setError('');
+                    }}
+                    mode="flat"
+                    left={<TextInput.Icon icon="account" iconColor="#64748B" />}
+                    style={styles.input}
+                    underlineColor="#E2E8F0"
+                    activeUnderlineColor="#0EA5E9"
+                    disabled={loading}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+
+                  <TextInput
+                    label="Mật khẩu"
+                    value={password}
+                    onChangeText={(text) => {
+                      setPassword(text);
+                      if (error) setError('');
+                    }}
+                    mode="flat"
+                    left={<TextInput.Icon icon="lock" iconColor="#64748B" />}
+                    right={
+                      <TextInput.Icon
+                        icon={showPassword ? 'eye-off' : 'eye'}
+                        iconColor="#64748B"
+                        onPress={() => {
+                          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                          setShowPassword(!showPassword);
+                        }}
+                      />
+                    }
+                    secureTextEntry={!showPassword}
+                    style={styles.input}
+                    underlineColor="#E2E8F0"
+                    activeUnderlineColor="#0EA5E9"
+                    disabled={loading}
+                    autoCapitalize="none"
+                  />
+
+                  <TouchableOpacity
+                    onPress={() => navigation.navigate('ForgotPassword')}
+                    style={styles.forgotPasswordLink}
+                  >
+                    <Paragraph style={styles.forgotPasswordText}>Quên mật khẩu?</Paragraph>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={handleLogin}
+                    disabled={loading}
+                    activeOpacity={0.8}
+                    style={styles.loginBtnContainer}
+                  >
+                    <LinearGradient
+                      colors={['#0EA5E9', '#2563EB']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.loginGradient}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                      ) : (
+                        <View style={styles.loginBtnInner}>
+                          <Paragraph style={styles.loginBtnLabel}>Đăng Nhập</Paragraph>
+                          <MaterialCommunityIcons name="arrow-right" size={20} color="#FFFFFF" />
+                        </View>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+
+                  <View style={styles.footer}>
+                    <Paragraph style={styles.footerText}>Version 2.0.0 • HRM Solution</Paragraph>
+                  </View>
+                </View>
+              </Surface>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </LinearGradient>
+      </ImageBackground >
     </>
   );
 }
@@ -203,8 +232,13 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   backgroundImage: {
     flex: 1,
-    resizeMode: 'cover', // Ensure the background covers the whole screen
+    width: width,
+    height: height,
+  },
+  gradientOverlay: {
+    flex: 1,
     justifyContent: 'center',
+    paddingHorizontal: 20,
   },
   keyboardView: {
     flex: 1,
@@ -212,126 +246,141 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 24, // Keep reasonable padding
     paddingVertical: 40,
-    width: '100%',
-    maxWidth: 350, // Reduced maxWidth for a more compact look, similar to the reference image
-    alignSelf: 'center',
   },
-  logoContainer: {
+  logoAndHeader: {
     alignItems: 'center',
-    // Removed background, padding, shadow to make logo "subtle/blended in"
-    padding: 0,
-    backgroundColor: 'transparent',
-    borderRadius: 0,
-    // web uses boxShadow; native uses shadow/elevation
-    ...Platform.select({
-      web: {
-        boxShadow: 'none',
-      },
-      default: {
-        shadowColor: 'transparent',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0,
-        shadowRadius: 0,
-        elevation: 0,
-      },
-    }),
+    marginBottom: 40,
   },
-  logo: {
-    width: 180,
-    height: 80,
-    marginBottom: 8,
+  logoImage: {
+    width: 250,
+    height: 120,
+    marginBottom: 10,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#003366',
-    marginBottom: 10, // Adjusted margin
-    textAlign: 'center',
-    marginTop: 20,
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: 2,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
-  subtitle: {
+  headerSubtitle: {
+    color: 'rgba(255, 255, 255, 0.8)',
     fontSize: 14,
-    color: '#336699',
-    marginBottom: 16,
-    textAlign: 'center',
-  },
-  errorText: {
-    fontSize: 14,
-    marginBottom: 12,
-    textAlign: 'center',
-    width: '100%',
-    backgroundColor: 'rgba(231, 76, 60, 0.06)',
-    padding: 8,
-    borderRadius: 8,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
   card: {
+    backgroundColor: 'rgba(255, 255, 255, 0.94)',
+    borderRadius: 32,
+    padding: 30,
     width: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 28,
-    alignItems: 'stretch',
-  },
-  input: {
-    width: '100%',
-    marginBottom: 16,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    fontSize: 16,
-    height: 56,
-    // keep native shadows, and provide boxShadow for web
+    maxWidth: 400,
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
     ...Platform.select({
-      web: {
-        boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
-      },
-    }),
-    outlineColor: '#E0E0E0',
-  },
-  loginButton: {
-    width: '100%',
-    marginTop: 18, // Adjusted top margin
-    borderRadius: 28,
-    height: 52,
-    justifyContent: 'center',
-    ...Platform.select({
-      web: {
-        boxShadow: '0 8px 26px rgba(0,119,190,0.18)',
-      },
       ios: {
-        shadowColor: '#0077BE',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.4,
-        shadowRadius: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 15 },
+        shadowOpacity: 0.1,
+        shadowRadius: 25,
       },
       android: {
-        elevation: 8,
+        elevation: 20,
       },
+      web: {
+        boxShadow: '0 20px 50px rgba(0, 0, 0, 0.1)',
+      }
     }),
   },
-  loginButtonContent: {
-    height: 50,
+  cardHeader: {
+    alignItems: 'center',
+    marginBottom: 25,
+  },
+  cardTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  titleUnderline: {
+    width: 40,
+    height: 4,
+    backgroundColor: '#0EA5E9',
+    borderRadius: 2,
+    marginTop: 5,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.2)',
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 13,
+    marginLeft: 8,
+    fontWeight: '600',
+    flex: 1,
+  },
+  form: {
+    width: '100%',
+  },
+  input: {
+    backgroundColor: 'transparent',
+    marginBottom: 15,
+    fontSize: 16,
+    height: 60,
+  },
+  forgotPasswordLink: {
+    alignSelf: 'flex-end',
+    marginBottom: 25,
+  },
+  forgotPasswordText: {
+    color: '#64748B',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  loginBtnContainer: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    elevation: 6,
+    shadowColor: '#2563EB',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+  },
+  loginGradient: {
+    height: 58,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loginBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
   },
-  loginButtonLabel: {
-    fontSize: 17, // Adjusted font size
-    fontWeight: '700',
+  loginBtnLabel: {
     color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    marginRight: 10,
   },
-  forgotButton: {
-    marginTop: 20,
+  footer: {
+    marginTop: 30,
+    alignItems: 'center',
   },
-  forgotButtonLabel: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#0077BE',
+  footerText: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '500',
   },
 });
+

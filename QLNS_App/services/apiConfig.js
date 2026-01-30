@@ -63,6 +63,14 @@ export const determineBestApiUrl = async () => {
 };
 
 /**
+ * Set the current active API Base URL
+ */
+export const setApiBaseUrl = (url) => {
+  console.log(`🔄 [APIConfig] Updating active Base URL to: ${url}`);
+  activeBaseUrl = url;
+};
+
+/**
  * Get the current active API Base URL
  * Prefers determined URL, falls back to Ngrok then LAN
  */
@@ -125,6 +133,7 @@ export const logApiConfig = () => {
 
 export default {
   getApiBaseUrl,
+  setApiBaseUrl,
   testApiConnection,
   logApiConfig,
 };

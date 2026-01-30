@@ -24,6 +24,7 @@ import {
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import SalaryService from '../../services/SalaryService';
+import CheckPermission from '../../components/CheckPermission';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -76,7 +77,7 @@ const SalaryManagementScreen = ({ navigation }) => {
   const [data, setData] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(getMonthsList()[0]);
   const [monthPickerVisible, setMonthPickerVisible] = useState(false);
-  
+
   // Modal chi tiết
   const [detailModalVisible, setDetailModalVisible] = useState(false);
   const [selectedPayslip, setSelectedPayslip] = useState(null);
@@ -282,16 +283,18 @@ const SalaryManagementScreen = ({ navigation }) => {
         </TouchableOpacity>
 
         {/* Calculate Button */}
-        <Button
-          mode="contained"
-          onPress={handleCalculate}
-          loading={calculating}
-          disabled={calculating}
-          icon="calculator"
-          style={styles.calculateBtn}
-        >
-          Tính lương
-        </Button>
+        <CheckPermission permissionKey="salaries" requiredType="create">
+          <Button
+            mode="contained"
+            onPress={handleCalculate}
+            loading={calculating}
+            disabled={calculating}
+            icon="calculator"
+            style={styles.calculateBtn}
+          >
+            Tính lương
+          </Button>
+        </CheckPermission>
       </Surface>
 
       {/* Invalid Users Warning */}

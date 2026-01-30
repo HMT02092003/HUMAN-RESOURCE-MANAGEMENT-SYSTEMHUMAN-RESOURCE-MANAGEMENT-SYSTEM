@@ -1029,7 +1029,11 @@ export const getDailyAttendanceByScope = async (req: Request, res: Response) => 
     const scopeResult = await CheckScopeService.checkUserScope(permissionKey as string, token, userData);
 
     if (!scopeResult.hasAccess) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden',
+        error: (scopeResult as any).error // details from CheckScopeService
+      });
     }
 
     let allowedUserIds = scopeResult.userIds;

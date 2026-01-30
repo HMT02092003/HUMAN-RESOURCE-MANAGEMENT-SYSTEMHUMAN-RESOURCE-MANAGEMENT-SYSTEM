@@ -10,26 +10,9 @@ import apiService from '../../services/apiService';
 const { width } = Dimensions.get('window');
 const isTablet = width >= 768;
 
-const FAKE_STATS = {
-  totalEmployees: 156,
-  totalDepartments: 12,
-  attendanceRate: 94.5,
-  pendingApplications: 8,
-  activeContracts: 142,
-  monthlySalary: 3250000000,
-};
-
-const FAKE_ACTIVITIES = [
-  { id: 1, icon: 'file-document-outline', title: 'Nguyễn Văn A nộp đơn xin nghỉ phép', time: '10 phút trước', type: 'application' },
-  { id: 2, icon: 'check-circle-outline', title: 'HR duyệt hợp đồng cho Trần Thị B', time: '25 phút trước', type: 'contract' },
-  { id: 3, icon: 'account-plus-outline', title: 'Nhân viên mới Lê Văn C được thêm vào hệ thống', time: '1 giờ trước', type: 'user' },
-  { id: 4, icon: 'clock-alert-outline', title: 'Phạm Thị D chấm công muộn 15 phút', time: '2 giờ trước', type: 'attendance' },
-  { id: 5, icon: 'briefcase-outline', title: 'Dự án "Website mới" được tạo bởi Hoàng Văn E', time: '3 giờ trước', type: 'project' },
-];
-
 const StatCard = ({ icon, title, value, color, suffix = '', onPress }) => {
   const theme = useTheme();
-  
+
   return (
     <Surface style={[styles.statCard, { borderLeftColor: color, borderLeftWidth: 4 }]} elevation={2}>
       <View style={styles.statIconContainer}>
@@ -40,37 +23,10 @@ const StatCard = ({ icon, title, value, color, suffix = '', onPress }) => {
       <View style={styles.statContent}>
         <Text style={styles.statTitle}>{title}</Text>
         <Text style={[styles.statValue, { color }]}>
-          {value.toLocaleString('vi-VN')}{suffix}
+          {value != null ? value.toLocaleString('vi-VN') : '0'}{suffix}
         </Text>
       </View>
     </Surface>
-  );
-};
-
-const ActivityItem = ({ activity }) => {
-  const theme = useTheme();
-  
-  const getActivityColor = (type) => {
-    switch (type) {
-      case 'application': return theme.colors.primary;
-      case 'contract': return '#52c41a';
-      case 'user': return '#722ed1';
-      case 'attendance': return '#fa8c16';
-      case 'project': return '#13c2c2';
-      default: return theme.colors.onSurfaceVariant;
-    }
-  };
-
-  return (
-    <View style={styles.activityItem}>
-      <View style={[styles.activityIconContainer, { backgroundColor: getActivityColor(activity.type) + '20' }]}>
-        <MaterialCommunityIcons name={activity.icon} size={20} color={getActivityColor(activity.type)} />
-      </View>
-      <View style={styles.activityContent}>
-        <Text style={styles.activityTitle} numberOfLines={2}>{activity.title}</Text>
-        <Text style={styles.activityTime}>{activity.time}</Text>
-      </View>
-    </View>
   );
 };
 
@@ -106,21 +62,18 @@ const HomeScreen = () => {
   const fetchDashboardStats = async (userId) => {
     try {
       console.log(`📊 [HomeScreen] Fetching dashboard stats for year=${selectedYear}, month=${selectedMonth}`);
-      
-      const resp = await apiService.get('/dashboard/stats', { 
-        params: { year: selectedYear, month: selectedMonth } 
+
+      const resp = await apiService.get('/dashboard/stats', {
+        params: { year: selectedYear, month: selectedMonth }
       });
-      
+
       if (resp?.data?.success) {
-        console.log('✅ [HomeScreen] Dashboard data loaded successfully');
         setDashboardData(resp.data.data);
       } else if (resp?.data) {
-        console.log('✅ [HomeScreen] Dashboard data loaded (direct format)');
         setDashboardData(resp.data);
       }
     } catch (err) {
       console.error('❌ [HomeScreen] Error fetching dashboard stats:', err);
-      console.error('❌ [HomeScreen] Error response:', err.response?.data);
     }
   };
 
@@ -147,7 +100,7 @@ const HomeScreen = () => {
 
   return (
     <View style={styles.container}>
-      <Surface style={styles.header} elevation={2}>
+      <Surface style={styles.header} elevation={1}>
         <View style={styles.headerContent}>
           <View>
             <Text style={styles.welcomeText}>Xin chào,</Text>
@@ -168,7 +121,7 @@ const HomeScreen = () => {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />}
       >
         {/* Date Selector */}
-        <Surface style={styles.dateSelector} elevation={2}>
+        <Surface style={styles.dateSelector} elevation={1}>
           <Text style={styles.dateSelectorTitle}>Chọn thời gian:</Text>
           <View style={styles.datePickerRow}>
             <Menu
@@ -307,7 +260,6 @@ const HomeScreen = () => {
                 const late = dashboardData.attendance.chartData.map(i => i.late ?? 0);
                 const absent = dashboardData.attendance.chartData.map(i => i.absent ?? 0);
 
-                // show multiple lines by overlaying charts horizontally (chart-kit supports multiple datasets for LineChart)
                 const data = {
                   labels,
                   datasets: [
@@ -315,6 +267,7 @@ const HomeScreen = () => {
                     { data: late, color: () => '#f59e0b', strokeWidth: 2 },
                     { data: absent, color: () => '#ef4444', strokeWidth: 2 },
                   ],
+                  legend: ["Đúng giờ", "Đi muộn", "Vắng"]
                 };
 
                 return (
@@ -325,7 +278,8 @@ const HomeScreen = () => {
                     chartConfig={{
                       backgroundGradientFrom: '#ffffff',
                       backgroundGradientTo: '#ffffff',
-                      color: (opacity = 1) => `rgba(6,37,77, ${opacity})`,
+                      color: (opacity = 1) => `rgba(24, 144, 255, ${opacity})`,
+                      labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
                       decimalPlaces: 0,
                     }}
                     bezier
@@ -334,7 +288,7 @@ const HomeScreen = () => {
                 );
               })()
             ) : (
-              <Text style={styles.placeholderText}>Không có dữ liệu biểu đồ chấm công</Text>
+              <Text style={styles.placeholderText}>Không có dữ liệu chấm công</Text>
             )}
           </Surface>
         </View>
@@ -359,6 +313,7 @@ const HomeScreen = () => {
                     { data: pending, color: () => '#f59e0b', strokeWidth: 2 },
                     { data: rejected, color: () => '#ef4444', strokeWidth: 2 },
                   ],
+                  legend: ["Duyệt", "Chờ", "Từ chối"]
                 };
 
                 return (
@@ -369,7 +324,8 @@ const HomeScreen = () => {
                     chartConfig={{
                       backgroundGradientFrom: '#ffffff',
                       backgroundGradientTo: '#ffffff',
-                      color: (opacity = 1) => `rgba(6,37,77, ${opacity})`,
+                      color: (opacity = 1) => `rgba(24, 144, 255, ${opacity})`,
+                      labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
                       decimalPlaces: 0,
                     }}
                     bezier
@@ -378,7 +334,7 @@ const HomeScreen = () => {
                 );
               })()
             ) : (
-              <Text style={styles.placeholderText}>Không có dữ liệu biểu đồ đơn từ</Text>
+              <Text style={styles.placeholderText}>Không có dữ liệu đơn từ</Text>
             )}
           </Surface>
         </View>
@@ -394,7 +350,7 @@ const HomeScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f7fa',
+    backgroundColor: '#F0F2F5', // Matched AppLayout
   },
   centerContent: {
     justifyContent: 'center',
@@ -409,6 +365,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     paddingVertical: 16,
     paddingHorizontal: 20,
+    marginBottom: 0,
   },
   headerContent: {
     flexDirection: 'row',
@@ -423,28 +380,24 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#262626',
+    color: '#1F2937',
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     padding: 16,
+    paddingBottom: 40,
   },
   section: {
     marginBottom: 24,
   },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#262626',
+    color: '#1F2937',
     marginBottom: 12,
+    marginLeft: 4,
   },
   dateSelector: {
     backgroundColor: '#ffffff',
@@ -462,40 +415,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexWrap: 'wrap',
   },
   dateButton: {
     flex: 1,
     borderRadius: 8,
+    minWidth: 100,
   },
   searchButton: {
     borderRadius: 8,
     minWidth: 80,
   },
-  refreshButton: {
-    margin: 0,
-  },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginHorizontal: -6,
+    justifyContent: 'space-between',
   },
-  statCard: {
+  statCard: { // Fixed width issue
     flexDirection: 'row',
     backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 16,
-    marginHorizontal: 6,
     marginBottom: 12,
-    width: isTablet ? 'calc(33.333% - 12px)' : 'calc(50% - 12px)',
-    minWidth: isTablet ? 200 : 150,
+    width: isTablet ? '32%' : '48%',
+    minWidth: 150,
   },
   statIconContainer: {
     marginRight: 12,
   },
   statIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -504,70 +455,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   statTitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#8c8c8c',
     marginBottom: 4,
   },
   statValue: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '700',
   },
   divider: {
-    marginVertical: 8,
+    marginVertical: 16,
     backgroundColor: '#e8e8e8',
-  },
-  activitiesContainer: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 16,
-  },
-  activityItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: 12,
-  },
-  activityIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#262626',
-    marginBottom: 4,
-  },
-  activityTime: {
-    fontSize: 12,
-    color: '#8c8c8c',
-  },
-  activityDivider: {
-    marginVertical: 4,
-    backgroundColor: '#f0f0f0',
-  },
-  calendarPlaceholder: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  placeholderText: {
-    marginTop: 12,
-    fontSize: 14,
-    color: '#8c8c8c',
   },
   chartContainer: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 12,
     alignItems: 'center',
+    overflow: 'hidden',
+  },
+  placeholderText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#8c8c8c',
+    textAlign: 'center',
+    padding: 20,
   },
   footer: {
     paddingVertical: 20,
@@ -575,7 +487,7 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 12,
-    color: '#8c8c8c',
+    color: '#9CA3AF',
   },
 });
 

@@ -16,7 +16,7 @@ class EmployeeService {
       // ✨ Use /all/departments for faster, non-paginated access without complex role mapping
       const response = await axios.get(
         `${EMPLOYEE_SERVICE_URL}/api/all/departments`,
-        { headers }
+        { headers, timeout: 5000 }
       );
       return response.data?.data || response.data || [];
     } catch (error: any) {
@@ -37,7 +37,7 @@ class EmployeeService {
       // ✨ Use /all/chevrons for faster, non-paginated access
       const response = await axios.get(
         `${EMPLOYEE_SERVICE_URL}/api/all/chevrons`,
-        { headers }
+        { headers, timeout: 5000 }
       );
       return response.data?.data || response.data || [];
     } catch (error: any) {
@@ -57,7 +57,7 @@ class EmployeeService {
 
       const response = await axios.get(
         `${EMPLOYEE_SERVICE_URL}/api/departments/${departmentId}`,
-        { headers }
+        { headers, timeout: 5000 }
       );
       return response.data?.data || response.data;
     } catch (error: any) {
@@ -79,7 +79,7 @@ class EmployeeService {
       const response = await axios.post(
         `${EMPLOYEE_SERVICE_URL}/api/getChevronDetail`,
         { id: chevronId },
-        { headers }
+        { headers, timeout: 5000 }
       );
       return response.data?.data || response.data;
     } catch (error: any) {
@@ -100,7 +100,7 @@ class EmployeeService {
       // ✨ Employee service uses /contractTypes/:id
       const response = await axios.get(
         `${EMPLOYEE_SERVICE_URL}/api/contractTypes/${contractTypeId}`,
-        { headers }
+        { headers, timeout: 5000 }
       );
       return response.data?.data || response.data;
     } catch (error: any) {
@@ -145,7 +145,7 @@ class EmployeeService {
       const response = await axios.post(
         `${target}/api/users/${userId}/contracts`,
         contractData,
-        { headers }
+        { headers, timeout: 5000 }
       );
       return response.data;
     } catch (error: any) {

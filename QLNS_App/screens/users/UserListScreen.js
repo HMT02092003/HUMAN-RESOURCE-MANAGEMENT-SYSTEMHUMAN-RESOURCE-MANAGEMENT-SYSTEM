@@ -1,159 +1,260 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, FlatList, RefreshControl } from 'react-native';
-import { 
-  Surface, 
-  Text, 
-  Searchbar, 
-  FAB, 
-  Card, 
-  Avatar, 
-  Chip, 
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, FlatList, RefreshControl, Alert, TouchableOpacity } from 'react-native';
+import {
+  Surface,
+  Text,
+  Searchbar,
+  FAB,
+  Card,
+  Avatar,
+  Chip,
   IconButton,
   useTheme,
-  ActivityIndicator
+  ActivityIndicator,
+  Divider,
+  Menu
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import UserService from '../../services/UserService';
+import CheckPermission from '../../components/CheckPermission';
 
-// Fake data
-const FAKE_USERS = [
-  { id: 1, username: 'admin', fullName: 'Nguyễn Văn A', email: 'admin@example.com', role: 'Admin', status: 'active' },
-  { id: 2, username: 'user01', fullName: 'Trần Thị B', email: 'user01@example.com', role: 'Manager', status: 'active' },
-  { id: 3, username: 'user02', fullName: 'Lê Văn C', email: 'user02@example.com', role: 'Employee', status: 'active' },
-  { id: 4, username: 'user03', fullName: 'Phạm Thị D', email: 'user03@example.com', role: 'Employee', status: 'inactive' },
-  { id: 5, username: 'user04', fullName: 'Hoàng Văn E', email: 'user04@example.com', role: 'HR', status: 'active' },
-];
-
-const UserListScreen = () => {
+const UserListScreen = ({ navigation }) => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [visibleMenuId, setVisibleMenuId] = useState(null);
+
   const theme = useTheme();
 
   useEffect(() => {
     loadUsers();
   }, []);
 
-  const loadUsers = async () => {
+  const loadUsers = async (pageNum = 1, isRefreshing = false) => {
+    if (pageNum === 1) setLoading(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setUsers(FAKE_USERS);
+      console.log('👥 [UserList] Fetching users, page:', pageNum);
+      const data = await UserService.getAllUsers({
+        page: pageNum,
+        pageSize: pageSize,
+        search: searchQuery
+      });
+
+      const results = data.results || data || [];
+      const totalCount = data.total || results.length || 0;
+
+      if (pageNum === 1) {
+        setUsers(results);
+      } else {
+        setUsers(prev => [...prev, ...results]);
+      }
+      setTotal(totalCount);
+      setPage(pageNum);
     } catch (error) {
-      console.error('Error loading users:', error);
+      console.error('❌ [UserList] Error loading users:', error);
+      Alert.alert('Lỗi', 'Không thể tải danh sách người dùng');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const onRefresh = async () => {
+  const onRefresh = () => {
     setRefreshing(true);
-    await loadUsers();
-    setRefreshing(false);
+    setPage(1);
+    loadUsers(1, true);
   };
 
-  const filteredUsers = users.filter(user =>
-    user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleSearch = (query) => {
+    setSearchQuery(query);
+    // Debounce search would be better, but for now simple:
+  };
 
-  const getRoleColor = (role) => {
-    switch (role) {
-      case 'Admin': return '#f5222d';
-      case 'Manager': return '#722ed1';
-      case 'HR': return '#1890ff';
-      default: return '#52c41a';
-    }
+  // Trigger search on submit
+  const submitSearch = () => {
+    setPage(1);
+    loadUsers(1);
+  };
+
+  const handleDeleteUser = (userId, fullName) => {
+    Alert.alert(
+      '🗑️ Xác nhận xóa',
+      `Bạn có chắc chắn muốn xóa người dùng "${fullName}"?`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Xóa',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await UserService.deleteUser(userId);
+              Alert.alert('✅ Thành công', 'Đã xóa người dùng');
+              onRefresh();
+            } catch (error) {
+              console.error('❌ [UserList] Delete failed:', error);
+              Alert.alert('Lỗi', error.response?.data?.message || 'Không thể xóa người dùng');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const getRoleColor = (roleName) => {
+    const name = roleName?.toLowerCase() || '';
+    if (name.includes('admin')) return '#f5222d';
+    if (name.includes('manager')) return '#722ed1';
+    if (name.includes('hr')) return '#1890ff';
+    return '#52c41a';
   };
 
   const getStatusColor = (status) => {
-    return status === 'active' ? '#52c41a' : '#8c8c8c';
+    // Web status: 1: active, 2: inactive? 
+    // In service: status can be string or number
+    const s = parseInt(status);
+    return s === 1 ? '#52c41a' : '#8c8c8c';
+  };
+
+  const getStatusLabel = (status) => {
+    const s = parseInt(status);
+    return s === 1 ? 'Hoạt động' : 'Ngưng';
   };
 
   const renderUserCard = ({ item }) => (
-    <Card style={styles.userCard}>
+    <Card style={styles.userCard} elevation={1}>
       <Card.Content>
         <View style={styles.userCardContent}>
-          <Avatar.Text 
-            size={56} 
-            label={item.fullName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
-            style={{ backgroundColor: getRoleColor(item.role) }}
+          <Avatar.Text
+            size={56}
+            label={item.fullName?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || '??'}
+            style={{ backgroundColor: getRoleColor(item.role?.name) }}
           />
           <View style={styles.userInfo}>
             <View style={styles.userHeader}>
-              <Text style={styles.userName}>{item.fullName}</Text>
-              <Chip 
-                mode="flat" 
+              <Text style={styles.userName} numberOfLines={1}>{item.fullName}</Text>
+              <Chip
+                mode="flat"
                 style={[styles.statusChip, { backgroundColor: getStatusColor(item.status) + '20' }]}
-                textStyle={{ color: getStatusColor(item.status), fontSize: 11 }}
+                textStyle={{ color: getStatusColor(item.status), fontSize: 10, fontWeight: '700' }}
               >
-                {item.status === 'active' ? 'Hoạt động' : 'Ngưng'}
+                {getStatusLabel(item.status)}
               </Chip>
             </View>
-            <Text style={styles.userEmail}>{item.email}</Text>
+            <Text style={styles.userEmail} numberOfLines={1}>{item.email || 'No email'}</Text>
             <View style={styles.userMeta}>
-              <Chip 
-                icon="account-tie" 
-                style={{ backgroundColor: getRoleColor(item.role) + '20' }}
-                textStyle={{ color: getRoleColor(item.role), fontSize: 12 }}
-              >
-                {item.role}
-              </Chip>
-              <Text style={styles.username}>@{item.username}</Text>
+              <View style={styles.roleBadge}>
+                <MaterialCommunityIcons name="account-tie" size={12} color={getRoleColor(item.role?.name)} />
+                <Text style={[styles.roleText, { color: getRoleColor(item.role?.name) }]}>
+                  {item.role?.name || 'No Role'}
+                </Text>
+              </View>
+              <Text style={styles.usernameText}>@{item.username}</Text>
             </View>
           </View>
-          <View style={styles.actions}>
-            <IconButton icon="pencil" size={20} onPress={() => {}} />
-            <IconButton icon="delete" size={20} onPress={() => {}} />
-          </View>
+
+          <Menu
+            visible={visibleMenuId === item.id}
+            onDismiss={() => setVisibleMenuId(null)}
+            anchor={
+              <IconButton
+                icon="dots-vertical"
+                size={22}
+                onPress={() => setVisibleMenuId(item.id)}
+              />
+            }
+          >
+            <CheckPermission permissionKey="users" requiredType="update">
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setVisibleMenuId(null);
+                  navigation.navigate('UserForm', { mode: 'edit', userId: item.id });
+                }}
+              >
+                <MaterialCommunityIcons name="pencil" size={18} color="#595959" style={styles.menuIcon} />
+                <Text>Chỉnh sửa</Text>
+              </TouchableOpacity>
+            </CheckPermission>
+
+            <CheckPermission permissionKey="users" requiredType="delete">
+              <>
+                <Divider />
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    setVisibleMenuId(null);
+                    handleDeleteUser(item.id, item.fullName);
+                  }}
+                >
+                  <MaterialCommunityIcons name="delete" size={18} color="#ff4d4f" style={styles.menuIcon} />
+                  <Text style={{ color: '#ff4d4f' }}>Xóa</Text>
+                </TouchableOpacity>
+              </>
+            </CheckPermission>
+          </Menu>
         </View>
       </Card.Content>
     </Card>
   );
 
-  if (loading) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={styles.loadingText}>Đang tải danh sách người dùng...</Text>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
-      <Surface style={styles.searchContainer} elevation={2}>
+      <Surface style={styles.searchContainer} elevation={0}>
         <Searchbar
-          placeholder="Tìm kiếm người dùng..."
-          onChangeText={setSearchQuery}
+          placeholder="Tìm tên, email, username..."
+          onChangeText={handleSearch}
+          onSubmitEditing={submitSearch}
+          onIconPress={submitSearch}
           value={searchQuery}
           style={styles.searchbar}
+          inputStyle={styles.searchInput}
         />
       </Surface>
 
-      <FlatList
-        data={filteredUsers}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderUserCard}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <MaterialCommunityIcons name="account-off" size={64} color={theme.colors.onSurfaceVariant} />
-            <Text style={styles.emptyText}>Không tìm thấy người dùng</Text>
-          </View>
-        }
-      />
+      {loading && page === 1 ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={styles.loadingText}>Đang tải danh sách...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={users}
+          keyExtractor={(item) => item.id?.toString()}
+          renderItem={renderUserCard}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />
+          }
+          onEndReached={() => {
+            if (users.length < total) {
+              loadUsers(page + 1);
+            }
+          }}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={() => (
+            loading && page > 1 ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <MaterialCommunityIcons name="account-off-outline" size={64} color="#bfbfbf" />
+              <Text style={styles.emptyText}>Không tìm thấy người dùng nào</Text>
+            </View>
+          }
+        />
+      )}
 
-      <FAB
-        icon="plus"
-        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
-        onPress={() => {}}
-        label="Thêm người dùng"
-      />
+      <CheckPermission permissionKey="users" requiredType="create">
+        <FAB
+          icon="plus"
+          style={styles.fab}
+          onPress={() => navigation.navigate('UserForm', { mode: 'create' })}
+          color="#fff"
+        />
+      </CheckPermission>
     </View>
   );
 };
@@ -161,32 +262,41 @@ const UserListScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f7fa',
+    backgroundColor: '#f0f2f5',
   },
   centered: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   loadingText: {
-    marginTop: 16,
-    fontSize: 14,
+    marginTop: 12,
     color: '#8c8c8c',
   },
   searchContainer: {
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    padding: 12,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0'
   },
   searchbar: {
     elevation: 0,
-    backgroundColor: '#f5f7fa',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    height: 48,
+  },
+  searchInput: {
+    fontSize: 15,
+    minHeight: 0,
   },
   listContent: {
-    padding: 16,
+    padding: 12,
+    paddingBottom: 80,
   },
   userCard: {
-    marginBottom: 12,
-    backgroundColor: '#ffffff',
+    marginBottom: 10,
+    borderRadius: 12,
+    backgroundColor: '#fff',
   },
   userCardContent: {
     flexDirection: 'row',
@@ -194,53 +304,76 @@ const styles = StyleSheet.create({
   },
   userInfo: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: 12,
   },
   userHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   userName: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#262626',
+    flex: 1,
+    marginRight: 8,
   },
   userEmail: {
     fontSize: 13,
-    color: '#8c8c8c',
-    marginBottom: 8,
+    color: '#595959',
+    marginBottom: 6,
   },
   userMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
-  username: {
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  roleText: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  usernameText: {
     fontSize: 12,
     color: '#8c8c8c',
+    fontStyle: 'italic',
   },
   statusChip: {
-    height: 24,
+    height: 22,
   },
-  actions: {
+  menuItem: {
     flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  menuIcon: {
+    marginRight: 10,
   },
   emptyContainer: {
     alignItems: 'center',
-    paddingVertical: 48,
+    paddingTop: 100,
   },
   emptyText: {
     marginTop: 16,
-    fontSize: 14,
-    color: '#8c8c8c',
+    color: '#bfbfbf',
+    fontSize: 16,
   },
   fab: {
     position: 'absolute',
     margin: 16,
     right: 0,
     bottom: 0,
+    backgroundColor: '#1890ff',
   },
 });
 

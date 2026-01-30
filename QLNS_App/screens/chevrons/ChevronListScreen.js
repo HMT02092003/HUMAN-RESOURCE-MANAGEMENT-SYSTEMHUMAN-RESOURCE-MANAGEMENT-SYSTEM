@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import { 
-  Card, 
-  Avatar, 
-  Text, 
-  IconButton, 
-  useTheme, 
+import {
+  Card,
+  Avatar,
+  Text,
+  IconButton,
+  useTheme,
   Menu,
   Divider,
   FAB,
@@ -14,6 +14,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import CardListWithInfiniteScroll from '../../components/CardListWithInfiniteScroll';
 import { ChevronService } from '../../services/ChevronService';
+import CheckPermission from '../../components/CheckPermission';
 
 const ChevronListScreen = ({ navigation }) => {
   const theme = useTheme();
@@ -23,15 +24,15 @@ const ChevronListScreen = ({ navigation }) => {
   const fetchChevrons = async (params) => {
     try {
       console.log('👔 [ChevronList] Fetching chevrons with params:', params);
-      
+
       const response = await ChevronService.getAllChevrons({
         page: params.page,
         limit: params.pageSize,
         search: params.search
       });
 
-      return { 
-        results: response.data || [], 
+      return {
+        results: response.data || [],
         total: response.pagination?.total || response.total || 0
       };
     } catch (error) {
@@ -97,7 +98,7 @@ const ChevronListScreen = ({ navigation }) => {
             <Text style={styles.chevronName} numberOfLines={1}>
               {item.name || 'N/A'}
             </Text>
-            
+
             {/* Description */}
             {item.description && (
               <View style={styles.infoRow}>
@@ -131,35 +132,40 @@ const ChevronListScreen = ({ navigation }) => {
                 />
               }
             >
-              <TouchableOpacity
-                style={styles.menuItemRow}
-                onPress={() => {
-                  console.log('🔀 [ChevronList] Edit pressed for', item.id);
-                  setVisibleMenuId(null);
-                  try {
-                    navigation.navigate('ChevronForm', { mode: 'edit', chevronId: item.id });
-                  } catch (e) {
-                    console.error('Navigation error to ChevronForm:', e);
-                    navigation.navigate('ChevronEdit', { chevronId: item.id });
-                  }
-                }}
-              >
-                <MaterialCommunityIcons name="pencil-outline" size={18} color="#595959" style={styles.menuIcon} />
-                <Text style={styles.menuItemText}>Chỉnh sửa</Text>
-              </TouchableOpacity>
+              <CheckPermission permissionKey="chevrons" requiredType="update">
+                <TouchableOpacity
+                  style={styles.menuItemRow}
+                  onPress={() => {
+                    console.log('🔀 [ChevronList] Edit pressed for', item.id);
+                    setVisibleMenuId(null);
+                    try {
+                      navigation.navigate('ChevronForm', { mode: 'edit', chevronId: item.id });
+                    } catch (e) {
+                      console.error('Navigation error to ChevronForm:', e);
+                      navigation.navigate('ChevronEdit', { chevronId: item.id });
+                    }
+                  }}
+                >
+                  <MaterialCommunityIcons name="pencil-outline" size={18} color="#595959" style={styles.menuIcon} />
+                  <Text style={styles.menuItemText}>Chỉnh sửa</Text>
+                </TouchableOpacity>
+              </CheckPermission>
 
-              <Divider />
-
-              <TouchableOpacity
-                style={styles.menuItemRow}
-                onPress={() => {
-                  setVisibleMenuId(null);
-                  handleDeleteChevron(item.id, item.name);
-                }}
-              >
-                <MaterialCommunityIcons name="delete-outline" size={18} color="#ff4d4f" style={styles.menuIcon} />
-                <Text style={[styles.menuItemText, { color: '#ff4d4f' }]}>Xóa</Text>
-              </TouchableOpacity>
+              <CheckPermission permissionKey="chevrons" requiredType="delete">
+                <>
+                  <Divider />
+                  <TouchableOpacity
+                    style={styles.menuItemRow}
+                    onPress={() => {
+                      setVisibleMenuId(null);
+                      handleDeleteChevron(item.id, item.name);
+                    }}
+                  >
+                    <MaterialCommunityIcons name="delete-outline" size={18} color="#ff4d4f" style={styles.menuIcon} />
+                    <Text style={[styles.menuItemText, { color: '#ff4d4f' }]}>Xóa</Text>
+                  </TouchableOpacity>
+                </>
+              </CheckPermission>
             </Menu>
           </View>
         </View>
@@ -211,12 +217,14 @@ const ChevronListScreen = ({ navigation }) => {
       />
 
       {/* FAB - Add Chevron */}
-      <FAB
-        icon="plus"
-        style={styles.fab}
-        onPress={() => navigation.navigate('ChevronForm', { mode: 'create' })}
-        color="#fff"
-      />
+      <CheckPermission permissionKey="chevrons" requiredType="create">
+        <FAB
+          icon="plus"
+          style={styles.fab}
+          onPress={() => navigation.navigate('ChevronForm', { mode: 'create' })}
+          color="#fff"
+        />
+      </CheckPermission>
     </View>
   );
 };

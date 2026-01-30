@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
-import { 
-  Card, 
-  Avatar, 
-  Text, 
-  IconButton, 
-  useTheme, 
+import {
+  Card,
+  Avatar,
+  Text,
+  IconButton,
+  useTheme,
   Menu,
   Divider,
   FAB,
@@ -14,6 +14,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import CardListWithInfiniteScroll from '../../components/CardListWithInfiniteScroll';
 import { DepartmentService } from '../../services/DepartmentService';
+import CheckPermission from '../../components/CheckPermission';
 
 const DepartmentListScreen = ({ navigation }) => {
   const theme = useTheme();
@@ -23,15 +24,15 @@ const DepartmentListScreen = ({ navigation }) => {
   const fetchDepartments = async (params) => {
     try {
       console.log('🏢 [DepartmentList] Fetching departments with params:', params);
-      
+
       const response = await DepartmentService.getAllDepartments({
         page: params.page,
         limit: params.pageSize,
         search: params.search
       });
 
-      return { 
-        results: response.data || [], 
+      return {
+        results: response.data || [],
         total: response.pagination?.total || response.total || 0
       };
     } catch (error) {
@@ -97,7 +98,7 @@ const DepartmentListScreen = ({ navigation }) => {
             <Text style={styles.departmentName} numberOfLines={1}>
               {item.name || 'N/A'}
             </Text>
-            
+
             {/* Description */}
             {item.description && (
               <View style={styles.infoRow}>
@@ -131,35 +132,40 @@ const DepartmentListScreen = ({ navigation }) => {
                 />
               }
             >
-              <TouchableOpacity
-                style={styles.menuItemRow}
-                onPress={() => {
-                  console.log('🔀 [DepartmentList] Edit pressed for', item.id);
-                  setVisibleMenuId(null);
-                  try {
-                    navigation.navigate('DepartmentForm', { mode: 'edit', departmentId: item.id });
-                  } catch (e) {
-                    console.error('Navigation error to DepartmentForm:', e);
-                    navigation.navigate('DepartmentEdit', { departmentId: item.id });
-                  }
-                }}
-              >
-                <MaterialCommunityIcons name="pencil-outline" size={18} color="#595959" style={styles.menuIcon} />
-                <Text style={styles.menuItemText}>Chỉnh sửa</Text>
-              </TouchableOpacity>
+              <CheckPermission permissionKey="departments" requiredType="update">
+                <TouchableOpacity
+                  style={styles.menuItemRow}
+                  onPress={() => {
+                    console.log('🔀 [DepartmentList] Edit pressed for', item.id);
+                    setVisibleMenuId(null);
+                    try {
+                      navigation.navigate('DepartmentForm', { mode: 'edit', departmentId: item.id });
+                    } catch (e) {
+                      console.error('Navigation error to DepartmentForm:', e);
+                      navigation.navigate('DepartmentEdit', { departmentId: item.id });
+                    }
+                  }}
+                >
+                  <MaterialCommunityIcons name="pencil-outline" size={18} color="#595959" style={styles.menuIcon} />
+                  <Text style={styles.menuItemText}>Chỉnh sửa</Text>
+                </TouchableOpacity>
+              </CheckPermission>
 
-              <Divider />
-
-              <TouchableOpacity
-                style={styles.menuItemRow}
-                onPress={() => {
-                  setVisibleMenuId(null);
-                  handleDeleteDepartment(item.id, item.name);
-                }}
-              >
-                <MaterialCommunityIcons name="delete-outline" size={18} color="#ff4d4f" style={styles.menuIcon} />
-                <Text style={[styles.menuItemText, { color: '#ff4d4f' }]}>Xóa</Text>
-              </TouchableOpacity>
+              <CheckPermission permissionKey="departments" requiredType="delete">
+                <>
+                  <Divider />
+                  <TouchableOpacity
+                    style={styles.menuItemRow}
+                    onPress={() => {
+                      setVisibleMenuId(null);
+                      handleDeleteDepartment(item.id, item.name);
+                    }}
+                  >
+                    <MaterialCommunityIcons name="delete-outline" size={18} color="#ff4d4f" style={styles.menuIcon} />
+                    <Text style={[styles.menuItemText, { color: '#ff4d4f' }]}>Xóa</Text>
+                  </TouchableOpacity>
+                </>
+              </CheckPermission>
             </Menu>
           </View>
         </View>
@@ -199,12 +205,14 @@ const DepartmentListScreen = ({ navigation }) => {
       />
 
       {/* FAB - Add Department */}
-      <FAB
-        icon="plus"
-        style={styles.fab}
-        onPress={() => navigation.navigate('DepartmentForm', { mode: 'create' })}
-        color="#fff"
-      />
+      <CheckPermission permissionKey="departments" requiredType="create">
+        <FAB
+          icon="plus"
+          style={styles.fab}
+          onPress={() => navigation.navigate('DepartmentForm', { mode: 'create' })}
+          color="#fff"
+        />
+      </CheckPermission>
     </View>
   );
 };

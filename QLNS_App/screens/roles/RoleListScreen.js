@@ -13,6 +13,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import RoleService from '../../services/RoleService';
 import { Portal, Dialog, Button, Paragraph } from 'react-native-paper';
+import CheckPermission from '../../components/CheckPermission';
 
 const RoleListScreen = ({ navigation }) => {
   const [roles, setRoles] = useState([]);
@@ -138,18 +139,23 @@ const RoleListScreen = ({ navigation }) => {
           </View>
           {!isSelectionMode && (
             <View style={styles.actionButtons}>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => handleEdit(item)}
-              >
-                <Ionicons name="create-outline" size={20} color="#1890ff" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => handleDelete(item)}
-              >
-                <Ionicons name="trash-outline" size={20} color="#ff4d4f" />
-              </TouchableOpacity>
+              <CheckPermission permissionKey="roles" requiredType="update">
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => handleEdit(item)}
+                >
+                  <Ionicons name="create-outline" size={20} color="#1890ff" />
+                </TouchableOpacity>
+              </CheckPermission>
+
+              <CheckPermission permissionKey="roles" requiredType="delete">
+                <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => handleDelete(item)}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#ff4d4f" />
+                </TouchableOpacity>
+              </CheckPermission>
             </View>
           )}
         </View>
@@ -190,20 +196,24 @@ const RoleListScreen = ({ navigation }) => {
             <Text style={styles.cancelText}>Hủy</Text>
           </TouchableOpacity>
           <Text style={styles.selectedCountText}>Đã chọn: {selectedItems.length}</Text>
-          <TouchableOpacity onPress={handleDeleteSelected} disabled={selectedItems.length === 0}>
-            <Ionicons name="trash-outline" size={24} color={selectedItems.length > 0 ? '#ff4d4f' : '#ccc'} />
-          </TouchableOpacity>
+          <CheckPermission permissionKey="roles" requiredType="delete">
+            <TouchableOpacity onPress={handleDeleteSelected} disabled={selectedItems.length === 0}>
+              <Ionicons name="trash-outline" size={24} color={selectedItems.length > 0 ? '#ff4d4f' : '#ccc'} />
+            </TouchableOpacity>
+          </CheckPermission>
         </View>
       ) : (
         <View style={styles.headerBar}>
           <Text style={styles.totalText}>Tổng số: {filteredRoles.length} vai trò</Text>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => navigation.navigate('RoleCreate')}
-          >
-            <Ionicons name="add-circle" size={24} color="#fff" />
-            <Text style={styles.addButtonText}>Tạo mới</Text>
-          </TouchableOpacity>
+          <CheckPermission permissionKey="roles" requiredType="create">
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => navigation.navigate('RoleCreate')}
+            >
+              <Ionicons name="add-circle" size={24} color="#fff" />
+              <Text style={styles.addButtonText}>Tạo mới</Text>
+            </TouchableOpacity>
+          </CheckPermission>
         </View>
       )}
 

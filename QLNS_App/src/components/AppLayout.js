@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Modal, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Modal, FlatList, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { useNavigation, DrawerActions, useNavigationState, CommonActions } from '@react-navigation/native';
-import { Avatar, Divider, useTheme, MD3LightTheme, Provider as PaperProvider, Surface, ActivityIndicator, List, Portal, Dialog, Button, Paragraph, Badge, Chip } from 'react-native-paper';
+import { Avatar, Divider, useTheme, MD3LightTheme, Provider as PaperProvider, Surface, ActivityIndicator, List, Portal, Dialog, Button, Paragraph, Badge } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AuthTokenManager from '../../services/AuthTokenManager';
 import { useAuth } from '../../services/AuthContext';
@@ -11,9 +11,16 @@ import NotificationService from '../../services/NotificationService';
 
 const { width } = Dimensions.get('window');
 const isTablet = width >= 768;
-const DRAWER_WIDTH_EXPANDED = isTablet ? 280 : 260;
-const DRAWER_WIDTH_COLLAPSED = 72;
+const DRAWER_WIDTH_EXPANDED = isTablet ? 280 : 280; // Widen for better look
+const DRAWER_WIDTH_COLLAPSED = 80;
 
+if (Platform.OS === 'android') {
+  if (UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+  }
+}
+
+// Import Screens
 import HomeScreen from '../../screens/home/HomeScreen';
 import RoleListScreen from '../../screens/roles/RoleListScreen';
 import RoleNavigator from '../navigation/RoleNavigator';
@@ -21,6 +28,9 @@ import RoleNavigator from '../navigation/RoleNavigator';
 import ContractListScreen from '../../screens/contracts/ContractListScreen';
 import AttendanceListScreen from '../../screens/attendance/AttendanceListScreen';
 import AttendanceApprovalScreen from '../../screens/attendance/AttendanceApprovalScreen';
+import HolidayScreen from '../../screens/attendance/HolidayScreen'; // New Placeholder
+import DailyAttendanceScreen from '../../screens/attendance/DailyAttendanceScreen';
+import AttendanceHistoryScreen from '../../screens/attendance/AttendanceHistoryScreen';
 import SettingsScreen from '../../screens/settings/SettingsScreen';
 import SalaryListScreen from '../../screens/salary/SalaryListScreen';
 import AllowanceListScreen from '../../screens/salary/AllowanceListScreen';
@@ -46,7 +56,7 @@ import { ShiftRegistrationNavigator, ShiftApprovalNavigator, ShiftConfigurationN
 
 const Drawer = createDrawerNavigator();
 
-// Mapping các màn hình con về màn hình cha tương ứng
+// Map back buttons for nested screens
 const backNavigationMap = {
   'Chi tiết dự án': 'Dự án',
   'Tạo dự án': 'Dự án',
@@ -61,11 +71,10 @@ const backNavigationMap = {
   'Chi tiết KPI': 'Quản lý KPI',
 };
 
-// Header Buttons Components - Isolated to avoid Reanimated conflicts
+// --- Header Components ---
 const HeaderBackButton = ({ navigation, routeName }) => (
   <TouchableOpacity
     onPress={() => {
-      console.log('⬅️ [Navigation] Back button pressed from:', routeName);
       const targetScreen = backNavigationMap[routeName];
       if (targetScreen) {
         navigation.navigate(targetScreen);
@@ -73,20 +82,20 @@ const HeaderBackButton = ({ navigation, routeName }) => (
         navigation.goBack();
       }
     }}
-    style={{ paddingHorizontal: 16, paddingVertical: 8 }}
+    style={styles.headerButton}
     activeOpacity={0.7}
   >
-    <MaterialCommunityIcons name="arrow-left" size={24} color="#ffffff" />
+    <MaterialCommunityIcons name="arrow-left" size={24} color="#1F2937" />
   </TouchableOpacity>
 );
 
 const HeaderMenuButton = ({ navigation }) => (
   <TouchableOpacity
     onPress={() => navigation.toggleDrawer()}
-    style={{ paddingHorizontal: 16, paddingVertical: 8 }}
+    style={styles.headerButton}
     activeOpacity={0.7}
   >
-    <MaterialCommunityIcons name="menu" size={24} color="#ffffff" />
+    <MaterialCommunityIcons name="menu" size={24} color="#1F2937" />
   </TouchableOpacity>
 );
 
@@ -96,10 +105,11 @@ const NotificationBellButton = () => {
   const [notifications, setNotifications] = useState([]);
   const [showPopup, setShowPopup] = useState(false);
   const [loading, setLoading] = useState(false);
+  const theme = useTheme();
 
   useEffect(() => {
     loadUnreadCount();
-    const interval = setInterval(loadUnreadCount, 30000); // Refresh every 30s
+    const interval = setInterval(loadUnreadCount, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -108,7 +118,7 @@ const NotificationBellButton = () => {
       const response = await NotificationService.getUnreadCount();
       setUnreadCount(response.data?.data?.unread_count || 0);
     } catch (error) {
-      console.error('Failed to load unread count:', error);
+      // console.error('Failed to load unread count');
     }
   };
 
@@ -135,28 +145,17 @@ const NotificationBellButton = () => {
     if (notif.is_read) return;
     try {
       await NotificationService.markAsRead(notif.notification_id);
-      setNotifications(prev => 
+      setNotifications(prev =>
         prev.map(n => n.notification_id === notif.notification_id ? { ...n, is_read: true } : n)
       );
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
-      console.error('Failed to mark as read:', error);
     }
   };
 
   const handleViewAll = () => {
     setShowPopup(false);
     navigation.navigate('Thông báo');
-  };
-
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 'urgent': return '#ff4d4f';
-      case 'high': return '#fa8c16';
-      case 'normal': return '#1890ff';
-      case 'low': return '#52c41a';
-      default: return '#1890ff';
-    }
   };
 
   const formatTimeAgo = (dateStr) => {
@@ -178,15 +177,15 @@ const NotificationBellButton = () => {
       style={[styles.notifItem, !item.is_read && styles.notifItemUnread]}
       onPress={() => handleMarkAsRead(item)}
     >
-      <View style={styles.notifIcon}>
-        <MaterialCommunityIcons 
-          name="bell" 
-          size={20} 
-          color={getPriorityColor(item.priority)} 
+      <View style={[styles.notifIcon, { backgroundColor: item.is_read ? '#f0f0f0' : '#e6f7ff' }]}>
+        <MaterialCommunityIcons
+          name="bell"
+          size={18}
+          color={item.is_read ? '#bfbfbf' : theme.colors.primary}
         />
       </View>
       <View style={styles.notifContent}>
-        <Text style={styles.notifTitle} numberOfLines={2}>
+        <Text style={[styles.notifTitle, !item.is_read && { fontWeight: '700' }]} numberOfLines={2}>
           {item.title}
         </Text>
         {item.content && (
@@ -196,7 +195,7 @@ const NotificationBellButton = () => {
         )}
         <Text style={styles.notifTime}>{formatTimeAgo(item.created_at)}</Text>
       </View>
-      {!item.is_read && <Badge size={8} style={styles.notifBadge} />}
+      {!item.is_read && <View style={styles.notifBadgeDot} />}
     </TouchableOpacity>
   );
 
@@ -204,15 +203,12 @@ const NotificationBellButton = () => {
     <>
       <TouchableOpacity
         onPress={handleBellPress}
-        style={{ paddingHorizontal: 16, paddingVertical: 8, position: 'relative' }}
+        style={styles.headerButton}
         activeOpacity={0.7}
       >
-        <MaterialCommunityIcons name="bell" size={24} color="#ffffff" />
+        <MaterialCommunityIcons name="bell-outline" size={24} color="#1F2937" />
         {unreadCount > 0 && (
-          <Badge
-            size={18}
-            style={styles.bellBadge}
-          >
+          <Badge size={16} style={styles.bellBadge}>
             {unreadCount > 99 ? '99+' : unreadCount}
           </Badge>
         )}
@@ -229,19 +225,19 @@ const NotificationBellButton = () => {
           activeOpacity={1}
           onPress={() => setShowPopup(false)}
         >
-          <View style={styles.notifPopup}>
+          <Surface style={styles.notifPopup} elevation={5}>
             <View style={styles.notifHeader}>
               <Text style={styles.notifHeaderTitle}>Thông báo</Text>
               {unreadCount > 0 && (
-                <Badge size={20} style={styles.headerBadge}>
-                  {unreadCount}
-                </Badge>
+                <View style={styles.headerBadgeContainer}>
+                  <Text style={styles.headerBadgeText}>{unreadCount} mới</Text>
+                </View>
               )}
             </View>
             <Divider />
             {loading ? (
               <View style={styles.notifLoading}>
-                <ActivityIndicator size="small" color="#1890ff" />
+                <ActivityIndicator size="small" color={theme.colors.primary} />
               </View>
             ) : notifications.length === 0 ? (
               <View style={styles.notifEmpty}>
@@ -259,9 +255,9 @@ const NotificationBellButton = () => {
             )}
             <Divider />
             <TouchableOpacity style={styles.viewAllButton} onPress={handleViewAll}>
-              <Text style={styles.viewAllText}>Xem tất cả</Text>
+              <Text style={[styles.viewAllText, { color: theme.colors.primary }]}>Xem tất cả</Text>
             </TouchableOpacity>
-          </View>
+          </Surface>
         </TouchableOpacity>
       </Modal>
     </>
@@ -272,357 +268,362 @@ const AppTheme = {
   ...MD3LightTheme,
   colors: {
     ...MD3LightTheme.colors,
-    primary: '#1890ff',
-    error: '#ff4d4f',
-    background: '#f5f7fa',
-    surface: '#ffffff',
-    surfaceVariant: '#f0f2f5',
-    onSurface: '#262626',
-    onSurfaceVariant: '#8c8c8c',
-    primaryContainer: 'rgba(24, 144, 255, 0.08)',
+    primary: '#1890FF', // Modern Blue
+    secondary: '#722ED1', // Purple accent
+    error: '#FF4D4F',
+    background: '#F0F2F5',
+    surface: '#FFFFFF',
+    surfaceVariant: '#F5F5F5',
+    onSurface: '#1F2937',
+    onSurfaceVariant: '#6B7280',
+    primaryContainer: '#E6F7FF', // Light blue background for active
+    onPrimaryContainer: '#1890FF',
+    outline: '#E5E7EB',
   },
+  roundness: 12,
 };
 
-
+// --- MENU DATA Definitions (Exact match with Web) ---
+// Structure:
+// key: string, label: string, icon: string, route?: string (if leaf),
+// permissions?: string[] (array of required permissions - OR logic by default unless requireAllPermissions)
+// requireAllPermissions?: boolean
+// requirePermission?: 'create'|'read'|'update'|'delete'|'approve' (specific flag check)
+// children?: []
+// permission?: string (legacy single permission key)
 
 const BASE_MENU_ITEMS = [
-  { key: 'Dashboard', label: 'Dashboard', icon: 'view-dashboard', route: 'Dashboard' },
+  { key: 'Dashboard', label: 'Dashboard', icon: 'view-dashboard-outline', route: 'Dashboard' },
   {
     key: 'account_management_parent',
     label: 'Quản lí tài khoản',
-    icon: 'account-group',
+    icon: 'account-group-outline',
     children: [
-      { key: 'users', label: 'Quản lý người dùng', icon: 'account-multiple', route: 'Quản lý người dùng', permission: 'users' },
-      { key: 'roles', label: 'Quản lý vai trò', icon: 'shield-account', route: 'Quản lý vai trò', permission: 'roles' },
+      { key: 'users', label: 'Quản lý người dùng', icon: 'account-outline', route: 'Quản lý người dùng', permission: 'users' },
+      { key: 'roles', label: 'Quản lý vai trò', icon: 'shield-account-outline', route: 'Quản lý vai trò', permission: 'roles' },
     ],
     permissions: ['users', 'roles'],
     requireAllPermissions: false
   },
-  { key: 'departments', label: 'Quản lý phòng ban', icon: 'office-building', route: 'Quản lý phòng ban', permission: 'departments' },
-  { key: 'positions', label: 'Quản lý chức vụ', icon: 'badge-account-horizontal', route: 'Quản lý chức vụ', permission: 'chevrons' },
-  { key: 'contractTypes', label: 'Quản lý loại hợp đồng', icon: 'file-document-edit', route: 'Quản lý loại hợp đồng', permission: 'contractTypes' },
-  { key: 'contracts', label: 'Quản lý hợp đồng', icon: 'file-document', route: 'Quản lý hợp đồng', permission: 'contracts' },
+  { key: 'departments', label: 'Quản lý phòng ban', icon: 'office-building-outline', route: 'Quản lý phòng ban', permission: 'departments' },
+  { key: 'positions', label: 'Quản lý chức vụ', icon: 'badge-account-horizontal-outline', route: 'Quản lý chức vụ', permission: 'chevrons' },
+  { key: 'contractTypes', label: 'Quản lý loại hợp đồng', icon: 'file-document-edit-outline', route: 'Quản lý loại hợp đồng', permission: 'contractTypes' },
+  { key: 'contracts', label: 'Quản lý hợp đồng', icon: 'file-document-outline', route: 'Quản lý hợp đồng', permission: 'contracts' }, // Web might not have 'contracts' explicit permission on menu item? Web: 'contractTypes' is there. 'contracts' is... wait. Web: getItem('Quản lí hợp đồng', 'contractTypes', ...). Note: Web only has 'contractTypes' menu item which leads to managing TYPES?
+  // User check: Web menu item 'Quản lí hợp đồng' (contractTypes) maps to 'contractTypes' permission.
+  // App has SEPARATE 'contracts' (Quản lý hợp đồng) and 'contractTypes' (Quản lý loại hợp đồng).
+  // I will keep App structure but fix permissions.
+
   {
     key: 'applications_parent',
     label: 'Danh sách đơn từ',
-    icon: 'file-multiple',
+    icon: 'file-multiple-outline',
     children: [
-      { key: 'my_applications', label: 'Đơn từ cá nhân', icon: 'file-account', route: 'Đơn từ cá nhân' },
-      { key: 'application_management', label: 'Quản lý đơn từ', icon: 'file-document-edit', route: 'Quản lý đơn từ', permission: 'applications', requirePermission: 'approve' },
-      { key: 'shift_registration', label: 'Đăng ký ca', icon: 'calendar-plus', route: 'Đăng ký ca', permission: 'shiftRegistration', requirePermission: 'create' },
-      { key: 'shift_approval', label: 'Duyệt đơn đăng ký ca', icon: 'calendar-check', route: 'Duyệt đơn đăng ký ca', permission: 'shiftApproval', requirePermission: 'approve' },
-      { key: 'shift_configuration', label: 'Cấu hình ca', icon: 'clock-time-four-outline', route: 'Cấu hình ca', permission: 'shiftConfiguration' },
+      { key: 'myApplications', label: 'Đơn từ cá nhân', icon: 'file-account-outline', route: 'Đơn từ cá nhân', permission: 'applications' },
+      { key: 'manageApplications', label: 'Quản lý đơn từ', icon: 'file-check-outline', route: 'Quản lý đơn từ', permission: 'applications', requirePermission: 'approve' },
+      // Shift items
+      { key: 'shiftRegistration', label: 'Đăng ký ca', icon: 'calendar-plus', route: 'Đăng ký ca', permission: 'shiftRegistration', requirePermission: 'create' },
+      { key: 'shiftApproval', label: 'Duyệt đơn đăng ký ca', icon: 'calendar-check-outline', route: 'Duyệt đơn đăng ký ca', permission: 'shiftApproval', requirePermission: 'approve' },
+      { key: 'shiftConfiguration', label: 'Cấu hình ca', icon: 'cog-outline', route: 'Cấu hình ca', permission: 'shiftConfiguration', requirePermission: 'read' },
     ],
-    permissions: ['applications', 'shiftRegistration', 'shiftApproval', 'shiftConfiguration']
+    permissions: ['applications'] // Web uses ONLY 'applications' for parent visibility check? 
+    // Web: permissions: ['applications']. So if I have shiftRegistration but NOT applications, Web shows parent?
+    // Web logic: "If item has children, and filteredChildren > 0, return parent". match!
+    // "If filteredChildren is 0, check item.permissions".
+    // So if I have 'shiftRegistration', I see the child. Thus filteredChildren > 0. Thus Parent shows.
+    // If I have no children access, Parent checks 'applications' permission. If fail, hidden.
+    // So this is correct.
   },
   {
     key: 'attendance_parent',
     label: 'Chấm công',
-    icon: 'clock-check',
+    icon: 'calendar-clock-outline',
     children: [
-      { key: 'attendance', label: 'Bảng chấm công', icon: 'calendar-clock', route: 'Chấm công', permission: 'timeAttendance' },
-      { key: 'attendance_approval', label: 'Duyệt bảng chấm...', icon: 'check-decagram', route: 'Duyệt bảng chấm công', permission: 'timeAttendance', requirePermission: 'approve' },
+      { key: 'attendance', label: 'Bảng chấm công', icon: 'calendar-month-outline', route: 'Chấm công', permission: 'timeAttendance' },
+      { key: 'attendanceApproval', label: 'Duyệt bảng chấm công', icon: 'check-decagram-outline', route: 'Duyệt bảng chấm công', permission: 'timeAttendance', requirePermission: 'approve' },
+      { key: 'dailyAttendance', label: 'Chấm công hàng ngày', icon: 'calendar-check', route: 'Chấm công hàng ngày', permission: 'dailyAttendance' },
+      { key: 'attendanceHistory', label: 'Lịch sử chấm công', icon: 'history', route: 'Lịch sử chấm công', permission: 'timeAttendance' },
+      { key: 'holidays', label: 'Quản lý ngày lễ', icon: 'calendar-star-outline', route: 'Quản lý ngày lễ', permission: 'settings' },
     ],
-    permissions: ['timeAttendance']
+    permissions: ['timeAttendance', 'settings', 'dailyAttendance']
   },
+  { key: 'settings', label: 'Cài đặt hệ thống', icon: 'cog-outline', route: 'Cài đặt hệ thống', permission: 'settings' },
   {
     key: 'salary_parent',
     label: 'Quản lý lương',
     icon: 'cash-multiple',
     children: [
-      { key: 'my_payslip', label: 'Bảng lương cá nhân', icon: 'cash', route: 'Bảng lương cá nhân' },
-      { key: 'salary_management', label: 'Quản lý bảng lương', icon: 'file-document-multiple', route: 'Quản lý bảng lương', permission: 'salaries' },
-      { key: 'allowance_config', label: 'Cấu hình phụ cấp', icon: 'currency-usd', route: 'Cấu hình phụ cấp', permission: 'salary_allowances' },
+      { key: 'salary_allowances', label: 'Cấu hình phụ cấp', icon: 'currency-usd', route: 'Cấu hình phụ cấp', permission: 'salary_allowances' },
+      { key: 'salaries', label: 'Quản lý bảng lương', icon: 'file-table-outline', route: 'Quản lý bảng lương', permission: 'salaries' },
+      { key: 'personal_salary_info', label: 'Bảng lương cá nhân', icon: 'cash-fast', route: 'Bảng lương cá nhân', permission: 'personal_salary_info' },
     ],
-    permissions: ['salaries', 'salary_allowances', 'personal_salary_info'],
-    requireAllPermissions: false
+    permissions: ['salary_allowances']
   },
   {
     key: 'job_management_parent',
     label: 'Quản lý công việc',
-    icon: 'briefcase',
+    icon: 'briefcase-outline',
     children: [
-      { key: 'projects', label: 'Dự án', icon: 'folder-multiple', route: 'Dự án' },
-      { key: 'cv', label: 'Hồ sơ/CV', icon: 'file-account', route: 'Hồ sơ/CV' },
-      { key: 'kpi', label: 'Quản lý KPI', icon: 'chart-line', route: 'Quản lý KPI' },
-    ]
+      { key: 'CV', label: 'Quản lý hồ sơ/CV', icon: 'file-account-details-outline', route: 'Hồ sơ/CV', permission: 'CV' },
+      { key: 'projects', label: 'Danh sách dự án', icon: 'folder-outline', route: 'Dự án', permission: 'projects' },
+      { key: 'kpiManagement', label: 'Quản lý KPI', icon: 'chart-line', route: 'Quản lý KPI', permission: 'kpiManagement' },
+    ],
+    permissions: [] // Web has no permissions for this parent!
   },
-  { key: 'notifications', label: 'Thông báo', icon: 'bell', route: 'Thông báo' },
-  { key: 'settings', label: 'Cài đặt hệ thống', icon: 'cog', route: 'Cài đặt hệ thống', permission: 'settings' },
 ];
 
-const CustomDrawerContent = ({ isCollapsed, setIsCollapsed, userPermissions, ...props }) => {
-  const [userData, setUserData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
-  const navigation = useNavigation();
+const CustomDrawerContent = ({ isCollapsed, setIsCollapsed, userPermissions, userData, ...props }) => {
+  const [expandedKeys, setExpandedKeys] = useState({});
   const theme = useTheme();
   const currentRoute = useNavigationState((state) => state?.routes[state.index]?.name);
-
-  // Sử dụng AuthContext để logout
   const { logout } = useAuth();
+  const [logoutDialogVisible, setLogoutDialogVisible] = useState(false);
 
-  useEffect(() => {
-    loadUserData();
-  }, []);
-
-  const loadUserData = async () => {
-    try {
-      const data = await AuthTokenManager.getUser();
-      setUserData(data);
-    } catch (error) {
-      console.error('Error loading user data:', error);
-    } finally {
-      setLoading(false);
-    }
+  const toggleExpand = (key) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedKeys(prev => ({ ...prev, [key]: !prev[key] }));
   };
+
+  const filterMenuItems = useCallback((items) => {
+    if (!items) return [];
+
+    // ADMIN Override: Role ID 1 sees ALL
+    const isAdmin = userData?.roleId === 1 || userData?.user?.roleId === 1;
+
+    return items.flatMap(item => {
+      // 1. Process Children first
+      if (item.children) {
+        const filteredChildren = filterMenuItems(item.children);
+
+        // If has valid children, ALWAYS show parent
+        if (filteredChildren.length > 0) {
+          return [{ ...item, children: filteredChildren }];
+        }
+
+        // If children are empty, check if Parent itself has explicit permission to be shown alone or as empty container
+        // Web Logic: 
+        // if (item.permissions && item.permissions.length > 0) { ifHasAccess -> return parentWithEmptyChildren }
+        // else if (parentPermissionKey) { ifHasAccess -> return parentWithEmptyChildren }
+        // else return [] (Hide)
+
+        if (isAdmin) return [{ ...item, children: [] }]; // Admin sees empty parents? Maybe not desired, but "sees all".
+        // Actually web says: Admin returns [item]. So yes.
+
+        // Check Permissions Array
+        if (item.permissions && item.permissions.length > 0) {
+          const requireAll = item.requireAllPermissions || false;
+          // Check logic
+          const hasAccess = item.permissions.some(key => {
+            const val = userPermissions[key];
+            if (!val) return false;
+            // Simple read check for existence
+            return decodePermissions(parseInt(val)).read;
+          });
+
+          if (hasAccess) return [{ ...item, children: [] }];
+        }
+
+        // Check Single Permission Legacy
+        if (item.permission) {
+          const val = userPermissions[item.permission];
+          if (val && decodePermissions(parseInt(val)).read) {
+            return [{ ...item, children: [] }];
+          }
+        }
+
+        // If NO permissions specified for parent and NO children -> HIDE
+        return [];
+      }
+
+      // 2. Process Leaf Item
+      // Admin Check
+      if (isAdmin) return [item];
+
+      // Check requirePermission (e.g. 'approve', 'create')
+      if (item.requirePermission) {
+        const key = item.permission;
+        if (!key) return [];
+        const val = userPermissions[key];
+        if (!val) return [];
+        const decoded = decodePermissions(parseInt(val));
+        if (!decoded.read || !decoded[item.requirePermission]) return [];
+        return [item];
+      }
+
+      // Check Permissions Array (rare for leaf, but possible)
+      if (item.permissions && item.permissions.length > 0) {
+        // Logic for array on leaf? Usually implies ONE of them is enough (unless requireAll)
+        const hasAccess = item.permissions.some(key => {
+          const val = userPermissions[key];
+          if (!val) return false;
+          return decodePermissions(parseInt(val)).read;
+        });
+        return hasAccess ? [item] : [];
+      }
+
+      // Check Single Permission (Read)
+      if (item.permission) {
+        const val = userPermissions[item.permission];
+        if (!val) return [];
+        const decoded = decodePermissions(parseInt(val));
+        return decoded.read ? [item] : [];
+      }
+
+      // If no permission requirements -> Public item (like Dashboard)
+      return [item];
+    });
+  }, [userPermissions, userData]);
+
+  const filteredMenuItems = useMemo(() => filterMenuItems(BASE_MENU_ITEMS), [filterMenuItems]);
+
+  // Hook Rule Fix: Moved useEffect to component level, out of renderMenuItem
+  useEffect(() => {
+    if (!currentRoute || !filteredMenuItems) return;
+
+    const newExpandedKeys = {};
+    let shouldUpdate = false;
+
+    const checkExpand = (items) => {
+      items.forEach(item => {
+        if (item.children) {
+          const hasActiveChild = item.children.some(child => child.route === currentRoute);
+          if (hasActiveChild) {
+            newExpandedKeys[item.key] = true;
+            if (!expandedKeys[item.key]) {
+              shouldUpdate = true;
+            }
+          }
+          checkExpand(item.children);
+        }
+      });
+    };
+
+    checkExpand(filteredMenuItems);
+
+    if (shouldUpdate) {
+      setExpandedKeys(prev => ({ ...prev, ...newExpandedKeys }));
+    }
+  }, [currentRoute, filteredMenuItems]);
+
 
   const getUserInitials = (name) => {
     if (!name) return 'U';
     return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  const handleLogout = () => {
-    console.log('🔴 [LOGOUT] Nút đăng xuất được bấm!');
-    console.log('🔴 [LOGOUT] Hiển thị dialog xác nhận...');
-    setLogoutDialogVisible(true);
-  };
-
+  const handleLogout = () => setLogoutDialogVisible(true);
   const confirmLogout = async () => {
-    console.log('🔴 [LOGOUT] Người dùng xác nhận đăng xuất');
     setLogoutDialogVisible(false);
-
-    console.log('🔴 [LOGOUT] Bắt đầu quá trình đăng xuất...');
-
-    try {
-      console.log('🔴 [LOGOUT] Calling logout from AuthContext...');
-      // Gọi logout từ AuthContext - nó sẽ xóa tokens và update auth state
-      await logout();
-      console.log('✅ [LOGOUT] Logout successful - AuthContext will handle navigation to Login');
-      // Không cần navigate thủ công - AuthContext sẽ tự động chuyển về Login
-    } catch (error) {
-      console.error('❌ [LOGOUT] Lỗi:', error);
-      console.error('❌ [LOGOUT] Stack:', error.stack);
-    }
+    await logout();
   };
 
-  const cancelLogout = () => {
-    console.log('🔴 [LOGOUT] Người dùng hủy đăng xuất');
-    setLogoutDialogVisible(false);
-  };
+  const renderMenuItem = (item, level = 0) => {
+    const isParent = !!item.children;
+    const isExpanded = expandedKeys[item.key];
+    const isActive = props.state?.routeNames[props.state.index] === item.route;
 
-  const filterMenuItems = useCallback((items) => {
-    return items.flatMap(item => {
-      // Helper to check permissions
-      const hasPermissionAccess = (permissionKeys, requireAll = false) => {
-        if (!permissionKeys || permissionKeys.length === 0) return false;
+    // Removed nested useEffect
 
-        const permissionChecks = permissionKeys.map(key => {
-          const permissionValue = userPermissions[key];
-          if (permissionValue === undefined || permissionValue === null || permissionValue === '') {
-            return false;
-          }
-          try {
-            const hasRead = decodePermissions(parseInt(permissionValue)).read;
-            return hasRead;
-          } catch (e) {
-            return false;
-          }
-        });
-
-        return requireAll ?
-          permissionChecks.every(check => check) :
-          permissionChecks.some(check => check);
-      };
-
-      // Handle children
-      if (item.children) {
-        const filteredChildren = filterMenuItems(item.children);
-
-        if (filteredChildren.length > 0) {
-          return [{ ...item, children: filteredChildren }];
-        }
-
-        if (item.permissions && item.permissions.length > 0) {
-          const requireAll = item.requireAllPermissions || false;
-          if (hasPermissionAccess(item.permissions, requireAll)) {
-            return [{ ...item, children: filteredChildren }];
-          }
-          return [];
-        }
-
-        // Check parent permission if no specific permissions array
-        const parentPermissionKey = item.permission;
-        if (parentPermissionKey) {
-          const permVal = userPermissions[parentPermissionKey];
-          if (permVal && decodePermissions(parseInt(permVal)).read) {
-            return [{ ...item, children: filteredChildren }];
-          }
-          return [];
-        }
-
-        // If no permissions required for group, but has children
-        // If children are all filtered out, we usually hide the group
-        return [];
-      }
-
-      // Handle single item
-
-      // Check requirePermission (e.g. 'approve')
-      if (item.requirePermission) {
-        const permKey = item.permission;
-        if (!permKey) return [];
-        const permVal = userPermissions[permKey];
-        if (!permVal) return [];
-
-        try {
-          const decoded = decodePermissions(parseInt(permVal));
-          if (!decoded.read || !decoded[item.requirePermission]) return [];
-          return [item];
-        } catch (e) {
-          return [];
-        }
-      }
-
-      // Check permissions array
-      if (item.permissions && item.permissions.length > 0) {
-        const requireAll = item.requireAllPermissions || false;
-        return hasPermissionAccess(item.permissions, requireAll) ? [item] : [];
-      }
-
-      // Check single permission
-      const permissionKey = item.permission;
-      if (!permissionKey) return [item];
-
-      const permissionValue = userPermissions[permissionKey];
-      if (!permissionValue) return [];
-
-      try {
-        const decoded = decodePermissions(parseInt(permissionValue));
-        return decoded.read ? [item] : [];
-      } catch (e) {
-        return [];
-      }
-    });
-  }, [userPermissions]);
-
-  const filteredMenuItems = useMemo(() => filterMenuItems(BASE_MENU_ITEMS), [filterMenuItems]);
-
-  const handleNavigation = (route) => {
-    if (route) {
-      props.navigation.navigate(route);
-      if (!isTablet) props.navigation.dispatch(DrawerActions.closeDrawer());
-    }
-  };
-
-  const renderMenuItem = (item, isNested = false) => {
-    const isActive = currentRoute === item.route;
-
-    if (item.children) {
+    if (isParent) {
       return (
-        <List.Accordion
-          key={item.key}
-          title={
-            <View style={{ flexDirection: 'row', alignItems: 'center', height: 24 }}>
-              <View style={styles.iconWrapper}>
-                <MaterialCommunityIcons name={item.icon} size={22} color={theme.colors.onSurfaceVariant} />
-              </View>
-              <Text style={[styles.menuItemText, { marginLeft: 8 }]}>{item.label}</Text>
+        <View key={item.key} style={styles.menuGroup}>
+          <TouchableOpacity
+            style={[styles.menuItem, styles.menuItemParent]}
+            onPress={() => toggleExpand(item.key)}
+            activeOpacity={0.7}
+          >
+            <MaterialCommunityIcons name={item.icon} size={22} color={theme.colors.onSurfaceVariant} />
+            {!isCollapsed && (
+              <>
+                <Text style={styles.menuItemText}>{item.label}</Text>
+                <MaterialCommunityIcons
+                  name={isExpanded ? "chevron-down" : "chevron-right"}
+                  size={20}
+                  color={theme.colors.onSurfaceVariant}
+                />
+              </>
+            )}
+          </TouchableOpacity>
+          {isExpanded && !isCollapsed && (
+            <View style={styles.subMenuContainer}>
+              {item.children.map(child => renderMenuItem(child, level + 1))}
             </View>
-          }
-          left={null}
-          style={[styles.menuItem, { paddingVertical: 0, justifyContent: 'center' }]}
-          titleStyle={{ margin: 0, padding: 0 }} // Reset title styles
-          theme={{ colors: { background: 'transparent' } }}
-        >
-          {item.children.map(child => renderMenuItem(child, true))}
-        </List.Accordion>
+          )}
+        </View>
       );
     }
 
     return (
       <TouchableOpacity
         key={item.key}
-        style={[styles.menuItem, isActive && styles.menuItemActive, isNested && styles.menuItemNested]}
-        onPress={() => handleNavigation(item.route)}
+        style={[
+          styles.menuItem,
+          isActive && styles.menuItemActive,
+          level > 0 && styles.menuItemNested
+        ]}
+        onPress={() => {
+          if (item.route) {
+            props.navigation.navigate(item.route);
+            if (!isTablet) props.navigation.closeDrawer();
+          }
+        }}
+        activeOpacity={0.7}
       >
-        <View style={styles.menuItemContent}>
-          <View style={styles.iconWrapper}>
-            <MaterialCommunityIcons name={item.icon} size={22} color={isActive ? theme.colors.primary : theme.colors.onSurfaceVariant} />
-          </View>
-          {!isCollapsed && <Text style={[styles.menuItemText, isActive && styles.menuItemTextActive]}>{item.label}</Text>}
-        </View>
+        <MaterialCommunityIcons
+          name={item.icon}
+          size={22}
+          color={isActive ? theme.colors.primary : theme.colors.onSurfaceVariant}
+        />
+        {!isCollapsed && (
+          <Text style={[styles.menuItemText, isActive && styles.menuItemTextActive]}>
+            {item.label}
+          </Text>
+        )}
       </TouchableOpacity>
     );
   };
 
   return (
-    <Surface style={[styles.drawerContainer, isCollapsed && styles.drawerContainerCollapsed]}>
-      <View style={[styles.drawerHeader, isCollapsed && styles.drawerHeaderCollapsed]}>
-        {!isCollapsed ? (
-          <>
-            <View style={styles.logoContainer}>
-              <MaterialCommunityIcons name="briefcase-account" size={32} color={theme.colors.primary} />
-              <Text style={styles.logoText}>HR System</Text>
-            </View>
-          </>
-        ) : (
-          <TouchableOpacity onPress={() => setIsCollapsed(false)} style={{ padding: 8 }}>
-            <MaterialCommunityIcons name="menu" size={24} color={theme.colors.primary} />
-          </TouchableOpacity>
-        )}
-        {/* Only show collapse button on Tablet/Desktop */}
-        {isTablet && !isCollapsed && (
-          <TouchableOpacity onPress={() => setIsCollapsed(true)} style={styles.collapseButton}>
-            <MaterialCommunityIcons name="menu-open" size={24} color={theme.colors.onSurfaceVariant} />
-          </TouchableOpacity>
-        )}
+    <Surface style={styles.drawerContent} elevation={0}>
+      {/* Header */}
+      <View style={[styles.drawerHeader, isCollapsed && { justifyContent: 'center' }]}>
+        <MaterialCommunityIcons name="briefcase-account" size={32} color={theme.colors.primary} />
+        {!isCollapsed && <Text style={styles.appName}>HR System</Text>}
       </View>
-      <Divider />
-      {!isCollapsed && (
-        <Surface style={styles.userSection} elevation={1}>
-          <Avatar.Text size={48} label={userData ? getUserInitials(userData.username || userData.fullName) : 'U'} style={styles.avatar} />
+
+      {/* User Info */}
+      {!isCollapsed ? (
+        <Surface style={styles.userCard} elevation={1}>
+          <Avatar.Text size={42} label={getUserInitials(userData?.username || userData?.fullName)} style={{ backgroundColor: theme.colors.primary }} />
           <View style={styles.userInfo}>
-            <Text style={styles.userName} numberOfLines={1}>{(userData && (userData.username || userData.fullName)) || 'User'}</Text>
-            <Text style={styles.userRole} numberOfLines={1}>{(userData && userData.role) || 'Role'}</Text>
+            <Text style={styles.userName} numberOfLines={1}>{userData?.username || userData?.fullName || 'User'}</Text>
+            <Text style={styles.userRole} numberOfLines={1}>{userData?.role || 'Staff'}</Text>
           </View>
         </Surface>
-      )}
-      {isCollapsed && userData && (
-        <View style={styles.userSectionCollapsed}>
-          <Avatar.Text size={40} label={getUserInitials(userData.username || userData.fullName)} style={styles.avatar} />
+      ) : (
+        <View style={{ alignItems: 'center', marginVertical: 10 }}>
+          <Avatar.Text size={40} label={getUserInitials(userData?.username)} style={{ backgroundColor: theme.colors.primary }} />
         </View>
       )}
-      <ScrollView style={styles.menuScrollView} showsVerticalScrollIndicator={false} contentContainerStyle={styles.menuContentContainer}>
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={theme.colors.primary} />
-          </View>
-        ) : (
-          filteredMenuItems.map((item) => renderMenuItem(item))
-        )}
+
+      <ScrollView style={styles.menuList} showsVerticalScrollIndicator={false}>
+        {filteredMenuItems.map(item => renderMenuItem(item))}
       </ScrollView>
-      <Divider />
-      <TouchableOpacity
-        style={styles.logoutButton}
-        onPress={() => {
-          console.log('🟢 [UI] Nút Đăng xuất được bấm từ TouchableOpacity');
-          handleLogout();
-        }}
-      >
+
+      <Divider style={styles.divider} />
+
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <MaterialCommunityIcons name="logout" size={22} color={theme.colors.error} />
         {!isCollapsed && <Text style={styles.logoutText}>Đăng xuất</Text>}
       </TouchableOpacity>
 
-      {/* Logout Confirmation Dialog */}
       <Portal>
-        <Dialog visible={logoutDialogVisible} onDismiss={cancelLogout}>
-          <Dialog.Title>Xác nhận đăng xuất</Dialog.Title>
+        <Dialog visible={logoutDialogVisible} onDismiss={() => setLogoutDialogVisible(false)}>
+          <Dialog.Title>Xác nhận</Dialog.Title>
           <Dialog.Content>
-            <Paragraph>Bạn có chắc chắn muốn đăng xuất?</Paragraph>
+            <Paragraph>Bạn có chắc chắn muốn đăng xuất không?</Paragraph>
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={cancelLogout}>Hủy</Button>
+            <Button onPress={() => setLogoutDialogVisible(false)}>Hủy</Button>
             <Button onPress={confirmLogout} textColor={theme.colors.error}>Đăng xuất</Button>
           </Dialog.Actions>
         </Dialog>
@@ -634,97 +635,106 @@ const CustomDrawerContent = ({ isCollapsed, setIsCollapsed, userPermissions, ...
 const AppLayout = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [userPermissions, setUserPermissions] = useState({});
+  const [userData, setUserData] = useState(null);
 
   useEffect(() => {
-    loadUserPermissions();
+    loadUser();
   }, []);
 
-  const loadUserPermissions = async () => {
+  const loadUser = async () => {
     try {
-      const userData = await AuthTokenManager.getUser();
-      const permissions = userData?.permissions || {};
-      setUserPermissions(permissions);
+      const data = await AuthTokenManager.getUser();
+      setUserData(data);
+      setUserPermissions(data?.permissions || {});
     } catch (error) {
-      console.error('Error loading permissions:', error);
+      console.error('Error loading user data', error);
     }
   };
 
   return (
     <PaperProvider theme={AppTheme}>
-      <View style={styles.container}>
+      <View style={{ flex: 1, backgroundColor: AppTheme.colors.background }}>
         <Drawer.Navigator
-          useLegacyImplementation={false}
           drawerContent={(props) => (
-            <CustomDrawerContent {...props} isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} userPermissions={userPermissions} />
+            <CustomDrawerContent
+              {...props}
+              isCollapsed={isCollapsed}
+              setIsCollapsed={setIsCollapsed}
+              userPermissions={userPermissions}
+              userData={userData}
+            />
           )}
-          screenOptions={({ navigation, route }) => {
-            // Check if this is a hidden screen (detail/form screens)
-            const isHiddenScreen = ['UserDetail', 'UserForm', 'UserCreate', 'UserEdit', 'Profile', 'Tạo phụ cấp', 'Sửa phụ cấp', 'Chi tiết dự án', 'Tạo dự án', 'Sửa dự án'].includes(route.name);
-
-            // Check if this is a hidden screen (detail/form screens)
-            const allHiddenScreens = ['UserDetail', 'UserForm', 'UserCreate', 'UserEdit', 'Profile', 'Tạo phụ cấp', 'Sửa phụ cấp', 'Chi tiết dự án', 'Tạo dự án', 'Sửa dự án', 'Chi tiết KPI'];
-            const isActuallyHidden = allHiddenScreens.includes(route.name);
-
-            return {
-              drawerType: isTablet ? 'permanent' : 'front',
-              drawerStyle: {
-                width: isTablet && isCollapsed ? DRAWER_WIDTH_COLLAPSED : DRAWER_WIDTH_EXPANDED,
-                backgroundColor: AppTheme.colors.surface
-              },
-              headerShown: true,
-              headerStyle: {
-                backgroundColor: AppTheme.colors.primary,
-              },
-              headerTintColor: '#ffffff',
-              headerTitleStyle: {
-                fontWeight: '600',
-                fontSize: 18,
-              },
-              // Use back button for hidden screens, menu button for main screens
-              headerLeft: isActuallyHidden
-                ? () => <HeaderBackButton navigation={navigation} routeName={route.name} />
-                : () => <HeaderMenuButton navigation={navigation} />,
-              headerRight: () => <NotificationBellButton />,
-              swipeEnabled: !isTablet,
-              overlayColor: 'rgba(0, 0, 0, 0.5)',
-              animationEnabled: true,
-            };
+          screenOptions={{
+            headerShown: true,
+            headerStyle: {
+              backgroundColor: '#FFFFFF',
+              elevation: 0,
+              shadowOpacity: 0,
+              borderBottomWidth: 1,
+              borderBottomColor: '#F0F0F0',
+              height: 60,
+            },
+            headerTitleStyle: {
+              fontWeight: '700',
+              fontSize: 18,
+              color: '#1F2937'
+            },
+            headerLeft: () => null, // We use custom buttons in screens or default
+            drawerType: isTablet ? 'permanent' : 'front',
+            drawerStyle: {
+              width: isTablet ? (isCollapsed ? DRAWER_WIDTH_COLLAPSED : DRAWER_WIDTH_EXPANDED) : DRAWER_WIDTH_EXPANDED,
+              backgroundColor: '#FFFFFF',
+              borderRightWidth: 1,
+              borderRightColor: '#F0F0F0',
+            },
+            overlayColor: 'rgba(0,0,0,0.4)',
           }}
         >
-          <Drawer.Screen name="Dashboard" component={HomeScreen} options={{ title: 'Trang chủ', headerShown: true }} />
+          {/* Main Screens */}
+          <Drawer.Screen name="Dashboard" component={HomeScreen} options={({ navigation }) => ({
+            headerLeft: () => <HeaderMenuButton navigation={navigation} />,
+            headerRight: () => <NotificationBellButton />
+          })} />
 
-          {/* Stack Navigators */}
-          <Drawer.Screen name="Quản lý người dùng" component={UserNavigator} />
-          <Drawer.Screen name="Quản lý phòng ban" component={DepartmentNavigator} />
-          <Drawer.Screen name="Đơn từ cá nhân" component={MyApplicationNavigator} />
-          <Drawer.Screen name="Quản lý đơn từ" component={ApplicationManagementNavigator} />
-          <Drawer.Screen name="Đăng ký ca" component={ShiftRegistrationNavigator} />
-          <Drawer.Screen name="Duyệt đơn đăng ký ca" component={ShiftApprovalNavigator} />
-          <Drawer.Screen name="Cấu hình ca" component={ShiftConfigurationNavigator} />
+          <Drawer.Screen name="Quản lý người dùng" component={UserNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Quản lý vai trò" component={RoleNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Quản lý phòng ban" component={DepartmentNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Quản lý chức vụ" component={ChevronNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Quản lý loại hợp đồng" component={ContractTypeNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Quản lý hợp đồng" component={ContractListScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
 
-          {/* Other screens still flat for now */}
-          <Drawer.Screen name="Quản lý vai trò" component={RoleNavigator} />
-          <Drawer.Screen name="Quản lý chức vụ" component={ChevronNavigator} />
-          <Drawer.Screen name="Quản lý loại hợp đồng" component={ContractTypeNavigator} />
-          <Drawer.Screen name="Quản lý hợp đồng" component={ContractListScreen} />
-          <Drawer.Screen name="Chấm công" component={AttendanceListScreen} />
-          <Drawer.Screen name="Duyệt bảng chấm công" component={AttendanceApprovalScreen} />
-          <Drawer.Screen name="Quản lý lương" component={SalaryListScreen} />
-          <Drawer.Screen name="Bảng lương cá nhân" component={MyPayslipScreen} />
-          <Drawer.Screen name="Quản lý bảng lương" component={SalaryManagementScreen} />
-          <Drawer.Screen name="Cấu hình phụ cấp" component={AllowanceListScreen} />
-          <Drawer.Screen name="Tạo phụ cấp" component={AllowanceFormScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Tạo phụ cấp' }} />
-          <Drawer.Screen name="Sửa phụ cấp" component={AllowanceFormScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Sửa phụ cấp' }} />
-          <Drawer.Screen name="Hồ sơ/CV" component={CVListScreen} />
-          <Drawer.Screen name="Dự án" component={ProjectListScreen} />
-          <Drawer.Screen name="Chi tiết dự án" component={ProjectDetailScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Chi tiết dự án' }} />
-          <Drawer.Screen name="Tạo dự án" component={ProjectFormScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Tạo dự án' }} />
-          <Drawer.Screen name="Sửa dự án" component={ProjectFormScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Sửa dự án' }} />
-          <Drawer.Screen name="Quản lý KPI" component={KpiListScreen} />
-          <Drawer.Screen name="Chi tiết KPI" component={KpiDetailScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Chi tiết KPI' }} />
-          <Drawer.Screen name="Thông báo" component={NotificationListScreen} />
-          <Drawer.Screen name="Cài đặt hệ thống" component={SettingsScreen} />
-          <Drawer.Screen name="Profile" component={ProfileScreen} options={{ drawerItemStyle: { display: 'none' }, title: 'Hồ sơ cá nhân' }} />
+          <Drawer.Screen name="Đơn từ cá nhân" component={MyApplicationNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Quản lý đơn từ" component={ApplicationManagementNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Đăng ký ca" component={ShiftRegistrationNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Duyệt đơn đăng ký ca" component={ShiftApprovalNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Cấu hình ca" component={ShiftConfigurationNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+
+          <Drawer.Screen name="Chấm công" component={AttendanceListScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Duyệt bảng chấm công" component={AttendanceApprovalScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Quản lý ngày lễ" component={HolidayScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Chấm công hàng ngày" component={DailyAttendanceScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Lịch sử chấm công" component={AttendanceHistoryScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+
+          <Drawer.Screen name="Cấu hình phụ cấp" component={AllowanceListScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Quản lý bảng lương" component={SalaryManagementScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Bảng lương cá nhân" component={MyPayslipScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+
+          <Drawer.Screen name="Hồ sơ/CV" component={CVListScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Dự án" component={ProjectListScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Quản lý KPI" component={KpiListScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+
+          <Drawer.Screen name="Cài đặt hệ thống" component={SettingsScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Thông báo" component={NotificationListScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+
+          {/* Hidden Detail Screens */}
+          <Drawer.Screen name="Profile" component={ProfileScreen} options={({ navigation }) => ({ title: 'Hồ sơ cá nhân', drawerItemStyle: { display: 'none' }, headerLeft: () => <HeaderBackButton navigation={navigation} routeName="Profile" /> })} />
+          <Drawer.Screen name="Chi tiết dự án" component={ProjectDetailScreen} options={({ navigation }) => ({ title: 'Chi tiết dự án', drawerItemStyle: { display: 'none' }, headerLeft: () => <HeaderBackButton navigation={navigation} routeName="Chi tiết dự án" /> })} />
+          <Drawer.Screen name="Tạo dự án" component={ProjectFormScreen} options={({ navigation }) => ({ title: 'Tạo dự án', drawerItemStyle: { display: 'none' }, headerLeft: () => <HeaderBackButton navigation={navigation} routeName="Tạo dự án" /> })} />
+          <Drawer.Screen name="Sửa dự án" component={ProjectFormScreen} options={({ navigation }) => ({ title: 'Sửa dự án', drawerItemStyle: { display: 'none' }, headerLeft: () => <HeaderBackButton navigation={navigation} routeName="Sửa dự án" /> })} />
+          <Drawer.Screen name="Tạo phụ cấp" component={AllowanceFormScreen} options={({ navigation }) => ({ title: 'Tạo phụ cấp', drawerItemStyle: { display: 'none' }, headerLeft: () => <HeaderBackButton navigation={navigation} routeName="Tạo phụ cấp" /> })} />
+          <Drawer.Screen name="Sửa phụ cấp" component={AllowanceFormScreen} options={({ navigation }) => ({ title: 'Sửa phụ cấp', drawerItemStyle: { display: 'none' }, headerLeft: () => <HeaderBackButton navigation={navigation} routeName="Sửa phụ cấp" /> })} />
+          <Drawer.Screen name="Chi tiết KPI" component={KpiDetailScreen} options={({ navigation }) => ({ title: 'Chi tiết KPI', drawerItemStyle: { display: 'none' }, headerLeft: () => <HeaderBackButton navigation={navigation} routeName="Chi tiết KPI" /> })} />
+
         </Drawer.Navigator>
       </View>
     </PaperProvider>
@@ -732,143 +742,51 @@ const AppLayout = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: AppTheme.colors.background },
-  drawerContainer: { flex: 1, backgroundColor: AppTheme.colors.surface },
-  drawerContainerCollapsed: { alignItems: 'center' },
-  drawerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, minHeight: 70 },
-  drawerHeaderCollapsed: { justifyContent: 'center', paddingHorizontal: 8 },
-  logoContainer: { flexDirection: 'row', alignItems: 'center' },
-  logoText: { marginLeft: 8, fontSize: 18, fontWeight: '700', color: AppTheme.colors.primary },
-  collapseButton: { padding: 8 },
-  userSection: { flexDirection: 'row', alignItems: 'center', padding: 16, marginHorizontal: 12, marginVertical: 8, borderRadius: 12, backgroundColor: AppTheme.colors.surfaceVariant },
-  userSectionCollapsed: { alignItems: 'center', paddingVertical: 12 },
-  avatar: { backgroundColor: AppTheme.colors.primary },
+  drawerContent: { flex: 1, backgroundColor: '#FFFFFF' },
+  drawerHeader: { flexDirection: 'row', alignItems: 'center', padding: 20, paddingTop: 30 },
+  appName: { fontSize: 22, fontWeight: '800', color: '#1890FF', marginLeft: 12 },
+  userCard: { margin: 16, padding: 12, borderRadius: 12, backgroundColor: '#F9FAFB', flexDirection: 'row', alignItems: 'center' },
   userInfo: { marginLeft: 12, flex: 1 },
-  userName: { fontSize: 15, fontWeight: '600', color: AppTheme.colors.onSurface, marginBottom: 2 },
-  userRole: { fontSize: 13, color: AppTheme.colors.onSurfaceVariant },
-  menuScrollView: { flex: 1 },
-  menuContentContainer: { paddingVertical: 8, paddingHorizontal: 8 },
-  loadingContainer: { padding: 24, alignItems: 'center' },
-  menuItem: { borderRadius: 8, marginVertical: 2, overflow: 'hidden' },
-  menuItemActive: { backgroundColor: AppTheme.colors.primaryContainer },
-  // ensure consistent vertical centering and spacing between icon and text
-  menuItemContent: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 12, minHeight: 44 },
-  menuItemText: { fontSize: 14, fontWeight: '500', color: AppTheme.colors.onSurface, marginLeft: 8, flex: 1, includeFontPadding: false },
-  menuItemTextActive: { color: AppTheme.colors.primary, fontWeight: '600' },
-  expandIcon: { marginLeft: 'auto' },
-  submenuContainer: { marginTop: 4 },
-  logoutButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, marginTop: 8 },
-  logoutText: { fontSize: 14, fontWeight: '600', color: AppTheme.colors.error, marginLeft: 16 },
-  iconWrapper: { width: 36, alignItems: 'center', justifyContent: 'center' },
-  menuItemNested: { paddingLeft: 20 },
-  bellBadge: {
-    position: 'absolute',
-    top: 4,
-    right: 10,
-    backgroundColor: '#ff4d4f',
-  },
-  notifModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-start',
-    paddingTop: 60,
-    paddingHorizontal: 8,
-  },
-  notifPopup: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    maxHeight: 500,
-    width: '100%',
-    maxWidth: 400,
-    alignSelf: 'flex-end',
-    marginRight: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  notifHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  notifHeaderTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#262626',
-  },
-  headerBadge: {
-    backgroundColor: '#ff4d4f',
-  },
-  notifLoading: {
-    paddingVertical: 40,
-    alignItems: 'center',
-  },
-  notifEmpty: {
-    paddingVertical: 60,
-    alignItems: 'center',
-  },
-  notifEmptyText: {
-    fontSize: 14,
-    color: '#8c8c8c',
-    marginTop: 12,
-  },
-  notifList: {
-    maxHeight: 380,
-  },
-  notifItem: {
-    flexDirection: 'row',
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-    alignItems: 'flex-start',
-  },
-  notifItemUnread: {
-    backgroundColor: '#f0f8ff',
-  },
-  notifIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#f5f5f5',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  notifContent: {
-    flex: 1,
-  },
-  notifTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#262626',
-    marginBottom: 4,
-  },
-  notifBody: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 4,
-  },
-  notifTime: {
-    fontSize: 12,
-    color: '#8c8c8c',
-  },
-  notifBadge: {
-    backgroundColor: '#1890ff',
-    marginLeft: 8,
-  },
-  viewAllButton: {
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  viewAllText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1890ff',
-  },
+  userName: { fontSize: 14, fontWeight: '700', color: '#1F2937' },
+  userRole: { fontSize: 12, color: '#6B7280', marginTop: 2 },
+  menuList: { flex: 1, paddingHorizontal: 12 },
+  divider: { marginVertical: 8, backgroundColor: '#E5E7EB' },
+  logoutButton: { flexDirection: 'row', alignItems: 'center', padding: 16, marginBottom: 16, borderRadius: 8, marginHorizontal: 12 },
+  logoutText: { color: '#FF4D4F', fontWeight: '600', marginLeft: 12 },
+
+  menuGroup: { marginBottom: 4 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 12, borderRadius: 8, marginVertical: 2 },
+  menuItemActive: { backgroundColor: '#E6F7FF' },
+  menuItemText: { flex: 1, marginLeft: 12, fontSize: 14, fontWeight: '500', color: '#4B5563' },
+  menuItemTextActive: { color: '#1890FF', fontWeight: '700' },
+  menuItemParent: {},
+  menuItemNested: { marginLeft: 12 },
+  subMenuContainer: { marginLeft: 12, borderLeftWidth: 1, borderLeftColor: '#E5E7EB', paddingLeft: 4 },
+
+  headerButton: { padding: 8, marginHorizontal: 4 },
+  bellBadge: { position: 'absolute', top: 0, right: 0, backgroundColor: '#FF4D4F', fontSize: 10 },
+
+  // Notification Popup Styles
+  notifModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.2)', alignItems: 'flex-end', paddingTop: 60, paddingRight: 16 },
+  notifPopup: { width: 360, backgroundColor: 'white', borderRadius: 12, maxHeight: 600, overflow: 'hidden' },
+  notifHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16 },
+  notifHeaderTitle: { fontSize: 18, fontWeight: '700' },
+  headerBadgeContainer: { backgroundColor: '#E6F7FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  headerBadgeText: { color: '#1890FF', fontSize: 12, fontWeight: '600' },
+  notifLoading: { padding: 20, alignItems: 'center' },
+  notifEmpty: { padding: 30, alignItems: 'center' },
+  notifEmptyText: { marginTop: 10, color: '#9CA3AF' },
+  notifList: { maxHeight: 400 },
+  notifItem: { flexDirection: 'row', padding: 16, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  notifItemUnread: { backgroundColor: '#FAFAFA' },
+  notifIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  notifContent: { flex: 1 },
+  notifTitle: { fontSize: 14, color: '#1F2937', marginBottom: 4 },
+  notifBody: { fontSize: 13, color: '#6B7280', marginBottom: 4 },
+  notifTime: { fontSize: 12, color: '#9CA3AF' },
+  notifBadgeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#1890FF', marginTop: 6, marginLeft: 6 },
+  viewAllButton: { padding: 16, alignItems: 'center' },
+  viewAllText: { fontWeight: '600', fontSize: 14 },
 });
 
 export default AppLayout;
