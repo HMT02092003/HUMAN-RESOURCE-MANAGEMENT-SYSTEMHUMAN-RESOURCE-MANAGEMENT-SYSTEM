@@ -21,6 +21,7 @@ jobs:
         
         $envSecret = @"
         ${{ secrets.ENV_FILE_CONTENT }}
+        SMTP_PASS=${{ secrets['GG_EMAIL_PASS'] }}
         "@
         
         # Hàm update file thông minh
