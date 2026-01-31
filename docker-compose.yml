@@ -166,6 +166,8 @@ services:
       # Email Default (Secrets from env_file will override)
       - SMTP_HOST=smtp.gmail.com
       - SMTP_PORT=465
+      - SMTP_USER=${SMTP_USER:-hoangmanhtoan292003@gmail.com}
+      - SMTP_PASS=${SMTP_PASS}
       # URLs
       - FRONTEND_URL=https://virgilio-wolfish-nonracially.ngrok-free.dev
       - EMPLOYEE_SERVICE_URL=http://employee-service:4102
