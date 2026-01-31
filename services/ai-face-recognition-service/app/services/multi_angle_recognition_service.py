@@ -113,6 +113,53 @@ class MultiAngleFaceService:
             
             # Get largest face
             face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+
+            # --- 3. Check Liveness (Anti-Spoofing) ---
+            from app.services.face_liveness_service import face_liveness_detector
+            
+            # Chỉ kiểm tra nếu model đã load thành công
+            if face_liveness_detector.is_available():
+                # Pass original image and face bbox for precise cropping
+                liveness_result = face_liveness_detector.check_liveness(img, face.bbox)
+                
+                # Log kết quả kiểm tra
+                if not liveness_result.is_real:
+                    logger.warning(f"⚠️ Spoof detected! {liveness_result.message} (Score: {liveness_result.confidence:.2f})")
+                    return {
+                        "success": False, 
+                        "message": f"PHÁT HIỆN GIẢ MẠO: {liveness_result.message}",
+                        "is_spoof": True,
+                        "spoof_score": liveness_result.confidence
+                    }
+                else:
+                    logger.info(f"✅ Liveness check passed: {liveness_result.confidence:.2f}")
+            # -----------------------------------------
+
+            # --- 4. Check Face Size (Resolution) ---
+            face_w = face.bbox[2] - face.bbox[0]
+            face_h = face.bbox[3] - face.bbox[1]
+            min_w, min_h = recognition_settings.MIN_FACE_SIZE
+            
+            if face_w < min_w or face_h < min_h:
+                logger.warning(f"⚠️ Face too small: {int(face_w)}x{int(face_h)} < {min_w}x{min_h}")
+                return {
+                    "success": False,
+                    "message": f"Khuôn mặt quá nhỏ/xa ({int(face_w)}x{int(face_h)}px). Vui lòng tiến lại gần camera hơn."
+                }
+            # ---------------------------------------
+
+            # --- 5. Check Head Pose (Angle) ---
+            # face.pose is usually [pitch, yaw, roll] in degrees (InsightFace models vary)
+            if hasattr(face, 'pose') and face.pose is not None:
+                pitch, yaw, roll = face.pose
+                # Basic check: Reject extreme angles (> 45 degrees) that distort features
+                if abs(pitch) > 45 or abs(yaw) > 45 or abs(roll) > 45:
+                     logger.warning(f"⚠️ Face angle extreme: P={pitch:.1f}, Y={yaw:.1f}, R={roll:.1f}")
+                     return {
+                        "success": False,
+                        "message": "Góc mặt quá nghiêng. Vui lòng nhìn thẳng vào camera."
+                     }
+            # ----------------------------------
             
             # Normalize embedding
             embedding = face.embedding

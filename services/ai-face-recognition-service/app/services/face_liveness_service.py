@@ -70,6 +70,8 @@ class FaceLivenessDetector:
                     os.path.join(user_home, ".insightface", "models", "2.7_80x80_MiniFASNetV2.onnx"),
                     # Project-relative fallbacks
                     "models/anti_spoofing/2.7_80x80_MiniFASNetV2.onnx",
+                    "models/2.7_80x80_MiniFASNetV2.onnx",  # Found via search
+                    "/app/models/2.7_80x80_MiniFASNetV2.onnx", # Docker volume path
                     "models/anti_spoofing/4_0_0_80x80_MiniFASNetV1SE.onnx",
                     "weight/anti_spoofing.onnx",
                     "../models/anti_spoofing.onnx"
