@@ -31,18 +31,54 @@ def get_attendance_logs(
     """
     Get attendance logs with aggregated user/department info.
     """
-    # 1. Authorization
+    # 1. Authorization & Scope Verification
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required to view logs")
+
     token_auth_header = request.headers.get("Authorization")
-    if current_user:
-        role_id = int(str(current_user.get('roleId', 0))) # Safely cast to int
-        requester_id = int(str(current_user.get('id', 0) or current_user.get('sub', 0)))
-        if role_id == 2: # Employee
-            if user_id and user_id != requester_id:
-                 raise HTTPException(status_code=403, detail="Forbidden")
-            user_id = requester_id
+    allowed_user_ids = None # None means all users allowed (global)
+    
+    # User info is nested under 'user' key in the payload from auth-service
+    user_info = current_user.get('user', {})
+    role_id = int(str(user_info.get('roleId', current_user.get('roleId', 0))))
+    requester_id = int(str(user_info.get('id', current_user.get('id', 0) or current_user.get('sub', 0))))
+        
+        # Admin (Role 1) always has global access
+        if role_id != 1:
+            try:
+                # Check scope for 'attendance_history' permission via Auth Service
+                base_url = settings.API_GATEWAY_URL if hasattr(settings, 'API_GATEWAY_URL') else "http://api-gateway:4000"
+                check_scope_url = f"{base_url}/api/auth/users/check-scope"
+                
+                headers = {"Content-Type": "application/json"}
+                if token_auth_header:
+                    headers["Authorization"] = token_auth_header
+                
+                resp = requests.post(
+                    check_scope_url, 
+                    json={"permissionKey": "attendance_history"}, 
+                    headers=headers,
+                    timeout=3
+                )
+                
+                if resp.status_code == 200:
+                    scope_data = resp.json()
+                    if scope_data.get("success"):
+                        allowed_user_ids = scope_data.get("userIds", [])
+                else:
+                    if role_id == 2:
+                        allowed_user_ids = [requester_id]
+            except Exception as e:
+                logger.error(f"Error checking scope via auth-service: {e}")
+                if role_id == 2:
+                    allowed_user_ids = [requester_id]
 
     # 2. Build Query
     query = db.query(AttendanceLog)
+
+    # Apply Scope Filter
+    if allowed_user_ids is not None:
+        query = query.filter(AttendanceLog.user_id.in_(allowed_user_ids))
 
     if start_date:
         try:
@@ -59,7 +95,12 @@ def get_attendance_logs(
             pass
 
     if user_id:
-        query = query.filter(AttendanceLog.user_id == user_id)
+        # If user provided a specific user_id, ensure it's within their allowed IDs
+        if allowed_user_ids is not None and user_id not in allowed_user_ids:
+             # If they try to filter for someone they can't see, return empty result
+             query = query.filter(AttendanceLog.user_id == -1) 
+        else:
+             query = query.filter(AttendanceLog.user_id == user_id)
     
     # Apply Time Filter
     if search_time:

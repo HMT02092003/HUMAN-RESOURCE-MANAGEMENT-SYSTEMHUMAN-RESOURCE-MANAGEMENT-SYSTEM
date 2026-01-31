@@ -31,15 +31,38 @@ export const gatewayAuth = (req, res, next) => {
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.substring(7);
   } else if (req.cookies && req.cookies['token']) {
-    // Also support cookie-based auth
     token = req.cookies['token'];
   }
 
-  // SKIP AUTH for AI Face Recognition endpoints (public access for device/kiosk)
-  if (req.path.startsWith('/api/ai')) {
-    console.log(`⏩ Skipping gateway auth for public AI path: ${req.path}`);
-    return next();
+  // If token exists, always attempt to verify and inject user data
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, secret);
+
+      // Inject user data into headers (compatible with previous services)
+      if (decoded.sub) {
+        req.headers['x-user-id'] = String(decoded.sub);
+      }
+      if (decoded.roleId) {
+        req.headers['x-user-role-id'] = String(decoded.roleId);
+      }
+
+      // Core: Pass full decoded token via Base64 header
+      const userDataJson = JSON.stringify(decoded);
+      req.headers['x-user-data'] = Buffer.from(userDataJson).toString('base64');
+
+      console.log(`🔐 Gateway Auth: User ${decoded.sub} (Role: ${decoded.user?.roleId || decoded.roleId}) authenticated.`);
+    } catch (err) {
+      console.error('⚠️ Gateway Token Verification Failed:', err.message);
+    }
   }
+
+  // Paths that are truly open/public (e.g. face recognition entry points)
+  // Others like /api/ai/logs will now have x-user-data if user is logged in
+  const publicAiPaths = ['/api/ai/enhanced-recognize', '/api/ai/multi-angle-recognize', '/api/ai/recognize'];
+
+  // Optional: If we want to skip EVERYTHING for certain paths, we could return here
+  // But injecting x-user-data is harmless even for public paths.
 
   if (!token) {
     // No token, pass through. Downstream services will handle 401 if auth is required.
