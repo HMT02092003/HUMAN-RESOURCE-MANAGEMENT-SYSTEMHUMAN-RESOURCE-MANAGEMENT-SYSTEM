@@ -1,7 +1,5 @@
-import dotenv from 'dotenv';
-
-// Load environment variables first
-dotenv.config();
+// Load environment variables first (ESM friendly)
+import 'dotenv/config';
 
 import express from 'express';
 import cors from 'cors';
