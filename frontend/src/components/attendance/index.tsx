@@ -1404,9 +1404,9 @@ const AttendanceSimplePage = () => {
                     </div>
                   </Col>
                   <Col xs={12} sm={12}>
-                    <div style={{ textAlign: 'center', padding: 8, background: '#fff1f0', borderRadius: 6, border: '1px solid #ffccc7' }}>
-                      <Text style={{ fontSize: isMobile ? 10 : 11, color: '#cf1322', display: 'block' }}>Công OT (đã nhân hệ số)</Text>
-                      <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#cf1322' }}>
+                    <div style={{ textAlign: 'center', padding: 8, background: '#f9f0ff', borderRadius: 6, border: '1px solid #d3adf7' }}>
+                      <Text style={{ fontSize: isMobile ? 10 : 11, color: '#722ed1', display: 'block' }}>Công OT (quy đổi)</Text>
+                      <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#722ed1' }}>
                         {((selectedDateData as any).effectiveOtWorkingUnit || (selectedDateData as any).otWorkingUnit || 0).toFixed(2)}
                       </Text>
                     </div>

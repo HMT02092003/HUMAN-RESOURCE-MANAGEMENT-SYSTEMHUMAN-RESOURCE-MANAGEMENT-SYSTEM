@@ -97,6 +97,7 @@ export function checkDateHasLeave(date: string, applications: ApprovedLeaveAppli
 
       if (appData.leaveType === 'unpaid') isPaid = false;
       if (appData.isPaid === false) isPaid = false;
+      if (appData.isPaidLeave === false) isPaid = false;
 
       // Check reason text for keywords
       const reasonText = (appData.reason || appData.description || '').toLowerCase();
