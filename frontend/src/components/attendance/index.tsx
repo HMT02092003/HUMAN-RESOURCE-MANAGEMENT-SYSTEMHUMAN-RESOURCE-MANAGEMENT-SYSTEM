@@ -645,7 +645,7 @@ const AttendanceSimplePage = () => {
                 if (hasPenaltyTime) return 'status-penalty';
 
                 // Ngày chấm công đúng giờ HOẶC có OT -> background xanh nhạt
-                if (attendance && (dailyDetail?.isOnTime || (dailyDetail?.status as any) === 'overtime')) return 'status-working';
+                if (attendance && (dailyDetail?.isOnTime || dailyDetail?.hasApprovedOT)) return 'status-working';
 
                 // Nghỉ không phép -> KHÔNG có background (chỉ chữ đỏ)
                 // Không cần CSS class cho ngày nghỉ không phép
@@ -1282,20 +1282,20 @@ const AttendanceSimplePage = () => {
                 )}
               </div>
 
-              {/* ✨ MODIFIED: Holiday displays OT application info instead of regular shift info */}
-              {isHoliday && (dailyDetail as any).overtimeData ? (
+              {/* ✨ MODIFIED: Display OT application info whenever it exists (Holiday or Normal day) */}
+              {(dailyDetail as any)?.overtimeData ? (
                 <div style={{ marginBottom: 16, padding: 12, background: '#f9f0ff', borderRadius: 8, border: '1px solid #d3adf7' }}>
                   <Row gutter={[12, 8]} align="middle">
                     <Col span={24}>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
                         <FireOutlined style={{ marginRight: 8, color: '#722ed1', fontSize: 16 }} />
                         <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#722ed1' }}>
-                          Đơn tăng ca ngày lễ
+                          {isHoliday ? 'Đơn tăng ca ngày lễ' : 'Đơn tăng ca'}
                         </Text>
                       </div>
                       <div style={{ textAlign: 'center' }}>
                         <Text style={{ fontSize: 13, color: '#595959', display: 'block' }}>
-                          <strong>Lý do:</strong> {(dailyDetail as any).overtimeData.application?.data?.reason || (dailyDetail as any).overtimeData.application?.reason || 'Làm thêm ngày lễ'}
+                          <strong>Lý do:</strong> {(dailyDetail as any).overtimeData.application?.data?.reason || (dailyDetail as any).overtimeData.application?.reason || (isHoliday ? 'Làm thêm ngày lễ' : 'Làm thêm giờ')}
                         </Text>
                         <Text style={{ fontSize: 12, color: '#8c8c8c' }}>
                           (Đơn ID: {(dailyDetail as any).overtimeData.application?.id} • {shiftForDate.start_time} - {shiftForDate.end_time})

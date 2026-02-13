@@ -293,6 +293,18 @@ export class AttendanceCalculationService {
           type: leaveCheck.hasLeave ? leaveCheck.leaveType : (businessTripCheck.hasBusinessTrip ? 'business-trip' : 'attendance')
         };
 
+        // ✨ ATTACH OVERTIME DATA for any day with approved OT
+        if (hasApprovedOT) {
+          const appData = typeof otApp!.data === 'string' ? JSON.parse(otApp!.data) : otApp!.data;
+          dayRecord.overtimeData = {
+            hasApprovedOT: true,
+            application: {
+              ...otApp,
+              data: appData
+            }
+          };
+        }
+
         if (leaveCheck.hasLeave || businessTripCheck.hasBusinessTrip) {
           Object.assign(dayRecord, {
             id: null, checkInTime: null, checkOutTime: null,
@@ -305,7 +317,6 @@ export class AttendanceCalculationService {
             ...attendanceRecord,
             date: dayjs(attendanceRecord.date).format('YYYY-MM-DD'),
             // ✨ Format times safely to HH:mm in VN timezone for frontend
-            // Logic: Check if it looks like HH:mm or HH:mm:ss first. If so, substring. Else, try parse.
             checkInTime: (() => {
               const val = attendanceRecord.checkInTime;
               if (!val) return null;
@@ -332,28 +343,18 @@ export class AttendanceCalculationService {
           });
         }
 
-        // ✨ Special override for Holiday logic
-        if (isHoliday && hasApprovedOT) {
-          const appData = typeof otApp!.data === 'string' ? JSON.parse(otApp!.data) : otApp!.data;
+        // ✨ Special override for any day with approved OT (Holiday or Normal day)
+        // Re-calculate on the fly to ensure UI shows the effect of the OT app window
+        if (hasApprovedOT) {
+          const appData = dayRecord.overtimeData.application.data;
 
-          // ✨ ATTACH OVERTIME DATA for frontend modal to show specific OT details
-          (dayRecord as any).overtimeData = {
-            hasApprovedOT: true,
-            application: {
-              ...otApp,
-              data: appData
-            }
-          };
-
-          // ✨ DETECT DURATION: Support multiple field names from different application versions
+          // ✨ DETECT DURATION: Support multiple field names
           const rawDuration = appData.totalHours || appData.overtimeHours || appData.overtime_hours || appData.duration || 0;
           const otDuration = parseFloat(rawDuration.toString().replace(/[^0-9.]/g, ''));
 
-          // Normalize start time: could be 'HH:mm' or ISO string
+          // Normalize start time
           let rawStart = appData.startTime || appData.start_time || '08:00';
           let startTimeFormatted = rawStart;
-
-          // If ISO string, format to HH:mm
           if (rawStart.includes('T') || rawStart.length > 8) {
             startTimeFormatted = dayjs(rawStart).tz('Asia/Ho_Chi_Minh').format('HH:mm');
           }
@@ -362,29 +363,30 @@ export class AttendanceCalculationService {
           let rawEnd = appData.endTime || appData.end_time;
 
           if (!rawEnd && otDuration > 0) {
-            // Calculate end time realistically: Start Time + Duration
             const fullStart = startTimeFormatted.length <= 5 ? `${dateKey} ${startTimeFormatted}` : startTimeFormatted;
             const calculatedEnd = dayjs(fullStart).add(otDuration, 'hour');
             endTimeFormatted = calculatedEnd.tz('Asia/Ho_Chi_Minh').format('HH:mm');
-            console.log(`⏱️ Derived Holiday OT End Time: ${startTimeFormatted} + ${otDuration}h = ${endTimeFormatted}`);
           } else if (!rawEnd) {
-            // Last resort fallback
             endTimeFormatted = '17:00';
           } else {
-            // Use provided end time (HH:mm:ss or ISO)
             endTimeFormatted = rawEnd.includes('T') || rawEnd.length > 8
               ? dayjs(rawEnd).tz('Asia/Ho_Chi_Minh').format('HH:mm')
               : rawEnd.substring(0, 5);
           }
 
-          dayRecord.shift = {
-            name: 'Làm thêm ngày lễ',
-            start_time: startTimeFormatted,
-            end_time: endTimeFormatted
-          };
-          dayRecord.shiftName = 'Làm thêm ngày lễ';
+          // Update shift name if it's a holiday or specialized OT
+          if (isHoliday) {
+            dayRecord.shift = {
+              name: 'Làm thêm ngày lễ',
+              start_time: startTimeFormatted,
+              end_time: endTimeFormatted
+            };
+            dayRecord.shiftName = 'Làm thêm ngày lễ';
+          } else if (!isWork) {
+            dayRecord.shiftName = 'Làm thêm ngày nghỉ';
+          }
 
-          // ✨ RE-CALCULATE for accurate UI (Late, Early Leave, Penalties based on OT window)
+          // ✨ RE-CALCULATE for accurate UI
           if (attendanceRecord && (attendanceRecord.checkInTime || attendanceRecord.checkOutTime)) {
             try {
               const calc = await AttendanceCalculationService.calculateAttendance(
@@ -394,7 +396,7 @@ export class AttendanceCalculationService {
                 userId,
                 _token,
                 endTimeFormatted,
-                true,
+                isHoliday,
                 undefined,
                 startTimeFormatted
               );
@@ -410,21 +412,17 @@ export class AttendanceCalculationService {
               dayRecord.dailyWorkingUnit = calc.dailyWorkingUnit;
               dayRecord.overtimeHours = calc.overtimeHours;
             } catch (e) {
-              console.error('Error recalcing holiday OT:', e);
+              console.error('Error recalcing OT day:', e);
             }
           }
         }
         else if (isHoliday) {
-          // ✨ CHANGED: If there is attendance data (user worked), DO NOT hide it.
-          // Show the actual work regardless of OT approval status (though pay might differ)
+          // ✨ Holiday logic for days WITHOUT approved OT
           if (attendanceRecord && (attendanceRecord.checkInTime || attendanceRecord.checkOutTime)) {
-            if (dateKey.includes('12')) console.log(`🔍 [${dateKey}] Holiday WITH Attendance -> KEEPING DATA`);
-            // Keep shift and times as is from DB/calculation
-            // Ensure unit is not zeroed out if DB has value
+            // User worked on holiday but no OT app -> strictly speaking shouldn't be here if we follow "no app = no work"
+            // but we keep it for visibility, just won't have OT units.
             dayRecord.dailyWorkingUnit = dayRecord.dailyWorkingUnit || 0;
           } else {
-            if (dateKey.includes('12')) console.log(`🔍 [${dateKey}] Holiday NO Attendance -> CLEARING DATA`);
-            // Only hide if NO attendance record exists
             dayRecord.shift = null;
             dayRecord.shiftName = null;
             dayRecord.checkInTime = null;
@@ -439,6 +437,7 @@ export class AttendanceCalculationService {
             dayRecord.earlyLeavePenalty = 0;
           }
         }
+
 
         // Final unit calculation for leave/trip markers
         if (!attendanceRecord && !isHoliday) {
@@ -934,10 +933,10 @@ export class AttendanceCalculationService {
             (dayjs(`${date} ${shiftInfo.end_time}`).diff(dayjs(`${date} ${shiftInfo.start_time}`), 'hour', true)) :
             8;
 
-          // Công OT = số giờ OT / thời gian ca
-          // VD: 4 giờ OT / 8 giờ ca = 0.5 công
-          result.otWorkingUnit = otHours / shiftDurationHours;
-          result.overtimeHours = otHours; // ✨ Lưu số giờ OT thực tế
+          // Công OT = (số giờ OT / thời gian ca) * hệ số OT
+          const overtimeRateMultiplier = settings.overtimeRate?.rate || 1.5;
+          result.otWorkingUnit = (otHours / shiftDurationHours) * overtimeRateMultiplier;
+          result.overtimeHours = otHours; // ✨ Số giờ làm thêm thực tế
           result.otSalary = 0; // Không tính lương OT riêng
 
           console.log('\n✅ ===== TÍNH OT THÀNH CÔNG =====');
@@ -949,8 +948,9 @@ export class AttendanceCalculationService {
           console.log('  - OT minutes:', result.otMinutes);
           console.log('  - OT hours:', otHours.toFixed(2));
           console.log('  - Shift duration:', shiftDurationHours, 'hours');
-          console.log('  - Công thức: (', otHours.toFixed(2), '/', shiftDurationHours, ') = OT working unit');
-          console.log('  - 🎯 OT working units (RAW - chưa nhân hệ số):', result.otWorkingUnit.toFixed(4));
+          console.log('  - OT Rate Multiplier:', overtimeRateMultiplier);
+          console.log('  - Công thức: (', otHours.toFixed(2), '/', shiftDurationHours, ') *', overtimeRateMultiplier, ' = OT working unit');
+          console.log('  - 🎯 OT working units (ĐÃ nhân hệ số):', result.otWorkingUnit.toFixed(4));
           console.log('  - 📊 Overtime hours:', result.overtimeHours.toFixed(2));
           console.log('===== KẾT THÚC TÍNH OT =====\n');
         } else {

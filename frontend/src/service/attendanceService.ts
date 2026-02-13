@@ -96,9 +96,11 @@ export interface DailyAttendanceDetail {
   statusText: string;
   unauthorizedAbsencePenalty: number;
   isOnTime: boolean;
+  hasApprovedOT?: boolean; // ✨ Added for OT tracking
+  overtimeData?: any;      // ✨ Added to store full OT app object
   lateMinutes?: number;
   earlyLeaveMinutes?: number;
-  isPaidLeave?: boolean;
+  isPaidLeave?: boolean;   // ✨ Explicitly pass paid leave status
   shiftName?: string;
   shift?: { name: string; start_time: string; end_time: string };
 }

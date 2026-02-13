@@ -367,6 +367,7 @@ export class MonthlyReportService {
         isPaidLeave: record.isPaidLeave, // ✨ Pass explicitly top-level as well
         businessTripData,
         attendanceData,
+        overtimeData: record.overtimeData, // ✨ Pass OT application data
         status,
         statusText,
         unauthorizedAbsencePenalty: status === 'absent' ? unauthorizedAbsencePenaltyPerDay : 0,
