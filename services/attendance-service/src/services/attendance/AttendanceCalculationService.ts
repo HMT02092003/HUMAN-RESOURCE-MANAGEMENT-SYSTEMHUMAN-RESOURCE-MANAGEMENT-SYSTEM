@@ -700,52 +700,72 @@ export class AttendanceCalculationService {
       };
     }
 
-    // ✨ ƯU TIÊN 1: Nếu có OT đã duyệt (approvedOtEndTime)
-    // Trường hợp này thường dùng cho làm thêm ngày lễ/cuối tuần
-    if (approvedOtEndTime && approvedOtStartTime) {
-      // Extract HH:mm from ISO strings if needed, or use as is if already HH:mm
-      const startTime = approvedOtStartTime.includes('T') ? dayjs(approvedOtStartTime).format('HH:mm') : approvedOtStartTime.substring(0, 5);
-      const endTime = approvedOtEndTime.includes('T') ? dayjs(approvedOtEndTime).format('HH:mm') : approvedOtEndTime.substring(0, 5);
+    // ✨ LOGIC TÁCH BIỆT: Ngày Thường vs Ngày Lễ/Cuối Tuần
+    const isNormalWorkingDay = !isHoliday && !isWeekend;
 
-      workingHours = {
-        start: startTime,
-        end: endTime
-      };
+    if (isNormalWorkingDay) {
+      // 🟢 NGÀY THƯỜNG: Ưu tiên Ca làm việc (Shift) để tính Late/Early
+      if (shiftInfo) {
+        workingHours = {
+          start: shiftInfo.start_time.substring(0, 5), // '08:00:00' -> '08:00'
+          end: shiftInfo.end_time.substring(0, 5)
+        };
+        // Tính số giờ chuẩn của ca (trừ nghỉ trưa)
+        const start = dayjs(`${date} ${shiftInfo.start_time}`).tz('Asia/Ho_Chi_Minh');
+        const end = dayjs(`${date} ${shiftInfo.end_time}`).tz('Asia/Ho_Chi_Minh');
+        const diffMinutes = end.diff(start, 'minute');
+        const lunchBreakMinutes = diffMinutes > 360 ? 60 : 0; // Nếu ca > 6h thì trừ 1h nghỉ trưa
+        standardHours = (diffMinutes - lunchBreakMinutes) / 60;
+        console.log(`📋 NORMAL DAY: Sử dụng shift ${shiftInfo.name} (${workingHours.start}-${workingHours.end}), standardHours=${standardHours}h`);
+      } else {
+        // Fallback: dùng settings cũ
+        workingHours = settings.workingHours as WorkingHours;
+        const start = dayjs(`${date} ${workingHours.start}`).tz('Asia/Ho_Chi_Minh');
+        const end = dayjs(`${date} ${workingHours.end}`).tz('Asia/Ho_Chi_Minh');
+        const diff = end.diff(start, 'minute');
+        if (diff > 0) standardHours = diff / 60;
+        console.log(`📋 NORMAL DAY: Sử dụng default settings (${workingHours.start}-${workingHours.end})`);
+      }
 
-      const startStr = approvedOtStartTime.length <= 8 ? `${date} ${approvedOtStartTime}` : approvedOtStartTime;
-      const endStr = approvedOtEndTime.length <= 8 ? `${date} ${approvedOtEndTime}` : approvedOtEndTime;
-
-      const start = dayjs.tz(startStr, 'Asia/Ho_Chi_Minh');
-      const end = dayjs.tz(endStr, 'Asia/Ho_Chi_Minh');
-      const diffMinutes = end.diff(start, 'minute');
-
-      // Deduct lunch break for long OT shifts (similar to standard shifts)
-      const lunchBreakMinutes = diffMinutes > 360 ? 60 : 0;
-      standardHours = (diffMinutes - lunchBreakMinutes) / 60;
-      approvedOtDurationHours = standardHours; // Lưu lại
-      console.log(`🎉 Calculated standardHours based on OT: ${standardHours}h (Total: ${diffMinutes}m, Lunch: ${lunchBreakMinutes}m)`);
-      console.log(`   Approved OT Duration: ${approvedOtDurationHours}h`);
-    }
-    // ✨ ƯU TIÊN 2: Dùng Shift Info (nếu không phải trường hợp trên)
-    else if (shiftInfo) {
-      workingHours = {
-        start: shiftInfo.start_time.substring(0, 5), // '08:00:00' -> '08:00'
-        end: shiftInfo.end_time.substring(0, 5)
-      };
-      // Tính số giờ chuẩn của ca (trừ nghỉ trưa)
-      const start = dayjs.tz(`${date} ${shiftInfo.start_time}`, 'Asia/Ho_Chi_Minh');
-      const end = dayjs.tz(`${date} ${shiftInfo.end_time}`, 'Asia/Ho_Chi_Minh');
-      const diffMinutes = end.diff(start, 'minute');
-      const lunchBreakMinutes = diffMinutes > 360 ? 60 : 0; // Nếu ca > 6h thì trừ 1h nghỉ trưa
-      standardHours = (diffMinutes - lunchBreakMinutes) / 60;
-      console.log(`📋 Sử dụng shift: ${shiftInfo.name}, working_unit=${shiftInfo.working_unit}, standardHours=${standardHours}h`);
+      // Nếu có OT vào ngày thường, chỉ tính duration để log, KHÔNG đè workingHours
+      if (approvedOtEndTime && approvedOtStartTime) {
+        const startStr = approvedOtStartTime.length <= 8 ? `${date} ${approvedOtStartTime}` : approvedOtStartTime;
+        const endStr = approvedOtEndTime.length <= 8 ? `${date} ${approvedOtEndTime}` : approvedOtEndTime;
+        const start = dayjs(startStr).tz('Asia/Ho_Chi_Minh');
+        const end = dayjs(endStr).tz('Asia/Ho_Chi_Minh');
+        approvedOtDurationHours = end.diff(start, 'hour', true);
+        console.log(`🔥 NORMAL DAY has OT: ${approvedOtDurationHours}h. Keeping Shift as standard frame.`);
+      }
     } else {
-      // Fallback: dùng settings cũ
-      workingHours = settings.workingHours as WorkingHours;
-      const start = dayjs.tz(`${date} ${workingHours.start}`, 'Asia/Ho_Chi_Minh');
-      const end = dayjs.tz(`${date} ${workingHours.end}`, 'Asia/Ho_Chi_Minh');
-      const diff = end.diff(start, 'minute');
-      if (diff > 0) standardHours = diff / 60;
+      // 🔴 NGÀY LỄ / CUỐI TUẦN: Ưu tiên Đơn Tăng Ca (OT Application)
+      if (approvedOtEndTime && approvedOtStartTime) {
+        // Extract HH:mm from ISO strings if needed, or use as is if already HH:mm
+        const startTime = approvedOtStartTime.includes('T') ? dayjs(approvedOtStartTime).format('HH:mm') : approvedOtStartTime.substring(0, 5);
+        const endTime = approvedOtEndTime.includes('T') ? dayjs(approvedOtEndTime).format('HH:mm') : approvedOtEndTime.substring(0, 5);
+
+        workingHours = {
+          start: startTime,
+          end: endTime
+        };
+
+        const startStr = approvedOtStartTime.length <= 8 ? `${date} ${approvedOtStartTime}` : approvedOtStartTime;
+        const endStr = approvedOtEndTime.length <= 8 ? `${date} ${approvedOtEndTime}` : approvedOtEndTime;
+
+        const start = dayjs(startStr).tz('Asia/Ho_Chi_Minh');
+        const end = dayjs(endStr).tz('Asia/Ho_Chi_Minh');
+        const diffMinutes = end.diff(start, 'minute');
+
+        // Deduct lunch break for long OT shifts (similar to standard shifts)
+        const lunchBreakMinutes = diffMinutes > 360 ? 60 : 0;
+        standardHours = (diffMinutes - lunchBreakMinutes) / 60;
+        approvedOtDurationHours = standardHours; // Lưu lại
+        console.log(`🎉 HOLIDAY/WEEKEND: Calculated standardHours based on OT: ${standardHours}h (Total: ${diffMinutes}m)`);
+      } else {
+        // Không có OT vào ngày nghỉ -> Không có giờ làm chuẩn
+        workingHours = { start: '00:00', end: '00:00' };
+        standardHours = 0;
+        console.log(`🎉 HOLIDAY/WEEKEND with NO OT: Standard Hours = 0`);
+      }
     }
 
     // Lấy thông tin lương của user nếu có userId
@@ -782,8 +802,8 @@ export class AttendanceCalculationService {
 
     // Convert all times to Vietnam timezone (UTC+7) for consistent calculation
     const checkIn = dayjs(checkInTime).tz('Asia/Ho_Chi_Minh');
-    const expectedCheckIn = dayjs.tz(`${date} ${workingHours.start}`, 'Asia/Ho_Chi_Minh');
-    const expectedCheckOut = dayjs.tz(`${date} ${workingHours.end}`, 'Asia/Ho_Chi_Minh');
+    const expectedCheckIn = dayjs(`${date} ${workingHours.start}`).tz('Asia/Ho_Chi_Minh');
+    const expectedCheckOut = dayjs(`${date} ${workingHours.end}`).tz('Asia/Ho_Chi_Minh');
 
     console.log('🕐 Time comparison (Vietnam timezone):');
     console.log('- Check-in raw input:', checkInTime);

@@ -79,11 +79,11 @@ exports.seed = async function (knex) {
     appKnex = require('knex')({
       client: 'pg',
       connection: {
-        host: process.env.DB_HOST || 'localhost',
-        port: Number(process.env.DB_PORT) || 5432,
+        host: '127.0.0.1',
+        port: 5433,
         database: 'application_service_final',
-        user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || '123456'
+        user: 'postgres',
+        password: '123456'
       }
     });
   } catch (err) {
@@ -494,60 +494,71 @@ exports.seed = async function (knex) {
         }
 
         // CASE 2: No OT, Standard Weekday
-        // CASE 2: No OT, Standard Weekday
         else if (isWeekday) {
-          // 85% Present (Increased absence slightly for realism)
-          if (Math.random() < 0.85) {
-            // Time Logic: MORE VISIBLE Late/Early for User Testing
-            // Start: Target 08:00
-            // - 30% Late (was 10%)
-            // - 70% On Time
-            let inTime;
+          // 90% Present (High attendance)
+          if (Math.random() < 0.90) {
+
+            // --- TIME GENERATION LOGIC (SAFER) ---
+            let inTime, outTime;
             let lateM = 0;
-            if (Math.random() < 0.30) { // Late
-              lateM = 1 + Math.floor(Math.random() * 59);
-              inTime = `08:${String(lateM).padStart(2, '0')}:00`;
-              record.lateMinutes = lateM;
+            let earlyLeaveM = 0;
+
+            // CHECK-IN RANDOMIZATION
+            // 90% On Time (07:30 - 07:55) -> SAFE ZONE
+            // 10% Late (08:15 - 09:00) -> OBVIOUS PENALTY
+            if (Math.random() < 0.90) {
+              // ON TIME: 07:30 to 07:55
+              const mm = 30 + Math.floor(Math.random() * 26);
+              inTime = `07:${String(mm).padStart(2, '0')}:00`;
+              lateM = 0;
+              record.lateArrivalPenalty = 0;
+            } else {
+              // LATE: 08:15 to 09:00 (Max 08:59)
+              const mm = 15 + Math.floor(Math.random() * 45); // Max 15+44 = 59
+              inTime = `08:${String(mm).padStart(2, '0')}:00`;
+              lateM = mm; // Minutes past 08:00
               record.lateArrivalPenalty = lateM * 1000;
-            } else { // On Time
-              const earlyM = Math.floor(Math.random() * 30); // 07:30 - 08:00
-              const mins = 60 - earlyM;
-              const d = new Date(2000, 0, 1, 8, 0, 0);
-              d.setMinutes(d.getMinutes() - earlyM);
-              inTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:00`;
             }
 
-            // End: Target 17:00
-            // - 15% Early Leave (was 5%)
-            // - 85% On Time/Late
-            let outTime;
-            let earlyLeaveM = 0;
-            if (Math.random() < 0.15) { // Early
-              earlyLeaveM = 1 + Math.floor(Math.random() * 59);
-              const d = new Date(2000, 0, 1, 17, 0, 0);
-              d.setMinutes(d.getMinutes() - earlyLeaveM);
-              outTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:00`;
-              record.earlyDepartureMinutes = earlyLeaveM;
+            // CHECK-OUT RANDOMIZATION
+            // 90% On Time (17:05 - 17:45) -> SAFE ZONE
+            // 10% Early (16:00 - 16:45) -> OBVIOUS PENALTY
+            if (Math.random() < 0.90) {
+              // ON TIME: 17:05 to 17:45
+              const mm = 5 + Math.floor(Math.random() * 41);
+              outTime = `17:${String(mm).padStart(2, '0')}:00`;
+              earlyLeaveM = 0;
+              record.earlyLeavePenalty = 0;
+            } else {
+              // EARLY: 16:00 to 16:45
+              const mm = Math.floor(Math.random() * 46);
+              outTime = `16:${String(mm).padStart(2, '0')}:00`;
+              // Early minutes = 17:00 - 16:mm
+              earlyLeaveM = 60 - mm;
               record.earlyLeavePenalty = earlyLeaveM * 1000;
-            } else { // On Time (17:00 - 17:30)
-              const overM = Math.floor(Math.random() * 30);
-              const d = new Date(2000, 0, 1, 17, 0, 0);
-              d.setMinutes(d.getMinutes() + overM);
-              outTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:00`;
             }
+
+            record.lateMinutes = lateM;
+            record.earlyDepartureMinutes = earlyLeaveM;
 
             record.checkInTime = `${dateStr}T${inTime}+07:00`;
             record.checkOutTime = `${dateStr}T${outTime}+07:00`;
 
-            // Calc effective work hours (8 - penalty)
+            // CALC EFFECTIVE WORK HOURS (Standard 8h - Penalty)
             let h = 8 - (lateM / 60) - (earlyLeaveM / 60);
             if (h < 0) h = 0;
-            record.dailyTotalWorkHours = Number(h.toFixed(2));
 
-            // Units (Adjusted: More lenient as per user request)
-            if (h >= 4.0) { record.dailyWorkingUnit = 1.0; } // Was 7.5
-            else if (h >= 2.0) { record.dailyWorkingUnit = 0.5; } // Was 3.5
-            else { record.dailyWorkingUnit = 0; }
+            // Round to 2 decimal places for neatness
+            record.dailyTotalWorkHours = Math.round(h * 100) / 100;
+
+            // WORKING UNITS (Simpler Logic)
+            if (h >= 7.0) {
+              record.dailyWorkingUnit = 1.0;
+            } else if (h >= 3.5) {
+              record.dailyWorkingUnit = 0.5;
+            } else {
+              record.dailyWorkingUnit = 0;
+            }
 
             record.totalWorkingUnit = record.dailyWorkingUnit;
           }

@@ -1145,15 +1145,7 @@ const AttendanceSimplePage = () => {
                                   {tripObj.data?.endDate ? ` → ${dayjs(tripObj.data.endDate).format('YYYY-MM-DD')}` : ''}
                                 </div>
                                 {tripObj.data?.destination && <div><strong>Địa điểm:</strong> {tripObj.data.destination}</div>}
-                                {tripObj.approvedBy !== undefined && <div><strong>Duyệt bởi:</strong> {tripObj.approvedBy}</div>}
                                 {tripObj.approvedDate && <div><strong>Ngày duyệt:</strong> {dayjs(tripObj.approvedDate).format('YYYY-MM-DD')}</div>}
-                              </div>
-
-                              {/* Pretty-print full object for debugging / full detail */}
-                              <div style={{ marginTop: 8, background: '#fafafa', padding: 12, borderRadius: 6, overflow: 'auto', maxHeight: 320 }}>
-                                <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, margin: 0 }}>
-                                  {JSON.stringify(tripObj, null, 2)}
-                                </pre>
                               </div>
                             </div>
                           )}
@@ -1282,29 +1274,8 @@ const AttendanceSimplePage = () => {
                 )}
               </div>
 
-              {/* ✨ MODIFIED: Display OT application info whenever it exists (Holiday or Normal day) */}
-              {(dailyDetail as any)?.overtimeData ? (
-                <div style={{ marginBottom: 16, padding: 12, background: '#f9f0ff', borderRadius: 8, border: '1px solid #d3adf7' }}>
-                  <Row gutter={[12, 8]} align="middle">
-                    <Col span={24}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
-                        <FireOutlined style={{ marginRight: 8, color: '#722ed1', fontSize: 16 }} />
-                        <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#722ed1' }}>
-                          {isHoliday ? 'Đơn tăng ca ngày lễ' : 'Đơn tăng ca'}
-                        </Text>
-                      </div>
-                      <div style={{ textAlign: 'center' }}>
-                        <Text style={{ fontSize: 13, color: '#595959', display: 'block' }}>
-                          <strong>Lý do:</strong> {(dailyDetail as any).overtimeData.application?.data?.reason || (dailyDetail as any).overtimeData.application?.reason || (isHoliday ? 'Làm thêm ngày lễ' : 'Làm thêm giờ')}
-                        </Text>
-                        <Text style={{ fontSize: 12, color: '#8c8c8c' }}>
-                          (Đơn ID: {(dailyDetail as any).overtimeData.application?.id} • {shiftForDate.start_time} - {shiftForDate.end_time})
-                        </Text>
-                      </div>
-                    </Col>
-                  </Row>
-                </div>
-              ) : (
+              {/* ✨ Shift Info - Only show on Normal Working Days (not Holiday/Weekend) unless user has assigned shift on those days */}
+              {(!isHoliday && dailyDetail?.status !== 'weekend') && (
                 <div style={{ marginBottom: 16, padding: 12, background: shiftForDate ? '#e6f7ff' : '#f5f5f5', borderRadius: 8, border: shiftForDate ? '1px solid #91d5ff' : '1px solid #d9d9d9' }}>
                   <Row gutter={[12, 8]} align="middle">
                     <Col span={24}>
@@ -1321,6 +1292,30 @@ const AttendanceSimplePage = () => {
                           </Text>
                         </div>
                       )}
+                    </Col>
+                  </Row>
+                </div>
+              )}
+
+              {/* ✨ OT Info - Show if exists */}
+              {(dailyDetail as any)?.overtimeData && (
+                <div style={{ marginBottom: 16, padding: 12, background: '#f9f0ff', borderRadius: 8, border: '1px solid #d3adf7' }}>
+                  <Row gutter={[12, 8]} align="middle">
+                    <Col span={24}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
+                        <FireOutlined style={{ marginRight: 8, color: '#722ed1', fontSize: 16 }} />
+                        <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#722ed1' }}>
+                          {isHoliday ? 'Đơn tăng ca ngày lễ' : 'Đơn tăng ca'}
+                        </Text>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <Text style={{ fontSize: 13, color: '#595959', display: 'block' }}>
+                          <strong>Lý do:</strong> {(dailyDetail as any).overtimeData.application?.data?.reason || (dailyDetail as any).overtimeData.application?.reason || (isHoliday ? 'Làm thêm ngày lễ' : 'Làm thêm giờ')}
+                        </Text>
+                        <Text style={{ fontSize: 12, color: '#8c8c8c' }}>
+                          (Đơn ID: {(dailyDetail as any).overtimeData.application?.id} • {(dailyDetail as any).overtimeData.application?.data?.startTime || (dailyDetail as any).overtimeData.application?.startTime} - {(dailyDetail as any).overtimeData.application?.data?.endTime || (dailyDetail as any).overtimeData.application?.endTime})
+                        </Text>
+                      </div>
                     </Col>
                   </Row>
                 </div>
