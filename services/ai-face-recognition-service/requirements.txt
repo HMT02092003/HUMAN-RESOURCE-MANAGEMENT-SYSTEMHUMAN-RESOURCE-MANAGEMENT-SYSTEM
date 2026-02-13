@@ -1,8 +1,5 @@
 # ============================================================================
-# AI FACE RECOGNITION SERVICE - REQUIREMENTS (OPTIMIZED & MINIMAL)
-# ============================================================================
-# Clean Architecture - Only essential libraries
-# No MediaPipe, No Dlib, No heavy dependencies
+# AI FACE RECOGNITION SERVICE - REQUIREMENTS (CLEAN & OPTIMIZED)
 # ============================================================================
 
 # --- CORE WEB FRAMEWORK ---
@@ -11,27 +8,24 @@ uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 
 # --- DATABASE ---
-sqlalchemy==2.0.23
+sqlalchemy>=2.0.0
 psycopg2-binary==2.9.9
-alembic==1.12.1
+alembic>=1.12.0
 pgvector
 
 # --- COMPUTER VISION (Core) ---
-opencv-python==4.8.1.78             # Chỉ cần OpenCV cho image processing
-numpy==1.26.4                       # Required by OpenCV và InsightFace
-pillow                    # Image loading/saving
+opencv-python-headless==4.8.1.78     # Headless version is better for Docker
+numpy==1.26.4
+pillow
 
 # --- INSIGHTFACE (Face Recognition) ---
-insightface>=0.7.3                  # Main library - bao gồm detection + recognition + landmarks
+insightface>=0.7.3
 
 # --- ONNX RUNTIME (Inference Engine) ---
-# CHỌN 1 TRONG 2 options dưới đây:
-
-# Use CPU-only ONNX Runtime by default on Windows / non-GPU setups
 onnxruntime>=1.16.0
 
 # --- HTTP CLIENT ---
-requests>=2.31.0                    # For service communication
+requests>=2.31.0
 
 # --- CONFIGURATION ---
 python-dotenv==1.0.0
@@ -41,24 +35,3 @@ pydantic-settings==2.0.3
 # --- DEVELOPMENT/TESTING (Optional) ---
 pytest==7.4.3
 pytest-asyncio==0.21.1
-
-# ============================================================================
-# NOTES:
-# ============================================================================
-# 1. MediaPipe đã được loại bỏ (không cần thiết cho head pose)
-#    => Sử dụng InsightFace landmarks thay thế
-#
-# 2. Silent-Face-Anti-Spoofing model (ONNX) cần tải riêng:
-#    - Download từ: https://github.com/minivision-ai/Silent-Face-Anti-Spoofing
-#    - Đặt file .onnx vào: models/anti_spoofing/
-#    - Hoặc tải bằng script: python scripts/download_anti_spoofing_model.py
-#
-# 3. InsightFace models (buffalo_l) sẽ tự động download lần đầu chạy
-#
-# 4. Để cài đặt:
-#    pip install -r requirements.txt
-#
-# 5. Nếu lỗi khi cài insightface trên Windows, cài thêm:
-#    pip install cmake wheel
-#
-# ============================================================================
