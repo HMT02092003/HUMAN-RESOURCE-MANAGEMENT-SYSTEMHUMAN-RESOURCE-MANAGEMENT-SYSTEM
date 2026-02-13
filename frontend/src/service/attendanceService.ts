@@ -103,6 +103,8 @@ export interface DailyAttendanceDetail {
   isPaidLeave?: boolean;   // ✨ Explicitly pass paid leave status
   shiftName?: string;
   shift?: { name: string; start_time: string; end_time: string };
+  checkInTime?: string | null;
+  checkOutTime?: string | null;
 }
 
 export interface MonthlyAttendanceDetailResponse {
