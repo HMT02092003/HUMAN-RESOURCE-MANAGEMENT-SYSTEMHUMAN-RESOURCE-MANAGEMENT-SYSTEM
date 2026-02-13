@@ -16,16 +16,16 @@ class AttendanceService {
   static async getUserMonthlyAttendanceFull(userId, year, month) {
     try {
       console.log('📊 [App] Calling monthly-full API:', `/attendance/user/${userId}/monthly-full?year=${year}&month=${month}`);
-      
+
       const response = await api.get(`/attendance/user/${userId}/monthly-full`, {
         params: { year, month }
       });
-      
-      console.log('📥 [App] Raw monthly-full response:', response.data);
-      
+
+      console.log('📥 [App] Monthly-full response success:', response.data?.success);
+
       const fullData = response.data?.success ? response.data.data : null;
-      console.log('✅ [App] Parsed monthly-full data:', fullData);
-      
+      console.log('✅ [App] Parsed monthly-full data items:', fullData?.dailyDetails?.length || 0);
+
       return fullData;
     } catch (error) {
       console.error('❌ [App] Error fetching user monthly attendance full:', error);
@@ -77,7 +77,7 @@ class AttendanceService {
   static async approveAttendance(approvalData) {
     try {
       const response = await api.post('/attendance/approve', approvalData);
-      
+
       if (response.data?.success) {
         return response.data;
       }
@@ -123,7 +123,7 @@ class AttendanceService {
    */
   static normalizeMonthlyStats(stats) {
     if (!stats) return null;
-    
+
     return {
       totalDays: stats.totalDays ?? stats.totalScheduledDays ?? 0,
       presentDays: stats.presentDays ?? 0,
@@ -147,6 +147,21 @@ class AttendanceService {
       approvedLeaveDays: stats.approvedLeaveDays ?? 0,
       businessTripDays: stats.businessTripDays ?? 0
     };
+  }
+
+  /**
+   * Lay danh sach cham cong hang ngay theo scope
+   * @param {Object} params 
+   */
+  static async getDailyAttendanceByScope(params) {
+    try {
+      const response = await api.get('/attendance/daily-attendance-by-scope', { params });
+      if (response.data.success) return response.data;
+      throw new Error(response.data.message || 'Không thể lấy dữ liệu');
+    } catch (error) {
+      console.error('Error fetching daily attendance by scope:', error);
+      throw error;
+    }
   }
 }
 

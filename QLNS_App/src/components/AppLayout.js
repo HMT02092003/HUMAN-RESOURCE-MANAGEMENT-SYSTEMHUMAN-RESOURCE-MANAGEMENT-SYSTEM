@@ -29,6 +29,8 @@ import ContractListScreen from '../../screens/contracts/ContractListScreen';
 import AttendanceListScreen from '../../screens/attendance/AttendanceListScreen';
 import AttendanceApprovalScreen from '../../screens/attendance/AttendanceApprovalScreen';
 import HolidayScreen from '../../screens/attendance/HolidayScreen'; // New Placeholder
+import DailyAttendanceScreen from '../../screens/attendance/DailyAttendanceScreen';
+import AttendanceHistoryScreen from '../../screens/attendance/AttendanceHistoryScreen';
 import SettingsScreen from '../../screens/settings/SettingsScreen';
 import SalaryListScreen from '../../screens/salary/SalaryListScreen';
 import AllowanceListScreen from '../../screens/salary/AllowanceListScreen';
@@ -337,6 +339,8 @@ const BASE_MENU_ITEMS = [
     icon: 'calendar-clock-outline',
     children: [
       { key: 'attendance', label: 'Bảng chấm công', icon: 'calendar-month-outline', route: 'Chấm công', permission: 'timeAttendance' },
+      { key: 'dailyAttendance', label: 'Lịch sử chấm công hàng ngày', icon: 'calendar-check', route: 'Chấm công hàng ngày', permission: 'dailyAttendance' },
+      { key: 'attendanceHistory', label: 'Lịch sử chấm công (AI)', icon: 'image-search', route: 'Lịch sử chấm công (AI)', permission: 'attendance_history' },
       { key: 'attendanceApproval', label: 'Duyệt bảng chấm công', icon: 'check-decagram-outline', route: 'Duyệt bảng chấm công', permission: 'timeAttendance', requirePermission: 'approve' },
       { key: 'holidays', label: 'Quản lý ngày lễ', icon: 'calendar-star-outline', route: 'Quản lý ngày lễ', permission: 'settings' },
     ],
@@ -706,6 +710,8 @@ const AppLayout = () => {
           <Drawer.Screen name="Cấu hình ca" component={ShiftConfigurationNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
 
           <Drawer.Screen name="Chấm công" component={AttendanceListScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Chấm công hàng ngày" component={DailyAttendanceScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Lịch sử chấm công (AI)" component={AttendanceHistoryScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
           <Drawer.Screen name="Duyệt bảng chấm công" component={AttendanceApprovalScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
           <Drawer.Screen name="Quản lý ngày lễ" component={HolidayScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
 

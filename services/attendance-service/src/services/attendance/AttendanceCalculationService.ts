@@ -374,17 +374,14 @@ export class AttendanceCalculationService {
               : rawEnd.substring(0, 5);
           }
 
-          // Update shift name if it's a holiday or specialized OT
-          if (isHoliday) {
-            dayRecord.shift = {
-              name: 'Làm thêm ngày lễ',
-              start_time: startTimeFormatted,
-              end_time: endTimeFormatted
-            };
-            dayRecord.shiftName = 'Làm thêm ngày lễ';
-          } else if (!isWork) {
-            dayRecord.shiftName = 'Làm thêm ngày nghỉ';
-          }
+          // ✨ Update shift name and window to reflect the OT application
+          // This ensures the UI (like the detail modal) shows the OT hours specifically.
+          dayRecord.shift = {
+            name: isHoliday ? 'Làm thêm ngày lễ' : (!isWork ? 'Làm thêm ngày nghỉ' : 'Làm thêm giờ'),
+            start_time: startTimeFormatted,
+            end_time: endTimeFormatted
+          };
+          dayRecord.shiftName = dayRecord.shift.name;
 
           // ✨ RE-CALCULATE for accurate UI
           if (attendanceRecord && (attendanceRecord.checkInTime || attendanceRecord.checkOutTime)) {
