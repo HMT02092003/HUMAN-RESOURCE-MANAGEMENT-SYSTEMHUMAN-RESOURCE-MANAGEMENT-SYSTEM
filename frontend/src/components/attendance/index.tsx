@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Card, Row, Col, Typography, Tag, Divider, Button, Space, ConfigProvider, Select, message, Grid, Modal } from 'antd';
+import { Card, Row, Col, Typography, Tag, Divider, Button, Space, ConfigProvider, Select, message, Grid, Modal, Spin } from 'antd';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import './react-calendar-custom.css';
@@ -90,6 +90,7 @@ const AttendanceSimplePage = () => {
   });
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // OT rate từ settings (mặc định 1.5)
   const [otRate, setOtRate] = useState<number>(1.5);
@@ -239,6 +240,7 @@ const AttendanceSimplePage = () => {
 
         // 🚀 CHỈ GỌI 1 API DUY NHẤT: monthly-full
         // API này trả về đầy đủ: monthlyStats + dailyData (bao gồm dailyDetails và summary)
+        setLoading(true);
         const monthlyFullData = await attendanceService.getUserMonthlyAttendanceFull(userId, currentYear, currentMonth);
 
         console.log('📊 Attendance fetched for userId:', userId);
@@ -287,9 +289,11 @@ const AttendanceSimplePage = () => {
           }
 
           // Map dailyDetails to attendanceData format for backward compatibility
+          // Map dailyDetails to attendanceData format for backward compatibility
+          // Fix: Handle both nested attendanceData and flat structure
           const attendanceData = dailyData?.dailyDetails
-            ?.filter((d: any) => d.attendanceData)
-            .map((d: any) => d.attendanceData) || [];
+            ?.map((d: any) => d.attendanceData || d)
+            .filter((d: any) => d) || [];
 
           setAttendanceData(attendanceData);
           setMonthlyStats(monthlyStats);
@@ -331,6 +335,8 @@ const AttendanceSimplePage = () => {
           totalEarlyLeavePenalty: 0,
           totalPenalty: 0
         });
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -360,8 +366,10 @@ const AttendanceSimplePage = () => {
     const map = new Map<string, any>();
     if (monthlyDetail?.dailyDetails) {
       monthlyDetail.dailyDetails.forEach((detail) => {
-        if (detail.hasAttendance && detail.attendanceData) {
-          const attData = detail.attendanceData as any; // Cast to any để access dynamic fields
+        // Fix: Check for attendance presence (either nested or flat)
+        const hasData = detail.hasAttendance || detail.checkInTime || detail.checkOutTime;
+        if (hasData) {
+          const attData = (detail.attendanceData || detail) as any; // Cast to any để access dynamic fields
 
           // Format checkIn/checkOut time để hiển thị
           // ✨ FIX: Backend returns 'HH:mm', no need to re-format (which risks Invalid Date)
@@ -537,429 +545,431 @@ const AttendanceSimplePage = () => {
         </div>
       )}
 
-      <Row gutter={[16, 16]}>
-        {/* Calendar Section - 70% */}
-        <Col xs={24} lg={17}>
-          <Card
-            title={`Lịch chấm công tháng ${calendarValue.month() + 1}/${calendarValue.year()}`}
-            extra={
-              <Space direction={isMobile ? 'vertical' : 'horizontal'} size="small">
-                <Row gutter={[8, 8]}>
-                  <Col xs={12}>
-                    <Button size="small" onClick={goPrevMonth} icon={<LeftOutlined />} style={{ width: '100%' }}>
-                      {isMobile ? 'Trước' : 'Tháng trước'}
-                    </Button>
-                  </Col>
-                  <Col xs={12}>
-                    <Button size="small" onClick={goNextMonth} icon={<RightOutlined />} iconPosition="end" style={{ width: '100%' }}>
-                      {isMobile ? 'Sau' : 'Tháng sau'}
-                    </Button>
-                  </Col>
-                </Row>
-                <Row gutter={[8, 8]}>
-                  <Col xs={12}>
-                    <Select
-                      size="small"
-                      value={calendarValue.year()}
-                      style={{ width: '100%' }}
-                      onChange={(y) => {
-                        const v = calendarValue.year(y);
-                        setCalendarValue(v);
-                        setCurrentDate(v.toDate());
-                      }}
-                      options={Array.from({ length: 11 }, (_, i) => {
-                        const base = dayjs().year();
-                        const yr = base - 5 + i;
-                        return { value: yr, label: yr };
-                      })}
-                    />
-                  </Col>
-                  <Col xs={12}>
-                    <Select
-                      size="small"
-                      value={calendarValue.month()}
-                      onChange={(m) => {
-                        const v = calendarValue.month(m);
-                        setCalendarValue(v);
-                        setCurrentDate(v.toDate());
-                      }}
-                      options={Array.from({ length: 12 }, (_, i) => ({ value: i, label: `Tháng ${i + 1}` }))}
-                    />
-                  </Col>
-                </Row>
-              </Space>
-            }
-          >
-            {/* React Calendar với tuần bắt đầu từ Thứ 2 - Chuẩn ISO 8601 */}
-            <Calendar
-              key={calendarValue.format('YYYY-MM')} // ✨ Force re-render when month changes to avoid stale state
-              value={calendarValue.toDate()}
-              onChange={(date) => {
-                if (date) {
-                  const dayjsDate = dayjs(date as Date);
-                  setCalendarValue(dayjsDate);
-                  setCurrentDate(date as Date);
-                }
-              }}
-              locale="vi-VN"
-              calendarType="iso8601"
-              showNeighboringMonth={true}
-              formatShortWeekday={(locale, date) => {
-                // ISO 8601: Monday=1, Tuesday=2, ..., Sunday=7
-                // getDay(): Sunday=0, Monday=1, ..., Saturday=6
-                const dayIndex = date.getDay();
-                const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-                return days[dayIndex];
-              }}
-              tileClassName={({ date, view }) => {
-                if (view !== 'month') return '';
+      <Spin spinning={loading} tip="Đang tải dữ liệu...">
+        <Row gutter={[16, 16]}>
+          {/* Calendar Section - 70% */}
+          <Col xs={24} lg={17}>
+            <Card
+              title={`Lịch chấm công tháng ${calendarValue.month() + 1}/${calendarValue.year()}`}
+              extra={
+                <Space direction={isMobile ? 'vertical' : 'horizontal'} size="small">
+                  <Row gutter={[8, 8]}>
+                    <Col xs={12}>
+                      <Button size="small" onClick={goPrevMonth} icon={<LeftOutlined />} style={{ width: '100%' }}>
+                        {isMobile ? 'Trước' : 'Tháng trước'}
+                      </Button>
+                    </Col>
+                    <Col xs={12}>
+                      <Button size="small" onClick={goNextMonth} icon={<RightOutlined />} iconPosition="end" style={{ width: '100%' }}>
+                        {isMobile ? 'Sau' : 'Tháng sau'}
+                      </Button>
+                    </Col>
+                  </Row>
+                  <Row gutter={[8, 8]}>
+                    <Col xs={12}>
+                      <Select
+                        size="small"
+                        value={calendarValue.year()}
+                        style={{ width: '100%' }}
+                        onChange={(y) => {
+                          const v = calendarValue.year(y);
+                          setCalendarValue(v);
+                          setCurrentDate(v.toDate());
+                        }}
+                        options={Array.from({ length: 11 }, (_, i) => {
+                          const base = dayjs().year();
+                          const yr = base - 5 + i;
+                          return { value: yr, label: yr };
+                        })}
+                      />
+                    </Col>
+                    <Col xs={12}>
+                      <Select
+                        size="small"
+                        value={calendarValue.month()}
+                        onChange={(m) => {
+                          const v = calendarValue.month(m);
+                          setCalendarValue(v);
+                          setCurrentDate(v.toDate());
+                        }}
+                        options={Array.from({ length: 12 }, (_, i) => ({ value: i, label: `Tháng ${i + 1}` }))}
+                      />
+                    </Col>
+                  </Row>
+                </Space>
+              }
+            >
+              {/* React Calendar với tuần bắt đầu từ Thứ 2 - Chuẩn ISO 8601 */}
+              <Calendar
+                key={calendarValue.format('YYYY-MM')} // ✨ Force re-render when month changes to avoid stale state
+                value={calendarValue.toDate()}
+                onChange={(date) => {
+                  if (date) {
+                    const dayjsDate = dayjs(date as Date);
+                    setCalendarValue(dayjsDate);
+                    setCurrentDate(date as Date);
+                  }
+                }}
+                locale="vi-VN"
+                calendarType="iso8601"
+                showNeighboringMonth={true}
+                formatShortWeekday={(locale, date) => {
+                  // ISO 8601: Monday=1, Tuesday=2, ..., Sunday=7
+                  // getDay(): Sunday=0, Monday=1, ..., Saturday=6
+                  const dayIndex = date.getDay();
+                  const days = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+                  return days[dayIndex];
+                }}
+                tileClassName={({ date, view }) => {
+                  if (view !== 'month') return '';
 
-                const dateStr = dayjs(date).format('YYYY-MM-DD');
-                const attendance = attendanceMap.get(dateStr);
-                const dailyDetail = dailyDetailMap.get(dateStr);
-                const isCurrentMonth = dayjs(date).month() === calendarValue.month();
+                  const dateStr = dayjs(date).format('YYYY-MM-DD');
+                  const attendance = attendanceMap.get(dateStr);
+                  const dailyDetail = dailyDetailMap.get(dateStr);
+                  const isCurrentMonth = dayjs(date).month() === calendarValue.month();
 
-                if (!isCurrentMonth) return 'other-month';
+                  if (!isCurrentMonth) return 'other-month';
 
-                // ✨ Kiểm tra ngày lễ từ holidayData object
-                const isHoliday = dailyDetail?.holidayData?.isHoliday === true;
-                const hasHolidayWork = isHoliday && (attendance || dailyDetail?.status === 'business_trip');
+                  // ✨ Kiểm tra ngày lễ từ holidayData object
+                  const isHoliday = dailyDetail?.holidayData?.isHoliday === true;
+                  const hasHolidayWork = isHoliday && (attendance || dailyDetail?.status === 'business_trip');
 
-                // ✨ NGÀY LỄ CÓ CHẤM CÔNG / CÔNG TÁC -> nền navy-blue (ưu tiên cao nhất)
-                if (hasHolidayWork) return 'status-holiday-work';
+                  // ✨ NGÀY LỄ CÓ CHẤM CÔNG / CÔNG TÁC -> nền navy-blue (ưu tiên cao nhất)
+                  if (hasHolidayWork) return 'status-holiday-work';
 
-                // ✨ NGÀY LỄ LUÔN CÓ NỀN XANH (không có chấm công) (ưu tiên tiếp theo)
-                if (isHoliday) return 'status-holiday';
+                  // ✨ NGÀY LỄ LUÔN CÓ NỀN XANH (không có chấm công) (ưu tiên tiếp theo)
+                  if (isHoliday) return 'status-holiday';
 
-                // Sau đó mới đến các trạng thái khác (nhưng ngày lễ đã có nền xanh rồi)
-                // Công tác -> background tím
-                if (dailyDetail?.status === 'business_trip') return 'status-business-trip';
+                  // Sau đó mới đến các trạng thái khác (nhưng ngày lễ đã có nền xanh rồi)
+                  // Công tác -> background tím
+                  if (dailyDetail?.status === 'business_trip') return 'status-business-trip';
 
-                // Nghỉ phép -> background vàng
-                if (dailyDetail?.status === 'approved_leave') return 'status-leave';
+                  // Nghỉ phép -> background vàng
+                  if (dailyDetail?.status === 'approved_leave') return 'status-leave';
 
-                // Kiểm tra ngày có phạt chấm công (đi muộn hoặc về sớm)
-                const hasPenaltyTime = attendance && (attendance.lateMinutes > 0 || attendance.earlyDepartureMinutes > 0);
+                  // Kiểm tra ngày có phạt chấm công (đi muộn hoặc về sớm)
+                  const hasPenaltyTime = attendance && (attendance.lateMinutes > 0 || attendance.earlyDepartureMinutes > 0);
 
-                // Ngày bị phạt chấm công -> background đỏ
-                if (hasPenaltyTime) return 'status-penalty';
+                  // Ngày bị phạt chấm công -> background đỏ
+                  if (hasPenaltyTime) return 'status-penalty';
 
-                // Ngày chấm công đúng giờ HOẶC có OT -> background xanh nhạt
-                if (attendance && (dailyDetail?.isOnTime || dailyDetail?.hasApprovedOT)) return 'status-working';
+                  // Ngày chấm công đúng giờ HOẶC có OT -> background xanh nhạt
+                  if (attendance && (dailyDetail?.isOnTime || dailyDetail?.hasApprovedOT)) return 'status-working';
 
-                // Nghỉ không phép -> KHÔNG có background (chỉ chữ đỏ)
-                // Không cần CSS class cho ngày nghỉ không phép
+                  // Nghỉ không phép -> KHÔNG có background (chỉ chữ đỏ)
+                  // Không cần CSS class cho ngày nghỉ không phép
 
-                // Weekend -> background xám
-                if (dailyDetail?.status === 'weekend') return 'status-weekend';
+                  // Weekend -> background xám
+                  if (dailyDetail?.status === 'weekend') return 'status-weekend';
 
-                return '';
-              }}
-              tileContent={({ date, view }) => {
-                if (view !== 'month') return null;
+                  return '';
+                }}
+                tileContent={({ date, view }) => {
+                  if (view !== 'month') return null;
 
-                const dateStr = dayjs(date).format('YYYY-MM-DD');
-                const attendance = attendanceMap.get(dateStr);
-                const dailyDetail = dailyDetailMap.get(dateStr);
-                const isCurrentMonth = dayjs(date).month() === calendarValue.month();
-                const hasTimePenalty = hasPenalty(attendance);
-                const today = dayjs().format('YYYY-MM-DD');
-                const isPastOrToday = dayjs(dateStr).isSameOrBefore(today, 'day');
+                  const dateStr = dayjs(date).format('YYYY-MM-DD');
+                  const attendance = attendanceMap.get(dateStr);
+                  const dailyDetail = dailyDetailMap.get(dateStr);
+                  const isCurrentMonth = dayjs(date).month() === calendarValue.month();
+                  const hasTimePenalty = hasPenalty(attendance);
+                  const today = dayjs().format('YYYY-MM-DD');
+                  const isPastOrToday = dayjs(dateStr).isSameOrBefore(today, 'day');
 
-                if (!isCurrentMonth) return null;
+                  if (!isCurrentMonth) return null;
 
-                // ✨ Kiểm tra ngày lễ từ holidayData object
-                const isHoliday = dailyDetail?.holidayData?.isHoliday === true;
-                const holidayName = dailyDetail?.holidayData?.holidayName || 'Ngày lễ';
+                  // ✨ Kiểm tra ngày lễ từ holidayData object
+                  const isHoliday = dailyDetail?.holidayData?.isHoliday === true;
+                  const holidayName = dailyDetail?.holidayData?.holidayName || 'Ngày lễ';
 
-                // Debug: Log attendance data for dates with attendance
-                if (attendance) {
-                  console.log(`📅 Date ${dateStr}:`, {
-                    checkInTime: attendance.checkInTime,
-                    checkOutTime: attendance.checkOutTime,
-                    lateMinutes: attendance.lateMinutes,
-                    earlyDepartureMinutes: attendance.earlyDepartureMinutes,
-                    hasTimePenalty,
-                    isHoliday,
-                    holidayName
-                  });
-                }
+                  // Debug: Log attendance data for dates with attendance
+                  if (attendance) {
+                    console.log(`📅 Date ${dateStr}:`, {
+                      checkInTime: attendance.checkInTime,
+                      checkOutTime: attendance.checkOutTime,
+                      lateMinutes: attendance.lateMinutes,
+                      earlyDepartureMinutes: attendance.earlyDepartureMinutes,
+                      hasTimePenalty,
+                      isHoliday,
+                      holidayName
+                    });
+                  }
 
-                return (
-                  <div className="calendar-cell-content" onClick={() => handleDateClick(date)} style={{ position: 'relative' }}>
-                    {/* ✨ Icon đặc điểm nhận biết ngày nghỉ lễ */}
-                    {isHoliday && (
-                      <div style={{
-                        position: 'absolute',
-                        top: -4,
-                        right: -4,
-                        zIndex: 1
-                      }}>
-                        <TrophyOutlined style={{ color: '#faad14', fontSize: isMobile ? 12 : 14 }} title={holidayName} />
-                      </div>
-                    )}
-
-                    {/* ✨ Ưu tiên hiển thị: Công tác > Nghỉ phép > Nghỉ không phép > Chấm công > Tên ngày lễ (nếu không có gì) */}
-                    {dailyDetail && dailyDetail.status === 'business_trip' ? (
-                      // Công tác: chữ tím (nền xanh nếu là ngày lễ)
-                      <div style={{
-                        textAlign: 'center',
-                        padding: '2px',
-                        fontSize: isMobile ? 9 : 11,
-                        color: '#722ed1',
-                        fontWeight: 500
-                      }}>
-                        Công tác
-                      </div>
-                    ) : dailyDetail && dailyDetail.status === 'approved_leave' ? (
-                      // Nghỉ phép: chữ vàng cam (nền xanh nếu là ngày lễ)
-                      // ✨ Calculate isPaid consistently with Modal
-                      (() => {
-                        // Cast to any to access dynamic props
-                        const detail = dailyDetail as any;
-                        const lData = detail.leaveData as any;
-
-                        // Aggressively determine if Unpaid
-                        let isPaid = true; // Default to Paid
-
-                        // Check 1: Explicit flags (False check)
-                        if (detail.isPaidLeave === false) isPaid = false;
-                        else if (lData?.isPaid === false) isPaid = false;
-                        else if (lData?.isPaidLeave === false) isPaid = false;
-
-                        // Check 2: Type strings (CHECK TOP LEVEL TYPE TOO)
-                        if (isPaid) {
-                          const lType = String(lData?.leaveType || detail.leaveType || detail.type || '').toLowerCase();
-                          if (lType.includes('unpaid') || lType.includes('không lương')) isPaid = false;
-                        }
-
-                        // Check 3: Reason/Info strings
-                        if (isPaid) {
-                          const reason = String(detail.leaveInfo || lData?.reason || '').toLowerCase();
-                          if (reason.includes('không lương') || reason.includes('unpaid')) isPaid = false;
-                        }
-
-                        // Determine Label
-                        // Use more sources for info
-                        const info = String(detail.leaveInfo || lData?.reason || detail.leaveTypeName || '');
-                        const isNormalLeave = info.toLowerCase().includes('nghỉ thường');
-
-                        let label = '';
-                        if (isNormalLeave) {
-                          label = isPaid ? 'Nghỉ thường\n(Lương)' : 'Nghỉ thường\n(K.Lương)';
-                        } else {
-                          label = isPaid ? 'Nghỉ phép\n(Lương)' : 'Nghỉ\n(K.Lương)';
-                        }
-
-                        // Debug indicator (tiny dot) if we forced unpaid via string
-                        // Not showing to user, just logic result
-
-                        return (
-                          <div style={{
-                            textAlign: 'center',
-                            padding: '2px',
-                            fontSize: isMobile ? 9 : 11,
-                            color: isPaid ? '#faad14' : '#8c8c8c', // Grayscale for unpaid
-                            fontWeight: 500,
-                            whiteSpace: 'pre-line',
-                            lineHeight: 1.2
-                          }}>
-                            {label}
-                          </div>
-                        );
-                      })()
-                    ) : dailyDetail && dailyDetail.status === 'absent' && isPastOrToday ? (
-                      // Nghỉ không phép: chỉ hiển thị cho ngày <= hôm nay
-                      <div style={{
-                        textAlign: 'center',
-                        padding: '2px',
-                        fontSize: isMobile ? 9 : 11,
-                        color: '#ff4d4f',
-                        fontWeight: 500
-                      }}>
-                        Nghỉ
-                      </div>
-                    ) : attendance ? (
-                      // Có chấm công: hiển thị giờ vào - giờ ra (nền xanh nếu là ngày lễ)
-                      <div className="calendar-cell-info">
-                        {/* ✨ MODIFIED: Holiday name hidden when working (showing time instead) */}
-                        {(attendance.effectiveOtWorkingUnit > 0 || attendance.otWorkingUnit > 0 || attendance.overtime > 0) && (
-                          <div style={{ color: '#d97706', fontSize: isMobile ? 9 : 11, fontWeight: 'bold' }}>
-                            +{(attendance.effectiveOtWorkingUnit || (attendance.otWorkingUnit || (attendance.overtime / 8)) * otRate).toFixed(2)}
-                          </div>
-                        )}
-                        {/* ✨ Display Total Daily Units clearly */}
-                        {(attendance.totalWorkingUnit > 0) && (
-                          <div style={{ color: '#4096ff', fontSize: isMobile ? 9 : 11, fontWeight: 400 }}>
-                            Công: {Number(attendance.totalWorkingUnit).toFixed(2)}
-                          </div>
-                        )}
-                        <div style={{ color: hasTimePenalty ? '#ff4d4f' : '#666', fontSize: isMobile ? 9 : 11 }}>
-                          {/* ✨ Safety Check: Direct display from backend (HH:mm), filter out 'Invalid Date' */}
-                          {(attendance.checkInTime && String(attendance.checkInTime) !== 'Invalid Date') ? attendance.checkInTime : '--:--'} - {(attendance.checkOutTime && String(attendance.checkOutTime) !== 'Invalid Date') ? attendance.checkOutTime : '--:--'}
+                  return (
+                    <div className="calendar-cell-content" onClick={() => handleDateClick(date)} style={{ position: 'relative' }}>
+                      {/* ✨ Icon đặc điểm nhận biết ngày nghỉ lễ */}
+                      {isHoliday && (
+                        <div style={{
+                          position: 'absolute',
+                          top: -4,
+                          right: -4,
+                          zIndex: 1
+                        }}>
+                          <TrophyOutlined style={{ color: '#faad14', fontSize: isMobile ? 12 : 14 }} title={holidayName} />
                         </div>
-                      </div>
-                    ) : isHoliday ? (
-                      // ✨ Ngày lễ không có chấm công/công tác/nghỉ phép → hiển thị tên ngày lễ
-                      <div style={{
-                        textAlign: 'center',
-                        padding: '2px',
-                        fontSize: isMobile ? 9 : 11,
-                        color: '#13c2c2',
-                        fontWeight: 600
-                      }}>
-                        {holidayName}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              }}
-            />
+                      )}
 
-            {/* Legend cho các màu sắc */}
-            <div style={{
-              marginTop: 16,
-              padding: isMobile ? 12 : 16,
-              background: '#fafafa',
-              borderRadius: 8,
-              border: '1px solid #d9d9d9'
-            }}>
-              <Row gutter={[8, 8]}>
-                <Col xs={24}>
-                  <Text strong style={{ fontSize: isMobile ? 12 : 14 }}>Chú thích:</Text>
-                </Col>
-                <Col xs={12} sm={6}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <div style={{
-                      width: 16,
-                      height: 16,
-                      background: '#f6ffed',
-                      border: '1px solid #b7eb8f',
-                      borderRadius: 4,
-                      marginRight: 8
-                    }} />
-                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Chấm công đúng giờ</Text>
-                  </div>
-                </Col>
-                <Col xs={12} sm={6}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <div style={{
-                      width: 16,
-                      height: 16,
-                      background: '#fff1f0',
-                      border: '1px solid #ffccc7',
-                      borderRadius: 4,
-                      marginRight: 8
-                    }} />
-                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Bị phạt (muộn/sớm)</Text>
-                  </div>
-                </Col>
-                <Col xs={12} sm={6}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <div style={{
-                      width: 16,
-                      height: 16,
-                      background: '#fffbe6',
-                      border: '1px solid #ffe58f',
-                      borderRadius: 4,
-                      marginRight: 8
-                    }} />
-                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Nghỉ phép</Text>
-                  </div>
-                </Col>
-                <Col xs={12} sm={6}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <div style={{
-                      width: 16,
-                      height: 16,
-                      background: '#f9f0ff',
-                      border: '1px solid #d3adf7',
-                      borderRadius: 4,
-                      marginRight: 8
-                    }} />
-                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Công tác</Text>
-                  </div>
-                </Col>
-                <Col xs={12} sm={6}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <div style={{
-                      width: 16,
-                      height: 16,
-                      background: '#e6fffb',
-                      border: '1px solid #87e8de',
-                      borderRadius: 4,
-                      marginRight: 8
-                    }} />
-                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Ngày lễ</Text>
-                  </div>
-                </Col>
+                      {/* ✨ Ưu tiên hiển thị: Công tác > Nghỉ phép > Nghỉ không phép > Chấm công > Tên ngày lễ (nếu không có gì) */}
+                      {dailyDetail && dailyDetail.status === 'business_trip' ? (
+                        // Công tác: chữ tím (nền xanh nếu là ngày lễ)
+                        <div style={{
+                          textAlign: 'center',
+                          padding: '2px',
+                          fontSize: isMobile ? 9 : 11,
+                          color: '#722ed1',
+                          fontWeight: 500
+                        }}>
+                          Công tác
+                        </div>
+                      ) : dailyDetail && dailyDetail.status === 'approved_leave' ? (
+                        // Nghỉ phép: chữ vàng cam (nền xanh nếu là ngày lễ)
+                        // ✨ Calculate isPaid consistently with Modal
+                        (() => {
+                          // Cast to any to access dynamic props
+                          const detail = dailyDetail as any;
+                          const lData = detail.leaveData as any;
 
-                <Col xs={12} sm={6}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <div style={{
-                      width: 16,
-                      height: 16,
-                      background: '#e6fffb',
-                      border: '1px solid #87e8de',
-                      borderRadius: 4,
-                      marginRight: 8
-                    }} />
-                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Ngày lễ</Text>
-                  </div>
-                </Col>
-                <Col xs={12} sm={6}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <div style={{
-                      width: 16,
-                      height: 16,
-                      background: 'white',
-                      border: '1px solid #f0f0f0',
-                      borderRadius: 4,
-                      marginRight: 8,
-                      position: 'relative'
-                    }}>
-                      <Text style={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        color: '#ff4d4f',
-                        fontSize: 10,
-                        fontWeight: 'bold'
-                      }}>X</Text>
+                          // Aggressively determine if Unpaid
+                          let isPaid = true; // Default to Paid
+
+                          // Check 1: Explicit flags (False check)
+                          if (detail.isPaidLeave === false) isPaid = false;
+                          else if (lData?.isPaid === false) isPaid = false;
+                          else if (lData?.isPaidLeave === false) isPaid = false;
+
+                          // Check 2: Type strings (CHECK TOP LEVEL TYPE TOO)
+                          if (isPaid) {
+                            const lType = String(lData?.leaveType || detail.leaveType || detail.type || '').toLowerCase();
+                            if (lType.includes('unpaid') || lType.includes('không lương')) isPaid = false;
+                          }
+
+                          // Check 3: Reason/Info strings
+                          if (isPaid) {
+                            const reason = String(detail.leaveInfo || lData?.reason || '').toLowerCase();
+                            if (reason.includes('không lương') || reason.includes('unpaid')) isPaid = false;
+                          }
+
+                          // Determine Label
+                          // Use more sources for info
+                          const info = String(detail.leaveInfo || lData?.reason || detail.leaveTypeName || '');
+                          const isNormalLeave = info.toLowerCase().includes('nghỉ thường');
+
+                          let label = '';
+                          if (isNormalLeave) {
+                            label = isPaid ? 'Nghỉ thường\n(Lương)' : 'Nghỉ thường\n(K.Lương)';
+                          } else {
+                            label = isPaid ? 'Nghỉ phép\n(Lương)' : 'Nghỉ\n(K.Lương)';
+                          }
+
+                          // Debug indicator (tiny dot) if we forced unpaid via string
+                          // Not showing to user, just logic result
+
+                          return (
+                            <div style={{
+                              textAlign: 'center',
+                              padding: '2px',
+                              fontSize: isMobile ? 9 : 11,
+                              color: isPaid ? '#faad14' : '#8c8c8c', // Grayscale for unpaid
+                              fontWeight: 500,
+                              whiteSpace: 'pre-line',
+                              lineHeight: 1.2
+                            }}>
+                              {label}
+                            </div>
+                          );
+                        })()
+                      ) : dailyDetail && dailyDetail.status === 'absent' && isPastOrToday ? (
+                        // Nghỉ không phép: chỉ hiển thị cho ngày <= hôm nay
+                        <div style={{
+                          textAlign: 'center',
+                          padding: '2px',
+                          fontSize: isMobile ? 9 : 11,
+                          color: '#ff4d4f',
+                          fontWeight: 500
+                        }}>
+                          Nghỉ
+                        </div>
+                      ) : attendance ? (
+                        // Có chấm công: hiển thị giờ vào - giờ ra (nền xanh nếu là ngày lễ)
+                        <div className="calendar-cell-info">
+                          {/* ✨ MODIFIED: Holiday name hidden when working (showing time instead) */}
+                          {(attendance.effectiveOtWorkingUnit > 0 || attendance.otWorkingUnit > 0 || attendance.overtime > 0) && (
+                            <div style={{ color: '#d97706', fontSize: isMobile ? 9 : 11, fontWeight: 'bold' }}>
+                              +{(attendance.effectiveOtWorkingUnit || (attendance.otWorkingUnit || (attendance.overtime / 8)) * otRate).toFixed(2)}
+                            </div>
+                          )}
+                          {/* ✨ Display Total Daily Units clearly */}
+                          {(attendance.totalWorkingUnit > 0) && (
+                            <div style={{ color: '#4096ff', fontSize: isMobile ? 9 : 11, fontWeight: 400 }}>
+                              Công: {Number(attendance.totalWorkingUnit).toFixed(2)}
+                            </div>
+                          )}
+                          <div style={{ color: hasTimePenalty ? '#ff4d4f' : '#666', fontSize: isMobile ? 9 : 11 }}>
+                            {/* ✨ Safety Check: Direct display from backend (HH:mm), filter out 'Invalid Date' */}
+                            {(attendance.checkInTime && String(attendance.checkInTime) !== 'Invalid Date') ? attendance.checkInTime : '--:--'} - {(attendance.checkOutTime && String(attendance.checkOutTime) !== 'Invalid Date') ? attendance.checkOutTime : '--:--'}
+                          </div>
+                        </div>
+                      ) : isHoliday ? (
+                        // ✨ Ngày lễ không có chấm công/công tác/nghỉ phép → hiển thị tên ngày lễ
+                        <div style={{
+                          textAlign: 'center',
+                          padding: '2px',
+                          fontSize: isMobile ? 9 : 11,
+                          color: '#13c2c2',
+                          fontWeight: 600
+                        }}>
+                          {holidayName}
+                        </div>
+                      ) : null}
                     </div>
-                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Nghỉ không phép</Text>
-                  </div>
-                </Col>
-                <Col xs={12} sm={6}>
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <div style={{
-                      width: 16,
-                      height: 16,
-                      background: '#fafafa',
-                      border: '1px solid #d9d9d9',
-                      borderRadius: 4,
-                      marginRight: 8
-                    }} />
-                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Ngày nghỉ</Text>
-                  </div>
-                </Col>
-              </Row>
-            </div>
-          </Card>
-        </Col>
+                  );
+                }}
+              />
 
-        {/* Stats Section - 30% */}
-        <Col xs={24} lg={7} style={{ height: '100vh', overflowY: 'auto' }}>
-          {/* New redesigned MonthlyStatsCard component */}
-          <MonthlyStatsCard
-            monthlyStats={monthlyStats}
-            otRate={otRate}
-            isMobile={isMobile}
-            defaultShift={defaultShift}
-          />
-        </Col>
-      </Row>
+              {/* Legend cho các màu sắc */}
+              <div style={{
+                marginTop: 16,
+                padding: isMobile ? 12 : 16,
+                background: '#fafafa',
+                borderRadius: 8,
+                border: '1px solid #d9d9d9'
+              }}>
+                <Row gutter={[8, 8]}>
+                  <Col xs={24}>
+                    <Text strong style={{ fontSize: isMobile ? 12 : 14 }}>Chú thích:</Text>
+                  </Col>
+                  <Col xs={12} sm={6}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <div style={{
+                        width: 16,
+                        height: 16,
+                        background: '#f6ffed',
+                        border: '1px solid #b7eb8f',
+                        borderRadius: 4,
+                        marginRight: 8
+                      }} />
+                      <Text style={{ fontSize: isMobile ? 11 : 12 }}>Chấm công đúng giờ</Text>
+                    </div>
+                  </Col>
+                  <Col xs={12} sm={6}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <div style={{
+                        width: 16,
+                        height: 16,
+                        background: '#fff1f0',
+                        border: '1px solid #ffccc7',
+                        borderRadius: 4,
+                        marginRight: 8
+                      }} />
+                      <Text style={{ fontSize: isMobile ? 11 : 12 }}>Bị phạt (muộn/sớm)</Text>
+                    </div>
+                  </Col>
+                  <Col xs={12} sm={6}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <div style={{
+                        width: 16,
+                        height: 16,
+                        background: '#fffbe6',
+                        border: '1px solid #ffe58f',
+                        borderRadius: 4,
+                        marginRight: 8
+                      }} />
+                      <Text style={{ fontSize: isMobile ? 11 : 12 }}>Nghỉ phép</Text>
+                    </div>
+                  </Col>
+                  <Col xs={12} sm={6}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <div style={{
+                        width: 16,
+                        height: 16,
+                        background: '#f9f0ff',
+                        border: '1px solid #d3adf7',
+                        borderRadius: 4,
+                        marginRight: 8
+                      }} />
+                      <Text style={{ fontSize: isMobile ? 11 : 12 }}>Công tác</Text>
+                    </div>
+                  </Col>
+                  <Col xs={12} sm={6}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <div style={{
+                        width: 16,
+                        height: 16,
+                        background: '#e6fffb',
+                        border: '1px solid #87e8de',
+                        borderRadius: 4,
+                        marginRight: 8
+                      }} />
+                      <Text style={{ fontSize: isMobile ? 11 : 12 }}>Ngày lễ</Text>
+                    </div>
+                  </Col>
+
+                  <Col xs={12} sm={6}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <div style={{
+                        width: 16,
+                        height: 16,
+                        background: '#e6fffb',
+                        border: '1px solid #87e8de',
+                        borderRadius: 4,
+                        marginRight: 8
+                      }} />
+                      <Text style={{ fontSize: isMobile ? 11 : 12 }}>Ngày lễ</Text>
+                    </div>
+                  </Col>
+                  <Col xs={12} sm={6}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <div style={{
+                        width: 16,
+                        height: 16,
+                        background: 'white',
+                        border: '1px solid #f0f0f0',
+                        borderRadius: 4,
+                        marginRight: 8,
+                        position: 'relative'
+                      }}>
+                        <Text style={{
+                          position: 'absolute',
+                          top: '50%',
+                          left: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          color: '#ff4d4f',
+                          fontSize: 10,
+                          fontWeight: 'bold'
+                        }}>X</Text>
+                      </div>
+                      <Text style={{ fontSize: isMobile ? 11 : 12 }}>Nghỉ không phép</Text>
+                    </div>
+                  </Col>
+                  <Col xs={12} sm={6}>
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                      <div style={{
+                        width: 16,
+                        height: 16,
+                        background: '#fafafa',
+                        border: '1px solid #d9d9d9',
+                        borderRadius: 4,
+                        marginRight: 8
+                      }} />
+                      <Text style={{ fontSize: isMobile ? 11 : 12 }}>Ngày nghỉ</Text>
+                    </div>
+                  </Col>
+                </Row>
+              </div>
+            </Card>
+          </Col>
+
+          {/* Stats Section - 30% */}
+          <Col xs={24} lg={7} style={{ height: '100vh', overflowY: 'auto' }}>
+            {/* New redesigned MonthlyStatsCard component */}
+            <MonthlyStatsCard
+              monthlyStats={monthlyStats}
+              otRate={otRate}
+              isMobile={isMobile}
+              defaultShift={defaultShift}
+            />
+          </Col>
+        </Row>
+      </Spin>
 
       {/* Modal Chi tiết ngày */}
       <Modal
@@ -1523,7 +1533,7 @@ const AttendanceSimplePage = () => {
           );
         })()}
       </Modal>
-    </div >
+    </div>
   );
 };
 
