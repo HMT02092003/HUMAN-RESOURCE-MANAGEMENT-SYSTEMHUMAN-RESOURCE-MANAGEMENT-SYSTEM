@@ -375,13 +375,16 @@ export class AttendanceCalculationService {
           }
 
           // ✨ Update shift name and window to reflect the OT application
-          // This ensures the UI (like the detail modal) shows the OT hours specifically.
-          dayRecord.shift = {
-            name: isHoliday ? 'Làm thêm ngày lễ' : (!isWork ? 'Làm thêm ngày nghỉ' : 'Làm thêm giờ'),
-            start_time: startTimeFormatted,
-            end_time: endTimeFormatted
-          };
-          dayRecord.shiftName = dayRecord.shift.name;
+          // ONLY if it is a Holiday or Non-working day (Weekend/Day Off).
+          // On Normal Working Days, we want to preserve the actual Shift info (e.g. Ca Hành Chính).
+          if (isHoliday || !isWork) {
+            dayRecord.shift = {
+              name: isHoliday ? 'Làm thêm ngày lễ' : 'Làm thêm ngày nghỉ',
+              start_time: startTimeFormatted,
+              end_time: endTimeFormatted
+            };
+            dayRecord.shiftName = dayRecord.shift.name;
+          }
 
           // ✨ RE-CALCULATE for accurate UI
           if (attendanceRecord && (attendanceRecord.checkInTime || attendanceRecord.checkOutTime)) {
