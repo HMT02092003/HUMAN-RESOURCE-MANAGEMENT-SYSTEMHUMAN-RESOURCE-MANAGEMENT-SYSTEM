@@ -127,6 +127,34 @@ interface ApprovedLeaveApplication {
 }
 
 export class AttendanceCalculationService {
+  /**
+   * Forces a full recalculation of attendance for a specific user and month.
+   * Useful for fixing data inconsistencies or updating past months.
+   */
+  public static async recalculateMonthlyAttendance(userId: number, month: string): Promise<any> {
+    console.log(`♻️ [attendance] Recalculating monthly attendance for User ${userId}, Month ${month}`);
+
+    // 1. Delete ALL auto-generated "Absent" records for this month to allow fresh detection
+    // Auto-generated records typically have checkInTime=null and NO associated application causing them to be valid leave
+    const startOfMonth = dayjs(`${month}-01`).startOf('month').format('YYYY-MM-DD');
+    const endOfMonth = dayjs(`${month}-01`).endOf('month').format('YYYY-MM-DD');
+
+    await TimeAttendanceModel.query()
+      .delete()
+      .where({ userId })
+      .whereBetween('date', [startOfMonth, endOfMonth])
+      .whereNull('checkInTime')
+      .whereNull('checkOutTime');
+
+    // 2. Call the main calculation function
+    // We need to import MonthlyReportService here but prevent circular dependency if possible.
+    // Actually MonthlyReportService imports AttendanceCalculationService.
+    // So we might use a dynamic import or move this method to MonthlyReportService.
+    // Let's check imports.
+    const { MonthlyReportService } = await import('../MonthlyReportService');
+    return await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, startOfMonth);
+  }
+
   public static async calculateTotalLateDays(userId: number, month: string): Promise<number> {
     try {
       const startDate = dayjs(`${month}-01`).startOf('month').format('YYYY-MM-DD');
@@ -191,6 +219,20 @@ export class AttendanceCalculationService {
             totalEarlyLeaveDays: parseFloat(((monthlyRecord as any)['earlyLeaveDays'] ?? 0).toString()) || 0,
             totalPenalty: parseFloat(((monthlyRecord as any)['totalPenalty'] ?? 0).toString()) || 0,
             totalOvertimeSalary: parseFloat(((monthlyRecord as any)['totalOvertimeSalary'] ?? 0).toString()) || 0,
+            // ✨ Full stats from DB
+            totalWorkingUnits: parseFloat(((monthlyRecord as any)['totalWorkingUnits'] ?? 0).toString()) || 0,
+            totalOtWorkingUnits: parseFloat(((monthlyRecord as any)['totalOtWorkingUnits'] ?? 0).toString()) || 0,
+            totalLateMinutes: parseFloat(((monthlyRecord as any)['totalLateMinutes'] ?? 0).toString()) || 0,
+            totalEarlyLeaveMinutes: parseFloat(((monthlyRecord as any)['totalEarlyLeaveMinutes'] ?? 0).toString()) || 0,
+            unauthorizedAbsenceDays: parseFloat(((monthlyRecord as any)['unauthorizedAbsenceDays'] ?? 0).toString()) || 0,
+            approvedLeaveDays: parseFloat(((monthlyRecord as any)['approvedLeaveDays'] ?? 0).toString()) || 0,
+            businessTripDays: parseFloat(((monthlyRecord as any)['businessTripDays'] ?? 0).toString()) || 0,
+            totalUnauthorizedAbsencePenalty: parseFloat(((monthlyRecord as any)['totalUnauthorizedAbsencePenalty'] ?? 0).toString()) || 0,
+            totalLatePenalty: parseFloat(((monthlyRecord as any)['totalLatePenalty'] ?? 0).toString()) || 0,
+            totalEarlyLeavePenalty: parseFloat(((monthlyRecord as any)['totalEarlyLeavePenalty'] ?? 0).toString()) || 0,
+            totalScheduledDays: parseFloat(((monthlyRecord as any)['totalScheduledDays'] ?? 0).toString()) || 0,
+            absentDays: parseFloat(((monthlyRecord as any)['absentDays'] ?? 0).toString()) || 0,
+            baseSalary: parseFloat(((monthlyRecord as any)['baseSalary'] ?? 0).toString()) || 0, // ✨ Salary info
             isApproved: !!isApprovedFlag,
             attendanceData: dailyDetails
           };
@@ -490,7 +532,9 @@ export class AttendanceCalculationService {
         totalPenalty: Math.round(totalPenalty * 100) / 100,
         totalWorkingUnits: Math.round(totalWorkingUnits * 100) / 100,
         totalOtWorkingUnits: Math.round(totalOtWorkingUnits * 100) / 100,
-        totalPaidLeaveDays, totalUnpaidLeaveDays,
+        totalPaidLeaveDays,
+        totalUnpaidLeaveDays,
+        approvedLeaveDays: totalPaidLeaveDays + totalUnpaidLeaveDays,
         isApproved: !!isApproved,
         attendanceData: enrichedAttendanceData
       };
@@ -804,7 +848,7 @@ export class AttendanceCalculationService {
     }
 
     // Convert all times to Vietnam timezone (UTC+7) for consistent calculation
-    const checkIn = dayjs(checkInTime).tz('Asia/Ho_Chi_Minh');
+    const checkIn = dayjs.utc(checkInTime).tz('Asia/Ho_Chi_Minh');
     const expectedCheckIn = dayjs(`${date} ${workingHours.start}`).tz('Asia/Ho_Chi_Minh');
     const expectedCheckOut = dayjs(`${date} ${workingHours.end}`).tz('Asia/Ho_Chi_Minh');
 
@@ -815,10 +859,19 @@ export class AttendanceCalculationService {
     console.log('- Expected check-in:', expectedCheckIn.format('YYYY-MM-DD HH:mm:ss'));
     console.log('- Expected check-out:', expectedCheckOut.format('YYYY-MM-DD HH:mm:ss'));
 
-    // Tính late minutes - chỉ tính nếu check-in muộn hơn giờ quy định
-    const lateMinutes = checkIn.isAfter(expectedCheckIn)
+    // ✨ Lấy grace period từ settings (mặc định 0)
+    const allowedLateMinutesVal = await SettingsService.getSettingValue('AllowedLateMinutes');
+    const allowedLateMinutes = allowedLateMinutesVal ? parseInt(allowedLateMinutesVal.value) : 0;
+
+    // Tính late minutes - trừ đi thời gian cho phép đi muộn
+    const rawLateMinutes = checkIn.isAfter(expectedCheckIn)
       ? checkIn.diff(expectedCheckIn, 'minute')
       : 0;
+    const lateMinutes = Math.max(0, rawLateMinutes - allowedLateMinutes);
+
+    if (rawLateMinutes > 0 && lateMinutes === 0) {
+      console.log(`✅ [attendance] Late but within grace period (${rawLateMinutes} <= ${allowedLateMinutes}m) -> Not late.`);
+    }
 
     console.log('⏰ Late calculation:');
     console.log('- checkIn.isAfter(expectedCheckIn):', checkIn.isAfter(expectedCheckIn));
@@ -854,7 +907,7 @@ export class AttendanceCalculationService {
 
     // Nếu có check-out thì tính toán chi tiết
     if (checkOutTime) {
-      const checkOut = dayjs(checkOutTime).tz('Asia/Ho_Chi_Minh');
+      const checkOut = dayjs.utc(checkOutTime).tz('Asia/Ho_Chi_Minh');
       console.log('- Actual check-out:', checkOut.format('YYYY-MM-DD HH:mm:ss'));
 
       // Tính early departure minutes - chỉ tính nếu check-out sớm hơn giờ quy định
@@ -1037,9 +1090,15 @@ export class AttendanceCalculationService {
 
     // ✨ Tính công cơ bản (không bao gồm OT)
     // Công cơ bản = min(1, số giờ làm / số giờ chuẩn) * working_unit của shift
-    const shiftWorkingUnit = shiftInfo?.working_unit || 1.0;
+    const shiftWorkingUnit = parseFloat((shiftInfo?.working_unit || 1.0).toString());
     if (result.workHours > 0 && standardHours > 0) {
-      const baseUnits = Math.min(1, result.workHours / standardHours) * shiftWorkingUnit;
+      let baseUnits = Math.min(1, result.workHours / standardHours) * shiftWorkingUnit;
+
+      // ✨ Tolerance: If worked within 1 hour of standard hours, count as full day (handles lunch break discrepancies)
+      if (result.workHours >= (standardHours - 1.0)) {
+        baseUnits = shiftWorkingUnit;
+        console.log(`✅ [attendance] User worked ${result.workHours}h (Standard ${standardHours}h). Rounded up to full unit ${baseUnits}.`);
+      }
 
       // ✨ Nếu là ngày lễ hoặc cuối tuần, CHỈ TÍNH CÔNG NẾU CÓ ĐƠN OT ĐÃ DUYỆT
       if (isHoliday) {
@@ -1091,7 +1150,7 @@ export class AttendanceCalculationService {
           }
 
           if (checkOutTime) {
-            const checkOutDayjs = dayjs(checkOutTime).tz('Asia/Ho_Chi_Minh');
+            const checkOutDayjs = dayjs.utc(checkOutTime).tz('Asia/Ho_Chi_Minh');
             if (checkOutDayjs.isValid() && otEnd.isValid()) {
               result.earlyDepartureMinutes = Math.max(0, otEnd.diff(checkOutDayjs, 'minute')) || 0;
             }
@@ -1137,7 +1196,7 @@ export class AttendanceCalculationService {
             : dayjs(`${date} ${approvedOtEndTime}`).tz('Asia/Ho_Chi_Minh');
 
           if (checkInTime) {
-            const checkInDayjs = dayjs(checkInTime).tz('Asia/Ho_Chi_Minh');
+            const checkInDayjs = dayjs.utc(checkInTime).tz('Asia/Ho_Chi_Minh');
             if (checkInDayjs.isValid() && otStart.isValid()) {
               result.lateMinutes = Math.max(0, checkInDayjs.diff(otStart, 'minute')) || 0;
             }

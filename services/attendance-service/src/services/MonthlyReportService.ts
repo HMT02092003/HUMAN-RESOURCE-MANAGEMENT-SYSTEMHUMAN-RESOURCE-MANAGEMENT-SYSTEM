@@ -57,479 +57,85 @@ export class MonthlyReportService {
     // Fetch OT rates from settings upfront
     const normalOtRate = await SettingsService.getOvertimeRateInUnits();
     const holidayOtRate = await SettingsService.getHolidayOvertimeRateInUnits();
-    const penaltyRateVal = await SettingsService.getSettingValue('PenaltyRate');
-    const penaltyRate = penaltyRateVal?.rate ? parseFloat(penaltyRateVal.rate) : 0;
-    console.log(`📊 OT Rates loaded: normalOtRate=${normalOtRate}, holidayOtRate=${holidayOtRate}, penaltyRate=${penaltyRate}`);
+    // ✨ New simplified buildMonthlyFull logic: Read-only from DB (requested by user)
+    // 1. Fetch pre-calculated summary from DB (fast path)
+    const summary = await AttendanceCalculationService.getUserMonthlyAttendance(userId, month, token, true);
 
-    // Reuse existing attendance summary if available by calling TimeAttendance + MonthlySummary
-    // Call AttendanceQueryService directly (no circular import expected)
-    const summary = await AttendanceCalculationService.getUserMonthlyAttendance(userId, month, token);
-    if (!summary) return null;
-
-    // Fetch salary via SalaryService
-    const salary = await SalaryService.fetchSalary(userId, token, userData);
-    const baseSalary = salary?.baseSalary ? parseFloat(salary.baseSalary.toString()) : 0;
-
-    // Derive scheduled working days for this month from the attendance summary so
-    // that the unauthorized absence penalty per day is computed on a daily salary
-    // basis (baseSalary / totalScheduledDays) — kept consistent with
-    // calculateAndSaveMonthlyAttendance.
-    const attendanceDataForCalc = summary.attendanceData || [];
-    const totalScheduledDaysFromSummary = Array.isArray(attendanceDataForCalc)
-      ? attendanceDataForCalc.filter((d: any) => (d.isWorkingDay !== false) && !d.isHoliday).length
-      : 0;
-    const dailySalaryForSummary = totalScheduledDaysFromSummary > 0 ? baseSalary / totalScheduledDaysFromSummary : 0;
-    // Calculate penalty per day as daily salary (rounded to integer, no decimals)
-    const unauthorizedAbsencePenaltyPerDay = Math.round(dailySalaryForSummary);
-
-    // Build processed daily details using a small builder and a single loop for aggregates
-    const attendanceRows = summary.attendanceData || [];
-
-    // Fetch full holiday rows for the month and build a date->holiday map so we can
-    // include full holiday objects in the response (preferred over small holiday fields)
-    // Note: we already load holidays in calculateAndSaveMonthlyAttendance, but here
-    // we fetch the HolidayModel entries to provide richer info to the frontend.
-    let holidayRowsForMonth: any[] = [];
-    try {
-      const [y, mStr] = (month || '').split('-');
-      const monthStart = dayjs(`${y}-${mStr}-01`).startOf('month').format('YYYY-MM-DD');
-      const monthEnd = dayjs(`${y}-${mStr}-01`).endOf('month').format('YYYY-MM-DD');
-      holidayRowsForMonth = await HolidayModel.query()
-        .where(function () {
-          this.whereBetween('start_date', [monthStart, monthEnd])
-            .orWhereBetween('end_date', [monthStart, monthEnd])
-            .orWhere(function () {
-              this.where('start_date', '<=', monthStart).andWhere('end_date', '>=', monthEnd);
-            });
-        })
-        .select('*')
-        .catch(() => []);
-    } catch (e) {
-      holidayRowsForMonth = [];
-    }
-
-    // Build a map from date -> holiday full object (if holiday spans multiple days, map each day)
-    const holidayMap = new Map<string, any>();
-    for (const hr of holidayRowsForMonth) {
-      if (hr && hr.start_date && hr.end_date) {
-        let cur = dayjs(hr.start_date);
-        const end = dayjs(hr.end_date);
-        while (cur.isBefore(end) || cur.isSame(end, 'day')) {
-          holidayMap.set(cur.format('YYYY-MM-DD'), hr);
-          cur = cur.add(1, 'day');
-        }
-      }
-    }
-
-    // Attach full holiday object to each attendance row if available
-    for (const r of attendanceRows) {
-      try {
-        const d = dayjs(r.date).format('YYYY-MM-DD');
-        if (holidayMap.has(d)) {
-          (r as any)._holidayFullObject = holidayMap.get(d);
-          // also set isHoliday flag for backward-compat
-          r.isHoliday = true;
-          r.holidayName = r.holidayName || holidayMap.get(d).name || null;
-          r.isPublicHoliday = r.isPublicHoliday ?? !!holidayMap.get(d).is_public;
-        }
-      } catch (e) {
-        // ignore attach errors
-      }
-    }
-
-    // --- Attach full approved application objects (leave / business trip) to rows ---
-    let approvedAppsForMonth: any[] = [];
-    try {
-      const [y, mStr] = (month || '').split('-');
-      const appUrl = (process.env['APPLICATION_SERVICE_URL'] || 'http://127.0.0.1:4008') as string;
-      const resp = await axios.get(`${appUrl}/api/applications/user/${userId}/approved`, {
-        params: { year: parseInt(y || '0'), month: parseInt(mStr || '0') }
-      });
-      approvedAppsForMonth = resp.data?.data || [];
-    } catch (e) {
-      approvedAppsForMonth = [];
-    }
-
-    const leaveAppMap = new Map<string, any[]>();
-    const businessTripAppMap = new Map<string, any[]>();
-    for (const app of approvedAppsForMonth) {
-      try {
-        const data = typeof app.data === 'string' ? JSON.parse(app.data) : app.data || {};
-        const t = (app.type || '').toString().toLowerCase();
-        const isLeaveApp = t.includes('leave');
-        const isBusinessTripApp = t.includes('business') || t.includes('trip') || t === 'business-trip' || t === 'business_trip';
-
-        // single-day
-        // Single-day (explicit date) or date range. Normalize dates before expansion.
-        if (data.date) {
-          const d = dayjs(data.date).format('YYYY-MM-DD');
-          if (isLeaveApp) {
-            const arr = leaveAppMap.get(d) || [];
-            arr.push(app);
-            leaveAppMap.set(d, arr);
-          }
-          if (isBusinessTripApp) {
-            const arr = businessTripAppMap.get(d) || [];
-            arr.push(app);
-            businessTripAppMap.set(d, arr);
-          }
-        } else if (data.startDate && data.endDate) {
-          // Ensure start <= end
-          let start = dayjs(data.startDate);
-          let end = dayjs(data.endDate);
-          if (start.isAfter(end)) {
-            const tmp = start; start = end; end = tmp;
-          }
-          let cur = start;
-          while (cur.isBefore(end) || cur.isSame(end, 'day')) {
-            const d = cur.format('YYYY-MM-DD');
-            if (isLeaveApp) {
-              const arr = leaveAppMap.get(d) || [];
-              arr.push(app);
-              leaveAppMap.set(d, arr);
-            }
-            if (isBusinessTripApp) {
-              const arr = businessTripAppMap.get(d) || [];
-              arr.push(app);
-              businessTripAppMap.set(d, arr);
-            }
-            cur = cur.add(1, 'day');
-          }
-        }
-      } catch (e) {
-        // ignore parse errors
-      }
-    }
-
-    // Attach app objects to attendance rows for convenience
-    for (const r of attendanceRows) {
-      try {
-        const d = dayjs(r.date).format('YYYY-MM-DD');
-        const leaves = leaveAppMap.get(d) || [];
-        const trips = businessTripAppMap.get(d) || [];
-        if (leaves.length > 0) {
-          (r as any)._leaveFullObjects = leaves;
-          (r as any)._leaveFullObject = leaves[0];
-          r.hasApprovedLeave = r.hasApprovedLeave || true;
-          r.leaveInfo = r.leaveInfo || leaves[0].title || leaves[0].reason || null;
-        }
-        if (trips.length > 0) {
-          (r as any)._businessTripFullObjects = trips;
-          (r as any)._businessTripFullObject = trips[0];
-          r.hasBusinessTrip = r.hasBusinessTrip || true;
-          r.businessTripInfo = r.businessTripInfo || trips[0].title || trips[0].reason || null;
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
-
-    const weekdayNames = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
-
-    const buildDay = (record: any, _normalOtRate: number, _holidayOtRate: number) => {
-      // (checkInDate removed to fix lint error)
-      const lateMinutes = Number(record.lateMinutes ?? 0);
-      const earlyDepartureMinutes = Number(record.earlyDepartureMinutes ?? 0);
-      const lateArrivalPenalty = Number(record.lateArrivalPenalty ?? 0);
-      const earlyLeavePenalty = Number(record.earlyLeavePenalty ?? 0);
-      const workHours = Number(record.dailyTotalWorkHours ?? record.workHours ?? record.totalHours ?? 0);
-
-      /**
-       * ✅ KHÔNG NHÂN HỆ SỐ NỮA - DB ĐÃ LƯU GIÁ TRỊ SAU KHI NHÂN RATE!
-       * 
-       * DB đã lưu otWorkingUnit là giá trị SAU KHI NHÂN HỆ SỐ rồi.
-       * Nếu nhân thêm 1 lần nữa sẽ bị sai (nhân 2 lần).
-       * 
-       * Lý do: Dữ liệu cũ hoặc AttendanceCalculationService đang lưu giá trị đã nhân rate.
-       * → Trả ra trực tiếp, KHÔNG nhân thêm!
-       */
-      const otWorkingUnit = Number(record.otWorkingUnit ?? 0); // ĐÃ bao gồm rate
-      const overtimeHours = Number(record.overtimeHours ?? 0); // ✨ Số giờ OT thực tế
-      // KHÔNG nhân rate nữa!
-      const effectiveOtWorkingUnit = otWorkingUnit;
-
-      const isWorkDay = (record.isWorkingDay !== false) && !record.isHoliday;
-      const isFuture = record.isFuture === true;
-
-      let status = 'working';
-      let statusText = 'Đã chấm công';
-      let isOnTime = false;
-
-      // ✨ ƯU TIÊN: Công tác và OT được kiểm tra TRƯỚC khi kiểm tra weekend
-      // Tùy chỉnh: Holiday hiển thị trước OT để user biết đó là ngày lễ
-      if (record.hasBusinessTrip || record.type === 'business-trip' || record.type === 'business_trip') { status = 'business_trip'; statusText = 'Công tác'; }
-      // ✨ Holiday Check - Prioritize displaying Holiday name before Weekend check
-      else if (record.isHoliday) {
-        status = 'holiday';
-        statusText = record.holidayName || 'Ngày lễ';
-        // If has OT, maybe append info? For now, stick to user request "hiên thị chính xac s khi nào là... ngày lễ"
-      }
-      else if (record.hasApprovedOT) { status = 'overtime'; statusText = 'Làm thêm giờ'; }
-      else if (!isWorkDay) { status = 'weekend'; statusText = 'Cuối tuần'; }
-      else if (record.hasApprovedLeave || ['leave', 'sick-leave'].includes(record.type)) { status = 'approved_leave'; statusText = record.leaveInfo ?? record.leaveTypeName ?? 'Nghỉ phép'; }
-      else if (isWorkDay && !record.checkInTime && !isFuture) { status = 'absent'; statusText = 'Nghỉ không phép'; }
-      else if (record.checkInTime) {
-        const late = lateMinutes > 0;
-        const early = earlyDepartureMinutes > 0;
-        if (!late && !early) { isOnTime = true; statusText = 'Đúng giờ'; }
-        else if (late && early) statusText = 'Đi muộn & về sớm';
-        else if (late) statusText = 'Đi muộn';
-        else if (early) statusText = 'Về sớm';
-      }
-
-      // Prefer the full HolidayModel object for the date if available (added map below)
-      const holidayObjForDate = (record._holidayFullObject) ? record._holidayFullObject : undefined;
-      const holidayData = holidayObjForDate ? {
-        // include full holiday object fields: keep original keys for consumers
-        isHoliday: Boolean(record.isHoliday || true),
-        holidayName: holidayObjForDate.name ?? record.holidayName ?? null,
-        isPublicHoliday: Boolean(holidayObjForDate.is_public ?? record.isPublicHoliday),
-        // attach raw holiday object for consumers who want full data
-        holiday: holidayObjForDate
-      } : ((record.isHoliday || record.holidayName) ? {
-        isHoliday: Boolean(record.isHoliday),
-        holidayName: record.holidayName ?? null,
-        isPublicHoliday: Boolean(record.isPublicHoliday)
-      } : undefined);
-
-      // Date key to lookup apps maps if full objects were not attached to the record
-      const dateKey = dayjs(record.date).format('YYYY-MM-DD');
-      const leaveAppsFromMap = (leaveAppMap && leaveAppMap.get) ? (leaveAppMap.get(dateKey) || []) : [];
-
-      // Determine single leave object (prefer attached record-level object, then first from map)
-      const singleLeaveObj = (record as any)._leaveFullObject ?? (leaveAppsFromMap[0] ?? undefined);
-      // Determine leaveApplications array only when no single leave object is set (avoid redundancy)
-      const leaveAppsArray = !(singleLeaveObj) ? ((record as any)._leaveFullObjects ?? (leaveAppsFromMap.length > 0 ? leaveAppsFromMap : undefined)) : undefined;
-
-      const leaveData = (record.hasApprovedLeave || ['leave', 'sick-leave', 'unpaid_leave'].includes(record.type) || singleLeaveObj || (leaveAppsFromMap && leaveAppsFromMap.length > 0)) ? {
-        hasApprovedLeave: Boolean(record.hasApprovedLeave),
-        leaveType: record.leaveType ?? record.type,
-        leaveInfo: record.leaveInfo ?? record.reason ?? null,
-        leaveTypeName: record.leaveTypeName ?? null,
-        isPaidLeave: record.isPaidLeave, // ✨ Pass explicitly
-        // embed full application object (single) if attached earlier or found in approvedAppsForMonth map
-        leave: singleLeaveObj,
-        // Only include leaveApplications when single leave object is not present
-        leaveApplications: leaveAppsArray
-      } : undefined;
-
-      const tripAppsFromMap = (businessTripAppMap && businessTripAppMap.get) ? (businessTripAppMap.get(dateKey) || []) : [];
-      const businessTripData = (record.hasBusinessTrip || record.type === 'business_trip' || record._businessTripFullObject || (tripAppsFromMap && tripAppsFromMap.length > 0)) ? {
-        hasBusinessTrip: Boolean(record.hasBusinessTrip),
-        businessTripInfo: record.tripInfo ?? record.businessTripInfo ?? null,
-        businessTripDestination: record.destination ?? record.businessTripDestination ?? null,
-        // embed full application objects (prefer attached objects, otherwise use map)
-        businessTrip: (record as any)._businessTripFullObject ?? (tripAppsFromMap[0] ?? undefined),
-        businessTripApplications: (record as any)._businessTripFullObjects ?? (tripAppsFromMap.length > 0 ? tripAppsFromMap : undefined)
-      } : undefined;
-
-      const attendanceData = record.checkInTime ? {
-        id: record.id,
-        userId: record.userId,
-        date: record.date,
-        checkIn: record.checkIn ?? record.checkInTime ?? null,
-        checkOut: record.checkOut ?? record.checkOutTime ?? null,
-        // ✨ Extra safety against 'Invalid Date' string from any source
-        checkInTime: (record.checkInTime && String(record.checkInTime) !== 'Invalid Date') ? record.checkInTime : null,
-        checkOutTime: (record.checkOutTime && String(record.checkOutTime) !== 'Invalid Date') ? record.checkOutTime : null,
-        status,
-        totalHours: Number(record.totalHours ?? workHours),
-        workHours,
-        lateMinutes,
-        earlyDepartureMinutes,
-        lateArrivalPenalty,
-        earlyLeavePenalty,
-        dailyTotalWorkHours: workHours,
-        // ✅ OT Working Units (ĐÃ bao gồm rate từ DB)
-        dailyWorkingUnit: Number(record.dailyWorkingUnit ?? 0),
-        otWorkingUnit, // Công OT (ĐÃ bao gồm rate từ DB)
-        effectiveOtWorkingUnit, // Alias của otWorkingUnit (cùng giá trị)
-        overtimeHours, // ✨ Số giờ làm thêm thực tế
-        overtime: overtimeHours, // Alternative for some components
-        // Backwards compatibility: include otMinutes (FE expects minutes) and otSalary if present
-        otMinutes: Number(record.otMinutes ?? Math.round((overtimeHours || 0) * 60)),
-        otSalary: Number(record.otSalary ?? 0),
-        totalWorkingUnit: Number(record.totalWorkingUnit ?? 0),
-        shift: record.shift,
-        shiftName: record.shiftName || record.shift?.name || null
-      } : undefined;
-
-      const dayIndex = dayjs(record.date).day();
-
-      return {
-        date: dayjs(record.date).format('YYYY-MM-DD'),
-        dayOfWeek: dayIndex,
-        dayName: weekdayNames[dayIndex],
-        isWorkingDay: record.isWorkingDay !== false,
-        hasAttendance: !!record.checkInTime,
-        holidayData,
-        leaveData,
-        isPaidLeave: record.isPaidLeave, // ✨ Pass explicitly top-level as well
-        businessTripData,
-        attendanceData,
-        overtimeData: record.overtimeData, // ✨ Pass OT application data
-        status,
-        statusText,
-        unauthorizedAbsencePenalty: status === 'absent' ? unauthorizedAbsencePenaltyPerDay : 0,
-        isOnTime,
-        lateMinutes,
-        earlyLeaveMinutes: earlyDepartureMinutes,
-        shift: record.shift,
-        shiftName: record.shiftName || record.shift?.name || null
-      };
-    };
-
-    const processedDailyDetails = attendanceRows.map((record: any) => buildDay(record, normalOtRate, holidayOtRate));
-
-    const todayStr = dayjs().tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
-
-    // Compute aggregates (used later) in a single pass
-    const agg = processedDailyDetails.reduce((acc: any, d: any) => {
-      const isPastOrToday = dayjs(d.date).isSameOrBefore(todayStr, 'day');
-
-      // Update cumulative totals ONLY for past or today
-      if (isPastOrToday) {
-        // ✨ PRIORITY LOGIC: Applications (Leave/Trip) take absolute priority over Check-in/out data
-        if (d.status === 'approved_leave') {
-          acc.approvedLeaveDays++;
-          if (d.isPaidLeave) {
-            acc.totalWorkingUnits += 1.0;
-          }
-          // Skip attendance-based penalties and work hour counts for leave days
-        }
-        else if (d.status === 'business_trip') {
-          acc.businessTripDays++;
-          acc.totalWorkingUnits += 1.0;
-          // Skip attendance-based penalties for trip days
-        }
-        else {
-          // No Leave/Trip -> Process actual attendance data (FaceID)
-          acc.totalLateMinutes += Number(d.lateMinutes ?? 0);
-          acc.totalEarlyLeaveMinutes += Number(d.earlyLeaveMinutes ?? 0);
-          acc.totalLatePenalty += Number(d.attendanceData?.lateArrivalPenalty ?? 0);
-          acc.totalEarlyLeavePenalty += Number(d.attendanceData?.earlyLeavePenalty ?? 0);
-          acc.totalEffectiveOtWorkingUnits += Number(d.attendanceData?.effectiveOtWorkingUnit ?? 0);
-
-          acc.totalWorkingUnits += Number(d.attendanceData?.totalWorkingUnit ?? 0);
-          acc.totalOtWorkingUnits += Number(d.attendanceData?.otWorkingUnit ?? 0);
-
-          if (d.isWorkingDay) {
-            if (d.status === 'absent') acc.unauthorizedAbsenceDays++;
-            if (d.hasAttendance) acc.presentDays++;
-            if (d.attendanceData && Number(d.attendanceData.lateMinutes ?? 0) > 0) acc.lateDays++;
-            if (d.attendanceData && Number(d.attendanceData.earlyDepartureMinutes ?? 0) > 0) acc.earlyLeaveDays++;
-          }
-        }
-
-        if (d.status === 'weekend') acc.weekendDays++;
-        if (d.isOnTime) acc.onTimeDays++;
-      }
-
-      return acc;
-    }, {
-      totalLateMinutes: 0,
-      totalEarlyLeaveMinutes: 0,
-      totalLatePenalty: 0,
-      totalEarlyLeavePenalty: 0,
-      totalEffectiveOtWorkingUnits: 0,
-      totalWorkingUnits: 0,
-      totalOtWorkingUnits: 0,
-      presentDays: 0,
-      lateDays: 0,
-      earlyLeaveDays: 0,
-      approvedLeaveDays: 0,
-      businessTripDays: 0,
-      unauthorizedAbsenceDays: 0,
-      weekendDays: 0,
-      onTimeDays: 0
-    } as any);
-
-    const presentDays = agg.presentDays;
-    const lateDays = agg.lateDays;
-    const earlyLeaveDays = agg.earlyLeaveDays;
-    const approvedLeaveDays = agg.approvedLeaveDays;
-    const businessTripDays = agg.businessTripDays;
-    const unauthorizedAbsenceDays = agg.unauthorizedAbsenceDays;
-    const totalLateMinutes = agg.totalLateMinutes;
-    const totalEarlyLeaveMinutes = agg.totalEarlyLeaveMinutes;
-    const totalLatePenalty = agg.totalLatePenalty;
-    const totalEarlyLeavePenalty = agg.totalEarlyLeavePenalty;
-    const onTimeDays = agg.onTimeDays;
-    const weekendDays = agg.weekendDays;
-
-    const totalUnauthorizedAbsencePenalty = unauthorizedAbsenceDays * unauthorizedAbsencePenaltyPerDay;
-    const absentDays = approvedLeaveDays + businessTripDays;
-
-    const monthlyRecord = await MonthlySummaryModel.getByUserAndMonth(userId, month);
-    const db: any = monthlyRecord as any;
-    const monthlyStatsFromDb = monthlyRecord ? {
-      totalDays: parseFloat((db.totalScheduledDays ?? summary.presentDays ?? 0).toString()) || 0,
-      presentDays: parseFloat((db.presentDays ?? presentDays).toString()) || presentDays,
-      absentDays: parseFloat((db.absentDays ?? (db.approvedLeaveDays ?? db.approvedLeaveDays) ?? absentDays).toString()) || absentDays,
-      lateDays: parseFloat((db.lateDays ?? lateDays).toString()) || lateDays,
-      earlyLeaveDays: parseFloat((db.earlyLeaveDays ?? earlyLeaveDays).toString()) || earlyLeaveDays,
-      totalHours: parseFloat((db.totalWorkHours ?? 0).toString()) || summary.totalWorkHours,
-      averageHours: parseFloat((db.averageWorkHours ?? (db.totalWorkHours && (db.totalScheduledDays || presentDays) ? db.totalWorkHours / (db.totalScheduledDays || presentDays) : undefined) ?? (presentDays > 0 ? summary.totalWorkHours / presentDays : 0)).toString()) || (presentDays > 0 ? summary.totalWorkHours / presentDays : 0),
-      overtimeHours: parseFloat((db.totalOvertimeHours ?? summary.totalOvertimeHours).toString()) || summary.totalOvertimeHours,
-      totalLatePenalty: parseFloat((db.totalLatePenalty ?? totalLatePenalty).toString()) || totalLatePenalty,
-      totalEarlyLeavePenalty: parseFloat((db.totalEarlyLeavePenalty ?? totalEarlyLeavePenalty).toString()) || totalEarlyLeavePenalty,
-      // Recalculate total penalty to ensure it includes authorized absence
-      totalPenalty: (parseFloat((db.totalLatePenalty ?? totalLatePenalty).toString()) || totalLatePenalty) +
-        (parseFloat((db.totalEarlyLeavePenalty ?? totalEarlyLeavePenalty).toString()) || totalEarlyLeavePenalty) +
-        Math.round(parseFloat((db.totalUnauthorizedAbsencePenalty ?? totalUnauthorizedAbsencePenalty).toString()) || totalUnauthorizedAbsencePenalty),
-      totalOvertimePay: summary.totalOvertimeSalary || 0, // totalOvertimeSalary removed from DB
-      totalLateMinutes: parseFloat((db.totalLateMinutes ?? totalLateMinutes).toString()) || totalLateMinutes,
-      totalEarlyLeaveMinutes: parseFloat((db.totalEarlyLeaveMinutes ?? totalEarlyLeaveMinutes).toString()) || totalEarlyLeaveMinutes,
-      unauthorizedAbsenceDays: parseFloat((db.unauthorizedAbsenceDays ?? unauthorizedAbsenceDays).toString()) || unauthorizedAbsenceDays,
-      // Round to integer (no decimals)
-      totalUnauthorizedAbsencePenalty: Math.round(parseFloat((db.totalUnauthorizedAbsencePenalty ?? totalUnauthorizedAbsencePenalty).toString()) || totalUnauthorizedAbsencePenalty),
-      // Per-day unauthorized absence penalty (VND) - rounded to integer
-      unauthorizedAbsencePenaltyPerDay: Math.round(parseFloat(((db as any).unauthorizedAbsencePenaltyPerDay ?? unauthorizedAbsencePenaltyPerDay).toString()) || unauthorizedAbsencePenaltyPerDay),
-      approvedLeaveDays: parseFloat((db.approvedLeaveDays ?? approvedLeaveDays).toString()) || approvedLeaveDays,
-      businessTripDays: parseFloat((db.businessTripDays ?? businessTripDays).toString()) || businessTripDays,
-      totalWorkingUnits: Math.round(agg.totalWorkingUnits * 100) / 100, // ✨ Real-time calculated units
-      totalOtWorkingUnits: Math.round(agg.totalOtWorkingUnits * 100) / 100,
-      totalEffectiveOtWorkingUnits: Math.round(agg.totalEffectiveOtWorkingUnits * 10000) / 10000,
-    } : null;
-
-    const monthlyStats = monthlyStatsFromDb ?? {
-      totalDays: 0,
-      presentDays: 0,
-      absentDays: 0,
-      lateDays: 0,
-      earlyLeaveDays: 0,
-      totalHours: 0,
-      averageHours: 0,
-      overtimeHours: 0,
-      totalLatePenalty: 0,
-      totalEarlyLeavePenalty: 0,
-      totalPenalty: 0,
-      totalOvertimePay: 0,
-      totalLateMinutes: 0,
-      totalEarlyLeaveMinutes: 0,
-      unauthorizedAbsenceDays: 0,
-      totalUnauthorizedAbsencePenalty: 0,
-      approvedLeaveDays: 0,
-      businessTripDays: 0,
-      totalWorkingUnits: 0,
-      totalOtWorkingUnits: 0,
-      totalEffectiveOtWorkingUnits: 0
-    };
-
-    // Ensure backwards-compatible alias for total overtime hours
-    if ((monthlyStats as any).overtimeHours !== undefined && (monthlyStats as any).totalOvertimeHours === undefined) {
-      (monthlyStats as any).totalOvertimeHours = (monthlyStats as any).overtimeHours;
+    if (!summary) {
+      console.log(`⚠️ [attendance] No summary found for user ${userId} month ${month}. Returning null/empty.`);
+      return null;
     }
 
     const [yearStr, monthStr] = (month || '').split('-');
 
-    // Calculate total overtime hours from daily details for summary
-    const summaryTotalOvertimeHours = processedDailyDetails.reduce((sum: number, d: any) => {
-      const dayOvertimeHours = Number(d.attendanceData?.overtimeHours ?? 0);
-      return sum + dayOvertimeHours;
-    }, 0);
+    // 2. Map directly to response structure without re-calculation
+    const monthlyStats = {
+      totalDays: summary.totalScheduledDays || 0,
+      presentDays: summary.presentDays || 0,
+      absentDays: summary.absentDays || 0,
+      lateDays: summary.totalLateDays || 0,
+      earlyLeaveDays: summary.totalEarlyLeaveDays || 0,
+      totalHours: summary.totalWorkHours || 0,
+      averageHours: (summary.presentDays > 0 ? Number((summary.totalWorkHours / summary.presentDays).toFixed(2)) : 0),
+      overtimeHours: summary.totalOvertimeHours || 0,
+      totalLatePenalty: summary.totalLatePenalty || 0,
+      totalEarlyLeavePenalty: summary.totalEarlyLeavePenalty || 0,
+      totalPenalty: summary.totalPenalty || 0,
+      totalOvertimePay: summary.totalOvertimeSalary || 0,
+      totalLateMinutes: summary.totalLateMinutes || 0,
+      totalEarlyLeaveMinutes: summary.totalEarlyLeaveMinutes || 0,
+      unauthorizedAbsenceDays: summary.unauthorizedAbsenceDays || 0,
+      totalUnauthorizedAbsencePenalty: summary.totalUnauthorizedAbsencePenalty || 0,
+      // Derived for display
+      unauthorizedAbsencePenaltyPerDay: Math.round(summary.unauthorizedAbsenceDays > 0 ? summary.totalUnauthorizedAbsencePenalty / summary.unauthorizedAbsenceDays : 0),
+      approvedLeaveDays: summary.approvedLeaveDays || 0,
+      businessTripDays: summary.businessTripDays || 0,
+      totalWorkingUnits: summary.totalWorkingUnits || 0,
+      totalOtWorkingUnits: summary.totalOtWorkingUnits || 0,
+      totalEffectiveOtWorkingUnits: summary.totalOtWorkingUnits || 0,
+      totalOvertimeHours: summary.totalOvertimeHours || 0
+    };
 
-    const response = {
+    // 3. Use snapshot directly from DB JSON
+    const dailyDetails = summary.attendanceData || [];
+
+    // 4. Lightweight formatting for UI (Status Text, Color)
+    const mappedDetails = dailyDetails.map((d: any) => {
+      let statusText = '';
+      let color = '';
+      const isFuture = dayjs(d.date).isAfter(dayjs(), 'day');
+
+      if (d.isHoliday) {
+        statusText = d.holidayName || 'Ngày lễ';
+        color = '#ff4d4f';
+        if (d.hasApprovedOT) statusText += ' (OT)';
+      } else if (d.hasApprovedLeave) {
+        statusText = d.isPaidLeave ? 'Nghỉ phép (Lương)' : 'Nghỉ (K.Lương)';
+        color = '#faad14';
+      } else if (d.hasBusinessTrip) {
+        statusText = 'Công tác';
+        color = '#1890ff';
+      } else if (d.checkInTime) {
+        if ((d.lateMinutes || 0) > 0) { statusText = 'Đi muộn'; color = '#ffec3d'; }
+        else if ((d.earlyDepartureMinutes || 0) > 0) { statusText = 'Về sớm'; color = '#ffec3d'; }
+        else { statusText = 'Đúng giờ'; color = '#52c41a'; }
+      } else if (d.isWorkingDay && !isFuture) {
+        statusText = 'Nghỉ không phép';
+        color = '#cf1322';
+      } else {
+        statusText = isFuture ? '--' : 'Ngày nghỉ';
+        color = '#d9d9d9';
+      }
+
+      return {
+        ...d,
+        statusText,
+        color
+      };
+    });
+
+    // 5. Wrap in API response structure (matching old contract)
+    return {
       success: true,
       data: {
         monthlyStats,
@@ -537,31 +143,26 @@ export class MonthlyReportService {
           userId: summary.userId,
           year: parseInt(yearStr || '0'),
           month: parseInt(monthStr || '0'),
-          monthlySalary: monthlyRecord?.baseSalary ?? 0,
-          penaltyRate,
-          dailyDetails: processedDailyDetails,
+          monthlySalary: (summary as any).baseSalary || 0,
+          penaltyRate: 0,
+          dailyDetails: mappedDetails,
           summary: {
-            totalDays: (summary.attendanceData || []).length,
-            workingDays: (summary.attendanceData || []).filter((r: any) => r.isWorkingDay !== false).length,
-            attendedDays: presentDays,
-            approvedLeaveDays,
-            unauthorizedAbsenceDays,
-            // Total unauthorized absence penalty for the month (rounded to integer)
-            totalUnauthorizedAbsencePenalty: Math.round(totalUnauthorizedAbsencePenalty),
-            // Unauthorized absence penalty per day (VND) - rounded to integer
-            unauthorizedAbsencePenaltyPerDay: Math.round(unauthorizedAbsencePenaltyPerDay),
-            weekendDays,
-            totalLateMinutes,
-            totalEarlyLeaveMinutes,
-            onTimeDays,
-            // Expose total overtime hours for frontend (compatibility)
-            totalOvertimeHours: Math.round(summaryTotalOvertimeHours * 100) / 100
+            totalDays: mappedDetails.length,
+            workingDays: mappedDetails.filter((d: any) => d.isWorkingDay !== false).length,
+            attendedDays: summary.presentDays,
+            approvedLeaveDays: summary.approvedLeaveDays,
+            unauthorizedAbsenceDays: summary.unauthorizedAbsenceDays,
+            totalUnauthorizedAbsencePenalty: Math.round(summary.totalUnauthorizedAbsencePenalty),
+            unauthorizedAbsencePenaltyPerDay: Math.round(summary.unauthorizedAbsenceDays > 0 ? summary.totalUnauthorizedAbsencePenalty / summary.unauthorizedAbsenceDays : 0),
+            weekendDays: 0,
+            totalLateMinutes: summary.totalLateMinutes,
+            totalEarlyLeaveMinutes: summary.totalEarlyLeaveMinutes,
+            onTimeDays: 0,
+            totalOvertimeHours: summary.totalOvertimeHours
           }
         }
       }
     };
-
-    return response;
   }
 
   /**
@@ -761,7 +362,7 @@ export class MonthlyReportService {
         const dow = dayjs(dateKey).day();
         const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const dayKey = dayNames[dow] || 'monday';
-        const cfgIsWork = workingDaysConfig ? !!(workingDaysConfig as any)[dayKey] : true;
+        const cfgIsWork = workingDaysConfig ? !!(workingDaysConfig as any)[dayKey] : (dayKey !== 'sunday' && dayKey !== 'saturday');
         return cfgIsWork && !holidaySet.has(dateKey);
       };
 
@@ -805,7 +406,10 @@ export class MonthlyReportService {
               otEndTime = d.endTime;
             } else if (d.startTime && d.totalHours) {
               // ✨ Calculate end time if missing but totalHours provided
-              otEndTime = dayjs(`${dateKey} ${d.startTime}`).add(parseFloat(d.totalHours), 'hour').format('HH:mm');
+              const duration = d.totalHours || d.hours || d.duration;
+              if (duration) {
+                otEndTime = dayjs(`${dateKey} ${d.startTime}`).add(parseFloat(duration), 'hour').format('HH:mm');
+              }
             }
             console.log(`⏱️ [attendance] Found OT app for ${dateKey}: ${otStartTime} - ${otEndTime}`);
           }
@@ -907,8 +511,8 @@ export class MonthlyReportService {
         if (app.type === 'leave') {
           try {
             const data = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
-            // Chỉ tính nghỉ phép CÓ LƯƠNG (leaveType === 'paid' hoặc không có leaveType = mặc định có lương)
-            const isPaidLeave = !data.leaveType || data.leaveType === 'paid' || data.leaveType === 'annual';
+            // Chỉ tính nghỉ phép CÓ LƯƠNG (leaveType === 'paid' hoặc không có leaveType = mặc định có lương, TRỪ KHI isPaidLeave === false)
+            const isPaidLeave = (data.isPaidLeave !== false) && (!data.leaveType || data.leaveType === 'paid' || data.leaveType === 'annual');
 
             if (isPaidLeave) {
               if (data.date) {
@@ -1035,6 +639,31 @@ export class MonthlyReportService {
 
       // Debug log các ngày bị tính là nghỉ không phép
       console.log(`\n❗ [attendance] Unauthorized absence days (${unauthorizedAbsenceDaysFinal}):`, unauthorizedAbsenceDates);
+
+      // ✨ FIX: Insert missing records for unauthorized absence so they show up in future reports
+      if (unauthorizedAbsenceDates.length > 0) {
+        for (const missingDate of unauthorizedAbsenceDates) {
+          try {
+            const exist = await TimeAttendanceModel.query().where({ userId, date: missingDate }).first();
+            if (!exist) {
+              console.log(`📝 [attendance] Creating missing record for unauthorized absence on ${missingDate}`);
+              await TimeAttendanceModel.query().insert({
+                userId,
+                date: missingDate,
+                checkInTime: null,
+                checkOutTime: null,
+                dailyTotalWorkHours: 0,
+                dailyWorkingUnit: 0,
+                totalWorkingUnit: 0,
+                otWorkingUnit: 0,
+                overtimeHours: 0
+              });
+            }
+          } catch (e) {
+            console.error(`⚠️ [attendance] Failed to insert missing record for ${missingDate}:`, e);
+          }
+        }
+      }
 
       const averageWorkHours = presentDays > 0 ? Math.round((totalWorkHours / presentDays) * 100) / 100 : 0;
 
