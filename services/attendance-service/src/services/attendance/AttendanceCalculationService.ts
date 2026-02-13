@@ -715,8 +715,8 @@ export class AttendanceCalculationService {
       const startStr = approvedOtStartTime.length <= 8 ? `${date} ${approvedOtStartTime}` : approvedOtStartTime;
       const endStr = approvedOtEndTime.length <= 8 ? `${date} ${approvedOtEndTime}` : approvedOtEndTime;
 
-      const start = dayjs(startStr).tz('Asia/Ho_Chi_Minh');
-      const end = dayjs(endStr).tz('Asia/Ho_Chi_Minh');
+      const start = dayjs.tz(startStr, 'Asia/Ho_Chi_Minh');
+      const end = dayjs.tz(endStr, 'Asia/Ho_Chi_Minh');
       const diffMinutes = end.diff(start, 'minute');
 
       // Deduct lunch break for long OT shifts (similar to standard shifts)
@@ -733,8 +733,8 @@ export class AttendanceCalculationService {
         end: shiftInfo.end_time.substring(0, 5)
       };
       // Tính số giờ chuẩn của ca (trừ nghỉ trưa)
-      const start = dayjs(`${date} ${shiftInfo.start_time}`).tz('Asia/Ho_Chi_Minh');
-      const end = dayjs(`${date} ${shiftInfo.end_time}`).tz('Asia/Ho_Chi_Minh');
+      const start = dayjs.tz(`${date} ${shiftInfo.start_time}`, 'Asia/Ho_Chi_Minh');
+      const end = dayjs.tz(`${date} ${shiftInfo.end_time}`, 'Asia/Ho_Chi_Minh');
       const diffMinutes = end.diff(start, 'minute');
       const lunchBreakMinutes = diffMinutes > 360 ? 60 : 0; // Nếu ca > 6h thì trừ 1h nghỉ trưa
       standardHours = (diffMinutes - lunchBreakMinutes) / 60;
@@ -742,8 +742,8 @@ export class AttendanceCalculationService {
     } else {
       // Fallback: dùng settings cũ
       workingHours = settings.workingHours as WorkingHours;
-      const start = dayjs(`${date} ${workingHours.start}`).tz('Asia/Ho_Chi_Minh');
-      const end = dayjs(`${date} ${workingHours.end}`).tz('Asia/Ho_Chi_Minh');
+      const start = dayjs.tz(`${date} ${workingHours.start}`, 'Asia/Ho_Chi_Minh');
+      const end = dayjs.tz(`${date} ${workingHours.end}`, 'Asia/Ho_Chi_Minh');
       const diff = end.diff(start, 'minute');
       if (diff > 0) standardHours = diff / 60;
     }
@@ -782,8 +782,8 @@ export class AttendanceCalculationService {
 
     // Convert all times to Vietnam timezone (UTC+7) for consistent calculation
     const checkIn = dayjs(checkInTime).tz('Asia/Ho_Chi_Minh');
-    const expectedCheckIn = dayjs(`${date} ${workingHours.start}`).tz('Asia/Ho_Chi_Minh');
-    const expectedCheckOut = dayjs(`${date} ${workingHours.end}`).tz('Asia/Ho_Chi_Minh');
+    const expectedCheckIn = dayjs.tz(`${date} ${workingHours.start}`, 'Asia/Ho_Chi_Minh');
+    const expectedCheckOut = dayjs.tz(`${date} ${workingHours.end}`, 'Asia/Ho_Chi_Minh');
 
     console.log('🕐 Time comparison (Vietnam timezone):');
     console.log('- Check-in raw input:', checkInTime);

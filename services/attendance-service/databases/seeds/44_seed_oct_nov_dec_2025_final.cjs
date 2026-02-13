@@ -91,12 +91,11 @@ exports.seed = async function (knex) {
     return;
   }
 
-  const userIds = Array.from({ length: 50 }, (_, i) => i + 1);
+  const userIds = Array.from({ length: 123 }, (_, i) => i + 1);
   const applicationsToInsert = [];
   const PLANNED_OT = new Map(); // Key: "userId-date", Value: OT Detail Object
-
-  // Helper ID generator for applications (we need unique IDs for conflict checks if we use them, 
-  // but better to let DB handle SERIAL. We'll use insert without IDs)
+  const PLANNED_LEAVE = new Map(); // Key: "userId-date", Value: Type
+  const PLANNED_TRIP = new Map(); // Key: "userId-date", Value: Detail
 
   const months = [
     { year: 2025, month: 10 }, { year: 2025, month: 11 }, { year: 2025, month: 12 },
@@ -109,10 +108,10 @@ exports.seed = async function (knex) {
     const daysInMonth = new Date(m.year, m.month, 0).getDate();
 
     for (const userId of userIds) {
-      // Determines probability for this user to have OT this month
-      // User 1-5: High OT (Managers/Key Personnel) - 30% chance per day
-      // Others: Low OT - 5% chance
-      const otChance = userId <= 5 ? 0.3 : 0.05;
+      // Probability settings
+      const otChance = userId <= 10 ? 0.25 : 0.08;
+      const leaveChance = 0.03; // ~1 day per month
+      const tripChance = 0.01;  // Rare
 
       for (let d = 1; d <= daysInMonth; d++) {
         const dateStr = `${m.year}-${String(m.month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -123,11 +122,68 @@ exports.seed = async function (knex) {
         const isWknd = (dayOfWeek === 0 || dayOfWeek === 6);
         const isWeekday = !isHol && !isWknd;
 
-        let otPlan = null;
+        // Skip if already has an application for this day
+        if (PLANNED_LEAVE.has(`${userId}-${dateStr}`) || PLANNED_TRIP.has(`${userId}-${dateStr}`)) continue;
 
-        // SCENARIO 1: Holiday OT (Rare but forced for some)
+        // 1. LEAVE (RANDOM)
+        if (isWeekday && Math.random() < leaveChance) {
+          const isPaid = Math.random() > 0.3;
+          const leaveData = {
+            startDate: dateStr,
+            endDate: dateStr,
+            reason: isPaid ? 'Bận việc gia đình' : 'Nghỉ việc riêng (không lương)',
+            leaveType: isPaid ? 'personal' : 'unpaid',
+            isPaid: isPaid
+          };
+          PLANNED_LEAVE.set(`${userId}-${dateStr}`, leaveData);
+          applicationsToInsert.push({
+            type: isPaid ? 'leave' : 'unpaid_leave',
+            status: 1,
+            userId: userId,
+            data: JSON.stringify(leaveData),
+            created_at: new Date(dateStr),
+            updated_at: new Date(dateStr)
+          });
+          continue;
+        }
+
+        // 2. BUSINESS TRIP (RANDOM)
+        if (isWeekday && Math.random() < tripChance) {
+          const duration = Math.floor(Math.random() * 2) + 1;
+          const tripDays = [];
+          for (let i = 0; i <= duration; i++) {
+            const tDate = new Date(dateStr);
+            tDate.setDate(tDate.getDate() + i);
+            const tDateStr = tDate.toISOString().split('T')[0];
+            tripDays.push(tDateStr);
+          }
+
+          const tripData = {
+            startDate: tripDays[0],
+            endDate: tripDays[tripDays.length - 1],
+            destination: ['Hà Nội', 'Đà Nẵng', 'Hồ Chí Minh', 'Cần Thơ'][Math.floor(Math.random() * 4)],
+            purpose: 'Họp đối tác & Khảo sát thị trường'
+          };
+
+          applicationsToInsert.push({
+            type: 'business-trip',
+            status: 1,
+            userId: userId,
+            data: JSON.stringify(tripData),
+            created_at: new Date(dateStr),
+            updated_at: new Date(dateStr)
+          });
+
+          for (const td of tripDays) {
+            PLANNED_TRIP.set(`${userId}-${td}`, tripData);
+          }
+          continue;
+        }
+
+        // 3. OVERTIME
+        let otPlan = null;
         if (isHol) {
-          if (Math.random() < 0.2) { // 20% users work on holiday
+          if (Math.random() < 0.15) {
             otPlan = {
               date: dateStr,
               startTime: '08:00',
@@ -137,49 +193,43 @@ exports.seed = async function (knex) {
             };
           }
         }
-        // SCENARIO 2: Weekend OT
         else if (isWknd) {
-          if (Math.random() < 0.1) { // 10% users work weekend
+          if (Math.random() < 0.08) {
             otPlan = {
               date: dateStr,
               startTime: '08:00',
               endTime: '17:00',
               totalHours: 8,
-              reason: 'Chạy dự án cuối tuần'
+              reason: 'Làm bù dự án'
             };
           }
         }
-        // SCENARIO 3: Weekday Evening OT
         else if (isWeekday) {
           if (Math.random() < otChance) {
-            // Determine duration: 1.5h to 3h
-            const duration = 1.5 + Math.random() * 2; // 1.5 - 3.5 hours
-            const endH = 17 + Math.floor(duration); // 18 or 19 or 20
+            const duration = 1.0 + Math.random() * 3;
+            const endH = 17 + Math.floor(duration);
             const endM = Math.floor((duration % 1) * 60);
             const endTimeStr = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
 
             otPlan = {
-              overtimeDate: dateStr, // Consistent with frontend
+              overtimeDate: dateStr,
               startTime: '17:00',
               endTime: endTimeStr,
-              overtimeHours: Number(duration.toFixed(1)), // Consistent with frontend
-              reason: 'Xử lý công việc tồn đọng'
+              overtimeHours: Number(duration.toFixed(1)),
+              reason: 'Hoàn thành báo cáo'
             };
           }
         }
 
         if (otPlan) {
-          // Store Plan for Attendance Seed
           PLANNED_OT.set(`${userId}-${dateStr}`, otPlan);
-
-          // Add to Applications Insert List
           applicationsToInsert.push({
             type: 'overtime',
-            status: 1, // Approved
+            status: 1,
             userId: userId,
             data: JSON.stringify(otPlan),
-            created_at: new Date(dateStr + 'T00:00:00Z').toISOString(),
-            updated_at: new Date(dateStr + 'T00:00:00Z').toISOString()
+            created_at: new Date(dateStr),
+            updated_at: new Date(dateStr)
           });
         }
       }
@@ -290,10 +340,29 @@ exports.seed = async function (knex) {
       updated_at: new Date('2026-02-15')
     }
   ];
-  console.log('   📝 Inserting Sample Leave Applications for User 1 & User 3...');
-  await appKnex('applications').insert(leaveAppsToInsert);
 
+  // REGISTER HARDCODED APPS TO MAPS SO ATTENDANCE LOGIC RESPECTS THEM
+  for (const app of leaveAppsToInsert) {
+    const data = JSON.parse(app.data);
+    const startDate = new Date(data.startDate);
+    const endDate = new Date(data.endDate);
 
+    let iter = new Date(startDate);
+    while (iter <= endDate) {
+      const dateStr = iter.toISOString().split('T')[0];
+      const key = `${app.userId}-${dateStr}`;
+
+      if (app.type === 'business-trip') {
+        PLANNED_TRIP.set(key, data);
+      } else {
+        PLANNED_LEAVE.set(key, { ...data, type: app.type });
+      }
+      iter.setDate(iter.getDate() + 1);
+    }
+  }
+
+  // Insert Sample Leave/Trip Apps
+  await appKnex('applications').insert(leaveAppsToInsert).onConflict(['id']).ignore();
   await appKnex.destroy();
 
 
@@ -328,6 +397,8 @@ exports.seed = async function (knex) {
         const isWeekday = !isHol && !isWknd;
 
         const appKey = `${userId}-${dateStr}`;
+        const leavePlan = PLANNED_LEAVE.get(appKey);
+        const tripPlan = PLANNED_TRIP.get(appKey);
         const otPlan = PLANNED_OT.get(appKey);
 
         let record = {
@@ -349,8 +420,22 @@ exports.seed = async function (knex) {
         };
 
         // ---------------------------------------------------------
-        // LOGIC: ATTENDANCE MATCHES OT PLAN
+        // LOGIC: ATTENDANCE MATCHES PLANS
         // ---------------------------------------------------------
+
+        // CASE 0: Leave Day -> Skip record (Monthly report handles absence/leave)
+        if (leavePlan) continue;
+
+        // CASE 0.5: Business Trip -> Standard 8h record
+        if (tripPlan) {
+          record.checkInTime = `${dateStr}T08:00:00+07:00`;
+          record.checkOutTime = `${dateStr}T17:00:00+07:00`;
+          record.dailyTotalWorkHours = 8;
+          record.dailyWorkingUnit = 1.0;
+          record.totalWorkingUnit = 1.0;
+          batch.push(record);
+          continue;
+        }
 
         // CASE 1: Has Planned OT (Holiday/Weekend/Weekday Evening)
         if (otPlan) {
@@ -396,10 +481,11 @@ exports.seed = async function (knex) {
 
             // Calculate standard hours (8) + OT hours
             record.dailyTotalWorkHours = 8; // Standard filled
-            record.overtimeHours = otPlan.totalHours;
+            const otHrs = otPlan.overtimeHours || otPlan.totalHours || 0;
+            record.overtimeHours = otHrs;
 
             record.dailyWorkingUnit = 1.0; // Standard day OK
-            record.otWorkingUnit = (otPlan.totalHours / 8) * 1.5; // Rate 1.5
+            record.otWorkingUnit = (otHrs / 8) * 1.5; // Rate 1.5
             record.totalWorkingUnit = record.dailyWorkingUnit + record.otWorkingUnit;
           }
 
