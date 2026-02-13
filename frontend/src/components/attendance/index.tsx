@@ -369,7 +369,11 @@ const AttendanceSimplePage = () => {
         // Fix: Check for attendance presence (either nested or flat)
         const hasData = detail.hasAttendance || detail.checkInTime || detail.checkOutTime;
         if (hasData) {
-          const attData = (detail.attendanceData || detail) as any; // Cast to any để access dynamic fields
+          // ⭐ Ưu tiên lấy dữ liệu đã tính toán từ detail (top level), sau đó mới đến attendanceData (nếu có)
+          const attData = {
+            ...(detail.attendanceData || {}),
+            ...detail
+          } as any;
 
           // Format checkIn/checkOut time để hiển thị
           // ✨ FIX: Backend returns 'HH:mm', no need to re-format (which risks Invalid Date)
@@ -388,14 +392,17 @@ const AttendanceSimplePage = () => {
             date: detail.date,
             checkInTime,
             checkOutTime,
-            // Map field names từ API sang format cũ của modal
-            totalHours: parseFloat(attData.dailyTotalWorkHours || '0'),
-            overtime: otHours, // ⭐ Chuyển đổi từ phút sang giờ
-            otSalary: parseFloat(attData.otSalary || '0'), // ⭐ Lương OT
+            // Map field names từ API sang format cũ của modal và calendar tile
+            totalWorkingUnit: parseFloat(attData.totalWorkingUnit || attData.totalWorkingUnits || attData.workingUnit || attData.dailyWorkingUnit || '0'),
+            otWorkingUnit: parseFloat(attData.otWorkingUnit || attData.otWorkingUnits || '0'),
+            effectiveOtWorkingUnit: parseFloat(attData.effectiveOtWorkingUnit || '0'),
+            totalHours: parseFloat(attData.dailyTotalWorkHours || attData.totalHours || '0'),
+            overtime: otHours || parseFloat(attData.overtimeHours || '0'), // ⭐ Chuyển đổi từ phút sang giờ hoặc lấy giờ từ API
+            otSalary: parseFloat(attData.otSalary || attData.totalOvertimePay || attData.totalOvertimeSalary || '0'),
             lateMinutes: parseFloat(attData.lateMinutes || '0'),
-            earlyDepartureMinutes: parseFloat(attData.earlyDepartureMinutes || '0'),
-            lateArrivalPenalty: parseFloat(attData.lateArrivalPenalty || '0'),
-            earlyLeavePenalty: parseFloat(attData.earlyLeavePenalty || '0')
+            earlyDepartureMinutes: parseFloat(attData.earlyLeaveMinutes || attData.earlyDepartureMinutes || '0'),
+            lateArrivalPenalty: parseFloat(attData.lateArrivalPenalty || attData.totalLatePenalty || '0'),
+            earlyLeavePenalty: parseFloat(attData.earlyLeavePenalty || attData.totalEarlyLeavePenalty || '0')
           });
         }
       });
@@ -648,7 +655,11 @@ const AttendanceSimplePage = () => {
                   if (dailyDetail?.status === 'approved_leave') return 'status-leave';
 
                   // Kiểm tra ngày có phạt chấm công (đi muộn hoặc về sớm)
-                  const hasPenaltyTime = attendance && (attendance.lateMinutes > 0 || attendance.earlyDepartureMinutes > 0);
+                  const hasPenaltyTime = attendance && (
+                    (attendance.lateMinutes && attendance.lateMinutes > 0) ||
+                    (attendance.earlyDepartureMinutes && attendance.earlyDepartureMinutes > 0) ||
+                    (attendance.earlyLeaveMinutes && attendance.earlyLeaveMinutes > 0)
+                  );
 
                   // Ngày bị phạt chấm công -> background đỏ
                   if (hasPenaltyTime) return 'status-penalty';
@@ -798,9 +809,9 @@ const AttendanceSimplePage = () => {
                             </div>
                           )}
                           {/* ✨ Display Total Daily Units clearly */}
-                          {(attendance.totalWorkingUnit > 0) && (
+                          {(attendance.totalWorkingUnit > 0 || (attendance.totalWorkingUnits > 0)) && (
                             <div style={{ color: '#4096ff', fontSize: isMobile ? 9 : 11, fontWeight: 400 }}>
-                              Công: {Number(attendance.totalWorkingUnit).toFixed(2)}
+                              Công: {(attendance.totalWorkingUnit || attendance.totalWorkingUnits).toFixed(2)}
                             </div>
                           )}
                           <div style={{ color: hasTimePenalty ? '#ff4d4f' : '#666', fontSize: isMobile ? 9 : 11 }}>
