@@ -4,7 +4,29 @@ import { message } from 'antd';
 import moment from 'moment-timezone';
 import { getDecodedToken } from '../utils/decode-token';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_GATEWAY_URL || '';
+// --- Hàm xác định API URL động dựa trên trình duyệt ---
+const getApiBaseUrl = () => {
+  // 1. Môi trường Browser (Client-side)
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+
+    // Nếu đang chạy Localhost (máy tính dev), ưu tiên dùng config từ .env hoặc fallback localhost
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:4000';
+    }
+
+    // Nếu đang chạy qua LAN IP (ví dụ điện thoại truy cập 192.168.1.x)
+    // Tự động trỏ API về cùng IP đó với cổng 4000
+    // Lưu ý: Cổng API Gateway được cố định là 4000 cho môi trường Local mới
+    return `http://${hostname}:4000`;
+  }
+
+  // 2. Môi trường Server (SSR)
+  // Luôn dùng config từ .env vì không có window để check IP
+  return process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:4000';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 // --- Hàm để xây dựng FormData (copy từ BaseService) ---
 function buildFormData(formData: FormData, data: any, parentKey?: string) {

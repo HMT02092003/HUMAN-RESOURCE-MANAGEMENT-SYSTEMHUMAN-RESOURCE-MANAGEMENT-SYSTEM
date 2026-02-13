@@ -5,15 +5,21 @@ import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
 import axios from 'axios';
-import os from 'os';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+dayjs.extend(isSameOrBefore);
+
 import TimeAttendanceModel from '@/Models/TimeAttendanceModel';
 import MonthlySummaryModel from '@/Models/MonthlySummaryModel';
 import {
-  getWorkingDaysConfig as helpersGetWorkingDaysConfig,
-  isWorkingDay as helpersIsWorkingDay,
-  checkDateHasLeave as helpersCheckDateHasLeave,
-  checkDateHasBusinessTrip as helpersCheckDateHasBusinessTrip
+  checkDateHasLeave,
+  checkDateHasBusinessTrip,
+  getWorkingDaysConfig,
+  isWorkingDay,
+  // checkDateHasHoliday as checkHasHoliday
 } from './AttendanceHelpers';
+import * as AttendanceHelpers from './AttendanceHelpers';
 import HolidayModel from '@/Models/HolidayModel';
 import knex from 'knex';
 
@@ -21,18 +27,7 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(isSameOrBefore);
 
-// Helper function to get local IP address
-function getLocalIpAddress(): string {
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    for (const iface of interfaces[name]!) {
-      if (iface.family === 'IPv4' && !iface.internal) {
-        return iface.address;
-      }
-    }
-  }
-  return '127.0.0.1';
-}
+
 
 // Helper function to get user startDate from auth-service database directly
 async function getUserStartDate(userId: number): Promise<string | null> {
@@ -44,7 +39,7 @@ async function getUserStartDate(userId: number): Promise<string | null> {
       connection: {
         host: process.env['DB_HOST'] || 'localhost',
         port: Number(process.env['DB_PORT']) || 5432,
-        database: 'auth_service', // Auth service database name
+        database: 'auth_service_final', // Auth service database name
         user: process.env['DB_USER'] || 'postgres',
         password: process.env['DB_PASSWORD'] || '123456'
       }
@@ -73,7 +68,7 @@ async function getUserStartDate(userId: number): Promise<string | null> {
   }
 }
 
-const API_GATEWAY_URL = `http://${getLocalIpAddress()}:${process.env['API_GATEWAY_PORT'] || 4000}`;
+
 
 interface WorkingHours {
   start: string;
@@ -172,20 +167,15 @@ export class AttendanceCalculationService {
     }
   }
 
-  public static async getUserMonthlyAttendance(userId: number, month: string, token?: string, useMonthlySummaryOnly: boolean = false): Promise<any | null> {
+  public static async getUserMonthlyAttendance(userId: number, month: string, _token?: string, useMonthlySummaryOnly: boolean = false, preFetchedApps?: any[]): Promise<any | null> {
+    console.log(`🔍 [AttendanceCalculationService] getUserMonthlyAttendance: userId=${userId}, month=${month}`);
     try {
       const startDate = dayjs(`${month}-01`).startOf('month').format('YYYY-MM-DD');
       const endDate = dayjs(`${month}-01`).endOf('month').format('YYYY-MM-DD');
 
-      // ✨ Lấy thông tin user startDate trực tiếp từ database của auth-service
       const userStartDate = await getUserStartDate(userId);
-      if (userStartDate) {
-        console.log(`👤 [getUserMonthlyAttendance] User ${userId} started working on: ${userStartDate}`);
-      }
-
       const monthlyRecord = await MonthlySummaryModel.getByUserAndMonth(userId, month);
-      // If caller explicitly requests to use the monthly summary only and a snapshot exists,
-      // return the stored dailyDetails directly without performing enrichment/recalculation.
+
       if (useMonthlySummaryOnly && monthlyRecord && (monthlyRecord as any)['dailyDetails']) {
         try {
           const dailyDetails = JSON.parse((monthlyRecord as any)['dailyDetails']);
@@ -204,33 +194,26 @@ export class AttendanceCalculationService {
             isApproved: !!isApprovedFlag,
             attendanceData: dailyDetails
           };
-        } catch (e) {
-          // parse error - fall through to enrichment path
-        }
+        } catch (e) { /* fall through */ }
       }
-      // Always load raw rows for the month. We'll enrich them into a full-month dataset below
+
       const rawAttendanceRows = await TimeAttendanceModel.query()
         .where('userId', userId)
         .whereBetween('date', [startDate, endDate])
         .orderBy('date', 'asc');
 
-      const attendancePlain = rawAttendanceRows.map((r: any) => (r.toJSON ? r.toJSON() : { ...r }));
+      const attendanceMap = new Map<string, any>();
+      rawAttendanceRows.forEach((r: any) => {
+        const dateKey = dayjs(r.date).format('YYYY-MM-DD');
+        attendanceMap.set(dateKey, r.toJSON ? r.toJSON() : { ...r });
+      });
 
-      // Note: if monthlyRecord exists we still want to return a full-month, enriched attendanceData
-      // that includes leave/business-trip markers for days without TimeAttendance rows. We'll reuse
-      // the enrichment logic below (approvedApplications, attendanceMap, enrichedAttendanceData).
-
-      const attendanceData = attendancePlain; // use preloaded rows
-
-      const workingDaysConfig = await helpersGetWorkingDaysConfig();
-
-      // ✨ Load holidays using Objection.js HolidayModel
+      const workingDaysConfig = await getWorkingDaysConfig();
       const holidayRows: any[] = await HolidayModel.query()
         .where(function () {
           this.whereBetween('start_date', [startDate, endDate])
             .orWhereBetween('end_date', [startDate, endDate])
             .orWhere(function () {
-              // Trường hợp kỳ nghỉ lễ bao trùm cả tháng
               this.where('start_date', '<=', startDate).andWhere('end_date', '>=', endDate);
             });
         })
@@ -239,41 +222,31 @@ export class AttendanceCalculationService {
 
       const holidaySet = new Set<string>();
       const holidayInfoMap = new Map<string, { name: string; isPublic: boolean }>();
-
       for (const hr of holidayRows) {
-        // Bảng holidays chỉ có start_date và end_date (không có cột date riêng lẻ)
         if (hr.start_date && hr.end_date) {
           let cur = dayjs(hr.start_date);
           const end = dayjs(hr.end_date);
           while (cur.isBefore(end) || cur.isSame(end, 'day')) {
             const dateKey = cur.format('YYYY-MM-DD');
             holidaySet.add(dateKey);
-            // importance >= 2 được coi là ngày lễ công ty (isPublic: true)
             holidayInfoMap.set(dateKey, { name: hr.name || 'Ngày lễ', isPublic: (hr.importance || 0) >= 2 });
             cur = cur.add(1, 'day');
           }
         }
       }
 
-      console.log(`🎉 [attendance] Found ${holidaySet.size} holiday dates in ${month}:`, Array.from(holidaySet));
-
-      const [year, monthNum] = month.split('-');
       const approvedApplications: ApprovedLeaveApplication[] = [];
-      try {
-        const headers: any = { 'Content-Type': 'application/json' };
-        if (token) headers['Authorization'] = `Bearer ${token}`;
-        const appResp = await axios.get(`${process.env['APPLICATION_SERVICE_URL'] || 'http://127.0.0.1:4008'}/api/applications/user/${userId}/approved`, { params: { year: parseInt(year || ''), month: parseInt(monthNum || '') }, headers });
-        approvedApplications.push(...(appResp.data.data || []));
-      } catch (e) {
-        // ignore
+      if (preFetchedApps) {
+        approvedApplications.push(...preFetchedApps);
+      } else {
+        try {
+          const [year, monthNum] = month.split('-');
+          const url = `${process.env['APPLICATION_SERVICE_URL'] || 'http://127.0.0.1:4008'}/api/applications/user/${userId}/approved`;
+          const appResp = await axios.get(url, { params: { year: parseInt(year || ''), month: parseInt(monthNum || '') } });
+          const apps = appResp.data.data || [];
+          approvedApplications.push(...apps);
+        } catch (e) { console.error('Error fetching apps:', (e as any).message); }
       }
-
-      const attendanceMap = new Map<string, any>();
-      attendanceData.forEach((record: any) => {
-        const dateKey = dayjs(record.date).format('YYYY-MM-DD');
-        const plainRecord = record.toJSON ? record.toJSON() : { ...record };
-        attendanceMap.set(dateKey, plainRecord);
-      });
 
       const daysInMonth = dayjs(`${month}-01`).daysInMonth();
       const enrichedAttendanceData: any[] = [];
@@ -282,129 +255,244 @@ export class AttendanceCalculationService {
         const currentDate = dayjs(`${month}-${String(day).padStart(2, '0')}`);
         const dateKey = currentDate.format('YYYY-MM-DD');
 
-        // ✨ Bỏ qua những ngày trước startDate
-        if (userStartDate && dayjs(dateKey).isBefore(userStartDate, 'day')) {
-          continue;
-        }
+        if (userStartDate && dayjs(dateKey).isBefore(userStartDate, 'day')) continue;
 
-        const isWork = helpersIsWorkingDay(dateKey, workingDaysConfig);
-        const isFuture = currentDate.isAfter(dayjs(), 'day');
-        const attendanceRecord = attendanceMap.get(dateKey);
-        const leaveCheck = helpersCheckDateHasLeave(dateKey, approvedApplications as any);
-        const businessTripCheck = helpersCheckDateHasBusinessTrip(dateKey, approvedApplications as any);
-
-        const hasApprovedOT = approvedApplications.some(app => {
-          if (app.type !== 'overtime') return false;
-          const appData = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
-          return appData.date === dateKey;
-        });
-
-        // ✨ Kiểm tra xem ngày này có phải ngày lễ không
         const isHoliday = holidaySet.has(dateKey);
         const holidayInfo = holidayInfoMap.get(dateKey);
+        const isWork = isWorkingDay(dateKey, workingDaysConfig);
+        const attendanceRecord = attendanceMap.get(dateKey);
 
-        const dayRecord: any = {
-          date: currentDate.toISOString(),
+        // 🔍 DEBUG LOG: Trace specific dates or all dates
+        if (dateKey === '2026-02-12' || dateKey.endsWith('12')) {
+          console.log(`🔍 [${dateKey}] Loop Start. isHoliday=${isHoliday}, hasRecord=${!!attendanceRecord}, RawCheckIn=${attendanceRecord?.checkInTime}`);
+        }
+        const leaveCheck = checkDateHasLeave(dateKey, approvedApplications as any);
+        const businessTripCheck = checkDateHasBusinessTrip(dateKey, approvedApplications as any);
+
+        const otApp = approvedApplications.find(a => {
+          if (a.type !== 'overtime') return false;
+          const d = typeof a.data === 'string' ? JSON.parse(a.data) : a.data;
+          const appDate = d.overtimeDate || d.date;
+          const normalizedAppDate = appDate ? dayjs(appDate).format('YYYY-MM-DD') : null;
+          return normalizedAppDate === dateKey;
+        });
+        const hasApprovedOT = !!otApp;
+
+        let dayRecord: any = {
+          date: currentDate.format('YYYY-MM-DD'),
           userId,
-          isWorkingDay: isWork,
-          isFuture,
-          hasApprovedOT,
-          // Keep legacy fields for backward compatibility
-          hasApprovedLeave: leaveCheck.hasLeave,
-          leaveType: leaveCheck.leaveType,
-          leaveInfo: leaveCheck.leaveInfo,
-          type: leaveCheck.hasLeave ? leaveCheck.leaveType : (businessTripCheck.hasBusinessTrip ? 'business-trip' : 'attendance'),
-          hasBusinessTrip: businessTripCheck.hasBusinessTrip,
-          businessTripInfo: businessTripCheck.tripInfo,
-          businessTripDestination: businessTripCheck.destination,
-          tripInfo: businessTripCheck.tripInfo,
-          destination: businessTripCheck.destination,
           isHoliday,
           holidayName: holidayInfo?.name || null,
-          isPublicHoliday: holidayInfo?.isPublic || false
+          isPublicHoliday: holidayInfo?.isPublic || false,
+          isWorkingDay: isWork,
+          hasApprovedOT,
+          hasApprovedLeave: leaveCheck.hasLeave,
+          leaveType: leaveCheck.leaveType,
+          isPaidLeave: (leaveCheck as any).isPaidLeave,
+          hasBusinessTrip: businessTripCheck.hasBusinessTrip,
+          type: leaveCheck.hasLeave ? leaveCheck.leaveType : (businessTripCheck.hasBusinessTrip ? 'business-trip' : 'attendance')
         };
 
-        if (attendanceRecord) {
+        if (leaveCheck.hasLeave || businessTripCheck.hasBusinessTrip) {
+          Object.assign(dayRecord, {
+            id: null, checkInTime: null, checkOutTime: null,
+            lateMinutes: 0, earlyDepartureMinutes: 0, dailyTotalWorkHours: 0,
+            lateArrivalPenalty: 0, earlyLeavePenalty: 0, otMinutes: 0, otSalary: 0,
+            totalWorkingUnit: 0, otWorkingUnit: 0, dailyWorkingUnit: 0
+          });
+        } else if (attendanceRecord) {
           Object.assign(dayRecord, {
             ...attendanceRecord,
-            date: currentDate.toISOString(),
-            userId,
-            isWorkingDay: isWork,
-            isFuture,
-            hasApprovedOT,
-            hasApprovedLeave: leaveCheck.hasLeave,
-            leaveType: leaveCheck.leaveType,
-            leaveInfo: leaveCheck.leaveInfo,
-            type: leaveCheck.hasLeave ? leaveCheck.leaveType : (businessTripCheck.hasBusinessTrip ? 'business_trip' : 'attendance'),
-            hasBusinessTrip: businessTripCheck.hasBusinessTrip,
-            businessTripInfo: businessTripCheck.tripInfo,
-            businessTripDestination: businessTripCheck.destination,
-            tripInfo: businessTripCheck.tripInfo,
-            destination: businessTripCheck.destination,
-            isHoliday,
-            holidayName: holidayInfo?.name || null,
-            isPublicHoliday: holidayInfo?.isPublic || false
+            date: dayjs(attendanceRecord.date).format('YYYY-MM-DD'),
+            // ✨ Format times safely to HH:mm in VN timezone for frontend
+            // Logic: Check if it looks like HH:mm or HH:mm:ss first. If so, substring. Else, try parse.
+            checkInTime: (() => {
+              const val = attendanceRecord.checkInTime;
+              if (!val) return null;
+              if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(val)) return val.substring(0, 5);
+              const d = dayjs(val);
+              return d.isValid() ? d.tz('Asia/Ho_Chi_Minh').format('HH:mm') : null;
+            })(),
+            checkOutTime: (() => {
+              const val = attendanceRecord.checkOutTime;
+              if (!val) return null;
+              if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(val)) return val.substring(0, 5);
+              const d = dayjs(val);
+              return d.isValid() ? d.tz('Asia/Ho_Chi_Minh').format('HH:mm') : null;
+            })()
           });
+          // Ensure calculated hasApprovedOT is not clobbered by DB record
+          dayRecord.hasApprovedOT = hasApprovedOT;
         } else {
-          dayRecord.id = null;
-          dayRecord.checkInTime = null;
-          dayRecord.checkOutTime = null;
-          dayRecord.lateMinutes = 0;
-          dayRecord.earlyDepartureMinutes = 0;
-          dayRecord.dailyTotalWorkHours = 0;
-          dayRecord.lateArrivalPenalty = 0;
-          dayRecord.earlyLeavePenalty = 0;
-          dayRecord.otMinutes = 0;
-          dayRecord.otSalary = 0;
+          Object.assign(dayRecord, {
+            id: null, checkInTime: null, checkOutTime: null,
+            lateMinutes: 0, earlyDepartureMinutes: 0, dailyTotalWorkHours: 0,
+            lateArrivalPenalty: 0, earlyLeavePenalty: 0, otMinutes: 0, otSalary: 0,
+            totalWorkingUnit: 0, otWorkingUnit: 0, dailyWorkingUnit: 0
+          });
         }
 
+        // ✨ Special override for Holiday logic
+        if (isHoliday && hasApprovedOT) {
+          const appData = typeof otApp!.data === 'string' ? JSON.parse(otApp!.data) : otApp!.data;
+
+          // ✨ ATTACH OVERTIME DATA for frontend modal to show specific OT details
+          (dayRecord as any).overtimeData = {
+            hasApprovedOT: true,
+            application: {
+              ...otApp,
+              data: appData
+            }
+          };
+
+          // ✨ DETECT DURATION: Support multiple field names from different application versions
+          const rawDuration = appData.totalHours || appData.overtimeHours || appData.overtime_hours || appData.duration || 0;
+          const otDuration = parseFloat(rawDuration.toString().replace(/[^0-9.]/g, ''));
+
+          // Normalize start time: could be 'HH:mm' or ISO string
+          let rawStart = appData.startTime || appData.start_time || '08:00';
+          let startTimeFormatted = rawStart;
+
+          // If ISO string, format to HH:mm
+          if (rawStart.includes('T') || rawStart.length > 8) {
+            startTimeFormatted = dayjs(rawStart).tz('Asia/Ho_Chi_Minh').format('HH:mm');
+          }
+
+          let endTimeFormatted: string;
+          let rawEnd = appData.endTime || appData.end_time;
+
+          if (!rawEnd && otDuration > 0) {
+            // Calculate end time realistically: Start Time + Duration
+            const fullStart = startTimeFormatted.length <= 5 ? `${dateKey} ${startTimeFormatted}` : startTimeFormatted;
+            const calculatedEnd = dayjs(fullStart).add(otDuration, 'hour');
+            endTimeFormatted = calculatedEnd.tz('Asia/Ho_Chi_Minh').format('HH:mm');
+            console.log(`⏱️ Derived Holiday OT End Time: ${startTimeFormatted} + ${otDuration}h = ${endTimeFormatted}`);
+          } else if (!rawEnd) {
+            // Last resort fallback
+            endTimeFormatted = '17:00';
+          } else {
+            // Use provided end time (HH:mm:ss or ISO)
+            endTimeFormatted = rawEnd.includes('T') || rawEnd.length > 8
+              ? dayjs(rawEnd).tz('Asia/Ho_Chi_Minh').format('HH:mm')
+              : rawEnd.substring(0, 5);
+          }
+
+          dayRecord.shift = {
+            name: 'Làm thêm ngày lễ',
+            start_time: startTimeFormatted,
+            end_time: endTimeFormatted
+          };
+          dayRecord.shiftName = 'Làm thêm ngày lễ';
+
+          // ✨ RE-CALCULATE for accurate UI (Late, Early Leave, Penalties based on OT window)
+          if (attendanceRecord && (attendanceRecord.checkInTime || attendanceRecord.checkOutTime)) {
+            try {
+              const calc = await AttendanceCalculationService.calculateAttendance(
+                attendanceRecord.checkInTime,
+                attendanceRecord.checkOutTime,
+                dateKey,
+                userId,
+                _token,
+                endTimeFormatted,
+                true,
+                undefined,
+                startTimeFormatted
+              );
+
+              // Sync results to dayRecord
+              dayRecord.lateMinutes = calc.lateMinutes;
+              dayRecord.earlyDepartureMinutes = calc.earlyDepartureMinutes;
+              dayRecord.lateArrivalPenalty = calc.latePenaltyAmount;
+              dayRecord.earlyLeavePenalty = calc.earlyLeavePenaltyAmount;
+              dayRecord.dailyTotalWorkHours = calc.workHours;
+              dayRecord.totalWorkingUnit = calc.totalWorkingUnit;
+              dayRecord.otWorkingUnit = calc.otWorkingUnit;
+              dayRecord.dailyWorkingUnit = calc.dailyWorkingUnit;
+              dayRecord.overtimeHours = calc.overtimeHours;
+            } catch (e) {
+              console.error('Error recalcing holiday OT:', e);
+            }
+          }
+        }
+        else if (isHoliday) {
+          // ✨ CHANGED: If there is attendance data (user worked), DO NOT hide it.
+          // Show the actual work regardless of OT approval status (though pay might differ)
+          if (attendanceRecord && (attendanceRecord.checkInTime || attendanceRecord.checkOutTime)) {
+            if (dateKey.includes('12')) console.log(`🔍 [${dateKey}] Holiday WITH Attendance -> KEEPING DATA`);
+            // Keep shift and times as is from DB/calculation
+            // Ensure unit is not zeroed out if DB has value
+            dayRecord.dailyWorkingUnit = dayRecord.dailyWorkingUnit || 0;
+          } else {
+            if (dateKey.includes('12')) console.log(`🔍 [${dateKey}] Holiday NO Attendance -> CLEARING DATA`);
+            // Only hide if NO attendance record exists
+            dayRecord.shift = null;
+            dayRecord.shiftName = null;
+            dayRecord.checkInTime = null;
+            dayRecord.checkOutTime = null;
+            dayRecord.dailyTotalWorkHours = 0;
+            dayRecord.dailyWorkingUnit = 0;
+            dayRecord.totalWorkingUnit = 0;
+            dayRecord.otWorkingUnit = 0;
+            dayRecord.lateMinutes = 0;
+            dayRecord.earlyDepartureMinutes = 0;
+            dayRecord.lateArrivalPenalty = 0;
+            dayRecord.earlyLeavePenalty = 0;
+          }
+        }
+
+        // Final unit calculation for leave/trip markers
+        if (!attendanceRecord && !isHoliday) {
+          if (dayRecord.hasApprovedLeave && dayRecord.isPaidLeave) {
+            dayRecord.dailyWorkingUnit = 1.0;
+            dayRecord.totalWorkingUnit = 1.0;
+          } else if (dayRecord.hasBusinessTrip) {
+            dayRecord.dailyWorkingUnit = 1.0;
+            dayRecord.totalWorkingUnit = 1.0;
+          }
+        }
+
+        if (dateKey.includes('12')) {
+          console.log(`🔍 [${dateKey}] Loop End. Final CheckIn=${dayRecord.checkInTime}, Unit=${dayRecord.dailyWorkingUnit}, Shift=${dayRecord.shiftName}`);
+        }
         enrichedAttendanceData.push(dayRecord);
       }
 
-      const isApproved = await MonthlySummaryModel.isApproved(userId, month);
+      // Aggregate totals
+      let totalWorkDays = 0, totalWorkHours = 0, totalPenalty = 0, totalWorkingUnits = 0, totalOtWorkingUnits = 0;
+      let totalOtHours = 0, totalPaidLeaveDays = 0, totalUnpaidLeaveDays = 0;
 
-      const totalLateDays = await AttendanceCalculationService.calculateTotalLateDays(userId, month);
-      const totalEarlyLeaveDays = await AttendanceCalculationService.calculateTotalEarlyLeaveDays(userId, month);
+      enrichedAttendanceData.forEach((r) => {
+        if (r.checkInTime && r.checkOutTime) totalWorkDays++;
+        totalWorkHours += parseFloat((r.dailyTotalWorkHours || 0).toString());
+        totalPenalty += parseFloat((r.lateArrivalPenalty || 0).toString()) + parseFloat((r.earlyLeavePenalty || 0).toString());
+        totalWorkingUnits += parseFloat((r.dailyWorkingUnit || 0).toString());
+        totalOtWorkingUnits += parseFloat((r.otWorkingUnit || 0).toString());
+        totalOtHours += parseFloat((r.overtimeHours || 0).toString());
 
-      let totalWorkDays = 0;
-      let totalWorkHours = 0;
-      let totalPenalty = 0;
-
-      enrichedAttendanceData.forEach(record => {
-        if (record.checkInTime && record.checkOutTime) {
-          totalWorkDays++;
-          totalWorkHours += parseFloat((record.dailyTotalWorkHours || 0).toString());
-          // Skip otMinutes and otSalary - they're deprecated, use otWorkingUnit instead
-          totalPenalty += parseFloat((record.lateArrivalPenalty || 0).toString()) + parseFloat((record.earlyLeavePenalty || 0).toString());
+        if (r.hasApprovedLeave) {
+          if (r.isPaidLeave) totalPaidLeaveDays++;
+          else totalUnpaidLeaveDays++;
         }
       });
 
-      // If there is an existing monthlyRecord use its totals to preserve any manual adjustments
-      const totalsFromDb = monthlyRecord ? {
-        presentDays: parseFloat((monthlyRecord.presentDays ?? totalWorkDays).toString()) || totalWorkDays,
-        totalWorkHours: parseFloat((monthlyRecord.totalWorkHours ?? totalWorkHours).toString()) || Math.round(totalWorkHours * 100) / 100,
-        totalOvertimeHours: parseFloat((monthlyRecord.totalOvertimeHours ?? 0).toString()) || 0,
-        totalLateDays: parseFloat((monthlyRecord.lateDays ?? totalLateDays).toString()) || totalLateDays,
-        totalEarlyLeaveDays: parseFloat((monthlyRecord.earlyLeaveDays ?? totalEarlyLeaveDays).toString()) || totalEarlyLeaveDays,
-        totalPenalty: parseFloat((monthlyRecord.totalPenalty ?? Math.round(totalPenalty * 100) / 100).toString()) || Math.round(totalPenalty * 100) / 100,
-        totalWorkingUnits: parseFloat((monthlyRecord.totalWorkingUnits ?? 0).toString()) || 0,
-        totalOtWorkingUnits: parseFloat((monthlyRecord.totalOtWorkingUnits ?? 0).toString()) || 0,
-        isApproved: monthlyRecord ? !!isApproved : isApproved
-      } : null;
+      const totalLateDays = await AttendanceCalculationService.calculateTotalLateDays(userId, month);
+      const totalEarlyLeaveDays = await AttendanceCalculationService.calculateTotalEarlyLeaveDays(userId, month);
+      const isApproved = await MonthlySummaryModel.isApproved(userId, month);
 
+      // Return real-time calculated totals to ensure UI accuracy
       return {
-        userId,
+        userId, month,
         user: { id: userId, name: 'N/A', email: 'N/A', departmentId: monthlyRecord?.departmentId || 0, department: { id: monthlyRecord?.departmentId || 0, name: 'N/A' } },
-        month,
-        presentDays: totalsFromDb ? totalsFromDb.presentDays : totalWorkDays,
-        totalWorkHours: totalsFromDb ? totalsFromDb.totalWorkHours : Math.round(totalWorkHours * 100) / 100,
-        totalOvertimeHours: totalsFromDb ? totalsFromDb.totalOvertimeHours : 0,
-        totalLateDays: totalsFromDb ? totalsFromDb.totalLateDays : totalLateDays,
-        totalEarlyLeaveDays: totalsFromDb ? totalsFromDb.totalEarlyLeaveDays : totalEarlyLeaveDays,
-        totalPenalty: totalsFromDb ? totalsFromDb.totalPenalty : Math.round(totalPenalty * 100) / 100,
-        totalWorkingUnits: totalsFromDb ? totalsFromDb.totalWorkingUnits : 0,
-        totalOtWorkingUnits: totalsFromDb ? totalsFromDb.totalOtWorkingUnits : 0,
-        isApproved: totalsFromDb ? totalsFromDb.isApproved : isApproved,
+        presentDays: totalWorkDays,
+        totalWorkHours: Math.round(totalWorkHours * 100) / 100,
+        totalOvertimeHours: Math.round(totalOtHours * 100) / 100,
+        totalLateDays: totalLateDays,
+        totalEarlyLeaveDays: totalEarlyLeaveDays,
+        totalPenalty: Math.round(totalPenalty * 100) / 100,
+        totalWorkingUnits: Math.round(totalWorkingUnits * 100) / 100,
+        totalOtWorkingUnits: Math.round(totalOtWorkingUnits * 100) / 100,
+        totalPaidLeaveDays, totalUnpaidLeaveDays,
+        isApproved: !!isApproved,
         attendanceData: enrichedAttendanceData
       };
     } catch (error) {
@@ -480,13 +568,18 @@ export class AttendanceCalculationService {
         return salaryInfo;
       }
 
-      console.log('⚠️ No salary info found for user - penalty will be 0');
+      console.log('⚠️ Will set penalty to 0 and continue attendance recording');
       return null;
     } catch (error) {
       console.error('❌ Error getting user salary info from salary-service:', error);
       console.log('⚠️ Will set penalty to 0 and continue attendance recording');
       return null;
     }
+  }
+
+  static async calculateTotalLeaveDays(_userId: number, _month: string): Promise<{ paid: number, unpaid: number }> {
+    // Helper to count leave days if needed, but simpler to do in aggregation
+    return { paid: 0, unpaid: 0 };
   }
 
   // Tính toán tiền phạt dựa trên lương thực tế
@@ -518,15 +611,15 @@ export class AttendanceCalculationService {
   private static async getSettings() {
     console.log('🔧 ATTENDANCE CALCULATION SERVICE - Getting settings...');
     try {
-      // Fetch penalty rates from salary-service
-      const penaltyRates = await SalaryService.fetchPenaltyRates();
-
-      // Use SettingsService (attendance-service) to fetch attendance-related settings only
-      const [workingHoursVal, lunchBreakVal, overtimeRateVal, holidayRateVal] = await Promise.all([
+      // Use SettingsService (attendance-service) to fetch attendance-related settings
+      const [workingHoursVal, lunchBreakVal, overtimeRateVal, holidayRateVal, otRateInUnits, holidayOtRateInUnits, penaltyRateVal] = await Promise.all([
         SettingsService.getSettingValue('WorkingHours'),
         SettingsService.getSettingValue('LunchBreak'),
         SettingsService.getSettingValue('OvertimeRate'),
         SettingsService.getSettingValue('HolidayRate'),
+        SettingsService.getSettingValue('OvertimeRateInUnits'),
+        SettingsService.getSettingValue('HolidayOvertimeRateInUnits'),
+        SettingsService.getSettingValue('PenaltyRate'),
       ]);
 
       const defaults = this.getDefaultSettings();
@@ -534,10 +627,10 @@ export class AttendanceCalculationService {
       return {
         workingHours: workingHoursVal || defaults.workingHours,
         lunchBreak: lunchBreakVal || defaults.lunchBreak,
-        overtimeRate: overtimeRateVal || defaults.overtimeRate,
-        holidayRate: holidayRateVal || defaults.holidayRate,
-        // Use penalty rate from salary-service, fallback to default
-        penaltyRate: penaltyRates ? { rate: penaltyRates.late } : defaults.penaltyRate
+        overtimeRate: otRateInUnits || overtimeRateVal || defaults.overtimeRate,
+        holidayRate: holidayOtRateInUnits || holidayRateVal || defaults.holidayRate,
+        // Use penalty rate from local settings, fallback to default
+        penaltyRate: penaltyRateVal ? { rate: penaltyRateVal.rate } : defaults.penaltyRate
       };
     } catch (error) {
       console.error('❌ Error getting settings:', error);
@@ -565,19 +658,80 @@ export class AttendanceCalculationService {
     approvedOtEndTime?: string | null,
     isHoliday?: boolean, // Thêm tham số để xác định ngày lễ
     shiftInfo?: { id: number; name: string; start_time: string; end_time: string; working_unit: number; is_default: boolean }, // ✨ Shift info
-    approvedOtStartTime?: string | null // ✨ OT start time để tính OT chính xác
+    approvedOtStartTime?: string | null, // ✨ OT start time để tính OT chính xác
+    isWeekend?: boolean // ✨ New param for Saturday/Sunday
   ): Promise<AttendanceCalculation & { standardHours: number }> {
     console.log('🧮 Starting attendance calculation for:', { date, checkInTime, checkOutTime, userId, approvedOtEndTime, isHoliday, shiftInfo });
+
+    // ✨ Auto-detect holiday if not explicit
+    if (isHoliday === undefined) {
+      const holidayCheck = await AttendanceHelpers.checkDateHasHoliday(date as string);
+      isHoliday = holidayCheck.isHoliday;
+      if (isHoliday) console.log(`🎉 Auto-detected holiday: ${holidayCheck.holidayName || 'Unknown'}`);
+    }
 
     const settings = await this.getSettings();
     const lunchBreak = settings.lunchBreak as LunchBreak;
     const penaltyRate = (settings.penaltyRate as PenaltyConfig).rate;
 
-    // ✨ Sử dụng shift info nếu có, không dùng WorkingHours từ settings nữa
+    // ✨ Sử dụng shift info hoặc OT time nếu có
     let workingHours: WorkingHours;
+    // Tính số giờ chuẩn (standardHours)
     let standardHours = 8;
+    // ✨ Biến lưu số giờ OT đã duyệt để dùng khi tính công ngày lễ
+    let approvedOtDurationHours = 0;
 
-    if (shiftInfo) {
+    // ✨ ƯU TIÊN 0: Nếu ngày lễ nhưng KHÔNG có đơn OT -> Coi như ngày nghỉ (không tính công)
+    // "nếu không có đơn OT thì dù có chấm công thì ... không được tính"
+    if (isHoliday && (!approvedOtStartTime || !approvedOtEndTime)) {
+      console.log('🎉 Holiday with NO Approved OT. Treating as non-working day (0 stats).');
+      return {
+        workHours: 0,
+        lateMinutes: 0,
+        earlyDepartureMinutes: 0,
+        otMinutes: 0,
+        otSalary: 0,
+        isLate: false,
+        isEarlyLeave: false,
+        penaltyRate,
+        latePenaltyAmount: 0,
+        earlyLeavePenaltyAmount: 0,
+        dailyWorkingUnit: 0,
+        totalWorkingUnit: 0,
+        otWorkingUnit: 0,
+        overtimeHours: 0,
+        standardHours: 0
+      };
+    }
+
+    // ✨ ƯU TIÊN 1: Nếu có OT đã duyệt (approvedOtEndTime)
+    // Trường hợp này thường dùng cho làm thêm ngày lễ/cuối tuần
+    if (approvedOtEndTime && approvedOtStartTime) {
+      // Extract HH:mm from ISO strings if needed, or use as is if already HH:mm
+      const startTime = approvedOtStartTime.includes('T') ? dayjs(approvedOtStartTime).format('HH:mm') : approvedOtStartTime.substring(0, 5);
+      const endTime = approvedOtEndTime.includes('T') ? dayjs(approvedOtEndTime).format('HH:mm') : approvedOtEndTime.substring(0, 5);
+
+      workingHours = {
+        start: startTime,
+        end: endTime
+      };
+
+      const startStr = approvedOtStartTime.length <= 8 ? `${date} ${approvedOtStartTime}` : approvedOtStartTime;
+      const endStr = approvedOtEndTime.length <= 8 ? `${date} ${approvedOtEndTime}` : approvedOtEndTime;
+
+      const start = dayjs(startStr).tz('Asia/Ho_Chi_Minh');
+      const end = dayjs(endStr).tz('Asia/Ho_Chi_Minh');
+      const diffMinutes = end.diff(start, 'minute');
+
+      // Deduct lunch break for long OT shifts (similar to standard shifts)
+      const lunchBreakMinutes = diffMinutes > 360 ? 60 : 0;
+      standardHours = (diffMinutes - lunchBreakMinutes) / 60;
+      approvedOtDurationHours = standardHours; // Lưu lại
+      console.log(`🎉 Calculated standardHours based on OT: ${standardHours}h (Total: ${diffMinutes}m, Lunch: ${lunchBreakMinutes}m)`);
+      console.log(`   Approved OT Duration: ${approvedOtDurationHours}h`);
+    }
+    // ✨ ƯU TIÊN 2: Dùng Shift Info (nếu không phải trường hợp trên)
+    else if (shiftInfo) {
       workingHours = {
         start: shiftInfo.start_time.substring(0, 5), // '08:00:00' -> '08:00'
         end: shiftInfo.end_time.substring(0, 5)
@@ -724,13 +878,24 @@ export class AttendanceCalculationService {
       console.log('  - Ngày là holiday?:', isHoliday);
 
       // ✨ FIX: Bỏ điều kiện checkOut.isAfter(expectedCheckOut) - chỉ cần có đơn OT đã duyệt là tính
-      if (approvedOtEndTime) {
-        const approvedOtEnd = dayjs(approvedOtEndTime).tz('Asia/Ho_Chi_Minh');
+      // condition: Must have approved OT end time.
+      // EXCEPTION: If it is a Holiday, we treat the OT Application as the "Standard Shift" (see logic above).
+      //            The compensation is calculated via `dailyWorkingUnit` (WorkHours / OT_Standard * HolidayRate).
+      //            Therefore, we MUST NOT calculate `otWorkingUnit` here to avoid double counting.
+      if (approvedOtEndTime && !isHoliday) {
+        // ✨ Handle full date or time string for approvedOtEndTime
+        const otEndStr = approvedOtEndTime.length <= 8 ? `${date} ${approvedOtEndTime}` : approvedOtEndTime;
+        const approvedOtEnd = dayjs(otEndStr).tz('Asia/Ho_Chi_Minh');
 
-        // ✨ Fallback: Nếu không có OT start time (do lỗi hoặc đơn cũ), dùng expectedCheckOut (hết giờ làm việc) làm mốc bắt đầu tính OT
-        const approvedOtStart = approvedOtStartTime
-          ? dayjs(approvedOtStartTime).tz('Asia/Ho_Chi_Minh')
-          : expectedCheckOut;
+        // ✨ Handle full date or time string for approvedOtStartTime
+        let approvedOtStart: dayjs.Dayjs;
+        if (approvedOtStartTime) {
+          const otStartStr = approvedOtStartTime.length <= 8 ? `${date} ${approvedOtStartTime}` : approvedOtStartTime;
+          approvedOtStart = dayjs(otStartStr).tz('Asia/Ho_Chi_Minh');
+        } else {
+          // Fallback to expectedCheckOut if not provided
+          approvedOtStart = expectedCheckOut;
+        }
 
         console.log('✅ Has approved OT, checking validity...');
         console.log('- Approved OT start:', approvedOtStart.format('YYYY-MM-DD HH:mm:ss'));
@@ -762,11 +927,16 @@ export class AttendanceCalculationService {
           // Tính số giờ OT (raw - chưa nhân hệ số)
           const otHours = result.otMinutes / 60;
 
-          // ✨ NHÂN HỆ SỐ OT (Hệ số lấy từ settings)
-          const otRate = isHoliday ? (settings.holidayRate?.rate || 3.0) : (settings.overtimeRate?.rate || 1.5);
+          // ✨ Tính công OT dựa trên thời gian ca hành chính
+          // 1 công = thời gian làm việc của ca (ví dụ: 8 tiếng cho ca hành chính)
+          // Lấy thời gian ca từ shiftInfo hoặc mặc định 8 giờ
+          const shiftDurationHours = shiftInfo ?
+            (dayjs(`${date} ${shiftInfo.end_time}`).diff(dayjs(`${date} ${shiftInfo.start_time}`), 'hour', true)) :
+            8;
 
-          // Công OT = (số giờ OT / 8) * hệ số
-          result.otWorkingUnit = (otHours / 8) * otRate;
+          // Công OT = số giờ OT / thời gian ca
+          // VD: 4 giờ OT / 8 giờ ca = 0.5 công
+          result.otWorkingUnit = otHours / shiftDurationHours;
           result.overtimeHours = otHours; // ✨ Lưu số giờ OT thực tế
           result.otSalary = 0; // Không tính lương OT riêng
 
@@ -778,8 +948,9 @@ export class AttendanceCalculationService {
           console.log('  - Effective OT end:', effectiveOtEnd.format('HH:mm:ss'));
           console.log('  - OT minutes:', result.otMinutes);
           console.log('  - OT hours:', otHours.toFixed(2));
-          console.log('  - Công thức: (', otHours.toFixed(2), '/ 8) = RAW working unit (chưa nhân hệ số)');
-          console.log('  - 🎯 OT working units (RAW):', result.otWorkingUnit.toFixed(4));
+          console.log('  - Shift duration:', shiftDurationHours, 'hours');
+          console.log('  - Công thức: (', otHours.toFixed(2), '/', shiftDurationHours, ') = OT working unit');
+          console.log('  - 🎯 OT working units (RAW - chưa nhân hệ số):', result.otWorkingUnit.toFixed(4));
           console.log('  - 📊 Overtime hours:', result.overtimeHours.toFixed(2));
           console.log('===== KẾT THÚC TÍNH OT =====\n');
         } else {
@@ -850,21 +1021,134 @@ export class AttendanceCalculationService {
     if (result.workHours > 0 && standardHours > 0) {
       const baseUnits = Math.min(1, result.workHours / standardHours) * shiftWorkingUnit;
 
-      // ✨ Nếu là ngày lễ, công được nhân hệ số ngày lễ (thường 3x)
+      // ✨ Nếu là ngày lễ hoặc cuối tuần, CHỈ TÍNH CÔNG NẾU CÓ ĐƠN OT ĐÃ DUYỆT
       if (isHoliday) {
-        // ✨ Theo yêu cầu: Phải có đơn OT mới tính công ngày lễ? 
-        // Tuy nhiên thường thì đi làm ngày lễ mặc định là OT. 
-        // Ta vẫn tính công nhưng log để biết có đơn hay không.
-        const hasOTApp = !!approvedOtEndTime;
-        if (!hasOTApp) {
-          console.log('⚠️ Cảnh báo: Nhân viên đi làm ngày lễ nhưng không thấy đơn OT được duyệt');
-        }
+        if (!approvedOtEndTime) {
+          result.dailyWorkingUnit = 0;
+          console.log(`🎉 Holiday work detected but NO Approved OT: dailyWorkingUnit = 0`);
+        } else {
+          // ✨ USER REQUEST: Dựa vào thời gian làm trong đơn OT
+          // Nếu làm đủ giờ registered -> otUnits ~ 1. Nếu làm ít hơn -> < 1.
 
-        const holidayRateMultiplier = settings.holidayRate?.rate || 3.0;
-        result.dailyWorkingUnit = baseUnits * holidayRateMultiplier;
-        console.log(`🎉 Holiday work detected: base units ${baseUnits.toFixed(4)} * ${holidayRateMultiplier}x = ${result.dailyWorkingUnit.toFixed(4)}`);
-      } else {
+          // Tuy nhiên, logic "1 công = 8 tiếng" có thể khác với "1 công = full ca OT".
+          // Nếu ca OT là 4 tiếng, làm đủ 4 tiếng => tính là 1 công ca đó? Hay 0.5 công chuẩn?
+          // Theo yêu cầu "có thể là 4 tiếng thì 0.5 công" -> vậy phải so với chuẩn 8 tiếng hoặc chuẩn ca hành chính.
+
+          // Giả sử working_unit của shiftInfo là chuẩn (thường là 1).
+          // standardHours ở đây là độ dài của ca OT (đã tính ở trên).
+
+          // Để nhất quán: Lấy số giờ OT thực tế (hoặc approved) chia cho 8 (giờ chuẩn hành chính) 
+          // rồi nhân hệ số.
+          // Hoặc nếu shiftInfo có working_unit = 1 (8h).
+
+          // Sử dụng approvedOtDurationHours (giờ đăng ký)
+          // Nếu approvedOtDurationHours = 4h. Thì base là 0.5.
+          // ✨ USER REQUEST: 
+          // Chữ xanh (totalWorkingUnit) = (Giờ đơn / 8.0) * Tỉ lệ
+          // Chữ nâu (otWorkingUnit) = ((Giờ đơn - Giờ muộn/về sớm) / 8.0) * Tỉ lệ
+          const actualShiftWorkHours = 8.0;
+
+          const holidayRateMultiplier = settings.holidayRate?.rate || 3.0;
+          const appHours = approvedOtDurationHours || 0;
+
+          // ✨ SAFETY FIX: Initialize to 0 to avoid DB validation errors
+          result.lateMinutes = 0;
+          result.earlyDepartureMinutes = 0;
+
+          // Parse OT times safely
+          const otStart = (approvedOtStartTime && approvedOtStartTime.includes('T'))
+            ? dayjs(approvedOtStartTime).tz('Asia/Ho_Chi_Minh')
+            : dayjs(`${date} ${approvedOtStartTime}`).tz('Asia/Ho_Chi_Minh');
+          const otEnd = (approvedOtEndTime && approvedOtEndTime.includes('T'))
+            ? dayjs(approvedOtEndTime).tz('Asia/Ho_Chi_Minh')
+            : dayjs(`${date} ${approvedOtEndTime}`).tz('Asia/Ho_Chi_Minh');
+
+          if (checkInTime) {
+            const checkInDayjs = dayjs(checkInTime).tz('Asia/Ho_Chi_Minh');
+            if (checkInDayjs.isValid() && otStart.isValid()) {
+              result.lateMinutes = Math.max(0, checkInDayjs.diff(otStart, 'minute')) || 0;
+            }
+          }
+
+          if (checkOutTime) {
+            const checkOutDayjs = dayjs(checkOutTime).tz('Asia/Ho_Chi_Minh');
+            if (checkOutDayjs.isValid() && otEnd.isValid()) {
+              result.earlyDepartureMinutes = Math.max(0, otEnd.diff(checkOutDayjs, 'minute')) || 0;
+            }
+          }
+
+          const lateMinutesVal = Number(result.lateMinutes) || 0;
+          const earlyMinutesVal = Number(result.earlyDepartureMinutes) || 0;
+          const penaltyHours = (lateMinutesVal + earlyMinutesVal) / 60;
+          const actualEarnedHours = Math.max(0, appHours - penaltyHours);
+
+          result.dailyWorkingUnit = 0;
+          // Chữ xanh (Blue): Công tối đa theo đơn
+          result.totalWorkingUnit = (appHours / actualShiftWorkHours) * holidayRateMultiplier;
+          // Chữ nâu (Brown): Công thực nhận sau khi trừ muộn/sớm
+          result.otWorkingUnit = (actualEarnedHours / actualShiftWorkHours) * holidayRateMultiplier;
+
+          console.log(`🎉 Holiday work CALCULATION (Safety Fixed):`);
+          console.log(`   - App Hours: ${appHours}, Penalty: ${penaltyHours}h`);
+          console.log(`   - Blue (App): ${result.totalWorkingUnit.toFixed(4)}`);
+          console.log(`   - Brown (Earned): ${result.otWorkingUnit.toFixed(4)}`);
+        }
+      }
+      else if (isWeekend) {
+        if (!approvedOtEndTime) {
+          result.dailyWorkingUnit = 0;
+          result.otWorkingUnit = 0;
+          result.totalWorkingUnit = 0;
+          console.log(`🏖️ Weekend work detected but NO Approved OT: units = 0`);
+        } else {
+          const actualShiftWorkHours = 8.0;
+          const weekendRateMultiplier = settings.overtimeRate?.rate || 1.5;
+          const appHours = approvedOtDurationHours || 0;
+
+          // ✨ SAFETY FIX: Initialize to 0
+          result.lateMinutes = 0;
+          result.earlyDepartureMinutes = 0;
+
+          const otStart = (approvedOtStartTime && approvedOtStartTime.includes('T'))
+            ? dayjs(approvedOtStartTime).tz('Asia/Ho_Chi_Minh')
+            : dayjs(`${date} ${approvedOtStartTime}`).tz('Asia/Ho_Chi_Minh');
+          const otEnd = (approvedOtEndTime && approvedOtEndTime.includes('T'))
+            ? dayjs(approvedOtEndTime).tz('Asia/Ho_Chi_Minh')
+            : dayjs(`${date} ${approvedOtEndTime}`).tz('Asia/Ho_Chi_Minh');
+
+          if (checkInTime) {
+            const checkInDayjs = dayjs(checkInTime).tz('Asia/Ho_Chi_Minh');
+            if (checkInDayjs.isValid() && otStart.isValid()) {
+              result.lateMinutes = Math.max(0, checkInDayjs.diff(otStart, 'minute')) || 0;
+            }
+          }
+
+          if (checkOutTime) {
+            const checkOutDayjs = dayjs(checkOutTime).tz('Asia/Ho_Chi_Minh');
+            if (checkOutDayjs.isValid() && otEnd.isValid()) {
+              result.earlyDepartureMinutes = Math.max(0, otEnd.diff(checkOutDayjs, 'minute')) || 0;
+            }
+          }
+
+          const lateMinutesVal = Number(result.lateMinutes) || 0;
+          const earlyMinutesVal = Number(result.earlyDepartureMinutes) || 0;
+          const penaltyHours = (lateMinutesVal + earlyMinutesVal) / 60;
+          const actualEarnedHours = Math.max(0, appHours - penaltyHours);
+
+          result.dailyWorkingUnit = 0;
+          result.totalWorkingUnit = (appHours / actualShiftWorkHours) * weekendRateMultiplier;
+          result.otWorkingUnit = (actualEarnedHours / actualShiftWorkHours) * weekendRateMultiplier;
+
+          console.log(`🏖️ Weekend work CALCULATION (Safety Fixed):`);
+          console.log(`   - Blue (App): ${result.totalWorkingUnit.toFixed(4)}`);
+          console.log(`   - Brown (Earned): ${result.otWorkingUnit.toFixed(4)}`);
+        }
+      }
+      else {
+        // Ngày thường
         result.dailyWorkingUnit = baseUnits;
+        // For regular days, totalWorkingUnit is dailyWorkingUnit + otWorkingUnit
+        result.totalWorkingUnit = result.dailyWorkingUnit + result.otWorkingUnit;
       }
     } else {
       result.dailyWorkingUnit = 0;
@@ -936,109 +1220,14 @@ export class AttendanceCalculationService {
    * @param overtimeHours Số giờ tăng ca
    * @returns Lương tăng ca
    */
-  static async calculateOvertimeSalary(userId: number, overtimeHours: number): Promise<number> {
-    try {
-      console.log(`💰 Calculating overtime salary for user ${userId}, hours: ${overtimeHours}`);
-
-      // Lấy thông tin lương của nhân viên từ Employee Service
-      const employeeResponse = await axios.get(
-        `${API_GATEWAY_URL}/api/employee/users/${userId}/salary`,
-        {
-          timeout: 10000
-        }
-      );
-
-      const salaryInfo: UserSalaryInfo = employeeResponse.data.data;
-      console.log('👤 Employee salary info:', salaryInfo);
-
-      if (!salaryInfo || !salaryInfo.baseSalary) {
-        console.log('⚠️ No salary info found, using default calculation');
-        return 0;
-      }
-
-      // Lấy cấu hình tỷ lệ lương tăng ca từ bảng settings
-      let overtimeRate = 1.5; // Mặc định 150% lương cơ bản
-      try {
-        const overtimeRateSetting = await SettingsService.getSettingValue('OvertimeRate');
-        if (overtimeRateSetting) {
-          const value = overtimeRateSetting;
-          if (typeof value === 'object' && value !== null) {
-            const valueObj = value as any;
-            overtimeRate = parseFloat(valueObj.rate || valueObj.value || 1.5);
-          } else if (typeof value === 'string') {
-            try {
-              const parsedValue = JSON.parse(value);
-              overtimeRate = parseFloat(parsedValue.rate || parsedValue.value || parsedValue || 1.5);
-            } catch {
-              overtimeRate = parseFloat(value);
-            }
-          } else if (typeof value === 'number') {
-            overtimeRate = value;
-          }
-          console.log(`✅ Loaded overtime rate from settings: ${overtimeRate}`);
-        } else {
-          console.log('⚠️ OvertimeRate setting not found, using default: 1.5');
-        }
-      } catch (error) {
-        console.log('⚠️ Error loading overtime rate from settings, using default: 1.5', error);
-      }
-
-      // Tính lương theo giờ = (lương cơ bản + phụ cấp) / (22 ngày * 8 giờ)
-      const totalMonthlySalary = salaryInfo.baseSalary + (salaryInfo.allowance || 0);
-      const hourlyRate = totalMonthlySalary / (22 * 8); // 22 ngày làm việc, 8 giờ/ngày
-
-      // Lương tăng ca: use base monthly salary * per-minute OT rate * minutes
-      // Convert overtimeHours to minutes
-      const overtimeMinutes = Math.round(overtimeHours * 60);
-
-      // derive per-minute OT rate (same logic as above)
-      let perMinuteOtRate = 0;
-      try {
-        const overtimeRateSetting2 = await SettingsService.getSettingValue('OvertimeRate');
-        if (overtimeRateSetting2) {
-          let otSetting: any = overtimeRateSetting2;
-          if (typeof otSetting === 'string') {
-            try { otSetting = JSON.parse(otSetting); } catch { };
-          }
-
-          if (otSetting && typeof otSetting === 'object') {
-            if (otSetting.perMinute) perMinuteOtRate = parseFloat(otSetting.perMinute);
-            else if (otSetting.rate) {
-              const days = otSetting.workingDaysPerMonth || 22;
-              const hours = otSetting.hoursPerDay || 8;
-              perMinuteOtRate = parseFloat(otSetting.rate) / (days * hours * 60);
-            }
-          } else if (typeof otSetting === 'number') {
-            perMinuteOtRate = otSetting / (22 * 8 * 60);
-          }
-        }
-      } catch (e) {
-        console.log('⚠️ Error reading OvertimeRate setting for calculateOvertimeSalary, using default');
-      }
-
-      if (!perMinuteOtRate || isNaN(perMinuteOtRate) || perMinuteOtRate <= 0) {
-        perMinuteOtRate = 1.5 / (22 * 8 * 60);
-      }
-
-      const overtimeSalary = Math.round(salaryInfo.baseSalary * perMinuteOtRate * overtimeMinutes);
-
-      console.log(`💰 Overtime salary calculation:`, {
-        baseSalary: salaryInfo.baseSalary,
-        allowance: salaryInfo.allowance || 0,
-        totalMonthlySalary,
-        hourlyRate: hourlyRate.toFixed(2),
-        overtimeRate,
-        overtimeHours,
-        overtimeSalary: overtimeSalary.toFixed(2)
-      });
-
-      return overtimeSalary;
-
-    } catch (error) {
-      console.error('❌ Error calculating overtime salary:', error);
-      // Trả về 0 nếu có lỗi, không throw để không ảnh hưởng đến việc duyệt đơn
-      return 0;
-    }
+  static async calculateOvertimeSalary(_userId: number, _overtimeHours: number): Promise<number> {
+    // ✨ DEPRECATED: Tiền lương OT hiện tại được tính bằng cách quy đổi sang CÔNG (working units)
+    // Logic mới:
+    // - Attendance Service: Tính ra số công (Standard + OT converted) -> totalWorkingUnit
+    // - Salary Service: Lấy totalWorkingUnit * Đơn giá lương
+    // Hàm này giữ lại để tránh lỗi type, nhưng sẽ luôn trả về 0.
+    console.log('💰 calculateOvertimeSalary called - returning 0 (Using Unit-based calculation)');
+    return 0;
   }
 }
 

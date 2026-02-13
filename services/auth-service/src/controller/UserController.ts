@@ -1968,7 +1968,6 @@ export const getUsersByIds = async (req: Request, res: Response) => {
   }
 };
 
-
 /**
  * Search users by name with department and chevron enrichment
  * Query params: 

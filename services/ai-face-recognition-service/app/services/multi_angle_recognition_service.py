@@ -113,7 +113,7 @@ class MultiAngleFaceService:
             
             # Get largest face
             face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
-
+            
             # --- 3. Check Liveness (Anti-Spoofing) ---
             from app.services.face_liveness_service import face_liveness_detector
             
@@ -165,10 +165,20 @@ class MultiAngleFaceService:
             embedding = face.embedding
             norm_embedding = embedding / np.linalg.norm(embedding)
             
+            # Crop face for saving
+            x1, y1, x2, y2 = [int(v) for v in face.bbox]
+            h, w, _ = img.shape
+            x1 = max(0, x1)
+            y1 = max(0, y1)
+            x2 = min(w, x2)
+            y2 = min(h, y2)
+            cropped_face = img[y1:y2, x1:x2]
+            
             return {
                 "success": True, 
                 "embedding": norm_embedding.tolist(),
-                "face": face
+                "face": face,
+                "cropped_face": cropped_face
             }
             
         except Exception as e:
@@ -183,15 +193,103 @@ class MultiAngleFaceService:
             
             logger.info(f"🔍 Searching... Threshold={threshold}")
 
-            # Search using L2 distance
-            # Explicitly cast to Vector(512)
-            distance_expr = cast(FaceEmbedding.embedding_vector, Vector(512)).l2_distance(embedding)
-            
-            # Get closest match regardless of threshold first to debug
-            stmt = select(FaceEmbedding, distance_expr.label('distance')).order_by(distance_expr).limit(1)
-            
-            result = db.execute(stmt).first()
-            
+            try:
+                # 1. Try search using pgvector (L2 distance)
+                # Explicitly cast to Vector(512)
+                distance_expr = cast(FaceEmbedding.embedding_vector, Vector(512)).l2_distance(embedding)
+                
+                # Get closest match regardless of threshold first to debug
+                stmt = select(FaceEmbedding, distance_expr.label('distance')).order_by(distance_expr).limit(1)
+                
+                result = db.execute(stmt).first()
+            except Exception as e:
+                # 2. Fallback to Python calculation if pgvector/vector type is missing
+                logger.warning(f"⚠️ SQL Vector search failed (likely missing pgvector): {e}")
+                
+                # IMPORTANT: Must rollback the failed transaction before making new queries
+                db.rollback()
+                
+                logger.info("🔄 Falling back to Python-based distance calculation...")
+                
+                # Fetch all embeddings
+                all_faces = db.query(FaceEmbedding).all()
+                if not all_faces:
+                     logger.warning("⚠️ Database empty (0 faces found)")
+                     # Try to list tables to ensure we are connected to the right DB
+                     try:
+                         from sqlalchemy import text
+                         result = db.execute(text("SELECT count(*) FROM face_embeddings"))
+                         count = result.scalar()
+                         logger.info(f"DEBUG: Raw SQL count from face_embeddings: {count}")
+                     except Exception as ex:
+                         logger.error(f"DEBUG: Failed to count faces: {ex}")
+                     return None
+                
+                logger.info(f"DEBUG: Found {len(all_faces)} faces in DB. Starting Python comparison...")
+
+                min_dist = 100.0
+                best_face = None
+                
+                target_emb = np.array(embedding, dtype=np.float32)
+                
+                for i, face in enumerate(all_faces):
+                    # Parse embedding from stored format (list or string)
+                    db_emb = None
+                    # FIX: Use 'is not None' to avoid numpy truth value ambiguity
+                    emb_vec = face.embedding_vector
+                    
+                    if emb_vec is None:
+                        continue
+
+                    # Safe string preview
+                    try:
+                        emb_str_preview = str(emb_vec)[:20]
+                    except:
+                        emb_str_preview = "ErrorStr"
+                    
+                    if isinstance(emb_vec, str):
+                        try:
+                            # Try loading as JSON
+                            db_emb = np.array(json.loads(emb_vec), dtype=np.float32)
+                        except:
+                            # Setup for simple string parsing if needed "[x,y,z]"
+                            val = emb_vec.strip('[]')
+                            if ',' in val:
+                                db_emb = np.fromstring(val, sep=',', dtype=np.float32)
+                    elif isinstance(emb_vec, list):
+                        db_emb = np.array(emb_vec, dtype=np.float32)
+                    # Check for numpy array directly (pgvector might map to it)
+                    elif isinstance(emb_vec, np.ndarray):
+                        db_emb = np.array(emb_vec, dtype=np.float32)
+                    # Check for other types (e.g. pgvector object)
+                    elif hasattr(emb_vec, 'tolist'):
+                        db_emb = np.array(emb_vec.tolist(), dtype=np.float32)
+                    else:
+                         if i < 3: logger.warning(f"DEBUG: Face {face.id} has unknown embedding type: {type(emb_vec)}")
+                         continue
+                        
+                    if db_emb is None:
+                        if i < 3: logger.warning(f"DEBUG: Face {face.id} embedding is None after parse. Raw: {emb_str_preview}")
+                        continue
+
+                    if len(db_emb) != len(target_emb):
+                        if i < 3: logger.warning(f"DEBUG: Face {face.id} dimension mismatch: {len(db_emb)} vs {len(target_emb)}")
+                        continue
+                        
+                    # Calculate L2 distance
+                    dist = np.linalg.norm(target_emb - db_emb)
+                    
+                    if dist < min_dist:
+                        min_dist = float(dist)
+                        best_face = face
+                
+                if best_face:
+                    logger.info(f"DEBUG: Best match found in Python: {best_face.username} with dist {min_dist}")
+                    result = (best_face, min_dist)
+                else:
+                    logger.warning("DEBUG: Loop finished but no best_face found.")
+                    result = None
+
             if not result:
                 logger.warning("⚠️ Database empty or no match candidates")
                 return None
@@ -224,9 +322,53 @@ class MultiAngleFaceService:
             db.rollback() 
             return None
 
-    def register_multiple_poses(self, db: Session, user_id: int, username: str, images: Dict[str, bytes]) -> Dict[str, Any]:
-        """Register multiple poses (unused but kept for interface compatibility)"""
-        return {"success": False, "message": "Method not implemented in this simplified version"}
+    def register_multiple_poses(
+        self, 
+        db: Session, 
+        user_id: int, 
+        username: str, 
+        full_name: str, 
+        poses_data: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Register multiple face poses for a user.
+        Replaces existing embeddings for this user.
+        """
+        try:
+            # 1. Delete existing embeddings for this user
+            db.query(FaceEmbedding).filter(FaceEmbedding.user_id == user_id).delete()
+            
+            # 2. Insert new embeddings
+            for pose in poses_data:
+                # Ensure embedding is list/json
+                emb = pose["embedding"]
+                if isinstance(emb, np.ndarray):
+                    emb = emb.tolist()
+                
+                new_face = FaceEmbedding(
+                    user_id=user_id,
+                    username=username,
+                    embedding_vector=emb, # Pass list directly to pgvector
+                    face_type=pose["pose_type"],
+                    created_at=None # Let DB handle defaults or add if needed
+                )
+                db.add(new_face)
+            
+            db.commit()
+            
+            return {
+                "success": True,
+                "message": f"Đăng ký thành công {len(poses_data)} góc khuôn mặt",
+                "data": {
+                    "user_id": user_id,
+                    "registered_poses": [p["pose_type"] for p in poses_data]
+                }
+            }
+            
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error registering poses: {e}")
+            return {"success": False, "message": f"Lỗi database: {str(e)}"}
 
 
     def recognize_face(

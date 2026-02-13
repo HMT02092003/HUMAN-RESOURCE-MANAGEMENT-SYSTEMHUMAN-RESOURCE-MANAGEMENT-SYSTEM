@@ -364,12 +364,9 @@ const AttendanceSimplePage = () => {
           const attData = detail.attendanceData as any; // Cast to any để access dynamic fields
 
           // Format checkIn/checkOut time để hiển thị
-          const checkInTime = attData.checkInTime
-            ? dayjs(attData.checkInTime).format('HH:mm')
-            : null;
-          const checkOutTime = attData.checkOutTime
-            ? dayjs(attData.checkOutTime).format('HH:mm')
-            : null;
+          // ✨ FIX: Backend returns 'HH:mm', no need to re-format (which risks Invalid Date)
+          const checkInTime = attData.checkInTime;
+          const checkOutTime = attData.checkOutTime;
 
           // ⭐ Format date to YYYY-MM-DD để khớp với tileClassName
           const dateKey = dayjs(detail.date).format('YYYY-MM-DD');
@@ -471,6 +468,11 @@ const AttendanceSimplePage = () => {
     // Đã chấm công nhưng có penalty (trắng - bình thường)
     if (dailyDetail.status === 'working') {
       return { bgColor: 'transparent', borderColor: 'transparent' };
+    }
+
+    // Holiday (cyan nhạt - giống blue weekend highlight nhưng sáng hơn)
+    if (dailyDetail.status === 'holiday') {
+      return { bgColor: '#e6fffb', borderColor: '#87e8de' };
     }
 
     // Weekend (xám nhạt)
@@ -590,6 +592,7 @@ const AttendanceSimplePage = () => {
           >
             {/* React Calendar với tuần bắt đầu từ Thứ 2 - Chuẩn ISO 8601 */}
             <Calendar
+              key={calendarValue.format('YYYY-MM')} // ✨ Force re-render when month changes to avoid stale state
               value={calendarValue.toDate()}
               onChange={(date) => {
                 if (date) {
@@ -641,8 +644,8 @@ const AttendanceSimplePage = () => {
                 // Ngày bị phạt chấm công -> background đỏ
                 if (hasPenaltyTime) return 'status-penalty';
 
-                // Ngày chấm công đúng giờ -> background xanh nhạt
-                if (attendance && dailyDetail?.isOnTime) return 'status-working';
+                // Ngày chấm công đúng giờ HOẶC có OT -> background xanh nhạt
+                if (attendance && (dailyDetail?.isOnTime || (dailyDetail?.status as any) === 'overtime')) return 'status-working';
 
                 // Nghỉ không phép -> KHÔNG có background (chỉ chữ đỏ)
                 // Không cần CSS class cho ngày nghỉ không phép
@@ -710,15 +713,61 @@ const AttendanceSimplePage = () => {
                       </div>
                     ) : dailyDetail && dailyDetail.status === 'approved_leave' ? (
                       // Nghỉ phép: chữ vàng cam (nền xanh nếu là ngày lễ)
-                      <div style={{
-                        textAlign: 'center',
-                        padding: '2px',
-                        fontSize: isMobile ? 9 : 11,
-                        color: '#faad14',
-                        fontWeight: 500
-                      }}>
-                        Nghỉ phép
-                      </div>
+                      // ✨ Calculate isPaid consistently with Modal
+                      (() => {
+                        // Cast to any to access dynamic props
+                        const detail = dailyDetail as any;
+                        const lData = detail.leaveData as any;
+
+                        // Aggressively determine if Unpaid
+                        let isPaid = true; // Default to Paid
+
+                        // Check 1: Explicit flags (False check)
+                        if (detail.isPaidLeave === false) isPaid = false;
+                        else if (lData?.isPaid === false) isPaid = false;
+                        else if (lData?.isPaidLeave === false) isPaid = false;
+
+                        // Check 2: Type strings (CHECK TOP LEVEL TYPE TOO)
+                        if (isPaid) {
+                          const lType = String(lData?.leaveType || detail.leaveType || detail.type || '').toLowerCase();
+                          if (lType.includes('unpaid') || lType.includes('không lương')) isPaid = false;
+                        }
+
+                        // Check 3: Reason/Info strings
+                        if (isPaid) {
+                          const reason = String(detail.leaveInfo || lData?.reason || '').toLowerCase();
+                          if (reason.includes('không lương') || reason.includes('unpaid')) isPaid = false;
+                        }
+
+                        // Determine Label
+                        // Use more sources for info
+                        const info = String(detail.leaveInfo || lData?.reason || detail.leaveTypeName || '');
+                        const isNormalLeave = info.toLowerCase().includes('nghỉ thường');
+
+                        let label = '';
+                        if (isNormalLeave) {
+                          label = isPaid ? 'Nghỉ thường\n(Lương)' : 'Nghỉ thường\n(K.Lương)';
+                        } else {
+                          label = isPaid ? 'Nghỉ phép\n(Lương)' : 'Nghỉ\n(K.Lương)';
+                        }
+
+                        // Debug indicator (tiny dot) if we forced unpaid via string
+                        // Not showing to user, just logic result
+
+                        return (
+                          <div style={{
+                            textAlign: 'center',
+                            padding: '2px',
+                            fontSize: isMobile ? 9 : 11,
+                            color: isPaid ? '#faad14' : '#8c8c8c', // Grayscale for unpaid
+                            fontWeight: 500,
+                            whiteSpace: 'pre-line',
+                            lineHeight: 1.2
+                          }}>
+                            {label}
+                          </div>
+                        );
+                      })()
                     ) : dailyDetail && dailyDetail.status === 'absent' && isPastOrToday ? (
                       // Nghỉ không phép: chỉ hiển thị cho ngày <= hôm nay
                       <div style={{
@@ -733,13 +782,21 @@ const AttendanceSimplePage = () => {
                     ) : attendance ? (
                       // Có chấm công: hiển thị giờ vào - giờ ra (nền xanh nếu là ngày lễ)
                       <div className="calendar-cell-info">
+                        {/* ✨ MODIFIED: Holiday name hidden when working (showing time instead) */}
                         {(attendance.effectiveOtWorkingUnit > 0 || attendance.otWorkingUnit > 0 || attendance.overtime > 0) && (
                           <div style={{ color: '#d97706', fontSize: isMobile ? 9 : 11, fontWeight: 'bold' }}>
                             +{(attendance.effectiveOtWorkingUnit || (attendance.otWorkingUnit || (attendance.overtime / 8)) * otRate).toFixed(2)}
                           </div>
                         )}
+                        {/* ✨ Display Total Daily Units clearly */}
+                        {(attendance.totalWorkingUnit > 0) && (
+                          <div style={{ color: '#4096ff', fontSize: isMobile ? 9 : 11, fontWeight: 400 }}>
+                            Công: {Number(attendance.totalWorkingUnit).toFixed(2)}
+                          </div>
+                        )}
                         <div style={{ color: hasTimePenalty ? '#ff4d4f' : '#666', fontSize: isMobile ? 9 : 11 }}>
-                          {attendance.checkInTime || '--:--'} - {attendance.checkOutTime || '--:--'}
+                          {/* ✨ Safety Check: Direct display from backend (HH:mm), filter out 'Invalid Date' */}
+                          {(attendance.checkInTime && String(attendance.checkInTime) !== 'Invalid Date') ? attendance.checkInTime : '--:--'} - {(attendance.checkOutTime && String(attendance.checkOutTime) !== 'Invalid Date') ? attendance.checkOutTime : '--:--'}
                         </div>
                       </div>
                     ) : isHoliday ? (
@@ -836,6 +893,20 @@ const AttendanceSimplePage = () => {
                     <Text style={{ fontSize: isMobile ? 11 : 12 }}>Ngày lễ</Text>
                   </div>
                 </Col>
+
+                <Col xs={12} sm={6}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <div style={{
+                      width: 16,
+                      height: 16,
+                      background: '#e6fffb',
+                      border: '1px solid #87e8de',
+                      borderRadius: 4,
+                      marginRight: 8
+                    }} />
+                    <Text style={{ fontSize: isMobile ? 11 : 12 }}>Ngày lễ</Text>
+                  </div>
+                </Col>
                 <Col xs={12} sm={6}>
                   <div style={{ display: 'flex', alignItems: 'center' }}>
                     <div style={{
@@ -910,7 +981,14 @@ const AttendanceSimplePage = () => {
           // Lấy dữ liệu từ attendanceMap và dailyDetailMap thay vì attendanceData cũ
           const selectedDateData = attendanceMap.get(dateStr);
           const dailyDetail = dailyDetailMap.get(dateStr);
-          const shiftForDate = getShiftForDate(dateStr);
+          // ✨ Lấy thông tin ngày lễ
+          const isHoliday = dailyDetail?.holidayData?.isHoliday === true;
+          const holidayName = dailyDetail?.holidayData?.holidayName || 'Ngày lễ';
+
+          // ✨ Use shift info from dailyDetail if available (e.g. Holiday OT override), otherwise lookup schedule
+          const shiftForDate = (dailyDetail && dailyDetail.shift)
+            ? dailyDetail.shift
+            : getShiftForDate(dateStr);
 
           console.log(`🔍 Modal clicked date:`, {
             selectedDate,
@@ -955,31 +1033,40 @@ const AttendanceSimplePage = () => {
 
                     {/* Hiển thị loại nghỉ phép */}
                     {(() => {
-                      // Prefer applicationCategory from leave object data when present
-                      const leaveObj = dailyDetail.leaveData?.leave ?? (dailyDetail.leaveData?.leaveApplications && dailyDetail.leaveData.leaveApplications[0]);
-                      const appCategory = leaveObj?.data?.applicationCategory ?? leaveObj?.data?.application_category ?? undefined;
-                      // Map applicationCategory to leaveConfig key: assume 'regular' means unpaid else 'leave' as paid
-                      const cfgKey = appCategory === 'regular' ? 'regular' : (appCategory === 'paid' ? 'leave' : (dailyDetail.leaveData?.leaveType || 'leave'));
-                      const effectiveLeaveConfig = constants.LeaveTypeConfig[cfgKey as keyof typeof constants.LeaveTypeConfig] ?? leaveConfig;
+                      // ✨ Use isPaidLeave if available (from backend logic)
+                      let isPaid = dailyDetail.leaveData?.isPaidLeave; // Check my previous edit to AttendanceHelpers/AttendanceCalculationService
+
+                      // Also check the raw flag from the dailyDetail map if mapped
+                      if (dailyDetail.isPaidLeave !== undefined) isPaid = dailyDetail.isPaidLeave;
+
+                      // Fallback to old logic if undefined
+                      if (isPaid === undefined) {
+                        const leaveObj = dailyDetail.leaveData?.leave ?? (dailyDetail.leaveData?.leaveApplications && dailyDetail.leaveData.leaveApplications[0]);
+                        const appCategory = leaveObj?.data?.applicationCategory ?? leaveObj?.data?.application_category ?? undefined;
+                        const cfgKey = appCategory === 'regular' ? 'regular' : (appCategory === 'paid' ? 'leave' : (dailyDetail.leaveData?.leaveType || 'leave'));
+                        const effectiveLeaveConfig = constants.LeaveTypeConfig[cfgKey as keyof typeof constants.LeaveTypeConfig] ?? leaveConfig;
+                        isPaid = effectiveLeaveConfig.hasSalary;
+                      }
+
                       return (
                         <div style={{
                           marginTop: 12,
                           padding: 12,
-                          background: effectiveLeaveConfig.hasSalary ? '#f6ffed' : '#fff2e8',
+                          background: isPaid ? '#f6ffed' : '#fff2e8',
                           borderRadius: 6,
-                          border: effectiveLeaveConfig.hasSalary ? '1px solid #b7eb8f' : '1px solid #ffd591'
+                          border: isPaid ? '1px solid #b7eb8f' : '1px solid #ffd591'
                         }}>
                           <div style={{ textAlign: 'center' }}>
                             <Text strong style={{
                               fontSize: 14,
-                              color: effectiveLeaveConfig.hasSalary ? '#52c41a' : '#fa8c16'
+                              color: isPaid ? '#52c41a' : '#fa8c16'
                             }}>
-                              {effectiveLeaveConfig.label}
+                              {isPaid ? 'Nghỉ có lương' : 'Nghỉ không lương'}
                             </Text>
                           </div>
                           <div style={{ textAlign: 'center', marginTop: 8 }}>
-                            <Tag color={effectiveLeaveConfig.hasSalary ? 'success' : 'warning'} style={{ fontSize: 12 }}>
-                              {effectiveLeaveConfig.hasSalary ? '✓ Có lương' : '✗ Không lương'}
+                            <Tag color={isPaid ? 'success' : 'warning'} style={{ fontSize: 12 }}>
+                              {isPaid ? '✓ Có lương' : '✗ Không lương'}
                             </Tag>
                           </div>
                         </div>
@@ -1180,31 +1267,64 @@ const AttendanceSimplePage = () => {
           // Case 5: Có chấm công bình thường (working day)
           return selectedDateData ? (
             <div>
-              <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: '#fafafa', borderRadius: 8 }}>
-                <CalendarOutlined style={{ fontSize: 18, color: '#1890ff', marginRight: 8 }} />
-                <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline' }}>{formatDate(selectedDateData.date)}</Title>
+              <div style={{ textAlign: 'center', marginBottom: 16, padding: '12px 0', background: isHoliday ? '#e6fffb' : '#fafafa', borderRadius: 8 }}>
+                <CalendarOutlined style={{ fontSize: 18, color: isHoliday ? '#13c2c2' : '#1890ff', marginRight: 8 }} />
+                <Title level={isMobile ? 5 : 4} style={{ margin: 0, display: 'inline', color: isHoliday ? '#13c2c2' : 'inherit' }}>
+                  {formatDate(selectedDateData.date)}
+                </Title>
+                {isHoliday && (
+                  <div style={{ marginTop: 4 }}>
+                    <Text strong style={{ color: '#13c2c2', fontSize: isMobile ? 12 : 14 }}>
+                      <TrophyOutlined style={{ marginRight: 6 }} />
+                      {holidayName}
+                    </Text>
+                  </div>
+                )}
               </div>
 
-              {/* Ca làm việc section */}
-              <div style={{ marginBottom: 16, padding: 12, background: shiftForDate ? '#e6f7ff' : '#f5f5f5', borderRadius: 8, border: shiftForDate ? '1px solid #91d5ff' : '1px solid #d9d9d9' }}>
-                <Row gutter={[12, 8]} align="middle">
-                  <Col span={24}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <ScheduleOutlined style={{ marginRight: 8, color: shiftForDate ? '#1890ff' : '#8c8c8c', fontSize: 16 }} />
-                      <Text strong style={{ fontSize: isMobile ? 13 : 14, color: shiftForDate ? '#1890ff' : '#8c8c8c' }}>
-                        Ca làm việc: {shiftForDate?.name || 'Hành chính'}
-                      </Text>
-                    </div>
-                    {shiftForDate && (
-                      <div style={{ textAlign: 'center', marginTop: 4 }}>
-                        <Text style={{ fontSize: 12, color: '#595959' }}>
-                          ({shiftForDate.start_time} - {shiftForDate.end_time})
+              {/* ✨ MODIFIED: Holiday displays OT application info instead of regular shift info */}
+              {isHoliday && (dailyDetail as any).overtimeData ? (
+                <div style={{ marginBottom: 16, padding: 12, background: '#f9f0ff', borderRadius: 8, border: '1px solid #d3adf7' }}>
+                  <Row gutter={[12, 8]} align="middle">
+                    <Col span={24}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
+                        <FireOutlined style={{ marginRight: 8, color: '#722ed1', fontSize: 16 }} />
+                        <Text strong style={{ fontSize: isMobile ? 13 : 14, color: '#722ed1' }}>
+                          Đơn tăng ca ngày lễ
                         </Text>
                       </div>
-                    )}
-                  </Col>
-                </Row>
-              </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <Text style={{ fontSize: 13, color: '#595959', display: 'block' }}>
+                          <strong>Lý do:</strong> {(dailyDetail as any).overtimeData.application?.data?.reason || (dailyDetail as any).overtimeData.application?.reason || 'Làm thêm ngày lễ'}
+                        </Text>
+                        <Text style={{ fontSize: 12, color: '#8c8c8c' }}>
+                          (Đơn ID: {(dailyDetail as any).overtimeData.application?.id} • {shiftForDate.start_time} - {shiftForDate.end_time})
+                        </Text>
+                      </div>
+                    </Col>
+                  </Row>
+                </div>
+              ) : (
+                <div style={{ marginBottom: 16, padding: 12, background: shiftForDate ? '#e6f7ff' : '#f5f5f5', borderRadius: 8, border: shiftForDate ? '1px solid #91d5ff' : '1px solid #d9d9d9' }}>
+                  <Row gutter={[12, 8]} align="middle">
+                    <Col span={24}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <ScheduleOutlined style={{ marginRight: 8, color: shiftForDate ? '#1890ff' : '#8c8c8c', fontSize: 16 }} />
+                        <Text strong style={{ fontSize: isMobile ? 13 : 14, color: shiftForDate ? '#1890ff' : '#8c8c8c' }}>
+                          Ca làm việc: {shiftForDate?.name || 'Hành chính'}
+                        </Text>
+                      </div>
+                      {shiftForDate && (
+                        <div style={{ textAlign: 'center', marginTop: 4 }}>
+                          <Text style={{ fontSize: 12, color: '#595959' }}>
+                            ({shiftForDate.start_time} - {shiftForDate.end_time})
+                          </Text>
+                        </div>
+                      )}
+                    </Col>
+                  </Row>
+                </div>
+              )}
 
               {/* Thời gian section */}
               <div style={{ marginBottom: 16 }}>
@@ -1408,7 +1528,7 @@ const AttendanceSimplePage = () => {
           );
         })()}
       </Modal>
-    </div>
+    </div >
   );
 };
 

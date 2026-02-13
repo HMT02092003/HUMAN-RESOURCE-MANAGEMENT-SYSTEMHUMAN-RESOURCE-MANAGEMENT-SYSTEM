@@ -1,543 +1,517 @@
+
 /**
- * SEED CHÍNH: Tạo dữ liệu chấm công Oct/Nov/Dec 2025
+ * UPDATED SEED (REALISTIC): Chấm công Oct 2025 - Feb 2026
  * 
- * Bao gồm đầy đủ các case:
- * - Đi làm bình thường (có check-in/check-out)
- * - Đi muộn / Về sớm  
- * - Nghỉ phép (approved leave) - sync với application-service
- * - Nghỉ không phép (unauthorized absence)
- * - Công tác (business trip) - sync với application-service
- * - Làm thêm giờ (OT) - sync với application-service
- * 
- * Tháng 12 tính đến ngày 5/12/2025 (ngày hiện tại)
+ * Logic cải tiến:
+ * 1. Dữ liệu thời gian (Check-in/Check-out) được random tự nhiên (không đều tăm tắp).
+ * 2. TẠO ĐƠN OT ĐỒNG BỘ:
+ *    - Trước khi seed, lập kế hoạch chi tiết ngày nào OT, giờ nào.
+ *    - Insert đơn OT vào Application Service tương ứng với kế hoạch.
+ * 3. TẠO ATTENDANCE KHỚP VỚI ĐƠN OT:
+ *    - Nếu ngày có OT -> Check-out muộn hơn giờ OT kết thúc.
+ *    - Nếu ngày thường -> Check-in/out dao động quanh 08:00 - 17:00.
+ * 4. Tính toán Monthly Aggregates chính xác.
  */
 
 exports.seed = async function (knex) {
-  console.log('\n' + '='.repeat(70));
-  console.log('🚀 SEED CHÍNH: Chấm công Oct 2025 - Feb 2026');
-  console.log('   Đầy đủ các case: đi làm, nghỉ phép, nghỉ không phép, công tác, OT');
-  console.log('='.repeat(70));
+  console.log('\n======================================================================');
+  console.log('🚀 MASTER SEED (REALISTIC & SYNCED): OT Apps & Attendance & Aggregates');
+  console.log('======================================================================');
+
+  // Helper: Get Random Time with Variance (e.g., 08:00 +/- 15 mins)
+  const getRandomTime = (baseHour, baseMinute, varianceMinutes = 15) => {
+    const date = new Date(2000, 0, 1, baseHour, baseMinute);
+    const variance = Math.floor(Math.random() * varianceMinutes * 2) - varianceMinutes; // +/- variance
+    date.setMinutes(date.getMinutes() + variance);
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:00`;
+  };
+
+  // Helper: Add minutes to time string "HH:mm"
+  const addMinutes = (timeStr, minutes) => {
+    const [h, m] = timeStr.split(':').map(Number);
+    const date = new Date(2000, 0, 1, h, m);
+    date.setMinutes(date.getMinutes() + minutes);
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  };
 
   // =============================================
-  // STEP 1: Xóa dữ liệu cũ
+  // STEP 0: Fetch Real Holidays from DB
   // =============================================
-  console.log('\n🗑️  Xóa dữ liệu cũ...');
+  console.log('🔎 Fetching Holidays from DB...');
+  const dbHolidays = await knex('holidays')
+    .select('start_date', 'end_date', 'name')
+    .where('start_date', '>=', '2025-10-01')
+    .andWhere('start_date', '<=', '2026-02-28');
+
+  // Convert to set of date strings 'YYYY-MM-DD'
+  const HOLIDAYS_SET = new Set();
+  const HOLIDAY_NAMES = new Map();
+
+  const toLocalYMD = (utcDateStr) => {
+    const d = new Date(utcDateStr);
+    const localMs = d.getTime() + (7 * 60 * 60 * 1000);
+    return new Date(localMs).toISOString().split('T')[0];
+  };
+
+  for (const holiday of dbHolidays) {
+    const startYMD = toLocalYMD(holiday.start_date);
+    const endYMD = toLocalYMD(holiday.end_date);
+
+    let iter = new Date(startYMD);
+    const endD = new Date(endYMD);
+
+    while (iter <= endD) {
+      const dateStr = iter.toISOString().split('T')[0];
+      HOLIDAYS_SET.add(dateStr);
+      HOLIDAY_NAMES.set(dateStr, holiday.name);
+      iter.setDate(iter.getDate() + 1);
+    }
+  }
+  console.log('   🗓️  Holidays (Local):', Array.from(HOLIDAYS_SET).sort());
+
+
+  // =============================================
+  // STEP 1: PLAN OT & CONNECT APPLICATION SERVICE
+  // =============================================
+  console.log('\n🔌 Connecting to Application Service...');
+  let appKnex;
+  try {
+    appKnex = require('knex')({
+      client: 'pg',
+      connection: {
+        host: process.env.DB_HOST || 'localhost',
+        port: Number(process.env.DB_PORT) || 5432,
+        database: 'application_service_final',
+        user: process.env.DB_USER || 'postgres',
+        password: process.env.DB_PASSWORD || '123456'
+      }
+    });
+  } catch (err) {
+    console.error(`❌ Failed to connect: ${err.message}`);
+    return;
+  }
+
+  const userIds = Array.from({ length: 50 }, (_, i) => i + 1);
+  const applicationsToInsert = [];
+  const PLANNED_OT = new Map(); // Key: "userId-date", Value: OT Detail Object
+
+  // Helper ID generator for applications (we need unique IDs for conflict checks if we use them, 
+  // but better to let DB handle SERIAL. We'll use insert without IDs)
+
+  const months = [
+    { year: 2025, month: 10 }, { year: 2025, month: 11 }, { year: 2025, month: 12 },
+    { year: 2026, month: 1 }, { year: 2026, month: 2 }
+  ];
+
+  console.log('📝 Planning Overtime Schedule...');
+
+  for (const m of months) {
+    const daysInMonth = new Date(m.year, m.month, 0).getDate();
+
+    for (const userId of userIds) {
+      // Determines probability for this user to have OT this month
+      // User 1-5: High OT (Managers/Key Personnel) - 30% chance per day
+      // Others: Low OT - 5% chance
+      const otChance = userId <= 5 ? 0.3 : 0.05;
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${m.year}-${String(m.month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        if (dateStr > '2026-02-28') continue;
+
+        const isHol = HOLIDAYS_SET.has(dateStr);
+        const dayOfWeek = new Date(dateStr).getDay();
+        const isWknd = (dayOfWeek === 0 || dayOfWeek === 6);
+        const isWeekday = !isHol && !isWknd;
+
+        let otPlan = null;
+
+        // SCENARIO 1: Holiday OT (Rare but forced for some)
+        if (isHol) {
+          if (Math.random() < 0.2) { // 20% users work on holiday
+            otPlan = {
+              date: dateStr,
+              startTime: '08:00',
+              endTime: '17:00',
+              totalHours: 8,
+              reason: `Trực lễ ${HOLIDAY_NAMES.get(dateStr)}`
+            };
+          }
+        }
+        // SCENARIO 2: Weekend OT
+        else if (isWknd) {
+          if (Math.random() < 0.1) { // 10% users work weekend
+            otPlan = {
+              date: dateStr,
+              startTime: '08:00',
+              endTime: '17:00',
+              totalHours: 8,
+              reason: 'Chạy dự án cuối tuần'
+            };
+          }
+        }
+        // SCENARIO 3: Weekday Evening OT
+        else if (isWeekday) {
+          if (Math.random() < otChance) {
+            // Determine duration: 1.5h to 3h
+            const duration = 1.5 + Math.random() * 2; // 1.5 - 3.5 hours
+            const endH = 17 + Math.floor(duration); // 18 or 19 or 20
+            const endM = Math.floor((duration % 1) * 60);
+            const endTimeStr = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+
+            otPlan = {
+              overtimeDate: dateStr, // Consistent with frontend
+              startTime: '17:00',
+              endTime: endTimeStr,
+              overtimeHours: Number(duration.toFixed(1)), // Consistent with frontend
+              reason: 'Xử lý công việc tồn đọng'
+            };
+          }
+        }
+
+        if (otPlan) {
+          // Store Plan for Attendance Seed
+          PLANNED_OT.set(`${userId}-${dateStr}`, otPlan);
+
+          // Add to Applications Insert List
+          applicationsToInsert.push({
+            type: 'overtime',
+            status: 1, // Approved
+            userId: userId,
+            data: JSON.stringify(otPlan),
+            created_at: new Date(dateStr + 'T00:00:00Z').toISOString(),
+            updated_at: new Date(dateStr + 'T00:00:00Z').toISOString()
+          });
+        }
+      }
+    }
+  }
+
+  // Batch Insert Apps
+  console.log(`   📝 Inserting ${applicationsToInsert.length} Synced OT Applications...`);
+
+  // CLEANUP: Delete OLD applications in the seed range to fix the "33 apps" issue
+  // We delete ALL OT and Leave apps in the target months to ensure consistency.
+  console.log('   🧹 Clearing old applications (OT & Leave) in seed range...');
+  await appKnex('applications')
+    .whereIn('type', ['overtime', 'leave', 'sick-leave', 'unpaid_leave', 'business-trip'])
+    .andWhereRaw("data ->> 'date' >= '2025-10-01' OR data ->> 'startDate' >= '2025-10-01'")
+    .del();
+
+  // Insert Synced OT Apps
+  const CHUNK_SIZE = 500;
+  for (let i = 0; i < applicationsToInsert.length; i += CHUNK_SIZE) {
+    const chunk = applicationsToInsert.slice(i, i + CHUNK_SIZE);
+    await appKnex('applications').insert(chunk).onConflict(['id']).ignore();
+  }
+
+  // SEED SAMPLE LEAVE APPS (User 1 & User 3)
+  // User 1 (Admin) - Existing test cases
+  const leaveAppsToInsert = [
+    {
+      type: 'leave', // Paid Leave
+      status: 1,
+      userId: 1, // Admin
+      data: JSON.stringify({
+        startDate: '2026-02-03',
+        endDate: '2026-02-03',
+        reason: 'Nghỉ phép năm (Test Seed)',
+        isPaid: true
+      }),
+      created_at: new Date('2026-02-01'),
+      updated_at: new Date('2026-02-01')
+    },
+    {
+      type: 'unpaid_leave', // Unpaid Leave
+      status: 1,
+      userId: 1, // Admin
+      data: JSON.stringify({
+        startDate: '2026-02-10',
+        endDate: '2026-02-10',
+        reason: 'Nghỉ không lương (Test Seed)',
+        leaveType: 'unpaid',
+        isPaid: false
+      }),
+      created_at: new Date('2026-02-01'),
+      updated_at: new Date('2026-02-01')
+    },
+    // User 3 (toanhm) - Requested Test Cases
+    {
+      type: 'unpaid_leave', // Changed to Unpaid as per user request ("đều là nghỉ không lương")
+      status: 1,
+      userId: 3, // toanhm
+      data: JSON.stringify({
+        startDate: '2026-02-11',
+        endDate: '2026-02-11',
+        reason: 'Nghỉ thường', // User term
+        leaveType: 'unpaid',
+        isPaid: false
+      }),
+      created_at: new Date('2026-02-05'),
+      updated_at: new Date('2026-02-05')
+    },
+    {
+      type: 'unpaid_leave', // Changed to Unpaid
+      status: 1,
+      userId: 3, // toanhm
+      data: JSON.stringify({
+        startDate: '2026-02-27',
+        endDate: '2026-02-28',
+        reason: 'Nghỉ thường', // User term
+        leaveType: 'unpaid',
+        isPaid: false
+      }),
+      created_at: new Date('2026-02-25'),
+      updated_at: new Date('2026-02-26')
+    },
+    {
+      type: 'business-trip',
+      status: 1, // Approved
+      userId: 1, // Admin (Existing User)
+      data: JSON.stringify({
+        startDate: '2026-01-15',
+        endDate: '2026-01-17',
+        reason: 'Công tác tại chi nhánh Hà Nội',
+        location: 'Hà Nội'
+      }),
+      created_at: new Date('2026-01-10'),
+      updated_at: new Date('2026-01-10')
+    },
+    {
+      type: 'business-trip',
+      status: 1, // Approved
+      userId: 3, // toanhm
+      data: JSON.stringify({
+        startDate: '2026-02-20',
+        endDate: '2026-02-22',
+        reason: 'Tham dự hội thảo công nghệ',
+        location: 'Đà Nẵng'
+      }),
+      created_at: new Date('2026-02-15'),
+      updated_at: new Date('2026-02-15')
+    }
+  ];
+  console.log('   📝 Inserting Sample Leave Applications for User 1 & User 3...');
+  await appKnex('applications').insert(leaveAppsToInsert);
+
+
+  await appKnex.destroy();
+
+
+  // =============================================
+  // STEP 2: Clear & Seed Attendance (Synced)
+  // =============================================
+  console.log('\n🗑️  Cleaning old attendance (Oct 2025 - Feb 2026)...');
   await knex('time_attendances')
     .whereRaw("date >= '2025-10-01' AND date <= '2026-02-28'")
     .del();
   await knex('monthly_attendances')
     .whereIn('month', ['2025-10', '2025-11', '2025-12', '2026-01', '2026-02'])
     .del();
-  console.log('   ✅ Đã xóa dữ liệu cũ');
 
-  // =============================================
-  // STEP 2: Lấy dữ liệu applications đã duyệt từ application-service DB
-  // =============================================
-  console.log('\n📋 Đang lấy dữ liệu applications đã duyệt...');
-
-  // Tạo kết nối tới application-service DB
-  const appDbConfig = {
-    client: 'pg',
-    connection: {
-      host: process.env.DB_HOST || 'localhost',
-      port: Number(process.env.DB_PORT) || 5432,
-      database: 'application_service',
-      user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || '123456'
-    }
-  };
-
-  let approvedApplications = [];
-  try {
-    const appKnex = require('knex')(appDbConfig);
-    // Lấy TẤT CẢ applications đã duyệt (không filter theo created_at)
-    // Vì đơn có thể được tạo trước ngày nghỉ (VD: tạo 30/9 cho ngày nghỉ 02/10)
-    approvedApplications = await appKnex('applications')
-      .where('status', 1) // status = 1 là approved
-      .select('*');
-    await appKnex.destroy();
-    console.log(`   ✅ Lấy được ${approvedApplications.length} đơn từ đã duyệt`);
-  } catch (err) {
-    console.log(`   ⚠️ Không thể lấy dữ liệu applications: ${err.message}`);
-    console.log('   ➡️ Tiếp tục với dữ liệu mặc định...');
-  }
-
-  // Build maps cho từng loại application theo userId và date
-  const leaveMap = new Map(); // userId-date -> leave info
-  const businessTripMap = new Map(); // userId-date -> business trip info
-  const overtimeMap = new Map(); // userId-date -> OT info
-  const forgotCheckMap = new Map(); // userId-date -> forgot check info
-
-  for (const app of approvedApplications) {
-    try {
-      const data = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
-      const userId = app.userId;
-
-      if (app.type === 'leave') {
-        // Leave có startDate và endDate
-        const startDate = data.startDate;
-        const endDate = data.endDate || data.startDate;
-        let cur = new Date(startDate);
-        const end = new Date(endDate);
-        while (cur <= end) {
-          const dateKey = cur.toISOString().split('T')[0];
-          leaveMap.set(`${userId}-${dateKey}`, { ...data, appId: app.id });
-          cur.setDate(cur.getDate() + 1);
-        }
-      } else if (app.type === 'business-trip') {
-        const startDate = data.startDate;
-        const endDate = data.endDate || data.startDate;
-        let cur = new Date(startDate);
-        const end = new Date(endDate);
-        while (cur <= end) {
-          const dateKey = cur.toISOString().split('T')[0];
-          businessTripMap.set(`${userId}-${dateKey}`, { ...data, appId: app.id });
-          cur.setDate(cur.getDate() + 1);
-        }
-      } else if (app.type === 'overtime') {
-        const date = data.date;
-        if (date) {
-          overtimeMap.set(`${userId}-${date}`, { ...data, appId: app.id });
-        }
-      } else if (app.type === 'forgot-check') {
-        const date = data.forgotDate;
-        if (date) {
-          forgotCheckMap.set(`${userId}-${date}`, { ...data, appId: app.id });
-        }
-      }
-    } catch (e) {
-      // Skip invalid application data
-    }
-  }
-
-  console.log(`   📊 Leave days: ${leaveMap.size}, Business trips: ${businessTripMap.size}, OT: ${overtimeMap.size}, Forgot check: ${forgotCheckMap.size}`);
-
-  // =============================================
-  // STEP 3: User IDs (1-100)
-  // =============================================
-  const userIds = Array.from({ length: 100 }, (_, i) => i + 1);
-  console.log(`\n👥 Sử dụng ${userIds.length} user IDs (1-100)`);
-
-  // =============================================
-  // HELPER FUNCTIONS
-  // =============================================
-
-  const isWorkday = (date) => {
-    const day = new Date(date).getDay();
-    return day >= 1 && day <= 5;
-  };
-
-  const getWorkdaysInMonth = (year, month, maxDay = 31) => {
-    const days = [];
-    const daysInMonth = Math.min(new Date(year, month, 0).getDate(), maxDay);
-
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      if (isWorkday(dateStr)) {
-        days.push(dateStr);
-      }
-    }
-    return days;
-  };
-
-  // Tạo thời gian check-in/check-out - ca 8h-18h
-  const generateDayTimes = (isLateForced = false, isEarlyLeaveForced = false) => {
-    let checkInHour, checkInMinute, checkOutHour, checkOutMinute;
-
-    if (isLateForced) {
-      // Đi muộn: 8:05-8:45
-      checkInHour = 8;
-      checkInMinute = 5 + Math.floor(Math.random() * 40);
-    } else if (Math.random() < 0.7) {
-      // 70% đúng giờ: đến 7:50-8:00
-      checkInHour = 7;
-      checkInMinute = 50 + Math.floor(Math.random() * 10);
-      if (checkInMinute >= 60) { checkInHour = 8; checkInMinute = 0; }
-    } else {
-      // 30% đi muộn nhẹ: 8:01-8:15
-      checkInHour = 8;
-      checkInMinute = 1 + Math.floor(Math.random() * 14);
-    }
-
-    if (isEarlyLeaveForced) {
-      // Về sớm: 17:00-17:45
-      checkOutHour = 17;
-      checkOutMinute = Math.floor(Math.random() * 45);
-    } else if (Math.random() < 0.75) {
-      // 75% về đúng giờ: 18:00-18:20
-      checkOutHour = 18;
-      checkOutMinute = Math.floor(Math.random() * 20);
-    } else {
-      // 25% về sớm nhẹ: 17:45-17:59
-      checkOutHour = 17;
-      checkOutMinute = 45 + Math.floor(Math.random() * 14);
-    }
-
-    const formatTime = (h, m) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
-
-    return {
-      checkInTime: formatTime(checkInHour, checkInMinute),
-      checkOutTime: formatTime(checkOutHour, checkOutMinute),
-      checkInHour, checkInMinute, checkOutHour, checkOutMinute
-    };
-  };
-
-  // Tính số giờ làm việc (trừ 1h nghỉ trưa)
-  const calculateWorkHours = (inH, inM, outH, outM) => {
-    const inMinutes = inH * 60 + inM;
-    const outMinutes = outH * 60 + outM;
-    return Math.max(0, (outMinutes - inMinutes - 60) / 60);
-  };
-
-  // Tính muộn/sớm (ca 8h-18h)
-  const calculateLateness = (inH, inM, outH, outM) => {
-    const lateMinutes = Math.max(0, (inH * 60 + inM) - (8 * 60));
-    const earlyMinutes = Math.max(0, (18 * 60) - (outH * 60 + outM));
-
-    // Giả sử tiền phạt là 2500 VNĐ / phút
-    const latePenalty = lateMinutes * 2500;
-    const earlyPenalty = earlyMinutes * 2500;
-
-    return { lateMinutes, earlyMinutes, latePenalty, earlyPenalty };
-  };
-
-  // =============================================
-  // STEP 4: Tạo time_attendances
-  // =============================================
-  const months = [
-    { year: 2025, month: 10, name: 'Tháng 10/2025' },
-    { year: 2025, month: 11, name: 'Tháng 11/2025' },
-    { year: 2025, month: 12, name: 'Tháng 12/2025' },
-    { year: 2026, month: 1, name: 'Tháng 01/2026' },
-    { year: 2026, month: 2, name: 'Tháng 02/2026' }
-  ];
-
-  let totalRecords = 0;
-  const batchSize = 500;
   let batch = [];
+  const BATCH_SIZE = 500;
+  const leaveMap = new Map(); // Assuming empty for now or fetch if needed (skipping fetch for speed/focus on OT)
 
-  // Lưu thông tin cho monthly calculation
-  const monthlyData = {}; // { 'userId-month': { ... } }
+  console.log('🏗️  Generating Time Attendance Records (Realistic)...');
 
-  for (const monthInfo of months) {
-    console.log(`\n📅 ${monthInfo.name}`);
-
-    const workdays = getWorkdaysInMonth(monthInfo.year, monthInfo.month, monthInfo.maxDay || 31);
-    const monthStr = `${monthInfo.year}-${String(monthInfo.month).padStart(2, '0')}`;
-    console.log(`   📆 ${workdays.length} ngày làm việc`);
-
-    let monthRecords = 0;
-    let monthStats = { present: 0, leave: 0, businessTrip: 0, absent: 0, ot: 0 };
-
-    // Force seed until end of Feb 2026
-    const today = new Date('2026-02-28');
-    const todayStr = today.toISOString().split('T')[0];
+  for (const m of months) {
+    const daysInMonth = new Date(m.year, m.month, 0).getDate();
 
     for (const userId of userIds) {
-      // Init monthly data
-      const key = `${userId}-${monthStr}`;
-      monthlyData[key] = {
-        userId,
-        month: monthStr,
-        totalScheduledDays: workdays.length,
-        presentDays: 0,
-        absentDays: 0,
-        approvedLeaveDays: 0,
-        unauthorizedAbsenceDays: 0,
-        businessTripDays: 0,
-        lateDays: 0,
-        earlyLeaveDays: 0,
-        totalLateMinutes: 0,
-        totalEarlyLeaveMinutes: 0,
-        totalWorkHours: 0,
-        totalWorkingUnits: 0,
-        totalOvertimeHours: 0,
-        totalOtWorkingUnits: 0,
-        totalLatePenalty: 0,
-        totalEarlyLeavePenalty: 0,
-        totalUnauthorizedAbsencePenalty: 0,
-        totalPenalty: 0
-      };
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dateStr = `${m.year}-${String(m.month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        if (dateStr > '2026-02-28') continue;
 
-      for (const date of workdays) {
-        // Chỉ seed đến ngày hiện tại
-        if (date > todayStr) continue;
+        const isHol = HOLIDAYS_SET.has(dateStr);
+        const dayOfWeek = new Date(dateStr).getDay();
+        const isWknd = (dayOfWeek === 0 || dayOfWeek === 6);
+        const isWeekday = !isHol && !isWknd;
 
-        const appKey = `${userId}-${date}`;
+        const appKey = `${userId}-${dateStr}`;
+        const otPlan = PLANNED_OT.get(appKey);
 
-        // Check các trường hợp đặc biệt từ applications
-        const hasLeave = leaveMap.has(appKey);
-        const hasBusinessTrip = businessTripMap.has(appKey);
-        const hasOT = overtimeMap.has(appKey);
-        const hasForgotCheck = forgotCheckMap.has(appKey);
-
-        // CASE 1: Nghỉ phép - không có time_attendance record
-        if (hasLeave) {
-          monthlyData[key].approvedLeaveDays++;
-          monthlyData[key].totalWorkingUnits += 1; // Nghỉ phép vẫn tính 1 công
-          monthStats.leave++;
-          continue;
-        }
-
-        // CASE 2: Công tác - tạo record với flag đặc biệt
-        if (hasBusinessTrip) {
-          monthlyData[key].businessTripDays++;
-          monthlyData[key].totalWorkingUnits += 1; // Công tác tính 1 công
-          monthlyData[key].presentDays++;
-          monthStats.businessTrip++;
-
-          // Tạo attendance record cho công tác (8h làm việc chuẩn)
-          batch.push({
-            userId,
-            date,
-            checkInTime: `${date}T08:00:00+07:00`,
-            checkOutTime: `${date}T18:00:00+07:00`,
-            dailyTotalWorkHours: 9,
-            dailyWorkingUnit: 1,
-            totalWorkingUnit: 1,
-            otWorkingUnit: 0,
-            lateMinutes: 0,
-            earlyDepartureMinutes: 0,
-            lateArrivalPenalty: 0,
-            earlyLeavePenalty: 0,
-            created_at: new Date(),
-            updated_at: new Date()
-          });
-          monthRecords++;
-          totalRecords++;
-          continue;
-        }
-
-        // CASE 3: Random nghỉ không phép (5% mỗi ngày)
-        if (Math.random() < 0.05) {
-          monthlyData[key].unauthorizedAbsenceDays++;
-          monthlyData[key].totalUnauthorizedAbsencePenalty += 200000; // Phạt 200k/ngày vắng không phép
-          monthlyData[key].totalPenalty += 200000;
-          monthStats.absent++;
-          continue;
-        }
-
-        // CASE 4: Đi làm bình thường (Check OT trước khi generate time)
-        let otHoursRecord = 0;
-        let isRandomOT = !hasOT && !hasLeave && !hasBusinessTrip && Math.random() < 0.15; // 15% random OT chance
-
-        if (hasOT) {
-          const otData = overtimeMap.get(appKey);
-          otHoursRecord = otData.totalHours || 0;
-        } else if (isRandomOT) {
-          // Random OT: 1.5 - 4 hours
-          otHoursRecord = 1.5 + Math.random() * 2.5;
-          otHoursRecord = Math.round(otHoursRecord * 10) / 10;
-        }
-
-        // Kiểm tra forgot-check để điều chỉnh thời gian
-        let times;
-        if (hasForgotCheck) {
-          const forgotData = forgotCheckMap.get(appKey);
-          if (forgotData.forgotType === 'check-in') {
-            // Quên check-in: dùng actualTime làm check-in
-            const actualTime = forgotData.actualTime ? new Date(forgotData.actualTime) : null;
-            times = generateDayTimes();
-            if (actualTime) {
-              times.checkInHour = actualTime.getHours();
-              times.checkInMinute = actualTime.getMinutes();
-              times.checkInTime = `${String(times.checkInHour).padStart(2, '0')}:${String(times.checkInMinute).padStart(2, '0')}:00`;
-            }
-          } else {
-            // Quên check-out: dùng actualTime làm check-out
-            const actualTime = forgotData.actualTime ? new Date(forgotData.actualTime) : null;
-            times = generateDayTimes();
-            if (actualTime) {
-              times.checkOutHour = actualTime.getHours();
-              times.checkOutMinute = actualTime.getMinutes();
-              times.checkOutTime = `${String(times.checkOutHour).padStart(2, '0')}:${String(times.checkOutMinute).padStart(2, '0')}:00`;
-            }
-          }
-        } else {
-          times = generateDayTimes();
-        }
-
-        // Adjust checkOutTime if OT exists
-        if (otHoursRecord > 0) {
-          // Base checkout is around 18:00. Add OT hours.
-          // If generated checkout is already late, keep it or extend it.
-          // Simplification: Set checkout to 18:00 + OT hours + random minutes
-          const baseEndHour = 18;
-          const extraHours = Math.floor(otHoursRecord);
-          const extraMinutes = Math.floor((otHoursRecord - extraHours) * 60) + Math.floor(Math.random() * 15);
-
-          let finalHour = baseEndHour + extraHours;
-          let finalMinute = extraMinutes; // Could be > 60
-
-          if (finalMinute >= 60) {
-            finalHour += Math.floor(finalMinute / 60);
-            finalMinute = finalMinute % 60;
-          }
-
-          if (finalHour > 23) finalHour = 23; // cap at midnight
-
-          times.checkOutHour = finalHour;
-          times.checkOutMinute = finalMinute;
-          times.checkOutTime = `${String(finalHour).padStart(2, '0')}:${String(finalMinute).padStart(2, '0')}:00`;
-        }
-
-
-        const workHours = calculateWorkHours(times.checkInHour, times.checkInMinute, times.checkOutHour, times.checkOutMinute);
-        const { lateMinutes, earlyMinutes, latePenalty, earlyPenalty } = calculateLateness(times.checkInHour, times.checkInMinute, times.checkOutHour, times.checkOutMinute);
-
-        // Tính công: 1 công nếu làm >= 4h
-        let dailyWorkingUnit = workHours >= 4 ? 1 : 0.5;
-        let otWorkingUnit = otHoursRecord / 8; // Mỗi 8h OT = 1 công OT
-
-        // CASE 5: Cập nhật thống kê OT
-        if (otHoursRecord > 0) {
-          monthlyData[key].totalOvertimeHours += otHoursRecord;
-          monthlyData[key].totalOtWorkingUnits += otWorkingUnit;
-          monthStats.ot++;
-        }
-
-        // Cập nhật monthly data
-        monthlyData[key].presentDays++;
-        monthlyData[key].totalWorkHours += workHours;
-        monthlyData[key].totalWorkingUnits += dailyWorkingUnit;
-        monthlyData[key].totalLateMinutes += lateMinutes;
-        monthlyData[key].totalEarlyLeaveMinutes += earlyMinutes;
-        monthlyData[key].totalLatePenalty += latePenalty;
-        monthlyData[key].totalEarlyLeavePenalty += earlyPenalty;
-        monthlyData[key].totalPenalty += (latePenalty + earlyPenalty);
-
-        if (lateMinutes > 0) monthlyData[key].lateDays++;
-        if (earlyMinutes > 0) monthlyData[key].earlyLeaveDays++;
-        monthStats.present++;
-
-        batch.push({
+        let record = {
           userId,
-          date,
-          checkInTime: `${date}T${times.checkInTime}+07:00`,
-          checkOutTime: `${date}T${times.checkOutTime}+07:00`,
-          dailyTotalWorkHours: Math.round(workHours * 100) / 100,
-          dailyWorkingUnit,
-          totalWorkingUnit: dailyWorkingUnit + otWorkingUnit,
-          otWorkingUnit,
-          overtimeHours: otHoursRecord,
-          lateMinutes,
-          earlyDepartureMinutes: earlyMinutes,
-          lateArrivalPenalty: latePenalty,
-          earlyLeavePenalty: earlyPenalty,
+          date: dateStr,
+          checkInTime: null,
+          checkOutTime: null,
+          dailyTotalWorkHours: 0,
+          dailyWorkingUnit: 0,
+          totalWorkingUnit: 0,
+          otWorkingUnit: 0,
+          overtimeHours: 0,
+          lateMinutes: 0,
+          earlyDepartureMinutes: 0,
+          lateArrivalPenalty: 0,
+          earlyLeavePenalty: 0,
           created_at: new Date(),
           updated_at: new Date()
-        });
+        };
 
-        monthRecords++;
-        totalRecords++;
+        // ---------------------------------------------------------
+        // LOGIC: ATTENDANCE MATCHES OT PLAN
+        // ---------------------------------------------------------
 
-        if (batch.length >= batchSize) {
-          await knex('time_attendances').insert(batch);
+        // CASE 1: Has Planned OT (Holiday/Weekend/Weekday Evening)
+        if (otPlan) {
+          // Must have check-in/out to justify the OT
+          let inTime = otPlan.startTime + ':00'; // e.g. 08:00:00 or 17:00:00?
+          let outTime = otPlan.endTime + ':00';  // e.g. 17:00:00 or 19:30:00
+
+          // If Full Day OT (Holiday/Weekend) -> Start ~08:00, End ~17:00
+          if ((isHol || isWknd) && otPlan.totalHours >= 8) {
+            // Add minor variance (come a bit early, leave a bit late)
+            // Random e.g. 07:45 - 08:00
+            const varIn = Math.floor(Math.random() * 15);
+            inTime = `07:${String(45 + varIn).padStart(2, '0')}:00`;
+
+            // End ~17:00 + variance
+            outTime = getRandomTime(17, 0, 10);
+
+            record.dailyTotalWorkHours = 8;
+            record.overtimeHours = 8;
+            // Units
+            const otRate = isHol ? 3.0 : 1.5;
+            record.otWorkingUnit = otRate;
+            record.totalWorkingUnit = otRate;
+          }
+          // If Weekday Evening OT -> Normal Work (8-17) + Extra
+          else if (isWeekday) {
+            // Normal Check-in (Varied)
+            inTime = getRandomTime(8, 0, 20); // 07:40 - 08:20
+            if (inTime > '08:00:00') {
+              // Calculate late logic later if needed
+              // For OT purity, let's assume they checked in reasonably
+              inTime = getRandomTime(7, 55, 5); // 07:50 - 08:00 safe
+            }
+
+            // Check-out MUST covers OT
+            // OT end is otPlan.endTime. Let's make actual checkout slightly AFTER that.
+            const planEnd = otPlan.endTime; // "19:30"
+            const [h, min] = planEnd.split(':').map(Number);
+            // checkout = planEnd + random(0-15 mins)
+            const dOut = new Date(2000, 0, 1, h, min);
+            dOut.setMinutes(dOut.getMinutes() + Math.floor(Math.random() * 15));
+            outTime = `${String(dOut.getHours()).padStart(2, '0')}:${String(dOut.getMinutes()).padStart(2, '0')}:00`;
+
+            // Calculate standard hours (8) + OT hours
+            record.dailyTotalWorkHours = 8; // Standard filled
+            record.overtimeHours = otPlan.totalHours;
+
+            record.dailyWorkingUnit = 1.0; // Standard day OK
+            record.otWorkingUnit = (otPlan.totalHours / 8) * 1.5; // Rate 1.5
+            record.totalWorkingUnit = record.dailyWorkingUnit + record.otWorkingUnit;
+          }
+
+          record.checkInTime = `${dateStr}T${inTime}+07:00`;
+          record.checkOutTime = `${dateStr}T${outTime}+07:00`;
+        }
+
+        // CASE 2: No OT, Standard Weekday
+        // CASE 2: No OT, Standard Weekday
+        else if (isWeekday) {
+          // 85% Present (Increased absence slightly for realism)
+          if (Math.random() < 0.85) {
+            // Time Logic: MORE VISIBLE Late/Early for User Testing
+            // Start: Target 08:00
+            // - 30% Late (was 10%)
+            // - 70% On Time
+            let inTime;
+            let lateM = 0;
+            if (Math.random() < 0.30) { // Late
+              lateM = 1 + Math.floor(Math.random() * 59);
+              inTime = `08:${String(lateM).padStart(2, '0')}:00`;
+              record.lateMinutes = lateM;
+              record.lateArrivalPenalty = lateM * 1000;
+            } else { // On Time
+              const earlyM = Math.floor(Math.random() * 30); // 07:30 - 08:00
+              const mins = 60 - earlyM;
+              const d = new Date(2000, 0, 1, 8, 0, 0);
+              d.setMinutes(d.getMinutes() - earlyM);
+              inTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:00`;
+            }
+
+            // End: Target 17:00
+            // - 15% Early Leave (was 5%)
+            // - 85% On Time/Late
+            let outTime;
+            let earlyLeaveM = 0;
+            if (Math.random() < 0.15) { // Early
+              earlyLeaveM = 1 + Math.floor(Math.random() * 59);
+              const d = new Date(2000, 0, 1, 17, 0, 0);
+              d.setMinutes(d.getMinutes() - earlyLeaveM);
+              outTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:00`;
+              record.earlyDepartureMinutes = earlyLeaveM;
+              record.earlyLeavePenalty = earlyLeaveM * 1000;
+            } else { // On Time (17:00 - 17:30)
+              const overM = Math.floor(Math.random() * 30);
+              const d = new Date(2000, 0, 1, 17, 0, 0);
+              d.setMinutes(d.getMinutes() + overM);
+              outTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:00`;
+            }
+
+            record.checkInTime = `${dateStr}T${inTime}+07:00`;
+            record.checkOutTime = `${dateStr}T${outTime}+07:00`;
+
+            // Calc effective work hours (8 - penalty)
+            let h = 8 - (lateM / 60) - (earlyLeaveM / 60);
+            if (h < 0) h = 0;
+            record.dailyTotalWorkHours = Number(h.toFixed(2));
+
+            // Units (Adjusted: More lenient as per user request)
+            if (h >= 4.0) { record.dailyWorkingUnit = 1.0; } // Was 7.5
+            else if (h >= 2.0) { record.dailyWorkingUnit = 0.5; } // Was 3.5
+            else { record.dailyWorkingUnit = 0; }
+
+            record.totalWorkingUnit = record.dailyWorkingUnit;
+          }
+        }
+
+        // CASE 3: Holiday/Weekend with No OT -> No Attendance (null)
+
+        batch.push(record);
+        if (batch.length >= BATCH_SIZE) {
+          await knex('time_attendances').insert(batch).onConflict('id').ignore();
           batch = [];
         }
       }
     }
-
-    if (batch.length > 0) {
-      await knex('time_attendances').insert(batch);
-      batch = [];
-    }
-
-    console.log(`   ✅ ${monthRecords} time_attendances records`);
-    console.log(`   📊 Thống kê: Present=${monthStats.present}, Leave=${monthStats.leave}, BusinessTrip=${monthStats.businessTrip}, Absent=${monthStats.absent}, OT=${monthStats.ot}`);
   }
 
-  console.log(`\n📊 Tổng: ${totalRecords} time_attendances records`);
-
-  // =============================================
-  // STEP 5: Tạo monthly_attendances từ dữ liệu đã tính
-  // =============================================
-  console.log('\n🔄 Đang tạo monthly_attendances...');
-
-  const monthlyRecords = Object.values(monthlyData).map((data) => {
-    const d = data;
-    const avgHours = d.presentDays > 0 ? d.totalWorkHours / d.presentDays : 0;
-
-    return {
-      userId: d.userId,
-      month: d.month,
-      totalScheduledDays: d.totalScheduledDays,
-      presentDays: d.presentDays,
-      absentDays: d.absentDays + d.unauthorizedAbsenceDays,
-      approvedLeaveDays: d.approvedLeaveDays,
-      unauthorizedAbsenceDays: d.unauthorizedAbsenceDays,
-      businessTripDays: d.businessTripDays,
-      lateDays: d.lateDays,
-      earlyLeaveDays: d.earlyLeaveDays,
-      totalLateMinutes: d.totalLateMinutes,
-      totalEarlyLeaveMinutes: d.totalEarlyLeaveMinutes,
-      totalWorkHours: Math.round(d.totalWorkHours * 100) / 100,
-      averageWorkHours: Math.round(avgHours * 100) / 100,
-      totalWorkingUnits: Math.round(d.totalWorkingUnits * 100) / 100,
-      totalOvertimeHours: Math.round(d.totalOvertimeHours * 100) / 100,
-      totalOtWorkingUnits: Math.round(d.totalOtWorkingUnits * 100) / 100,
-      totalLatePenalty: d.totalLatePenalty,
-      totalEarlyLeavePenalty: d.totalEarlyLeavePenalty,
-      totalUnauthorizedAbsencePenalty: d.totalUnauthorizedAbsencePenalty,
-      totalPenalty: d.totalPenalty,
-      isApproved: d.month.startsWith('2025'), // Tự động duyệt các tháng năm 2025
-      approvedBy: d.month.startsWith('2025') ? 1 : null,
-      approvedAt: d.month.startsWith('2025') ? new Date() : null,
-      notes: d.month.startsWith('2025') ? 'Auto-approved by seed' : null,
-      created_at: new Date(),
-      updated_at: new Date()
-    };
-  });
-
-  // Tất cả users đều có record monthly (kể cả nghỉ cả tháng)
-  const validMonthlyRecords = monthlyRecords.filter(r => r.totalScheduledDays > 0);
-
-  // Insert batch
-  const monthlyBatchSize = 100;
-  for (let i = 0; i < validMonthlyRecords.length; i += monthlyBatchSize) {
-    const batchInsert = validMonthlyRecords.slice(i, i + monthlyBatchSize);
-    await knex('monthly_attendances').insert(batchInsert);
+  if (batch.length > 0) {
+    await knex('time_attendances').insert(batch).onConflict('id').ignore();
   }
-
-  console.log(`   ✅ ${validMonthlyRecords.length} monthly_attendances records`);
+  console.log('   ✅ Inserted Time Attendances.');
 
   // =============================================
-  // VERIFY
+  // STEP 3: Monthly Aggregation
   // =============================================
-  console.log('\n' + '='.repeat(70));
-  console.log('✅ HOÀN THÀNH SEED DỮ LIỆU CHẤM CÔNG!');
-
-  const verifyTime = await knex('time_attendances')
-    .whereRaw("date >= '2025-10-01' AND date <= '2025-12-31'")
-    .count('* as count')
-    .first();
-
-  const verifyMonthly = await knex('monthly_attendances')
-    .whereIn('month', ['2025-10', '2025-11', '2025-12'])
-    .count('* as count')
-    .first();
-
-  console.log(`   📊 time_attendances: ${verifyTime.count} records`);
-  console.log(`   📊 monthly_attendances: ${verifyMonthly.count} records`);
-
-  // Sample data với đầy đủ thông tin
-  const samples = await knex('monthly_attendances')
-    .whereIn('month', ['2025-10', '2025-11', '2025-12'])
-    .andWhere('presentDays', '>', 0)
-    .limit(3);
-
-  for (const sample of samples) {
-    console.log(`\n📋 Sample (user ${sample.userId}, ${sample.month}):`);
-    console.log(`   📅 Ngày làm việc: ${sample.totalScheduledDays}`);
-    console.log(`   ✅ Có mặt: ${sample.presentDays} | 🏖️ Nghỉ phép: ${sample.approvedLeaveDays}`);
-    console.log(`   🚗 Công tác: ${sample.businessTripDays} | ❌ Vắng không phép: ${sample.unauthorizedAbsenceDays}`);
-    console.log(`   ⏰ Đi muộn: ${sample.lateDays} ngày (${sample.totalLateMinutes} phút)`);
-    console.log(`   🏃 Về sớm: ${sample.earlyLeaveDays} ngày (${sample.totalEarlyLeaveMinutes} phút)`);
-    console.log(`   💼 Tổng công: ${sample.totalWorkingUnits} | OT: ${sample.totalOtWorkingUnits} công`);
-    console.log(`   🕐 Tổng giờ làm: ${sample.totalWorkHours}h | OT: ${sample.totalOvertimeHours}h`);
-  }
-
-  console.log('\n' + '='.repeat(70));
-  console.log('📝 GHI CHÚ: Chạy script recalculate_monthly.cjs để tính penalty và OT salary');
-  console.log('='.repeat(70));
+  console.log('📊 Calculating Monthly Aggregates...');
+  const aggregatorSQL = `
+    INSERT INTO monthly_attendances (
+      "userId", "month", "totalWorkingUnits", "totalOtWorkingUnits", 
+      "totalWorkHours", "totalOvertimeHours", "presentDays", "lateDays", 
+      "earlyLeaveDays", "totalLateMinutes", "totalEarlyLeaveMinutes", 
+      "created_at", "updated_at"
+    )
+    SELECT 
+      "userId",
+      to_char("date", 'YYYY-MM'),
+      SUM(COALESCE("totalWorkingUnit", 0)),
+      SUM(COALESCE("otWorkingUnit", 0)),
+      SUM(COALESCE("dailyTotalWorkHours", 0)),
+      SUM(COALESCE("overtimeHours", 0)),
+      COUNT(CASE WHEN "checkInTime" IS NOT NULL THEN 1 END),
+      COUNT(CASE WHEN "lateMinutes" > 0 THEN 1 END),
+      COUNT(CASE WHEN "earlyDepartureMinutes" > 0 THEN 1 END),
+      SUM(COALESCE("lateMinutes", 0)),
+      SUM(COALESCE("earlyDepartureMinutes", 0)),
+      NOW(), NOW()
+    FROM time_attendances
+    WHERE date >= '2025-10-01' AND date <= '2026-02-28'
+    GROUP BY "userId", to_char("date", 'YYYY-MM')
+  `;
+  await knex.raw(aggregatorSQL);
+  console.log('   ✅ Monthly Aggregates Calculated.');
+  console.log('🎉 SEED COMPLETED SUCCESSFULLY.');
 };

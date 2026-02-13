@@ -17,6 +17,7 @@ class TimeAttendanceModel extends Model {
     dailyWorkingUnit!: number;
     totalWorkingUnit!: number; // Tổng công (bao gồm cả OT)
     otWorkingUnit!: number; // Công OT riêng
+    overtimeHours!: number; // Giờ OT thực tế
     earlyLeavePenalty!: number;
     lateArrivalPenalty!: number;
     created_at!: string;
@@ -38,6 +39,7 @@ class TimeAttendanceModel extends Model {
                 dailyWorkingUnit: { type: ['number', 'string'], default: 0 },
                 totalWorkingUnit: { type: ['number', 'string'], default: 0 },
                 otWorkingUnit: { type: ['number', 'string'], default: 0 },
+                overtimeHours: { type: ['number', 'string'], default: 0 },
                 earlyLeavePenalty: { type: ['number', 'string'], default: 0 },
                 lateArrivalPenalty: { type: ['number', 'string'], default: 0 },
                 created_at: { type: 'string' },

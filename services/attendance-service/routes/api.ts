@@ -58,7 +58,7 @@ router.get('/dashboard/stats', async (req: Request, res: Response) => {
 
 // API: Lấy toàn bộ thông tin chấm công tháng (monthly-full)
 // GET /api/user/:userId/monthly-full?year=2025&month=10
-router.get('/user/:userId/monthly-full', async (req: Request, res: Response) => {
+router.get('/user/:userId/monthly-full', noCache, async (req: Request, res: Response) => {
   await getUserMonthlyFull(req, res);
 });
 

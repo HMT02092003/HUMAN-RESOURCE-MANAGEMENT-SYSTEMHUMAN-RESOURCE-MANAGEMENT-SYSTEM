@@ -5,7 +5,6 @@ from typing import List, Optional, Dict, Any
 from datetime import date, datetime, timedelta
 import requests
 import logging
-import os
 
 from app.core.database import get_db, AttendanceLog
 from app.api.deps import get_current_user
@@ -48,6 +47,7 @@ def get_attendance_logs(
         try:
             # Check scope for 'attendance_history' permission via Auth Service
             base_url = settings.API_GATEWAY_URL if hasattr(settings, 'API_GATEWAY_URL') else "http://api-gateway:4000"
+            # Fallback to direct auth-service if gateway fails
             check_scope_url = f"{base_url}/api/auth/users/check-scope"
             
             headers = {"Content-Type": "application/json"}
@@ -65,7 +65,9 @@ def get_attendance_logs(
                 scope_data = resp.json()
                 if scope_data.get("success"):
                     allowed_user_ids = scope_data.get("userIds", [])
+                    # logger.info(f"Scope check for user {requester_id}: {scope_data.get('scope')} ({len(allowed_user_ids)} users)")
             else:
+                # Fallback for Employee (Role 2) if check-scope fails
                 if role_id == 2:
                     allowed_user_ids = [requester_id]
         except Exception as e:
@@ -97,7 +99,8 @@ def get_attendance_logs(
     if user_id:
         # If user provided a specific user_id, ensure it's within their allowed IDs
         if allowed_user_ids is not None and user_id not in allowed_user_ids:
-             # If they try to filter for someone they can't see, return empty result
+             # If they try to filter for someone they can't see, return empty or forbidden
+             # For better UX, we just force the filter to something impossible or empty
              query = query.filter(AttendanceLog.user_id == -1) 
         else:
              query = query.filter(AttendanceLog.user_id == user_id)
@@ -121,13 +124,11 @@ def get_attendance_logs(
     user_map = {}
     if user_ids_to_fetch:
         try:
-            base_url = settings.API_GATEWAY_URL if hasattr(settings, 'API_GATEWAY_URL') else "http://api-gateway:4100"
-            auth_service_url = os.getenv('AUTH_SERVICE_URL', 'http://auth-service:4101')
-            
-            # Use Gateway first, then direct service
+            base_url = settings.API_GATEWAY_URL if hasattr(settings, 'API_GATEWAY_URL') else "http://localhost:4000"
+            # Fallback to direct service if needed
             urls_to_try = [
                 f"{base_url}/api/auth/users/bulk",
-                f"{auth_service_url}/api/users/bulk"
+                "http://localhost:4001/api/users/bulk"
             ]
             
             payload = {"userIds": user_ids_to_fetch}

@@ -30,15 +30,15 @@ interface MonthlyStatsCardProps {
   defaultShift?: { name: string; start_time: string; end_time: string };
 }
 
-const MonthlyStatsCard: React.FC<MonthlyStatsCardProps> = ({ 
-  monthlyStats, 
-  otRate, 
+const MonthlyStatsCard: React.FC<MonthlyStatsCardProps> = ({
+  monthlyStats,
+  otRate,
   isMobile,
   defaultShift = { name: 'Ca hành chính', start_time: '08:00', end_time: '17:00' }
 }) => {
   return (
-    <Card 
-      title="Thống kê tháng" 
+    <Card
+      title="Thống kê tháng"
       style={{ marginBottom: 16 }}
       bodyStyle={{ padding: isMobile ? 12 : 16 }}
     >
@@ -61,7 +61,7 @@ const MonthlyStatsCard: React.FC<MonthlyStatsCardProps> = ({
             </div>
           </div>
         </Col>
-        
+
         {/* Hàng 2: Công OT */}
         <Col span={24}>
           <div style={{
@@ -79,7 +79,7 @@ const MonthlyStatsCard: React.FC<MonthlyStatsCardProps> = ({
             </div>
           </div>
         </Col>
-        
+
         {/* Hàng 3: Ngày làm việc */}
         <Col span={24}>
           <div style={{
@@ -97,7 +97,7 @@ const MonthlyStatsCard: React.FC<MonthlyStatsCardProps> = ({
             </div>
           </div>
         </Col>
-        
+
         {/* Hàng 4: Tổng phạt */}
         <Col span={24}>
           <div style={{
@@ -111,30 +111,30 @@ const MonthlyStatsCard: React.FC<MonthlyStatsCardProps> = ({
             overflow: 'hidden'
           }}>
             <div style={{ fontSize: 13, color: monthlyStats.totalPenalty > 0 ? '#b91c1c' : '#15803d', fontWeight: 500 }}>Tổng phạt</div>
-            <div style={{ 
-              fontSize: monthlyStats.totalPenalty >= 1000000 ? 16 : 20, 
-              fontWeight: 'bold', 
+            <div style={{
+              fontSize: monthlyStats.totalPenalty >= 1000000 ? 16 : 20,
+              fontWeight: 'bold',
               color: monthlyStats.totalPenalty > 0 ? '#dc2626' : '#16a34a',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis'
             }}>
-              -{formatVND(monthlyStats.totalPenalty || 0)}đ
+              {formatVND(monthlyStats.totalPenalty || 0)}đ
             </div>
           </div>
         </Col>
       </Row>
 
       {/* ===== COLLAPSIBLE DETAILS ===== */}
-      <Collapse 
-        ghost 
+      <Collapse
+        ghost
         defaultActiveKey={['days']}
         expandIconPosition="end"
         style={{ background: '#fafafa', borderRadius: 8 }}
         items={[
           {
             key: 'days',
-            label: <Text strong style={{ fontSize: 13 }}>📅 Chi tiết ngày công</Text>,
+            label: <Text strong style={{ fontSize: 13 }}><CalendarOutlined style={{ marginRight: 8 }} />Chi tiết ngày công</Text>,
             children: (
               <Row gutter={[8, 8]}>
                 <Col span={8}>
@@ -184,7 +184,7 @@ const MonthlyStatsCard: React.FC<MonthlyStatsCardProps> = ({
           },
           {
             key: 'hours',
-            label: <Text strong style={{ fontSize: 13 }}>⏰ Thời gian làm việc</Text>,
+            label: <Text strong style={{ fontSize: 13 }}><ClockCircleOutlined style={{ marginRight: 8 }} />Thời gian làm việc</Text>,
             children: (
               <Row gutter={[8, 8]}>
                 <Col span={12}>
@@ -222,7 +222,7 @@ const MonthlyStatsCard: React.FC<MonthlyStatsCardProps> = ({
             key: 'penalty',
             label: (
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                <Text strong style={{ fontSize: 13 }}>💰 Chi tiết tiền phạt</Text>
+                <Text strong style={{ fontSize: 13 }}><DollarOutlined style={{ marginRight: 8 }} />Chi tiết tiền phạt</Text>
                 {monthlyStats.totalPenalty > 0 && (
                   <Tag color="red" style={{ marginLeft: 8 }}>{formatVND(monthlyStats.totalPenalty)}đ</Tag>
                 )}

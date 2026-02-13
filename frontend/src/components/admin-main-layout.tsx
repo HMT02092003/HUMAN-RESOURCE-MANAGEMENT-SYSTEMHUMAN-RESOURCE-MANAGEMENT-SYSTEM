@@ -164,7 +164,7 @@ const baseMenuItemsList: ExtendedMenuItem[] = [
         [
             getItem('Bảng chấm công', 'attendance', <CalendarOutlined />, 'timeAttendance'),
             getItem('Chấm công hàng ngày', 'dailyAttendance', <CalendarOutlined />, 'dailyAttendance'),
-            getItem('Lịch sử chấm công (AI)', 'attendanceHistory', <ClockCircleOutlined />, 'attendance_history'),
+            // getItem('Lịch sử chấm công (AI)', 'attendanceHistory', <ClockCircleOutlined />, 'attendance_history'),
             getItem('Duyệt bảng chấm công', 'attendanceApproval', <CheckCircleOutlined />, 'timeAttendance', 'approve'),
             getItem('Quản lý ngày lễ', 'holidays', <CalendarOutlined />, 'holidays'), // Phải dùng đúng key 'holidays' trong DB
         ],

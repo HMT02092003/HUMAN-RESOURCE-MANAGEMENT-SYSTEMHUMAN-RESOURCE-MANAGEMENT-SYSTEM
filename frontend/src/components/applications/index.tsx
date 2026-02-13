@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Button, Space, Typography, Empty, message, Tooltip, Tag, Modal, Form, Input } from 'antd';
-import { PlusOutlined, EyeOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, DownloadOutlined } from '@ant-design/icons';
+import { PlusOutlined, EyeOutlined, DeleteOutlined, CheckOutlined, CloseOutlined, DownloadOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useRouter } from 'next/navigation';
 import applicationService from '@/service/applicationService';
 import { APPLICATION_STATUS_LABELS, APPLICATION_TYPE_LABELS, APPLICATION_STATUS_COLORS } from '@/config/constant';
@@ -438,7 +438,7 @@ const ApplicationList: React.FC<ApplicationListProps> = ({
                             image={Empty.PRESENTED_IMAGE_SIMPLE}
                             description={
                                 <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                                    <div style={{ fontSize: '60px', marginBottom: '16px' }}>📋</div>
+                                    <div style={{ fontSize: '60px', marginBottom: '16px', color: '#1890ff' }}><FileTextOutlined /></div>
                                     <Title level={4} type="secondary" style={{ marginBottom: '8px' }}>
                                         Chưa có đơn từ nào cần duyệt
                                     </Title>

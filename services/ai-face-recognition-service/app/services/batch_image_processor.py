@@ -186,6 +186,13 @@ class BatchImageProcessor:
             normalized_blur = min(blur_score / 500.0, 1.0)
             quality_score = (detection_score * 0.4) + (normalized_blur * 0.6)
             
+            # Crop face for display/dataset
+            x1, y1, x2, y2 = bbox.astype(int)
+            h, w = img_array.shape[:2]
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(w, x2), min(h, y2)
+            cropped_face = img_array[y1:y2, x1:x2].copy()
+
             # Extract yaw angle(s) if available (pose may be [yaw, pitch, roll] or [pitch, yaw, roll])
             yaw_angle = 0.0
             yaw_candidates = []
@@ -209,7 +216,8 @@ class BatchImageProcessor:
                 "yaw_angle": yaw_angle,
                 "yaw_angle_candidates": yaw_candidates,
                 "face_size": (face_width, face_height),
-                "index": img_index
+                "index": img_index,
+                "cropped_face": cropped_face
             }
             
             logger.debug(
@@ -359,6 +367,8 @@ class BatchImageProcessor:
         return {
             "success": True,
             "vector": final_embedding_list,
+            "best_cropped_face": top_k_faces[0].get("cropped_face") if top_k_faces else None,
+            "top_k_cropped_faces": [f.get("cropped_face") for f in top_k_faces],
             "message": f"Đã xử lý thành công {len(top_k_faces)}/{len(images_bytes)} ảnh tốt nhất",
             "metadata": {
                 "total_images": len(images_bytes),
@@ -542,6 +552,8 @@ class BatchImageProcessor:
         return {
             "success": True,
             "vector": final_embedding_list,
+            "best_cropped_face": top_k_faces[0].get("cropped_face") if top_k_faces else None,
+            "top_k_cropped_faces": [f.get("cropped_face") for f in top_k_faces],
             "message": f"Đã xử lý thành công {len(top_k_faces)}/{len(images_bytes)} frames tốt nhất cho góc {angle_type}",
             "metadata": {
                 "angle_type": angle_type,

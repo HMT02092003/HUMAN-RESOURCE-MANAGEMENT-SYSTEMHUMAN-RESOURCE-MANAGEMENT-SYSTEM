@@ -19,35 +19,35 @@ class MonthlySummaryModel extends Model {
     userId!: number;
     departmentId!: number;
     month!: string; // Format: YYYY-MM
-    
+
     // ========== MONTHLY SUMMARY FIELDS ==========
     totalWorkHours!: number;
     totalScheduledDays!: number;
     presentDays!: number;
-    
+
     lateDays!: number;
     earlyLeaveDays!: number;
     totalLateMinutes!: number;
     totalEarlyLeaveMinutes!: number;
-    
+
     totalOvertimeHours!: number;
     totalWorkingUnits!: number; // Tổng công trong tháng (bao gồm cả OT, nghỉ phép, công tác)
     totalOtWorkingUnits!: number; // Tổng công OT riêng biệt
-    
+
     // totalUnpaidLeaveDays removed - use unauthorizedAbsenceDays
-    
+
     totalLatePenalty!: number;
     totalEarlyLeavePenalty!: number;
     totalPenalty!: number;
     isApproved!: boolean;
-    
+
     baseSalary!: number | null;
     finalSalary!: number | null;
-    
+
     approvedBy!: number;
     approvedAt!: string;
     notes!: string | null;
-    
+
     created_at!: string;
     updated_at!: string;
 
@@ -62,33 +62,33 @@ class MonthlySummaryModel extends Model {
                 userId: { type: 'integer' },
                 departmentId: { type: ['integer', 'null'] },
                 month: { type: 'string', pattern: '^\\d{4}-\\d{2}$' }, // YYYY-MM format
-                
+
                 totalScheduledDays: { type: 'integer', default: 0 },
                 totalWorkHours: { type: 'number', default: 0 },
                 presentDays: { type: 'integer', default: 0 },
-                
+
                 lateDays: { type: 'integer', default: 0 },
                 totalLateMinutes: { type: 'integer', default: 0 },
                 totalEarlyLeaveMinutes: { type: 'integer', default: 0 },
-                
+
                 totalOvertimeHours: { type: 'number', default: 0 },
                 totalWorkingUnits: { type: 'number', default: 0 },
                 totalOtWorkingUnits: { type: 'number', default: 0 },
-                
+
                 // totalUnpaidLeaveDays: removed
-                
+
                 totalLatePenalty: { type: 'number', default: 0 },
                 totalEarlyLeavePenalty: { type: 'number', default: 0 },
                 totalPenalty: { type: 'number', default: 0 },
                 isApproved: { type: 'boolean', default: false },
-                
+
                 baseSalary: { type: ['number', 'null'] },
                 finalSalary: { type: ['number', 'null'] },
-                
+
                 approvedBy: { type: ['integer', 'null'] },
                 approvedAt: { type: ['string', 'null'] },
                 notes: { type: ['string', 'null'] },
-                
+
                 created_at: { type: 'string' },
                 updated_at: { type: 'string' }
             }
@@ -156,10 +156,11 @@ class MonthlySummaryModel extends Model {
     // Sanitize properties before insert/update to avoid writing unexpected columns
     override async $beforeInsert() {
         const allowed = [
-            'userId','month','totalScheduledDays','presentDays','absentDays','approvedLeaveDays','unauthorizedAbsenceDays','businessTripDays',
-            'lateDays','earlyLeaveDays','totalLateMinutes','totalEarlyLeaveMinutes','totalWorkHours','averageWorkHours','totalWorkingUnits',
-            'totalOvertimeHours','totalOtWorkingUnits','totalLatePenalty','totalEarlyLeavePenalty','totalUnauthorizedAbsencePenalty','totalPenalty',
-            'totalOvertimeSalary','isApproved','approvedBy','approvedAt','notes','baseSalary','finalSalary','departmentId','created_at','updated_at'
+            'userId', 'month', 'totalScheduledDays', 'presentDays', 'absentDays', 'approvedLeaveDays', 'unauthorizedAbsenceDays', 'businessTripDays',
+            'lateDays', 'earlyLeaveDays', 'totalLateMinutes', 'totalEarlyLeaveMinutes', 'totalWorkHours', 'averageWorkHours', 'totalWorkingUnits',
+            'totalOvertimeHours', 'totalOtWorkingUnits', 'totalEffectiveOtWorkingUnits', 'totalLatePenalty', 'totalEarlyLeavePenalty', 'totalUnauthorizedAbsencePenalty', 'totalPenalty',
+            'totalOvertimeSalary', 'isApproved', 'approvedBy', 'approvedAt', 'notes', 'baseSalary', 'finalSalary', 'departmentId', 'created_at', 'updated_at',
+            'dailyDetails' // ✨ Add dailyDetails snapshot
         ];
         for (const k of Object.keys(this)) {
             if (!allowed.includes(k) && k !== 'id') {
@@ -171,10 +172,11 @@ class MonthlySummaryModel extends Model {
 
     override async $beforeUpdate() {
         const allowed = [
-            'userId','month','totalScheduledDays','presentDays','absentDays','approvedLeaveDays','unauthorizedAbsenceDays','businessTripDays',
-            'lateDays','earlyLeaveDays','totalLateMinutes','totalEarlyLeaveMinutes','totalWorkHours','averageWorkHours','totalWorkingUnits',
-            'totalOvertimeHours','totalOtWorkingUnits','totalLatePenalty','totalEarlyLeavePenalty','totalUnauthorizedAbsencePenalty','totalPenalty',
-            'totalOvertimeSalary','isApproved','approvedBy','approvedAt','notes','baseSalary','finalSalary','departmentId','created_at','updated_at'
+            'userId', 'month', 'totalScheduledDays', 'presentDays', 'absentDays', 'approvedLeaveDays', 'unauthorizedAbsenceDays', 'businessTripDays',
+            'lateDays', 'earlyLeaveDays', 'totalLateMinutes', 'totalEarlyLeaveMinutes', 'totalWorkHours', 'averageWorkHours', 'totalWorkingUnits',
+            'totalOvertimeHours', 'totalOtWorkingUnits', 'totalEffectiveOtWorkingUnits', 'totalLatePenalty', 'totalEarlyLeavePenalty', 'totalUnauthorizedAbsencePenalty', 'totalPenalty',
+            'totalOvertimeSalary', 'isApproved', 'approvedBy', 'approvedAt', 'notes', 'baseSalary', 'finalSalary', 'departmentId', 'created_at', 'updated_at',
+            'dailyDetails' // ✨ Add dailyDetails snapshot
         ];
         for (const k of Object.keys(this)) {
             if (!allowed.includes(k) && k !== 'id') {

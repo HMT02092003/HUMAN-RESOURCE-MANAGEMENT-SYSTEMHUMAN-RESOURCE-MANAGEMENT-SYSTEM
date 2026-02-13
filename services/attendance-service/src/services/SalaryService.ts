@@ -84,7 +84,7 @@ export class SalaryService {
         connection: {
           host: process.env['DB_HOST'] || 'localhost',
           port: Number(process.env['DB_PORT']) || 5432,
-          database: 'salary_service',
+          database: 'salary_service_final',
           user: process.env['DB_USER'] || 'postgres',
           password: process.env['DB_PASSWORD'] || '123456'
         }
@@ -188,7 +188,7 @@ export class SalaryService {
         connection: {
           host: process.env['DB_HOST'] || 'localhost',
           port: Number(process.env['DB_PORT']) || 5432,
-          database: 'salary_service',
+          database: 'salary_service_final',
           user: process.env['DB_USER'] || 'postgres',
           password: process.env['DB_PASSWORD'] || '123456'
         }

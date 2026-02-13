@@ -214,8 +214,8 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
                 <Select
                   placeholder="Chọn loại đơn"
                   options={[
-                    { value: "leave", label: "📝 Nghỉ phép (có lương, trừ số ngày phép)" },
-                    { value: "regular", label: "📌 Nghỉ không phép (không lương)" },
+                    { value: "leave", label: "Nghỉ phép (có lương, trừ số ngày phép)" },
+                    { value: "regular", label: "Nghỉ thường (không lương)" },
                   ]}
                 />
               </Form.Item>
@@ -253,9 +253,9 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
                 <Select
                   placeholder="Chọn hình thức nghỉ"
                   options={[
-                    { value: "personal", label: "🏠 Nghỉ cá nhân" },
-                    { value: "sick", label: "🤒 Nghỉ ốm" },
-                    { value: "other", label: "🔖 Khác" },
+                    { value: "personal", label: "Nghỉ cá nhân" },
+                    { value: "sick", label: "Nghỉ ốm" },
+                    { value: "other", label: "Khác" },
                   ]}
                 />
               </Form.Item>

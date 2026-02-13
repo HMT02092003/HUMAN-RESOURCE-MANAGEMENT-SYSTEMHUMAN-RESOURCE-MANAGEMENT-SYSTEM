@@ -7,6 +7,8 @@ API endpoints cho đăng ký khuôn mặt bằng batch images hoặc video
 import logging
 import os
 import json
+import cv2
+import shutil
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.responses import JSONResponse
@@ -113,13 +115,11 @@ async def register_face_batch(
                 }
             )
         
-        # Save vector to database as JSON string
-        vector_json = json.dumps(result["vector"])
-        
+        # Save vector to database directly
         new_embedding = FaceEmbedding(
             user_id=user_id,
             username=username,
-            embedding_vector=vector_json,
+            embedding_vector=result["vector"],
             face_type='MASTER',
             quality_score=result["metadata"].get("average_quality_score", 0.0)
         )
@@ -127,6 +127,29 @@ async def register_face_batch(
         db.add(new_embedding)
         db.commit()
         db.refresh(new_embedding)
+        
+        # --- SAVE CROPPED FACES TO DATASET ---
+        try:
+            dataset_dir = getattr(settings, 'DATASET_DIR', 'dataset')
+            # Use 'master' subfolder for batch registration
+            user_save_dir = os.path.join(dataset_dir, username, 'master')
+            
+            # Clear old folder
+            if os.path.exists(user_save_dir):
+                shutil.rmtree(user_save_dir)
+            os.makedirs(user_save_dir, exist_ok=True)
+            
+            # Save top K faces
+            top_faces = result.get("top_k_cropped_faces", [])
+            for idx, face_img in enumerate(top_faces):
+                if face_img is not None:
+                    save_path = os.path.join(user_save_dir, f"{idx}.jpg")
+                    cv2.imwrite(save_path, face_img)
+            
+            logger.info(f"✅ Saved {len(top_faces)} cropped faces to {user_save_dir}")
+        except Exception as e:
+            logger.error(f"❌ Failed to save dataset images: {e}")
+        # ------------------------------------
         
         logger.info(f"✅ Successfully registered MASTER vector for {username} (embedding_id: {new_embedding.id})")
         
@@ -277,13 +300,11 @@ async def register_face_video(
                 }
             )
         
-        # Save vector to database as JSON string
-        vector_json = json.dumps(result["vector"])
-        
+        # Save vector to database directly (pgvector handles conversion)
         new_embedding = FaceEmbedding(
             user_id=user_id,
             username=username,
-            embedding_vector=vector_json,
+            embedding_vector=result["vector"],
             face_type='MASTER',
             quality_score=result["metadata"].get("average_quality_score", 0.0)
         )
@@ -291,6 +312,29 @@ async def register_face_video(
         db.add(new_embedding)
         db.commit()
         db.refresh(new_embedding)
+        
+        # --- SAVE CROPPED FACES TO DATASET ---
+        try:
+            dataset_dir = getattr(settings, 'DATASET_DIR', 'dataset')
+            # Use 'master' subfolder for video registration
+            user_save_dir = os.path.join(dataset_dir, username, 'master')
+            
+            # Clear old folder
+            if os.path.exists(user_save_dir):
+                shutil.rmtree(user_save_dir)
+            os.makedirs(user_save_dir, exist_ok=True)
+            
+            # Save top K faces
+            top_faces = result.get("top_k_cropped_faces", [])
+            for idx, face_img in enumerate(top_faces):
+                if face_img is not None:
+                    save_path = os.path.join(user_save_dir, f"{idx}.jpg")
+                    cv2.imwrite(save_path, face_img)
+            
+            logger.info(f"✅ Saved {len(top_faces)} cropped video frames to {user_save_dir}")
+        except Exception as e:
+            logger.error(f"❌ Failed to save dataset images: {e}")
+        # ------------------------------------
         
         logger.info(f"✅ Successfully registered MASTER vector from video for {username} (embedding_id: {new_embedding.id})")
         
@@ -442,11 +486,11 @@ async def register_face_video_multi(
         ).first()
         
         # Save vector to database
-        vector_json = json.dumps(result["vector"])
+        # vector_json = json.dumps(result["vector"])  # REMOVED: pgvector expects list, not json string
         
         if existing_embedding:
             # Update existing
-            existing_embedding.embedding_vector = vector_json
+            existing_embedding.embedding_vector = result["vector"]
             existing_embedding.quality_score = result["metadata"].get("average_quality_score", 0.0)
             logger.info(f"🔄 Updated existing {angle_type} embedding for {username}")
         else:
@@ -454,7 +498,7 @@ async def register_face_video_multi(
             new_embedding = FaceEmbedding(
                 user_id=user_id,
                 username=username,
-                embedding_vector=vector_json,
+                embedding_vector=result["vector"],
                 face_type=angle_type,  # CENTER, LEFT, RIGHT, or MASK
                 quality_score=result["metadata"].get("average_quality_score", 0.0)
             )
@@ -462,6 +506,29 @@ async def register_face_video_multi(
             logger.info(f"➕ Created new {angle_type} embedding for {username}")
         
         db.commit()
+
+        # --- SAVE CROPPED FACES TO DATASET ---
+        try:
+            dataset_dir = getattr(settings, 'DATASET_DIR', 'dataset')
+            # Use specific angle subfolder (e.g., dataset/username/left)
+            user_save_dir = os.path.join(dataset_dir, username, angle_type.lower())
+            
+            # Clear old folder to overwrite previous attempt for this angle
+            if os.path.exists(user_save_dir):
+                shutil.rmtree(user_save_dir)
+            os.makedirs(user_save_dir, exist_ok=True)
+            
+            # Save top K faces
+            top_faces = result.get("top_k_cropped_faces", [])
+            for idx, face_img in enumerate(top_faces):
+                if face_img is not None:
+                    save_path = os.path.join(user_save_dir, f"{idx}.jpg")
+                    cv2.imwrite(save_path, face_img)
+                    
+            logger.info(f"✅ Saved {len(top_faces)} cropped frames to {user_save_dir}")
+        except Exception as e:
+            logger.error(f"❌ Failed to save dataset images: {e}")
+        # ------------------------------------
         
         # Count total embeddings for this user
         total_embeddings = db.query(FaceEmbedding).filter(

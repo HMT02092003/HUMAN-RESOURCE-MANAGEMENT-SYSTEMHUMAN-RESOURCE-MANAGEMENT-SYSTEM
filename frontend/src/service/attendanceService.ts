@@ -66,6 +66,7 @@ export interface LeaveData {
   leaveApplications?: any[];
   // Convenience: applicationCategory if backend provides it at top-level
   applicationCategory?: string;
+  isPaidLeave?: boolean;
 }
 
 export interface BusinessTripData {
@@ -97,6 +98,9 @@ export interface DailyAttendanceDetail {
   isOnTime: boolean;
   lateMinutes?: number;
   earlyLeaveMinutes?: number;
+  isPaidLeave?: boolean;
+  shiftName?: string;
+  shift?: { name: string; start_time: string; end_time: string };
 }
 
 export interface MonthlyAttendanceDetailResponse {

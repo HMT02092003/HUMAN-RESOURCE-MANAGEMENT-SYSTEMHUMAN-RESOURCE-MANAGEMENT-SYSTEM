@@ -9,7 +9,8 @@ import {
     DollarOutlined,
     FileImageOutlined,
     CheckCircleOutlined,
-    CloseCircleOutlined
+    CloseCircleOutlined,
+    PushpinOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
@@ -43,17 +44,19 @@ const parseTime = (timeValue: any): string => {
     return '--:--';
 };
 
-// Helper function để parse ngày từ nhiều định dạng
+// Helper function để parse ngày từ nhiều định dạng, đảm bảo hiển thị đúng theo múi giờ địa phương
 const parseDate = (dateValue: any): string => {
     if (!dateValue) return '--/--/----';
 
-    // Thử parse với dayjs
+    // Thử parse với dayjs - dayjs(dateValue) sẽ parse ISO string và chuyển về local time
     const parsed = dayjs(dateValue);
     if (parsed.isValid()) {
+        // Nếu chuỗi chứa 'T', nó có khả năng là ISO/UTC, dayjs sẽ tự chuyển về local
+        // Nếu là "YYYY-MM-DD", nó sẽ được coi là đầu ngày ở local
         return parsed.format('DD/MM/YYYY');
     }
 
-    // Thử parse format YYYY-MM-DD
+    // Fallback cho format YYYY-MM-DD thủ công nếu dayjs fail (hiếm gặp)
     if (typeof dateValue === 'string') {
         const dateOnlyMatch = dateValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
         if (dateOnlyMatch) {
@@ -135,8 +138,8 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                     <Text strong>{parseDate(data.endDate)}</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label={<Text><ClockCircleOutlined /> Loại đơn</Text>}>
-                    <Tag color={data.applicationCategory === 'leave' ? 'blue' : 'orange'}>
-                        {data.applicationCategory === 'leave' ? '📝 Nghỉ phép' : '📌 Nghỉ thường'}
+                    <Tag icon={<PushpinOutlined />} color={data.applicationCategory === 'leave' || data.applicationCategory === 'paid' ? 'blue' : 'orange'}>
+                        {data.applicationCategory === 'leave' || data.applicationCategory === 'paid' ? 'Nghỉ phép (Lương)' : 'Nghỉ thường (K.Lương)'}
                     </Tag>
                 </Descriptions.Item>
                 <Descriptions.Item label={<Text>Số ngày nghỉ</Text>}>
@@ -157,10 +160,10 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
         <>
             <Descriptions column={1} bordered size="small">
                 <Descriptions.Item label={<Text><CalendarOutlined /> Ngày tăng ca</Text>}>
-                    <Text strong>{parseDate(data.overtimeDate)}</Text>
+                    <Text strong>{parseDate(data.overtimeDate || data.date)}</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label={<Text><ClockCircleOutlined /> Giờ bắt đầu tăng ca</Text>}>
-                    <Text strong>{parseTime(data.startTime)} giờ</Text>
+                    <Text strong>{parseTime(data.startTime)}</Text>
                 </Descriptions.Item>
                 <Descriptions.Item label={<Text><ClockCircleOutlined /> Số giờ tăng ca</Text>}>
                     <Text strong>{data.overtimeHours} giờ</Text>

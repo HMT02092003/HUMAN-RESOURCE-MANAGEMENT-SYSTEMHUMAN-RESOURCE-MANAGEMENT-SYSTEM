@@ -19,10 +19,9 @@ export const getPhotoUrl = (photoPath: string | null | undefined): string => {
         cleanPhotoPath = photoPath.startsWith('/') ? photoPath : `/${photoPath}`;
     }
 
-    // For web browser, using root-relative paths is most reliable when behind a proxy (Nginx/Ngrok)
-    if (typeof window !== 'undefined') {
-        return cleanPhotoPath;
-    }
+    // Always use the gateway URL since images are stored in the backend service
+    // and not statically served by the Next.js frontend
+
 
     // Server-side or fallback: Get gateway URL from environment
     const gatewayUrl = process.env.NEXT_PUBLIC_API_GATEWAY_URL || '';

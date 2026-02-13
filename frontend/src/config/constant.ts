@@ -77,8 +77,8 @@ const AttendanceStatus = {
 
 // Leave type configuration with salary info
 const LeaveTypeConfig = {
-  leave: { label: 'Nghỉ phép (có lương)', hasSalary: true, icon: '📝' },
-  regular: { label: 'Nghỉ không phép (không lương)', hasSalary: false, icon: '📌' },
+  leave: { label: 'Nghỉ phép (có lương)', hasSalary: true },
+  regular: { label: 'Nghỉ không phép (không lương)', hasSalary: false },
 } as const;
 
 const TypeOfApplication = {
@@ -201,7 +201,7 @@ export const FORGOT_CHECK_TYPE_LABELS = {
 } as const;
 
 export const APPLICATION_TYPE_LABELS = {
-  'business-trip': 'Công tác', 
+  'business-trip': 'Công tác',
   'leave': 'Xin nghỉ phép',
   'overtime': 'Làm thêm giờ',
   'remote-work': 'Làm việc từ xa',

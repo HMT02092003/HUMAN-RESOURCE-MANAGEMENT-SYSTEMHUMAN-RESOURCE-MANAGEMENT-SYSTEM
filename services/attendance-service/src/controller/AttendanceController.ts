@@ -229,10 +229,19 @@ export const getUserMonthlyFull = async (req: Request, res: Response) => {
     // First try to read monthly summary row (monthly_attendances)
     const monthlyRecord = await MonthlySummaryModel.getByUserAndMonth(parseInt(userId), monthStr);
 
-    if (monthlyRecord && (monthlyRecord as any).dailyDetails) {
-      // If dailyDetails snapshot exists, return 100% from monthly_attendances per user request
+    // ⭐ ONLY use DB snapshot if record is approved (isFinal)
+    // If not approved, always fall back to on-the-fly calculation to ensure latest fixes from buildMonthlyFull are applied.
+    if (monthlyRecord && monthlyRecord.isApproved && (monthlyRecord as any).dailyDetails) {
+      // If dailyDetails snapshot exists and is approved, return 100% from monthly_attendances
       let dailyDetails: any[] = [];
-      try { dailyDetails = JSON.parse((monthlyRecord as any).dailyDetails); } catch (e) { dailyDetails = []; }
+      try {
+        const raw = (monthlyRecord as any).dailyDetails;
+        if (typeof raw === 'string') {
+          dailyDetails = JSON.parse(raw);
+        } else if (typeof raw === 'object') {
+          dailyDetails = raw; // Already parsed by pg driver
+        }
+      } catch (e) { dailyDetails = []; }
 
       // Build monthlyStats from DB fields following requested formulas (cast to any for DB-only columns)
       const db: any = monthlyRecord as any;
@@ -1029,11 +1038,7 @@ export const getDailyAttendanceByScope = async (req: Request, res: Response) => 
     const scopeResult = await CheckScopeService.checkUserScope(permissionKey as string, token, userData);
 
     if (!scopeResult.hasAccess) {
-      return res.status(403).json({
-        success: false,
-        message: 'Forbidden',
-        error: (scopeResult as any).error // details from CheckScopeService
-      });
+      return res.status(403).json({ success: false, message: 'Forbidden' });
     }
 
     let allowedUserIds = scopeResult.userIds;
@@ -1113,7 +1118,7 @@ export const getDailyAttendanceByScope = async (req: Request, res: Response) => 
       };
     });
 
-    res.json({
+    return res.json({
       success: true,
       results: flatten,
       total: result.total,
@@ -1123,6 +1128,6 @@ export const getDailyAttendanceByScope = async (req: Request, res: Response) => 
 
   } catch (error: any) {
     console.error('Error in getDailyAttendanceByScope:', error);
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };

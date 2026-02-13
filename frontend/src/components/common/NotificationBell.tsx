@@ -48,7 +48,18 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ userId }) => {
     if (!userId) return;
 
     // Connect directly to notification-service (Socket.io doesn't proxy well through gateway)
-    const notificationServiceUrl = process.env.NEXT_PUBLIC_NOTIFICATION_SERVICE_URL || '';
+    // Tự động detect IP LAN nếu đang chạy trên browser
+    let notificationServiceUrl = process.env.NEXT_PUBLIC_NOTIFICATION_SERVICE_URL || '';
+
+    if (typeof window !== 'undefined') {
+      const hostname = window.location.hostname;
+      if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+        notificationServiceUrl = `http://${hostname}:4010`;
+      } else {
+        // Fallback cho localhost nếu env chưa set hoặc set sai
+        notificationServiceUrl = notificationServiceUrl || 'http://localhost:4010';
+      }
+    }
 
     // Get token from cookie or localStorage
     const token = document.cookie

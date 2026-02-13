@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AuthTokenManager from './AuthTokenManager';
 import { Alert } from 'react-native';
-import { getApiBaseUrl, logApiConfig, setApiBaseUrl } from './apiConfig';
+import { getApiBaseUrl, logApiConfig } from './apiConfig';
 
 // Tự động lấy API URL (auto-detect từ Expo hoặc fallback theo platform)
 const API_BASE_URL = getApiBaseUrl();
@@ -30,7 +30,6 @@ api.interceptors.request.use(
         if (isUsingFallback && config.baseURL.includes('ngrok-free.dev')) {
             const lanUrl = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
             config.baseURL = lanUrl;
-            setApiBaseUrl(lanUrl); // Update global state
             console.log('🔄 [API] Auto-fallback to LAN:', config.baseURL);
         }
 
@@ -63,9 +62,6 @@ api.interceptors.response.use(
             const lanUrl = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
             originalRequest.baseURL = lanUrl;
             isUsingFallback = true; // Đánh dấu để các request sau dùng luôn LAN
-
-            // Update global config so other parts (like Image URLs) use the working URL
-            setApiBaseUrl(lanUrl);
 
             // Thử lại request với URL LAN
             return api(originalRequest);

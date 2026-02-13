@@ -34,35 +34,42 @@ export const gatewayAuth = (req, res, next) => {
     token = req.cookies['token'];
   }
 
-  // If token exists, always attempt to verify and inject user data
+  // Attempt to verify token if it exists
   if (token) {
     try {
       const decoded = jwt.verify(token, secret);
 
-      // Inject user data into headers (compatible with previous services)
-      if (decoded.sub) {
-        req.headers['x-user-id'] = String(decoded.sub);
-      }
-      if (decoded.roleId) {
-        req.headers['x-user-role-id'] = String(decoded.roleId);
-      }
+      // Inject user data into headers
+      if (decoded.sub) req.headers['x-user-id'] = String(decoded.sub);
+      if (decoded.roleId) req.headers['x-user-role-id'] = String(decoded.roleId);
 
-      // Core: Pass full decoded token via Base64 header
       const userDataJson = JSON.stringify(decoded);
       req.headers['x-user-data'] = Buffer.from(userDataJson).toString('base64');
 
-      console.log(`🔐 Gateway Auth: User ${decoded.sub} (Role: ${decoded.user?.roleId || decoded.roleId}) authenticated.`);
+      console.log(`🔐 Gateway Auth: User ${decoded.sub} authenticated.`);
     } catch (err) {
       console.error('⚠️ Gateway Token Verification Failed:', err.message);
     }
   }
 
-  // Paths that are truly open/public (e.g. face recognition entry points)
-  // Others like /api/ai/logs will now have x-user-data if user is logged in
-  const publicAiPaths = ['/api/ai/enhanced-recognize', '/api/ai/multi-angle-recognize', '/api/ai/recognize'];
+  // PUBLIC AI ENDPOINTS: Face recognition should NOT be blocked/checked for token requirement here
+  const publicAiPaths = [
+    '/api/ai/recognize',
+    '/api/ai/enhanced-recognize',
+    '/api/ai/multi-angle-recognize',
+    '/api/ai/detect'
+  ];
 
-  // Optional: If we want to skip EVERYTHING for certain paths, we could return here
-  // But injecting x-user-data is harmless even for public paths.
+  const isPublicAiPath = publicAiPaths.some(p => req.path.startsWith(p));
+
+  if (isPublicAiPath) {
+    console.log(`⏩ Public AI Path: ${req.path} - Skipping strict auth requirement`);
+    return next();
+  }
+
+  // For non-public paths (like /api/ai/logs), if no token exists, we'll let it pass
+  // but WITHOUT x-user-data. The downstream service (AI Service) will then see 
+  // no user and can decide to return 401.
 
   if (!token) {
     // No token, pass through. Downstream services will handle 401 if auth is required.

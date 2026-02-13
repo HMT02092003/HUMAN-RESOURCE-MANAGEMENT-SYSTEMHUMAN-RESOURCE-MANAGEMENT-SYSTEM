@@ -7,13 +7,28 @@ import TimeAttendanceModel from '@/Models/TimeAttendanceModel';
 import AttendanceCalculationService from './AttendanceCalculationService';
 import { MonthlyReportService } from '../MonthlyReportService';
 import { getShiftForUserAndDate } from './ShiftHelper';
+import { getWorkingDaysConfig, isWorkingDay } from './AttendanceHelpers';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
 export async function recordAttendance(userId: number, time: string, token?: string, userData?: any): Promise<any> {
   try {
-    const date = dayjs(time).tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
+    // ✨ FIX: Ensure proper timezone conversion
+    // If time is ISO UTC (e.g., "2026-02-12T11:36:00.000Z"), convert to VN timezone first
+    // dayjs will parse the UTC string correctly and .tz() will convert it to local VN time
+    const vnTime = dayjs(time).tz('Asia/Ho_Chi_Minh');
+    if (!vnTime.isValid()) {
+      console.error('❌ Invalid time received:', time);
+      throw new Error('Invalid time format');
+    }
+    const date = vnTime.format('YYYY-MM-DD');
+
+    console.log('⏰ Time conversion:', {
+      input: time,
+      vnTime: vnTime.format('YYYY-MM-DD HH:mm:ss'),
+      extractedDate: date
+    });
 
     const existingRecord = await TimeAttendanceModel.query().where('userId', userId).where('date', date).first();
 
@@ -33,6 +48,10 @@ export async function recordAttendance(userId: number, time: string, token?: str
     // Lấy shift cho user vào ngày này (đã đăng ký hoặc mặc định)
     const shift = await getShiftForUserAndDate(userId, date);
     console.log('📋 Shift loaded', { userId, date, shift: shift?.name || shift?.id });
+
+    // ✨ Determine if it's a weekend/off-day based on config
+    const workingDaysConfig = await getWorkingDaysConfig();
+    console.log('📅 Working days config loaded');
 
     // Lấy thông tin OT đã duyệt
     const overtimeApp = await AttendanceCalculationService.getApprovedOvertimeApplication(userId, date);
@@ -69,7 +88,8 @@ export async function recordAttendance(userId: number, time: string, token?: str
       otEndTime, // OT end time (ISO string hoặc undefined)
       undefined, // isHoliday - sẽ được tính trong calculateAttendance
       shift, // ✨ Truyền shift info
-      otStartTime // ✨ OT start time để tính OT chính xác
+      otStartTime, // ✨ OT start time để tính OT chính xác
+      !isWorkingDay(date, workingDaysConfig) // ✨ Passed isWeekend (calculated as !isWorkingDay)
     );
 
     console.log('📤 Calculation result', {

@@ -1,12 +1,8 @@
-"""
-Multi-Angle Face Recognition Routes
-====================================
-API endpoints cho đăng ký và nhận diện khuôn mặt đa góc (eKYC chuẩn)
-"""
-
 import logging
 import os
 import uuid
+import shutil
+import cv2
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.responses import JSONResponse
@@ -69,9 +65,26 @@ async def register_multiple_faces(
         
         logger.info(f"📸 Registering {len(images)} faces for user_id={user_id}, poses={poses}")
         
-        # Chuẩn bị thư mục uploads
+        # Chuẩn bị thư mục uploads (legacy)
         upload_dir = getattr(settings, 'UPLOAD_DIR', './uploads')
         os.makedirs(upload_dir, exist_ok=True)
+
+        # --- Chuẩn bị thư mục dataset theo yêu cầu user ---
+        # Structure: dataset/username/pose_type.jpg
+        dataset_dir = getattr(settings, 'DATASET_DIR', 'dataset')
+        user_save_dir = os.path.join(dataset_dir, username)
+
+        # Clear old data if exists (to replace old images on re-registration)
+        if os.path.exists(user_save_dir):
+            try:
+                shutil.rmtree(user_save_dir)
+                logger.info(f"🗑️ Cleared existing dataset for user: {username}")
+            except Exception as e:
+                logger.error(f"❌ Failed to clear user dataset dir: {e}")
+
+        # Create fresh directory
+        os.makedirs(user_save_dir, exist_ok=True)
+        # ---------------------------------------------------
         
         # Process từng ảnh
         poses_data = []
@@ -95,13 +108,27 @@ async def register_multiple_faces(
                     detail=f"Ảnh {idx+1} ({pose_type}): {result['message']}"
                 )
             
-            # Save image locally but do NOT persist path to DB
+            # Save original image locally (legacy/backup log)
             filename = f"{user_id}_{pose_type}_{uuid.uuid4().hex}.jpg"
             _saved_path = os.path.join(upload_dir, filename)
             with open(_saved_path, 'wb') as f:
                 f.write(image_bytes)
 
-            # Thêm vào danh sách (omit image_path to avoid storing paths in DB)
+            # --- Save CROPPED face to user dataset ---
+            cropped_face = result.get("cropped_face")
+            if cropped_face is not None:
+                # Filename: frontal.jpg, left.jpg, right.jpg
+                save_path = os.path.join(user_save_dir, f"{pose_type}.jpg")
+                try:
+                    cv2.imwrite(save_path, cropped_face)
+                    logger.info(f"✅ Saved cropped face: {save_path}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to save cropped face: {e}")
+            else:
+                 logger.warning(f"⚠️ No cropped face returned for {pose_type}")
+            # -----------------------------------------
+
+            # Thêm vào danh sách (omit image_path to avoid storing paths in DB if using embedding only)
             poses_data.append({
                 "pose_type": pose_type,
                 "embedding": result["embedding"],

@@ -19,7 +19,7 @@ async function getUserStartDate(userId: number): Promise<string | null> {
       connection: {
         host: process.env['DB_HOST'] || 'localhost',
         port: Number(process.env['DB_PORT']) || 5432,
-        database: 'auth_service', // Auth service database name
+        database: 'auth_service_final', // Auth service database name
         user: process.env['DB_USER'] || 'postgres',
         password: process.env['DB_PASSWORD'] || '123456'
       }
@@ -57,7 +57,9 @@ export class MonthlyReportService {
     // Fetch OT rates from settings upfront
     const normalOtRate = await SettingsService.getOvertimeRateInUnits();
     const holidayOtRate = await SettingsService.getHolidayOvertimeRateInUnits();
-    console.log(`📊 OT Rates loaded: normalOtRate=${normalOtRate}, holidayOtRate=${holidayOtRate}`);
+    const penaltyRateVal = await SettingsService.getSettingValue('PenaltyRate');
+    const penaltyRate = penaltyRateVal?.rate ? parseFloat(penaltyRateVal.rate) : 0;
+    console.log(`📊 OT Rates loaded: normalOtRate=${normalOtRate}, holidayOtRate=${holidayOtRate}, penaltyRate=${penaltyRate}`);
 
     // Reuse existing attendance summary if available by calling TimeAttendance + MonthlySummary
     // Call AttendanceQueryService directly (no circular import expected)
@@ -225,7 +227,7 @@ export class MonthlyReportService {
     const weekdayNames = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
 
     const buildDay = (record: any, _normalOtRate: number, _holidayOtRate: number) => {
-      const checkInDate = record.checkInTime ? new Date(record.checkInTime) : null;
+      // (checkInDate removed to fix lint error)
       const lateMinutes = Number(record.lateMinutes ?? 0);
       const earlyDepartureMinutes = Number(record.earlyDepartureMinutes ?? 0);
       const lateArrivalPenalty = Number(record.lateArrivalPenalty ?? 0);
@@ -254,8 +256,14 @@ export class MonthlyReportService {
       let isOnTime = false;
 
       // ✨ ƯU TIÊN: Công tác và OT được kiểm tra TRƯỚC khi kiểm tra weekend
-      // Vì công tác và OT có thể xảy ra vào cuối tuần
+      // Tùy chỉnh: Holiday hiển thị trước OT để user biết đó là ngày lễ
       if (record.hasBusinessTrip || record.type === 'business-trip' || record.type === 'business_trip') { status = 'business_trip'; statusText = 'Công tác'; }
+      // ✨ Holiday Check - Prioritize displaying Holiday name before Weekend check
+      else if (record.isHoliday) {
+        status = 'holiday';
+        statusText = record.holidayName || 'Ngày lễ';
+        // If has OT, maybe append info? For now, stick to user request "hiên thị chính xac s khi nào là... ngày lễ"
+      }
       else if (record.hasApprovedOT) { status = 'overtime'; statusText = 'Làm thêm giờ'; }
       else if (!isWorkDay) { status = 'weekend'; statusText = 'Cuối tuần'; }
       else if (record.hasApprovedLeave || ['leave', 'sick-leave'].includes(record.type)) { status = 'approved_leave'; statusText = record.leaveInfo ?? record.leaveTypeName ?? 'Nghỉ phép'; }
@@ -293,11 +301,12 @@ export class MonthlyReportService {
       // Determine leaveApplications array only when no single leave object is set (avoid redundancy)
       const leaveAppsArray = !(singleLeaveObj) ? ((record as any)._leaveFullObjects ?? (leaveAppsFromMap.length > 0 ? leaveAppsFromMap : undefined)) : undefined;
 
-      const leaveData = (record.hasApprovedLeave || ['leave', 'sick-leave'].includes(record.type) || singleLeaveObj || (leaveAppsFromMap && leaveAppsFromMap.length > 0)) ? {
+      const leaveData = (record.hasApprovedLeave || ['leave', 'sick-leave', 'unpaid_leave'].includes(record.type) || singleLeaveObj || (leaveAppsFromMap && leaveAppsFromMap.length > 0)) ? {
         hasApprovedLeave: Boolean(record.hasApprovedLeave),
         leaveType: record.leaveType ?? record.type,
         leaveInfo: record.leaveInfo ?? record.reason ?? null,
         leaveTypeName: record.leaveTypeName ?? null,
+        isPaidLeave: record.isPaidLeave, // ✨ Pass explicitly
         // embed full application object (single) if attached earlier or found in approvedAppsForMonth map
         leave: singleLeaveObj,
         // Only include leaveApplications when single leave object is not present
@@ -320,8 +329,9 @@ export class MonthlyReportService {
         date: record.date,
         checkIn: record.checkIn ?? record.checkInTime ?? null,
         checkOut: record.checkOut ?? record.checkOutTime ?? null,
-        checkInTime: record.checkInTime ?? null,
-        checkOutTime: record.checkOutTime ?? null,
+        // ✨ Extra safety against 'Invalid Date' string from any source
+        checkInTime: (record.checkInTime && String(record.checkInTime) !== 'Invalid Date') ? record.checkInTime : null,
+        checkOutTime: (record.checkOutTime && String(record.checkOutTime) !== 'Invalid Date') ? record.checkOutTime : null,
         status,
         totalHours: Number(record.totalHours ?? workHours),
         workHours,
@@ -335,22 +345,26 @@ export class MonthlyReportService {
         otWorkingUnit, // Công OT (ĐÃ bao gồm rate từ DB)
         effectiveOtWorkingUnit, // Alias của otWorkingUnit (cùng giá trị)
         overtimeHours, // ✨ Số giờ làm thêm thực tế
+        overtime: overtimeHours, // Alternative for some components
         // Backwards compatibility: include otMinutes (FE expects minutes) and otSalary if present
         otMinutes: Number(record.otMinutes ?? Math.round((overtimeHours || 0) * 60)),
         otSalary: Number(record.otSalary ?? 0),
-        totalWorkingUnit: Number(record.totalWorkingUnit ?? 0)
+        totalWorkingUnit: Number(record.totalWorkingUnit ?? 0),
+        shift: record.shift,
+        shiftName: record.shiftName || record.shift?.name || null
       } : undefined;
 
-      const dayIndex = checkInDate ? checkInDate.getDay() : new Date(record.date).getDay();
+      const dayIndex = dayjs(record.date).day();
 
       return {
-        date: record.date,
+        date: dayjs(record.date).format('YYYY-MM-DD'),
         dayOfWeek: dayIndex,
         dayName: weekdayNames[dayIndex],
         isWorkingDay: record.isWorkingDay !== false,
         hasAttendance: !!record.checkInTime,
         holidayData,
         leaveData,
+        isPaidLeave: record.isPaidLeave, // ✨ Pass explicitly top-level as well
         businessTripData,
         attendanceData,
         status,
@@ -358,31 +372,57 @@ export class MonthlyReportService {
         unauthorizedAbsencePenalty: status === 'absent' ? unauthorizedAbsencePenaltyPerDay : 0,
         isOnTime,
         lateMinutes,
-        earlyLeaveMinutes: earlyDepartureMinutes
+        earlyLeaveMinutes: earlyDepartureMinutes,
+        shift: record.shift,
+        shiftName: record.shiftName || record.shift?.name || null
       };
     };
 
     const processedDailyDetails = attendanceRows.map((record: any) => buildDay(record, normalOtRate, holidayOtRate));
 
+    const todayStr = dayjs().tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
+
     // Compute aggregates (used later) in a single pass
     const agg = processedDailyDetails.reduce((acc: any, d: any) => {
-      acc.totalLateMinutes += Number(d.lateMinutes ?? 0);
-      acc.totalEarlyLeaveMinutes += Number(d.earlyLeaveMinutes ?? 0);
-      acc.totalLatePenalty += Number(d.attendanceData?.lateArrivalPenalty ?? 0);
-      acc.totalEarlyLeavePenalty += Number(d.attendanceData?.earlyLeavePenalty ?? 0);
-      acc.totalEffectiveOtWorkingUnits += Number(d.attendanceData?.effectiveOtWorkingUnit ?? 0);
+      const isPastOrToday = dayjs(d.date).isSameOrBefore(todayStr, 'day');
 
-      if (d.isWorkingDay) {
-        if (d.status === 'approved_leave') acc.approvedLeaveDays++;
-        if (d.status === 'business_trip') acc.businessTripDays++;
-        if (d.status === 'absent') acc.unauthorizedAbsenceDays++;
-        if (d.hasAttendance) acc.presentDays++;
-        if (d.attendanceData && Number(d.attendanceData.lateMinutes ?? 0) > 0) acc.lateDays++;
-        if (d.attendanceData && Number(d.attendanceData.earlyDepartureMinutes ?? 0) > 0) acc.earlyLeaveDays++;
+      // Update cumulative totals ONLY for past or today
+      if (isPastOrToday) {
+        // ✨ PRIORITY LOGIC: Applications (Leave/Trip) take absolute priority over Check-in/out data
+        if (d.status === 'approved_leave') {
+          acc.approvedLeaveDays++;
+          if (d.isPaidLeave) {
+            acc.totalWorkingUnits += 1.0;
+          }
+          // Skip attendance-based penalties and work hour counts for leave days
+        }
+        else if (d.status === 'business_trip') {
+          acc.businessTripDays++;
+          acc.totalWorkingUnits += 1.0;
+          // Skip attendance-based penalties for trip days
+        }
+        else {
+          // No Leave/Trip -> Process actual attendance data (FaceID)
+          acc.totalLateMinutes += Number(d.lateMinutes ?? 0);
+          acc.totalEarlyLeaveMinutes += Number(d.earlyLeaveMinutes ?? 0);
+          acc.totalLatePenalty += Number(d.attendanceData?.lateArrivalPenalty ?? 0);
+          acc.totalEarlyLeavePenalty += Number(d.attendanceData?.earlyLeavePenalty ?? 0);
+          acc.totalEffectiveOtWorkingUnits += Number(d.attendanceData?.effectiveOtWorkingUnit ?? 0);
+
+          acc.totalWorkingUnits += Number(d.attendanceData?.totalWorkingUnit ?? 0);
+          acc.totalOtWorkingUnits += Number(d.attendanceData?.otWorkingUnit ?? 0);
+
+          if (d.isWorkingDay) {
+            if (d.status === 'absent') acc.unauthorizedAbsenceDays++;
+            if (d.hasAttendance) acc.presentDays++;
+            if (d.attendanceData && Number(d.attendanceData.lateMinutes ?? 0) > 0) acc.lateDays++;
+            if (d.attendanceData && Number(d.attendanceData.earlyDepartureMinutes ?? 0) > 0) acc.earlyLeaveDays++;
+          }
+        }
+
+        if (d.status === 'weekend') acc.weekendDays++;
+        if (d.isOnTime) acc.onTimeDays++;
       }
-
-      if (d.status === 'weekend') acc.weekendDays++;
-      if (d.isOnTime) acc.onTimeDays++;
 
       return acc;
     }, {
@@ -391,6 +431,8 @@ export class MonthlyReportService {
       totalLatePenalty: 0,
       totalEarlyLeavePenalty: 0,
       totalEffectiveOtWorkingUnits: 0,
+      totalWorkingUnits: 0,
+      totalOtWorkingUnits: 0,
       presentDays: 0,
       lateDays: 0,
       earlyLeaveDays: 0,
@@ -444,9 +486,9 @@ export class MonthlyReportService {
       unauthorizedAbsencePenaltyPerDay: Math.round(parseFloat(((db as any).unauthorizedAbsencePenaltyPerDay ?? unauthorizedAbsencePenaltyPerDay).toString()) || unauthorizedAbsencePenaltyPerDay),
       approvedLeaveDays: parseFloat((db.approvedLeaveDays ?? approvedLeaveDays).toString()) || approvedLeaveDays,
       businessTripDays: parseFloat((db.businessTripDays ?? businessTripDays).toString()) || businessTripDays,
-      totalWorkingUnits: db.totalWorkingUnits != null ? parseFloat(db.totalWorkingUnits.toString()) : 0,
-      totalOtWorkingUnits: db.totalOtWorkingUnits != null ? parseFloat(db.totalOtWorkingUnits.toString()) : 0,
-      totalEffectiveOtWorkingUnits: Math.round(agg.totalEffectiveOtWorkingUnits * 10000) / 10000, // Công OT đã nhân tỷ lệ
+      totalWorkingUnits: Math.round(agg.totalWorkingUnits * 100) / 100, // ✨ Real-time calculated units
+      totalOtWorkingUnits: Math.round(agg.totalOtWorkingUnits * 100) / 100,
+      totalEffectiveOtWorkingUnits: Math.round(agg.totalEffectiveOtWorkingUnits * 10000) / 10000,
     } : null;
 
     const monthlyStats = monthlyStatsFromDb ?? {
@@ -495,7 +537,7 @@ export class MonthlyReportService {
           year: parseInt(yearStr || '0'),
           month: parseInt(monthStr || '0'),
           monthlySalary: monthlyRecord?.baseSalary ?? 0,
-          penaltyRate: 0,
+          penaltyRate,
           dailyDetails: processedDailyDetails,
           summary: {
             totalDays: (summary.attendanceData || []).length,
@@ -724,8 +766,6 @@ export class MonthlyReportService {
 
       // Build a set of all days in month for fast lookup
       const allDaysInMonth = Array.from({ length: daysInMonth }, (_, i) => dayjs(`${m}-${String(i + 1).padStart(2, '0')}`).format('YYYY-MM-DD'));
-      // Track which days already have attendance
-      const attendanceDaysSet = new Set(rows.map(r => dayjs(r.date).format('YYYY-MM-DD')));
 
       for (const r of rows) {
         const dateKey = dayjs(r.date).format('YYYY-MM-DD');
@@ -733,10 +773,41 @@ export class MonthlyReportService {
         const rowIsScheduledWorkDay = isScheduledWorkingDay(dateKey);
         const isFuture = dayjs(dateKey).isAfter(todayStr, 'day');
 
+
+        const isLeave = leaveDaysSet.has(dateKey);
+        const isTrip = businessTripDaysSet.has(dateKey);
+
+        // ✨ ƯU TIÊN: Nếu có đơn nghỉ phép hoặc công tác -> BỎ QUA dữ liệu chấm công ngày này
+        if (isLeave || isTrip) {
+          console.log(`ℹ️ [attendance] Ignoring attendance for ${dateKey} due to Approved Leave/Trip`);
+          continue;
+        }
+
         try {
           // Recalculate để có dữ liệu chính xác nhất
           // ✨ Cần lấy shift cho ngày này
           const shift = await import('./attendance/ShiftHelper').then(m => m.getShiftForUserAndDate(userId, dateKey));
+
+          // ✨ Tìm đơn OT đã duyệt cho ngày này để lấy giờ bắt đầu/kết thúc
+          const otApp = approvedApplications.find(app => {
+            if (app.type !== 'overtime') return false;
+            const d = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
+            return d.date === dateKey || d.overtimeDate === dateKey;
+          });
+
+          let otStartTime = null;
+          let otEndTime = null;
+          if (otApp) {
+            const d = typeof otApp.data === 'string' ? JSON.parse(otApp.data) : otApp.data;
+            if (d.startTime) otStartTime = d.startTime;
+            if (d.endTime) {
+              otEndTime = d.endTime;
+            } else if (d.startTime && d.totalHours) {
+              // ✨ Calculate end time if missing but totalHours provided
+              otEndTime = dayjs(`${dateKey} ${d.startTime}`).add(parseFloat(d.totalHours), 'hour').format('HH:mm');
+            }
+            console.log(`⏱️ [attendance] Found OT app for ${dateKey}: ${otStartTime} - ${otEndTime}`);
+          }
 
           const calc = await AttendanceCalculationService.calculateAttendance(
             r.checkInTime || null,
@@ -744,9 +815,10 @@ export class MonthlyReportService {
             dateKey,
             userId,
             undefined, // token
-            r.approvedOtEndTime || null, // approvedOtEndTime
+            otEndTime, // ✨ Pass OT End Time correctly
             isHoliday, // Truyền thông tin ngày lễ
-            shift // ✨ Truyền shift info
+            shift, // ✨ Truyền shift info
+            otStartTime // ✨ Pass OT Start Time correctly
           );
 
           const workHours = parseFloat((calc.workHours || 0).toString());
@@ -759,6 +831,7 @@ export class MonthlyReportService {
           // ✨ Lấy công từ calculation
           const dailyUnits = parseFloat((calc.totalWorkingUnit || 0).toString()); // Tổng công (bao gồm cả OT)
           const otUnits = parseFloat((calc.otWorkingUnit || 0).toString()); // Công OT RAW
+          const baseUnits = parseFloat((calc.dailyWorkingUnit || 0).toString()); // ✨ Base Working Unit
           const otHours = parseFloat((calc.overtimeHours || 0).toString()); // ✨ Giờ OT thực tế
 
           totalWorkHours += workHours;
@@ -769,6 +842,37 @@ export class MonthlyReportService {
           totalOvertimeHours += otHours; // ✨ Cộng giờ OT thực tế
           totalLatePenalty += latePenalty;
           totalEarlyLeavePenalty += earlyPenalty;
+
+          // ✨ SYNCHRONIZE: Update TimeAttendance record if calculated values differ
+          // This ensures that when we generate the snapshot later (via getUserMonthlyAttendance),
+          // it picks up these fresh calculations (e.g. 9 mins early leave instead of 0).
+          if (r.id) {
+            const storedLate = parseFloat(String(r.lateMinutes || 0));
+            const storedEarly = parseFloat(String(r.earlyDepartureMinutes || 0));
+            const storedWork = parseFloat(String(r.dailyTotalWorkHours || 0));
+            const storedUnits = parseFloat(String(r.totalWorkingUnit || 0));
+
+            // ✨ Check differences including working units
+            if (
+              Math.abs(lateMin - storedLate) > 0.1 ||
+              Math.abs(earlyMin - storedEarly) > 0.1 ||
+              Math.abs(workHours - storedWork) > 0.1 ||
+              Math.abs(dailyUnits - storedUnits) > 0.01
+            ) {
+              console.log(`🔄 [attendance] Syncing daily stats for ${dateKey} (ID: ${r.id}): Late ${storedLate}->${lateMin}, Unit ${storedUnits}->${dailyUnits}`);
+              await TimeAttendanceModel.query().patch({
+                lateMinutes: lateMin,
+                earlyDepartureMinutes: earlyMin,
+                dailyTotalWorkHours: workHours,
+                lateArrivalPenalty: latePenalty,
+                earlyLeavePenalty: earlyPenalty,
+                totalWorkingUnit: dailyUnits,
+                dailyWorkingUnit: baseUnits, // ✨ Patch base units
+                otWorkingUnit: otUnits,
+                overtimeHours: otHours
+              }).where('id', r.id);
+            }
+          }
 
           // ✨ Tổng số ngày đi làm = số ngày có chấm công
           const hasAttendance = !!(r.checkInTime || r.checkOutTime);
@@ -834,12 +938,12 @@ export class MonthlyReportService {
         const isHoliday = holidaySet.has(dateKey);
         const isPaidLeave = paidLeaveDaysSet.has(dateKey);
         const isBusinessTrip = businessTripDaysSet.has(dateKey);
-        const hasAttendance = attendanceDaysSet.has(dateKey);
         const isScheduledWork = isScheduledWorkingDay(dateKey);
         const isPast = dayjs(dateKey).isSameOrBefore(todayStr, 'day');
 
-        // Chỉ cộng công nếu KHÔNG có chấm công và ngày đã qua
-        if (!hasAttendance && isPast) {
+        // ✨ Ưu tiên tính ngày nghỉ phép / công tác (Bất kể có chấm công hay không, vì đã bỏ qua chấm công ở trên)
+        if (isPast) {
+          // 1. Nghỉ phép CÓ LƯƠNG vào ngày làm việc → +1 công
           // 1. Nghỉ phép CÓ LƯƠNG vào ngày làm việc → +1 công
           if (isPaidLeave && isScheduledWork) {
             totalWorkingUnits += 1;
@@ -865,20 +969,23 @@ export class MonthlyReportService {
       // 7️⃣ Tính các số liệu tổng hợp
       // Count approved leave and business trip days only when they fall on scheduled working days
       // ✨ Lấy enriched attendance data để có đầy đủ thông tin nghỉ phép/công tác
-      const enrichedData = await AttendanceCalculationService.getUserMonthlyAttendance(userId, m, undefined);
+      const enrichedData = await AttendanceCalculationService.getUserMonthlyAttendance(userId, m, undefined, false, approvedApplications);
       const enrichedRows = enrichedData?.attendanceData || [];
 
       // Kết hợp ngày nghỉ phép/công tác từ enriched data (đã có đầy đủ thông tin)
-      const approvedLeaveDaysSetCombined = new Set(
-        enrichedRows
-          .filter((r: any) => r.hasApprovedLeave && isScheduledWorkingDay(dayjs(r.date).format('YYYY-MM-DD')) && dayjs(r.date).isSameOrBefore(todayStr, 'day'))
-          .map((r: any) => dayjs(r.date).format('YYYY-MM-DD'))
-      );
+      // ✨ IMPORTANT: Do NOT filter out days with checkInTime. We want to COUNT them as leave/trip even if checkInTime exists (since we ignore it).
       const businessTripDaysSetCombined = new Set(
         enrichedRows
           .filter((r: any) => r.hasBusinessTrip && isScheduledWorkingDay(dayjs(r.date).format('YYYY-MM-DD')) && dayjs(r.date).isSameOrBefore(todayStr, 'day'))
           .map((r: any) => dayjs(r.date).format('YYYY-MM-DD'))
       );
+
+      const approvedLeaveDaysSetCombined = new Set(
+        enrichedRows
+          .filter((r: any) => r.hasApprovedLeave && !r.hasBusinessTrip && isScheduledWorkingDay(dayjs(r.date).format('YYYY-MM-DD')) && dayjs(r.date).isSameOrBefore(todayStr, 'day'))
+          .map((r: any) => dayjs(r.date).format('YYYY-MM-DD'))
+      );
+
       const approvedLeaveDaysArr = Array.from(approvedLeaveDaysSetCombined);
       const businessTripDaysArr = Array.from(businessTripDaysSetCombined);
       const approvedLeaveDays = approvedLeaveDaysArr.length;
@@ -1009,11 +1116,17 @@ export class MonthlyReportService {
       try {
         // Build the enriched daily data for storage by reusing the same enrichment
         // logic used by getUserMonthlyAttendance
-        console.log(`🔄 [attendance] Building dailyDetails snapshot...`);
-        const full = await AttendanceCalculationService.getUserMonthlyAttendance(userId, m, undefined);
+        console.log(`🔄 [attendance] Building dailyDetails snapshot... Calling getUserMonthlyAttendance`);
+        const full = await AttendanceCalculationService.getUserMonthlyAttendance(userId, m, undefined, false, approvedApplications);
+        console.log(`🔄 [attendance] Finished getUserMonthlyAttendance for snapshot`);
         if (full && full.attendanceData) {
           filtered['dailyDetails'] = JSON.stringify(full.attendanceData);
           console.log(`✅ [attendance] dailyDetails snapshot saved (${full.attendanceData.length} days)`);
+
+          const debugDay = full.attendanceData.find((d: any) => d.date.includes('2026-02-16'));
+          if (debugDay) {
+            console.log(`🔍 [Pre-Save Check] 2026-02-16: hasApprovedOT=${debugDay.hasApprovedOT}, shift=${JSON.stringify(debugDay.shift)}`);
+          }
         }
       } catch (e) {
         console.error(`⚠️ [attendance] Failed to build dailyDetails snapshot:`, e);

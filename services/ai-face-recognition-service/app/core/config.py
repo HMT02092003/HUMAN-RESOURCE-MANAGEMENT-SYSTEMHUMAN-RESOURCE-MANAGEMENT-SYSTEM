@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     # File Upload Configuration
     MAX_FILE_SIZE: int = int(os.getenv("MAX_FILE_SIZE", "10485760"))  # 10MB
     UPLOAD_DIR: str = os.getenv("UPLOAD_DIR", "./uploads")
+    DATASET_DIR: str = os.getenv("DATASET_DIR", "./dataset")
     ALLOWED_EXTENSIONS: set = {".jpg", ".jpeg", ".png", ".bmp"}
     
     # API Gateway Configuration

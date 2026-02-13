@@ -109,19 +109,19 @@ export const generateFromAttendance = async (req: Request, res: Response, next: 
     const totalPenalty = Math.round(totalLatePenalty + totalEarlyLeavePenalty + totalUnauthorizedAbsencePenalty);
 
     // compute gross and net
-  let allowancesSum = 0;
-  try {
-    const allowanceRows = await EmployeeSalaryProfileAllowance.query().where('employee_salary_profile_id', profile?.id || -1).select('allowance_type_id');
-    const atIds = allowanceRows.map((r: any) => Number(r.allowance_type_id)).filter(Boolean);
-    if (atIds.length > 0) {
-      const types = await AllowanceType.query().whereIn('id', atIds).select('id', 'default_amount');
-      const map = new Map<number, number>();
-      for (const t of types) map.set(Number(t.id), Number(t.default_amount || 0));
-      allowancesSum = atIds.reduce((s: number, id: number) => s + (map.get(id) || 0), 0);
+    let allowancesSum = 0;
+    try {
+      const allowanceRows = await EmployeeSalaryProfileAllowance.query().where('employee_salary_profile_id', profile?.id || -1).select('allowance_type_id');
+      const atIds = allowanceRows.map((r: any) => Number(r.allowance_type_id)).filter(Boolean);
+      if (atIds.length > 0) {
+        const types = await AllowanceType.query().whereIn('id', atIds).select('id', 'default_amount');
+        const map = new Map<number, number>();
+        for (const t of types) map.set(Number(t.id), Number(t.default_amount || 0));
+        allowancesSum = atIds.reduce((s: number, id: number) => s + (map.get(id) || 0), 0);
+      }
+    } catch (e: any) {
+      console.error('[salary-service] error computing allowances in controller generateFromAttendance:', e?.message || e);
     }
-  } catch (e: any) {
-    console.error('[salary-service] error computing allowances in controller generateFromAttendance:', e?.message || e);
-  }
 
     const gross = baseSalary + allowancesSum + Number(monthlyStats.totalOvertimePay || monthlyStats.totalOvertimeSalary || 0);
 
@@ -175,21 +175,21 @@ export const generateFromAttendance = async (req: Request, res: Response, next: 
  */
 export const calculateFromAttendanceBulk = async (req: Request, res: Response, next: NextFunction) => {
   try {
-  const monthStr = String(req.body.month || req.query.month || '');
-  // Propagate incoming Authorization header or token cookie so service-to-service calls via API Gateway
-  let incomingToken: string | undefined = undefined;
-  if (req.headers['authorization']) incomingToken = String(req.headers['authorization']).startsWith('Bearer ') ? String(req.headers['authorization']).substring(7) : String(req.headers['authorization']);
-  else if (req.headers['cookie']) {
-    const match = (req.headers['cookie'] as string).split(';').map(c => c.trim()).find(c => c.startsWith('token='));
-    if (match) incomingToken = match.replace(/^token=/, '');
-  }
+    const monthStr = String(req.body.month || req.query.month || '');
+    // Propagate incoming Authorization header or token cookie so service-to-service calls via API Gateway
+    let incomingToken: string | undefined = undefined;
+    if (req.headers['authorization']) incomingToken = String(req.headers['authorization']).startsWith('Bearer ') ? String(req.headers['authorization']).substring(7) : String(req.headers['authorization']);
+    else if (req.headers['cookie']) {
+      const match = (req.headers['cookie'] as string).split(';').map(c => c.trim()).find(c => c.startsWith('token='));
+      if (match) incomingToken = match.replace(/^token=/, '');
+    }
 
-  const result = await PayslipCalculationService.calculateAndInsertPayslipsForMonth(monthStr, { authToken: incomingToken });
-  if (!result || !result.success) {
-    console.error('[salary-service] calculateFromAttendanceBulk failed:', result?.message);
-    return res.status(400).json({ success: false, message: result?.message || 'Calculation failed' });
-  }
-  return res.status(201).json(result);
+    const result = await PayslipCalculationService.calculateAndInsertPayslipsForMonth(monthStr, { authToken: incomingToken });
+    if (!result || !result.success) {
+      console.error('[salary-service] calculateFromAttendanceBulk failed:', result?.message);
+      return res.status(400).json({ success: false, message: result?.message || 'Calculation failed' });
+    }
+    return res.status(201).json(result);
   } catch (err: any) {
     next(err);
   }
@@ -209,12 +209,12 @@ export const listPaginatedPayslips = async (req: Request, res: Response, next: N
     // allMonths: default to true (show all months unless explicitly filtered)
     const allMonthsRaw = req.query.allMonths;
     const allMonths = allMonthsRaw === undefined ? true : (String(allMonthsRaw) === 'true' || String(allMonthsRaw) === '1');
-    
+
     // If frontend explicitly sets allMonths=false or provides month filter, apply month filter
     let year: number | undefined;
     let month: number | undefined;
     let applyMonthFilter = false;
-    
+
     if (!allMonths || req.query.month) {
       const monthStr = req.query.month ? String(req.query.month) : '';
       if (monthStr && /^\d{4}-\d{2}$/.test(monthStr)) {
@@ -231,13 +231,13 @@ export const listPaginatedPayslips = async (req: Request, res: Response, next: N
       }
     }
 
-    console.log('[salary-service] listPaginatedPayslips:', { 
+    console.log('[salary-service] listPaginatedPayslips:', {
       allMonths,
-      year, 
-      month, 
+      year,
+      month,
       applyMonthFilter,
-      page: req.query.page, 
-      pageSize: req.query.pageSize 
+      page: req.query.page,
+      pageSize: req.query.pageSize
     });
 
     // Frontend uses 1-based page, convert to 0-based
@@ -259,13 +259,13 @@ export const listPaginatedPayslips = async (req: Request, res: Response, next: N
 
     // Build base query with scope filter
     let query = MonthlyPayslip.query();
-    
+
     // Apply month filter if needed
     if (applyMonthFilter && year && month) {
       query = query.where({ year, month });
       console.log('[salary-service] Filtering by year:', year, 'month:', month);
     }
-    
+
     // Only apply user filter if not full access
     if (!hasFullAccess) {
       if (scopedUserIds.length > 0) {
@@ -285,10 +285,10 @@ export const listPaginatedPayslips = async (req: Request, res: Response, next: N
     }
 
     // Apply DB field filters (support all numeric and text columns)
-    const dbFields = ['year', 'month', 'status', 'base_salary', 'allowances', 'overtime_pay', 
-      'gross_salary', 'social_insurance', 'health_insurance', 'personal_income_tax', 
+    const dbFields = ['year', 'month', 'status', 'base_salary', 'allowances', 'overtime_pay',
+      'gross_salary', 'social_insurance', 'health_insurance', 'personal_income_tax',
       'total_deductions', 'penalty_total', 'net_salary', 'notes', 'created_at', 'updated_at'];
-    
+
     for (const field of dbFields) {
       const value = req.query[field];
       if (value !== undefined && value !== null && String(value).trim() !== '') {
@@ -302,9 +302,9 @@ export const listPaginatedPayslips = async (req: Request, res: Response, next: N
           if (!isNaN(numValue)) {
             query = query.where(field, numValue);
           }
-        } else if (['base_salary', 'allowances', 'overtime_pay', 'gross_salary', 
-                    'social_insurance', 'health_insurance', 'personal_income_tax',
-                    'total_deductions', 'penalty_total', 'net_salary'].includes(field)) {
+        } else if (['base_salary', 'allowances', 'overtime_pay', 'gross_salary',
+          'social_insurance', 'health_insurance', 'personal_income_tax',
+          'total_deductions', 'penalty_total', 'net_salary'].includes(field)) {
           // Numeric fields - exact match (can be extended to range filters)
           const numValue = Number(trimmedValue);
           if (!isNaN(numValue)) {
@@ -360,14 +360,14 @@ export const listPaginatedPayslips = async (req: Request, res: Response, next: N
         const eY = eParts[0];
         const eM = eParts[1];
 
-        query = query.where(function() {
+        query = query.where(function () {
           // year > sY OR (year = sY AND month >= sM)
-          this.where('year', '>', sY).orWhere(function() {
+          this.where('year', '>', sY).orWhere(function () {
             this.where('year', sY).andWhere('month', '>=', sM);
           });
-        }).andWhere(function() {
+        }).andWhere(function () {
           // year < eY OR (year = eY AND month <= eM)
-          this.where('year', '<', eY).orWhere(function() {
+          this.where('year', '<', eY).orWhere(function () {
             this.where('year', eY).andWhere('month', '<=', eM);
           });
         });
@@ -400,7 +400,7 @@ export const listPaginatedPayslips = async (req: Request, res: Response, next: N
       if (userIds.length > 0) {
         const usersResp = await axios.post(`${apiGateway}/api/auth/users/bulk`, { userIds });
         const users = (usersResp?.data?.data || usersResp?.data || []);
-        
+
         // Fetch department names
         const deptIds = [...new Set(users.map((u: any) => Number(u.departmentId)).filter(Boolean))];
         const deptMap = new Map<number, string>();
@@ -467,7 +467,7 @@ export const listPaginatedPayslips = async (req: Request, res: Response, next: N
     const sortField = req.query['sort'];
     const sortOrder = (req.query['order'] || 'desc') as 'asc' | 'desc';
     const userEnrichedFields = ['fullName', 'username', 'departmentName'];
-    
+
     if (sortField && userEnrichedFields.includes(String(sortField))) {
       enrichedRows.sort((a: any, b: any) => {
         const aVal = a[String(sortField)] || '';
@@ -679,8 +679,8 @@ export const getMyPayslips = async (req: Request, res: Response, next: NextFunct
     }
 
     // DB fields available for direct filtering
-    const dbFields = ['year', 'month', 'status', 'base_salary', 'allowances', 'overtime_pay', 
-      'gross_salary', 'social_insurance', 'health_insurance', 'personal_income_tax', 
+    const dbFields = ['year', 'month', 'status', 'base_salary', 'allowances', 'overtime_pay',
+      'gross_salary', 'social_insurance', 'health_insurance', 'personal_income_tax',
       'total_deductions', 'penalty_total', 'net_salary', 'notes', 'created_at', 'updated_at'];
 
     for (const field of dbFields) {
@@ -692,9 +692,9 @@ export const getMyPayslips = async (req: Request, res: Response, next: NextFunct
         } else if (['year', 'month'].includes(field)) {
           const numValue = Number(trimmedValue);
           if (!isNaN(numValue)) query = query.where(field, numValue);
-        } else if (['base_salary', 'allowances', 'overtime_pay', 'gross_salary', 
-                    'social_insurance', 'health_insurance', 'personal_income_tax',
-                    'total_deductions', 'penalty_total', 'net_salary'].includes(field)) {
+        } else if (['base_salary', 'allowances', 'overtime_pay', 'gross_salary',
+          'social_insurance', 'health_insurance', 'personal_income_tax',
+          'total_deductions', 'penalty_total', 'net_salary'].includes(field)) {
           const numValue = Number(trimmedValue);
           if (!isNaN(numValue)) query = query.where(field, numValue);
         } else if (['created_at', 'updated_at'].includes(field)) {
@@ -745,12 +745,12 @@ export const getMyPayslips = async (req: Request, res: Response, next: NextFunct
         const eY = eParts[0];
         const eM = eParts[1];
 
-        query = query.where(function() {
-          this.where('year', '>', sY).orWhere(function() {
+        query = query.where(function () {
+          this.where('year', '>', sY).orWhere(function () {
             this.where('year', sY).andWhere('month', '>=', sM);
           });
-        }).andWhere(function() {
-          this.where('year', '<', eY).orWhere(function() {
+        }).andWhere(function () {
+          this.where('year', '<', eY).orWhere(function () {
             this.where('year', eY).andWhere('month', '<=', eM);
           });
         });
