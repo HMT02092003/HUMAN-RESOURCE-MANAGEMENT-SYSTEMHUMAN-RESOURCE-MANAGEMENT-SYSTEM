@@ -17,8 +17,8 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --default-timeout=1000 --upgrade pip setuptools wheel
+RUN pip install --no-cache-dir --default-timeout=1000 -r requirements.txt
 
 # Copy pre-trained models (buffalo_l + anti-spoofing)
 # This avoids downloading models during container startup
