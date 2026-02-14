@@ -689,7 +689,7 @@ export class ApplicationController {
         ApplicationStatus.APPROVED, // Dùng số 1 thay vì 'APPROVED'
         null, // type
         0, // offset
-        1000 // limit lớn để lấy hết
+        10000 // limit lớn để lấy hết (tăng từ 1000 lên 10000 để tránh miss đơn của user có nhiều record)
       );
 
       console.log(`✅ Found ${applications.length} APPROVED applications`);

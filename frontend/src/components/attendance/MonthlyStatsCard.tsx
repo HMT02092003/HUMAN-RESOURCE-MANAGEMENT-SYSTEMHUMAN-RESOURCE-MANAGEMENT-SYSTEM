@@ -75,7 +75,7 @@ const MonthlyStatsCard: React.FC<MonthlyStatsCardProps> = ({
           }}>
             <div style={{ fontSize: 13, color: '#b45309', fontWeight: 500 }}>Công OT</div>
             <div style={{ fontSize: 20, fontWeight: 'bold', color: '#d97706' }}>
-              +{(monthlyStats.totalEffectiveOtWorkingUnits || (monthlyStats.totalOtWorkingUnits || 0) * otRate).toFixed(2)}
+              +{(monthlyStats.totalEffectiveOtWorkingUnits || monthlyStats.totalOtWorkingUnits || 0).toFixed(2)}
             </div>
           </div>
         </Col>
@@ -211,7 +211,7 @@ const MonthlyStatsCard: React.FC<MonthlyStatsCardProps> = ({
                 <Col span={12}>
                   <div style={{ textAlign: 'center', padding: 10, background: '#fef3c7', borderRadius: 6 }}>
                     <TrophyOutlined style={{ color: '#d97706', fontSize: 16 }} />
-                    <div style={{ fontSize: 18, fontWeight: 'bold', color: '#d97706' }}>+{(monthlyStats.totalEffectiveOtWorkingUnits || (monthlyStats.totalOtWorkingUnits || 0) * otRate).toFixed(2)}</div>
+                    <div style={{ fontSize: 18, fontWeight: 'bold', color: '#d97706' }}>+{(monthlyStats.totalEffectiveOtWorkingUnits || monthlyStats.totalOtWorkingUnits || 0).toFixed(2)}</div>
                     <div style={{ fontSize: 10, color: '#8c8c8c' }}>Công tăng ca</div>
                   </div>
                 </Col>

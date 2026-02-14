@@ -51,26 +51,40 @@ export async function recordAttendance(userId: number, time: string, token?: str
 
     // ✨ Determine if it's a weekend/off-day based on config
     const workingDaysConfig = await getWorkingDaysConfig();
-    console.log('📅 Working days config loaded');
+    const lunchBreak = AttendanceCalculationService.getDefaultSettings().lunchBreak;
+    console.log('📅 Working days config \u0026 Lunch break loaded');
 
     // Lấy thông tin OT đã duyệt
     const overtimeApp = await AttendanceCalculationService.getApprovedOvertimeApplication(userId, date);
     let otStartTime: string | undefined = undefined;
     let otEndTime: string | undefined = undefined;
+
     if (overtimeApp) {
       const appData = typeof overtimeApp.data === 'string' ? JSON.parse(overtimeApp.data) : overtimeApp.data;
       console.log('✅ Found approved OT app', { id: overtimeApp.id, overtimeHours: appData.overtimeHours });
 
       // Tính startTime và endTime từ OT application (rút gọn logging)
       if (appData.startTime && appData.overtimeHours) {
-        const startTime = dayjs(appData.startTime).tz('Asia/Ho_Chi_Minh');
-        const endTime = startTime.add(appData.overtimeHours, 'hour');
+        const startTime = (appData.startTime.length <= 8) ? dayjs(`${date} ${appData.startTime}`).tz('Asia/Ho_Chi_Minh') : dayjs(appData.startTime).tz('Asia/Ho_Chi_Minh');
+
+        // ✨ FIX: Sử dụng calculateExtendedEndTime để tự động dời giờ checkout nếu qua trưa
+        const extendedEndTime = AttendanceCalculationService.calculateExtendedEndTime(
+          startTime,
+          parseFloat(appData.overtimeHours),
+          lunchBreak,
+          date
+        );
+
         otStartTime = startTime.toISOString();
-        otEndTime = endTime.toISOString();
-        console.log('⏰ OT time range', { start: startTime.format('HH:mm'), end: endTime.format('HH:mm'), hours: appData.overtimeHours });
+        otEndTime = extendedEndTime.toISOString();
+        console.log('⏰ OT time range (EXTENDED)', {
+          start: startTime.format('HH:mm'),
+          end: extendedEndTime.format('HH:mm'),
+          hours: appData.overtimeHours
+        });
       } else if (appData.endTime) {
         otEndTime = dayjs(`${date} ${appData.endTime}`).tz('Asia/Ho_Chi_Minh').toISOString();
-        console.log('⏰ OT endTime (fallback)', { otEndTime });
+        console.log('⏰ OT endTime (fixed in app)', { otEndTime });
       } else {
         console.warn('⚠️ OT app missing startTime/overtimeHours or endTime', { appId: overtimeApp.id });
       }
@@ -124,7 +138,7 @@ export async function recordAttendance(userId: number, time: string, token?: str
     // Recalculate and upsert monthly summary for this user/month
     try {
       console.log('🔄 Triggering monthly calculation', { userId, date });
-      const result = await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, date, userData);
+      const result = await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, date, userData, token);
       console.log('✅ Monthly calculation finished', { success: result?.success || false });
     } catch (monthlyErr: any) {
       console.error(`❌ [attendance] Failed to update monthly summary:`, monthlyErr);

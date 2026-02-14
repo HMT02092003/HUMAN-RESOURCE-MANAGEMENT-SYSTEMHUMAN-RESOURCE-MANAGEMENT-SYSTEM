@@ -90,7 +90,7 @@ app.use('*', (req, res) => {
 // Enhanced error handling
 app.use((err, req, res, next) => {
   const timestamp = new Date().toISOString();
-  
+
   // Log error with context
   console.error(`[${timestamp}] Attendance Service Error:`, {
     message: err.message,
@@ -135,7 +135,8 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🔗 API: http://0.0.0.0:${PORT}/api`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🗄️ Database: ${process.env.DB_HOST || 'localhost'}`);
-  console.log(`⏰ Started at: ${new Date().toISOString()}\n`);
+  console.log(`⏰ Started at: ${new Date().toISOString()}`);
+  console.log(`📂 CWD: ${process.cwd()}\n`);
 });
 
 export default app;

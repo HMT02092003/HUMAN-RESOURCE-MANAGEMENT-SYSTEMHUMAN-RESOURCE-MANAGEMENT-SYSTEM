@@ -246,38 +246,45 @@ const AttendanceSimplePage = () => {
         console.log('📊 Attendance fetched for userId:', userId);
         console.log('� Monthly full data:', monthlyFullData);
 
-        // Tách monthlyStats và dailyData từ response
+        // Tách monthlyStats và dailyData từ response (Hỗ trợ cả trường hợp data bị bọc trong field 'data')
         if (monthlyFullData) {
-          let { monthlyStats, dailyData } = monthlyFullData;
+          const fullData = monthlyFullData as any;
+          const stats = fullData.monthlyStats || fullData.data?.monthlyStats || {};
+          const details = fullData.dailyData || fullData.data?.dailyData ||
+            (fullData.dailyDetails ? fullData : null);
 
-          console.log('📅 Monthly detail data:', dailyData);
+          let monthlyStats = stats;
+          let dailyData = details;
+
+          console.log('📊 Stats found:', monthlyStats);
+          console.log('📅 Details found:', dailyData);
 
           // Normalize monthlyStats to support fields coming from `monthly_attendances` table
           const normalizedMonthlyStats = {
-            totalDays: monthlyStats.totalDays ?? dailyData?.summary?.totalDays ?? monthlyStats.totalScheduledDays ?? 0,
-            presentDays: monthlyStats.presentDays ?? dailyData?.summary?.attendedDays ?? 0,
-            absentDays: monthlyStats.absentDays ?? dailyData?.summary?.unauthorizedAbsenceDays ?? 0,
-            lateDays: monthlyStats.lateDays ?? dailyData?.summary?.lateDays ?? 0,
-            earlyLeaveDays: monthlyStats.earlyLeaveDays ?? dailyData?.summary?.earlyLeaveDays ?? 0,
-            totalHours: monthlyStats.totalHours ?? monthlyStats.totalWorkHours ?? 0,
-            averageHours: monthlyStats.averageHours ?? monthlyStats.averageWorkHours ?? 0,
-            overtimeHours: monthlyStats.overtimeHours ?? monthlyStats.totalOvertimeHours ?? 0,
-            totalLatePenalty: monthlyStats.totalLatePenalty ?? 0,
-            totalEarlyLeavePenalty: monthlyStats.totalEarlyLeavePenalty ?? 0,
-            totalPenalty: monthlyStats.totalPenalty ?? 0,
+            totalDays: monthlyStats.totalDays || dailyData?.summary?.totalDays || monthlyStats.totalScheduledDays || 30,
+            presentDays: monthlyStats.presentDays || dailyData?.summary?.attendedDays || 0,
+            absentDays: monthlyStats.absentDays || dailyData?.summary?.unauthorizedAbsenceDays || 0,
+            lateDays: monthlyStats.lateDays || dailyData?.summary?.lateDays || 0,
+            earlyLeaveDays: monthlyStats.earlyLeaveDays || dailyData?.summary?.earlyLeaveDays || 0,
+            totalHours: monthlyStats.totalHours || monthlyStats.totalWorkHours || 0,
+            averageHours: monthlyStats.averageHours || monthlyStats.averageWorkHours || 0,
+            overtimeHours: monthlyStats.overtimeHours || monthlyStats.totalOvertimeHours || 0,
+            totalLatePenalty: monthlyStats.totalLatePenalty || 0,
+            totalEarlyLeavePenalty: monthlyStats.totalEarlyLeavePenalty || 0,
+            totalPenalty: monthlyStats.totalPenalty || 0,
             // overtime pay may come under either name
-            totalOvertimePay: monthlyStats.totalOvertimePay ?? monthlyStats.totalOvertimeSalary ?? 0,
-            totalWorkingUnits: monthlyStats.totalWorkingUnits ?? monthlyStats.totalWorkingUnits ?? 0,
-            totalOtWorkingUnits: monthlyStats.totalOtWorkingUnits ?? monthlyStats.totalOtWorkingUnits ?? 0,
-            totalEffectiveOtWorkingUnits: monthlyStats.totalEffectiveOtWorkingUnits ?? 0,
-            totalLateMinutes: monthlyStats.totalLateMinutes ?? dailyData?.summary?.totalLateMinutes ?? 0,
-            totalEarlyLeaveMinutes: monthlyStats.totalEarlyLeaveMinutes ?? dailyData?.summary?.totalEarlyLeaveMinutes ?? 0,
-            unauthorizedAbsenceDays: monthlyStats.unauthorizedAbsenceDays ?? dailyData?.summary?.unauthorizedAbsenceDays ?? 0,
+            totalOvertimePay: monthlyStats.totalOvertimePay || monthlyStats.totalOvertimeSalary || 0,
+            totalWorkingUnits: monthlyStats.totalWorkingUnits || 0,
+            totalOtWorkingUnits: monthlyStats.totalOtWorkingUnits || 0,
+            totalEffectiveOtWorkingUnits: monthlyStats.totalEffectiveOtWorkingUnits || 0,
+            totalLateMinutes: monthlyStats.totalLateMinutes || dailyData?.summary?.totalLateMinutes || 0,
+            totalEarlyLeaveMinutes: monthlyStats.totalEarlyLeaveMinutes || dailyData?.summary?.totalEarlyLeaveMinutes || 0,
+            unauthorizedAbsenceDays: monthlyStats.unauthorizedAbsenceDays || dailyData?.summary?.unauthorizedAbsenceDays || 0,
             // Per-day penalty for unauthorized absence (required by MonthlyStats)
-            unauthorizedAbsencePenaltyPerDay: monthlyStats.unauthorizedAbsencePenaltyPerDay ?? 0,
-            totalUnauthorizedAbsencePenalty: monthlyStats.totalUnauthorizedAbsencePenalty ?? dailyData?.summary?.totalUnauthorizedAbsencePenalty ?? 0,
-            approvedLeaveDays: monthlyStats.approvedLeaveDays ?? dailyData?.summary?.approvedLeaveDays ?? 0,
-            businessTripDays: monthlyStats.businessTripDays ?? 0
+            unauthorizedAbsencePenaltyPerDay: monthlyStats.unauthorizedAbsencePenaltyPerDay || 0,
+            totalUnauthorizedAbsencePenalty: monthlyStats.totalUnauthorizedAbsencePenalty || dailyData?.summary?.totalUnauthorizedAbsencePenalty || 0,
+            approvedLeaveDays: monthlyStats.approvedLeaveDays || dailyData?.summary?.approvedLeaveDays || 0,
+            businessTripDays: monthlyStats.businessTripDays || 0
           };
 
           monthlyStats = normalizedMonthlyStats;
@@ -369,14 +376,13 @@ const AttendanceSimplePage = () => {
         // Fix: Check for attendance presence (either nested or flat)
         const hasData = detail.hasAttendance || detail.checkInTime || detail.checkOutTime;
         if (hasData) {
-          // ⭐ Merge carefully: Ưu tiên lấy dữ liệu thô từ attendanceData, sau đó bổ sung các trường tính toán từ detail
+          // ⭐ Merge carefully: Ưu tiên lấy dữ liệu đã tính toán từ detail (top level), sau đó mới đến attendanceData (nếu có)
           const attData = {
-            ...detail,
             ...(detail.attendanceData || {}),
+            ...detail,
           } as any;
 
           // Format checkIn/checkOut time để hiển thị
-          // ✨ FIX: Backend returns 'HH:mm', no need to re-format (which risks Invalid Date)
           const checkInTime = attData.checkInTime;
           const checkOutTime = attData.checkOutTime;
 
@@ -397,12 +403,13 @@ const AttendanceSimplePage = () => {
             otWorkingUnit: parseFloat(attData.otWorkingUnit || attData.otWorkingUnits || '0'),
             effectiveOtWorkingUnit: parseFloat(attData.effectiveOtWorkingUnit || '0'),
             totalHours: parseFloat(attData.dailyTotalWorkHours || attData.totalHours || '0'),
-            overtime: otHours || parseFloat(attData.overtimeHours || '0'), // ⭐ Chuyển đổi từ phút sang giờ hoặc lấy giờ từ API
+            overtime: otHours || parseFloat(attData.overtimeHours || '0'),
             otSalary: parseFloat(attData.otSalary || attData.totalOvertimePay || attData.totalOvertimeSalary || '0'),
             lateMinutes: parseFloat(attData.lateMinutes || '0'),
-            earlyDepartureMinutes: parseFloat(attData.earlyLeaveMinutes || attData.earlyDepartureMinutes || '0'),
+            earlyDepartureMinutes: parseFloat(attData.earlyDepartureMinutes || attData.earlyLeaveMinutes || '0'),
             lateArrivalPenalty: parseFloat(attData.lateArrivalPenalty || attData.totalLatePenalty || '0'),
-            earlyLeavePenalty: parseFloat(attData.earlyLeavePenalty || attData.totalEarlyLeavePenalty || '0')
+            earlyLeavePenalty: parseFloat(attData.earlyLeavePenalty || attData.totalEarlyLeavePenalty || '0'),
+            hasApprovedOT: !!(attData.hasApprovedOT || attData.overtimeData?.hasApprovedOT)
           });
         }
       });
@@ -414,10 +421,46 @@ const AttendanceSimplePage = () => {
   const dailyDetailMap = useMemo(() => {
     const map = new Map<string, DailyAttendanceDetail>();
     if (monthlyDetail?.dailyDetails) {
-      monthlyDetail.dailyDetails.forEach((detail) => {
+      monthlyDetail.dailyDetails.forEach((detail: any) => {
         // ⭐ Format date to YYYY-MM-DD để khớp với tileClassName
         const dateKey = dayjs(detail.date).format('YYYY-MM-DD');
-        map.set(dateKey, detail);
+
+        // ⭐ Normalize nested objects if they are missing but flags are at top-level
+        const holidayData = detail.holidayData || (detail.isHoliday ? {
+          isHoliday: true,
+          holidayName: detail.holidayName || detail.statusText
+        } : null);
+
+        const leaveData = detail.leaveData || (detail.hasApprovedLeave ? {
+          hasApprovedLeave: true,
+          leaveType: detail.leaveType,
+          leaveInfo: detail.leaveInfo || detail.statusText,
+          isPaid: detail.isPaidLeave
+        } : null);
+
+        const businessTripData = detail.businessTripData || (detail.hasBusinessTrip ? {
+          hasBusinessTrip: true,
+          businessTripInfo: detail.statusText || 'Công tác'
+        } : null);
+
+        // ⭐ Normalize status if missing or named differently (Map from type or statusText)
+        let status = detail.status;
+        if (!status) {
+          if (detail.type === 'leave' || detail.hasApprovedLeave) status = 'approved_leave';
+          else if (detail.type === 'business-trip' || detail.hasBusinessTrip) status = 'business_trip';
+          else if (detail.statusText === 'Nghỉ không phép') status = 'absent';
+          else if (detail.statusText === 'Ngày nghỉ') status = 'weekend';
+          else if (detail.isHoliday) status = 'holiday';
+          else if (detail.checkInTime || detail.checkOutTime) status = 'working';
+        }
+
+        map.set(dateKey, {
+          ...detail,
+          status,
+          holidayData,
+          leaveData,
+          businessTripData
+        });
       });
       console.log(`🗺️ dailyDetailMap created with ${map.size} entries`);
 
@@ -476,7 +519,13 @@ const AttendanceSimplePage = () => {
     }
 
     // Đã chấm công đúng giờ (xanh nhạt) - CHỈ khi không có penalty
-    if (dailyDetail.status === 'working' && dailyDetail.isOnTime) {
+    const attData = dailyDetail.attendanceData;
+    const hasPenaltyTime = attData && (
+      (parseFloat(attData.lateMinutes?.toString() || '0') > 0) ||
+      (parseFloat(attData.earlyDepartureMinutes?.toString() || '0') > 0)
+    );
+
+    if (dailyDetail.status === 'working' && !hasPenaltyTime) {
       return { bgColor: '#f6ffed', borderColor: '#b7eb8f' };
     }
 
@@ -656,16 +705,15 @@ const AttendanceSimplePage = () => {
 
                   // Kiểm tra ngày có phạt chấm công (đi muộn hoặc về sớm)
                   const hasPenaltyTime = attendance && (
-                    (attendance.lateMinutes && attendance.lateMinutes > 0) ||
-                    (attendance.earlyDepartureMinutes && attendance.earlyDepartureMinutes > 0) ||
-                    (attendance.earlyLeaveMinutes && attendance.earlyLeaveMinutes > 0)
+                    (attendance.lateMinutes > 0) ||
+                    (attendance.earlyDepartureMinutes > 0)
                   );
 
                   // Ngày bị phạt chấm công -> background đỏ
                   if (hasPenaltyTime) return 'status-penalty';
 
                   // Ngày chấm công đúng giờ HOẶC có OT -> background xanh nhạt
-                  if (attendance && (dailyDetail?.isOnTime || dailyDetail?.hasApprovedOT)) return 'status-working';
+                  if (attendance && !hasPenaltyTime) return 'status-working';
 
                   // Nghỉ không phép -> KHÔNG có background (chỉ chữ đỏ)
                   // Không cần CSS class cho ngày nghỉ không phép
@@ -802,10 +850,10 @@ const AttendanceSimplePage = () => {
                       ) : attendance ? (
                         // Có chấm công: hiển thị giờ vào - giờ ra (nền xanh nếu là ngày lễ)
                         <div className="calendar-cell-info">
-                          {/* ✨ MODIFIED: Holiday name hidden when working (showing time instead) */}
-                          {(attendance.effectiveOtWorkingUnit > 0 || attendance.otWorkingUnit > 0 || attendance.overtime > 0) && (
+                          {/* ✨ MODIFIED: Only show OT indicator if there is an approved OT application */}
+                          {(attendance.hasApprovedOT && (attendance.effectiveOtWorkingUnit > 0 || attendance.otWorkingUnit > 0 || attendance.overtime > 0)) && (
                             <div style={{ color: '#d97706', fontSize: isMobile ? 9 : 11, fontWeight: 'bold' }}>
-                              +{(attendance.effectiveOtWorkingUnit || (attendance.otWorkingUnit || (attendance.overtime / 8)) * otRate).toFixed(2)}
+                              +{(attendance.effectiveOtWorkingUnit || attendance.otWorkingUnit || 0).toFixed(2)}
                             </div>
                           )}
                           {/* ✨ Display Total Daily Units clearly */}
@@ -1320,7 +1368,56 @@ const AttendanceSimplePage = () => {
                           <strong>Lý do:</strong> {(dailyDetail as any).overtimeData.application?.data?.reason || (dailyDetail as any).overtimeData.application?.reason || (isHoliday ? 'Làm thêm ngày lễ' : 'Làm thêm giờ')}
                         </Text>
                         <Text style={{ fontSize: 12, color: '#8c8c8c' }}>
-                          (Đơn ID: {(dailyDetail as any).overtimeData.application?.id} • {(dailyDetail as any).overtimeData.application?.data?.startTime || (dailyDetail as any).overtimeData.application?.startTime} - {(dailyDetail as any).overtimeData.application?.data?.endTime || (dailyDetail as any).overtimeData.application?.endTime})
+                          {(() => {
+                            const app = (dailyDetail as any).overtimeData.application;
+                            // Use more robust data access
+                            const data = app?.data || app || {};
+                            const rawStart = data.startTime;
+                            const rawEnd = data.endTime;
+
+                            // Try to find a duration source
+                            // 1. App-defined duration
+                            const appDuration = data.duration || data.hours || data.totalHours;
+                            // 2. Actual OT hours from attendance
+                            const actualOT = selectedDateData?.overtime || 0;
+                            // 3. Total working hours (fallback for holidays/special cases where overtime field might be 0 but total hours counts)
+                            const actualTotal = selectedDateData?.totalHours || 0;
+
+                            const fmt = (t: any) => {
+                              if (!t) return null;
+                              if (typeof t === 'string' && (t.includes('T') || t.includes('-'))) {
+                                const d = dayjs(t);
+                                return d.isValid() ? d.format('HH:mm') : t;
+                              }
+                              if (typeof t === 'string' && t.includes(':')) {
+                                return t.substring(0, 5);
+                              }
+                              return String(t);
+                            };
+
+                            let startStr = fmt(rawStart);
+                            let endStr = fmt(rawEnd);
+
+                            // Calculate End Time if missing
+                            if (startStr && !endStr) {
+                              // Determine best duration to use
+                              let duration = parseFloat(appDuration || '0');
+                              if (!duration && actualOT > 0) duration = actualOT;
+                              if (!duration && isHoliday && actualTotal > 0) duration = actualTotal;
+
+                              if (duration > 0) {
+                                const [h, m] = startStr.split(':').map(Number);
+                                if (!isNaN(h)) {
+                                  const totalMin = h * 60 + (m || 0) + Math.round(duration * 60);
+                                  const endH = Math.floor(totalMin / 60) % 24;
+                                  const endM = totalMin % 60;
+                                  endStr = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+                                }
+                              }
+                            }
+
+                            return `(Đơn ID: ${app?.id || 'N/A'} • ${startStr || '??:??'} - ${endStr || '??:??'})`;
+                          })()}
                         </Text>
                       </div>
                     </Col>
@@ -1343,7 +1440,7 @@ const AttendanceSimplePage = () => {
                     <div style={{ textAlign: 'center', padding: 8, background: '#f6ffed', borderRadius: 6, border: '1px solid #b7eb8f' }}>
                       <Text style={{ fontSize: isMobile ? 10 : 11, color: '#52c41a', display: 'block' }}>Vào làm</Text>
                       <Text strong style={{ fontSize: isMobile ? 14 : 16, color: '#52c41a' }}>
-                        {selectedDateData.checkInTime || '--:--'}
+                        {selectedDateData?.checkInTime || '--:--'}
                       </Text>
                     </div>
                   </Col>
@@ -1351,7 +1448,7 @@ const AttendanceSimplePage = () => {
                     <div style={{ textAlign: 'center', padding: 8, background: '#fff7e6', borderRadius: 6, border: '1px solid #ffd591' }}>
                       <Text style={{ fontSize: isMobile ? 10 : 11, color: '#d48806', display: 'block' }}>Tan làm</Text>
                       <Text strong style={{ fontSize: isMobile ? 14 : 16, color: '#d48806' }}>
-                        {selectedDateData.checkOutTime || '--:--'}
+                        {selectedDateData?.checkOutTime || '--:--'}
                       </Text>
                     </div>
                   </Col>
@@ -1373,7 +1470,7 @@ const AttendanceSimplePage = () => {
                     <div style={{ textAlign: 'center', padding: 8, background: '#e6f7ff', borderRadius: 6, border: '1px solid #91d5ff' }}>
                       <Text style={{ fontSize: isMobile ? 10 : 11, color: '#1890ff', display: 'block' }}>Tổng giờ</Text>
                       <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#1890ff' }}>
-                        {selectedDateData.totalHours}h
+                        {selectedDateData?.totalHours || 0}h
                       </Text>
                     </div>
                   </Col>
@@ -1381,7 +1478,7 @@ const AttendanceSimplePage = () => {
                     <div style={{ textAlign: 'center', padding: 8, background: '#f9f0ff', borderRadius: 6, border: '1px solid #d3adf7' }}>
                       <Text style={{ fontSize: isMobile ? 10 : 11, color: '#722ed1', display: 'block' }}>Làm thêm</Text>
                       <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#722ed1' }}>
-                        {selectedDateData.overtime}h
+                        {selectedDateData?.overtime || 0}h
                       </Text>
                     </div>
                   </Col>
@@ -1389,7 +1486,7 @@ const AttendanceSimplePage = () => {
                     <div style={{ textAlign: 'center', padding: 8, background: '#fff1f0', borderRadius: 6, border: '1px solid #ffccc7' }}>
                       <Text style={{ fontSize: isMobile ? 10 : 11, color: '#ff4d4f', display: 'block' }}>Muộn</Text>
                       <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#ff4d4f' }}>
-                        {selectedDateData.lateMinutes}p
+                        {selectedDateData?.lateMinutes || 0}p
                       </Text>
                     </div>
                   </Col>
@@ -1397,7 +1494,7 @@ const AttendanceSimplePage = () => {
                     <div style={{ textAlign: 'center', padding: 8, background: '#fff2e8', borderRadius: 6, border: '1px solid #ffd591' }}>
                       <Text style={{ fontSize: isMobile ? 10 : 11, color: '#fa8c16', display: 'block' }}>Sớm</Text>
                       <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#fa8c16' }}>
-                        {selectedDateData.earlyDepartureMinutes}p
+                        {selectedDateData?.earlyDepartureMinutes || 0}p
                       </Text>
                     </div>
                   </Col>
@@ -1406,7 +1503,7 @@ const AttendanceSimplePage = () => {
                     <div style={{ textAlign: 'center', padding: 8, background: '#fff7e6', borderRadius: 6, border: '1px solid #ffd591' }}>
                       <Text style={{ fontSize: isMobile ? 10 : 11, color: '#d48806', display: 'block' }}>Số công</Text>
                       <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#d48806' }}>
-                        {((selectedDateData as any).dailyWorkingUnit || (selectedDateData as any).totalWorkingUnit || 0).toFixed(2)}
+                        {Number((selectedDateData as any)?.dailyWorkingUnit || (selectedDateData as any)?.totalWorkingUnit || 0).toFixed(2)}
                       </Text>
                     </div>
                   </Col>
@@ -1414,14 +1511,14 @@ const AttendanceSimplePage = () => {
                     <div style={{ textAlign: 'center', padding: 8, background: '#f9f0ff', borderRadius: 6, border: '1px solid #d3adf7' }}>
                       <Text style={{ fontSize: isMobile ? 10 : 11, color: '#722ed1', display: 'block' }}>Công OT (quy đổi)</Text>
                       <Text strong style={{ fontSize: isMobile ? 12 : 14, color: '#722ed1' }}>
-                        {((selectedDateData as any).effectiveOtWorkingUnit || (selectedDateData as any).otWorkingUnit || 0).toFixed(2)}
+                        {Number((selectedDateData as any)?.effectiveOtWorkingUnit || (selectedDateData as any)?.otWorkingUnit || 0).toFixed(2)}
                       </Text>
                     </div>
                   </Col>
                 </Row>
               </div>
 
-              {selectedDateData.overtime > 0 ? (
+              {selectedDateData?.overtime > 0 ? (
                 <div style={{ marginBottom: 16 }}>
                   <Row gutter={[12, 8]} style={{ marginBottom: 8 }}>
                     <Col span={24}>

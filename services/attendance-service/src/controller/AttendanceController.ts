@@ -6,7 +6,6 @@
 import { Request, Response } from 'express';
 import { AttendanceService } from '@/services/AttendanceService';
 import MonthlySummaryModel from '@/Models/MonthlySummaryModel';
-import SalaryService from '@/services/SalaryService';
 import { MonthlyReportService } from '@/services/MonthlyReportService';
 import { getDecodedToken } from '@/utils/decode-token';
 import { getUserData } from '@/utils/getUserData';
@@ -229,10 +228,8 @@ export const getUserMonthlyFull = async (req: Request, res: Response) => {
     // First try to read monthly summary row (monthly_attendances)
     const monthlyRecord = await MonthlySummaryModel.getByUserAndMonth(parseInt(userId), monthStr);
 
-    // ⭐ ONLY use DB snapshot if record is approved (isFinal)
-    // If not approved, always fall back to on-the-fly calculation to ensure latest fixes from buildMonthlyFull are applied.
-    if (monthlyRecord && monthlyRecord.isApproved && (monthlyRecord as any).dailyDetails) {
-      // If dailyDetails snapshot exists and is approved, return 100% from monthly_attendances
+    if (monthlyRecord && (monthlyRecord as any).dailyDetails) {
+      // Return 100% from monthly_attendances if record exists
       let dailyDetails: any[] = [];
       try {
         const raw = (monthlyRecord as any).dailyDetails;
@@ -243,26 +240,13 @@ export const getUserMonthlyFull = async (req: Request, res: Response) => {
         }
       } catch (e) { dailyDetails = []; }
 
-      // Build monthlyStats from DB fields following requested formulas (cast to any for DB-only columns)
       const db: any = monthlyRecord as any;
-      const totalScheduledDays = Number(db.totalScheduledDays || 0);
-      const presentDays = Number(db.presentDays || 0);
-      const approvedLeaveDays = Number(db.approvedLeaveDays || 0);
-      const businessTripDays = Number(db.businessTripDays || 0);
-      const unauthorizedAbsenceDays = Number(db.unauthorizedAbsenceDays ?? Math.max(0, totalScheduledDays - (presentDays + approvedLeaveDays + businessTripDays)));
 
-      const userData = getUserData(req);
-      const salary = await SalaryService.fetchSalary(parseInt(userId), token, userData);
-      const baseSalary = salary?.baseSalary ? Number(salary.baseSalary) : 0;
-      const workingDaysInMonth = Number(db.totalScheduledDays || totalScheduledDays || 0);
-      // Calculate penalty per day as daily salary (rounded to integer, no decimals)
-      const unauthorizedAbsencePenaltyPerDay = baseSalary && workingDaysInMonth ? Math.round(baseSalary / workingDaysInMonth) : 0;
-      const totalUnauthorizedAbsencePenalty = unauthorizedAbsencePenaltyPerDay * unauthorizedAbsenceDays;
-
+      // Use values directly from DB columns as requested (no re-calculation)
       const monthlyStats = {
-        totalDays: totalScheduledDays,
-        presentDays,
-        absentDays: Number(db.absentDays || unauthorizedAbsenceDays),
+        totalDays: Number(db.totalScheduledDays || 0),
+        presentDays: Number(db.presentDays || 0),
+        absentDays: Number(db.absentDays || 0),
         lateDays: Number(db.lateDays || 0),
         earlyLeaveDays: Number(db.earlyLeaveDays || 0),
         totalHours: Number(db.totalWorkHours || 0),
@@ -275,20 +259,39 @@ export const getUserMonthlyFull = async (req: Request, res: Response) => {
         totalOvertimePay: Number(db.totalOvertimeSalary || 0),
         totalLateMinutes: Number(db.totalLateMinutes || 0),
         totalEarlyLeaveMinutes: Number(db.totalEarlyLeaveMinutes || 0),
-        unauthorizedAbsenceDays,
-        totalUnauthorizedAbsencePenalty,
-        approvedLeaveDays,
-        businessTripDays,
+        unauthorizedAbsenceDays: Number(db.unauthorizedAbsenceDays || 0),
+        totalUnauthorizedAbsencePenalty: Number(db.totalUnauthorizedAbsencePenalty || 0),
+        unauthorizedAbsencePenaltyPerDay: Number(db.unauthorizedAbsenceDays > 0 ? Math.round(Number(db.totalUnauthorizedAbsencePenalty || 0) / Number(db.unauthorizedAbsenceDays)) : 0),
+        approvedLeaveDays: Number(db.approvedLeaveDays || 0),
+        businessTripDays: Number(db.businessTripDays || 0),
         totalWorkingUnits: Number(db.totalWorkingUnits || 0),
-        totalOtWorkingUnits: Number(db.totalOtWorkingUnits || 0)
+        totalOtWorkingUnits: Number(db.totalOtWorkingUnits || 0),
+        totalEffectiveOtWorkingUnits: Number(db.totalOtWorkingUnits || 0)
       };
 
-      return res.status(200).json({ success: true, data: { monthlyStats, dailyData: { userId: parseInt(userId), month: Number(monthStr.split('-')[1]), year: Number(monthStr.split('-')[0]), dailyDetails, monthlySalary: Number(db.baseSalary || 0), penaltyRate: 0, summary: {} } } });
+      return res.status(200).json({
+        success: true,
+        data: {
+          monthlyStats,
+          dailyData: {
+            userId: parseInt(userId),
+            month: Number(monthStr.split('-')[1]),
+            year: Number(monthStr.split('-')[0]),
+            dailyDetails,
+            monthlySalary: Number(db.baseSalary || 0),
+            penaltyRate: 0,
+            summary: {
+              ...monthlyStats,
+              workingDays: Number(db.totalScheduledDays || 0),
+              attendedDays: Number(db.presentDays || 0)
+            }
+          }
+        }
+      });
     }
 
     // Fallback: delegate to existing service to compute on the fly
-    const userData = getUserData(req);
-    const payload = await AttendanceService.getUserMonthlyFull(parseInt(userId), monthStr, token, userData);
+    const payload = await AttendanceService.getUserMonthlyFull(parseInt(userId), monthStr, token);
 
     if (!payload) return res.status(404).json({ success: false, message: 'Không tìm thấy dữ liệu chấm công' });
     return res.status(200).json(payload);
@@ -633,7 +636,10 @@ export const calculateAndSaveMonthly = async (req: Request, res: Response) => {
     if (!userId || !year || !month) return res.status(400).json({ success: false, message: 'userId, year and month are required' });
     const dateStr = `${String(year)}-${String(month).padStart(2, '0')}-01`;
     const userData = getUserData(req);
-    await MonthlyReportService.calculateAndSaveMonthlyAttendance(Number(userId), dateStr, userData);
+    // Extract token for service calls
+    const token = req.cookies?.['token'] || req.headers.authorization?.replace('Bearer ', '');
+
+    await MonthlyReportService.calculateAndSaveMonthlyAttendance(Number(userId), dateStr, userData, token);
     return res.status(200).json({ success: true, message: 'Monthly attendance calculated and saved' });
   } catch (error: any) {
     console.error('Error in calculateAndSaveMonthly:', error);
@@ -874,7 +880,7 @@ export const updateForgotCheck = async (req: Request, res: Response) => {
     const userData = getUserData(req);
     try {
       console.log(`🔄 [updateForgotCheck] Triggering monthly calculation...`);
-      const monthlyResult = await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, forgotDate, userData);
+      const monthlyResult = await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, forgotDate, userData, token);
       console.log(`✅ [updateForgotCheck] Monthly calculation result:`, monthlyResult);
     } catch (monthlyErr: any) {
       console.error(`❌ [updateForgotCheck] Failed to update monthly summary:`, monthlyErr);

@@ -233,6 +233,7 @@ export class AttendanceCalculationService {
             totalScheduledDays: parseFloat(((monthlyRecord as any)['totalScheduledDays'] ?? 0).toString()) || 0,
             absentDays: parseFloat(((monthlyRecord as any)['absentDays'] ?? 0).toString()) || 0,
             baseSalary: parseFloat(((monthlyRecord as any)['baseSalary'] ?? 0).toString()) || 0, // ✨ Salary info
+            averageWorkHours: parseFloat(((monthlyRecord as any)['averageWorkHours'] ?? 0).toString()) || 0, // ✨ Average work hours from DB
             isApproved: !!isApprovedFlag,
             attendanceData: dailyDetails
           };
@@ -381,7 +382,9 @@ export class AttendanceCalculationService {
             id: null, checkInTime: null, checkOutTime: null,
             lateMinutes: 0, earlyDepartureMinutes: 0, dailyTotalWorkHours: 0,
             lateArrivalPenalty: 0, earlyLeavePenalty: 0, otMinutes: 0, otSalary: 0,
-            totalWorkingUnit: 0, otWorkingUnit: 0, dailyWorkingUnit: 0
+            totalWorkingUnit: 0, otWorkingUnit: 0, dailyWorkingUnit: 0,
+            status: (isWork && dayjs(dateKey).isBefore(dayjs(), 'day')) ? 0 : undefined,
+            type: (isWork && dayjs(dateKey).isBefore(dayjs(), 'day')) ? 'absent' : 'attendance'
           });
         }
 
@@ -406,8 +409,16 @@ export class AttendanceCalculationService {
 
           if (!rawEnd && otDuration > 0) {
             const fullStart = startTimeFormatted.length <= 5 ? `${dateKey} ${startTimeFormatted}` : startTimeFormatted;
-            const calculatedEnd = dayjs(fullStart).add(otDuration, 'hour');
-            endTimeFormatted = calculatedEnd.tz('Asia/Ho_Chi_Minh').format('HH:mm');
+            const startTimeDerive = dayjs(fullStart).tz('Asia/Ho_Chi_Minh');
+            const lunchBreak = await AttendanceCalculationService.getSettings().then(s => s.lunchBreak);
+
+            const extendedEnd = AttendanceCalculationService.calculateExtendedEndTime(
+              startTimeDerive,
+              otDuration,
+              lunchBreak,
+              dateKey
+            );
+            endTimeFormatted = extendedEnd.format('HH:mm');
           } else if (!rawEnd) {
             endTimeFormatted = '17:00';
           } else {
@@ -423,7 +434,8 @@ export class AttendanceCalculationService {
             dayRecord.shift = {
               name: isHoliday ? 'Làm thêm ngày lễ' : 'Làm thêm ngày nghỉ',
               start_time: startTimeFormatted,
-              end_time: endTimeFormatted
+              end_time: endTimeFormatted,
+              working_unit: 0 // Optional but safe
             };
             dayRecord.shiftName = dayRecord.shift.name;
           }
@@ -456,14 +468,37 @@ export class AttendanceCalculationService {
             } catch (e) {
               console.error('Error recalcing OT day:', e);
             }
+          } else {
+            // ✨ Planned OT without Check-in: Calculate based on application hours (full units)
+            const settings = await AttendanceCalculationService.getSettings();
+            const appHours = otDuration;
+            const holidayRateMultiplier = settings.holidayRate?.rate || 3.0;
+            const weekendRateMultiplier = settings.overtimeRate?.rate || 1.5;
+            const rate = isHoliday ? holidayRateMultiplier : (isWork ? 1.5 : weekendRateMultiplier);
+
+            const units = (appHours / 8) * rate;
+            dayRecord.dailyWorkingUnit = 0;
+            dayRecord.otWorkingUnit = units / rate;
+            dayRecord.totalWorkingUnit = units;
+            dayRecord.overtimeHours = appHours;
+            console.log(`✨ [${dateKey}] Planned OT without Record: adding ${units.toFixed(2)} units`);
           }
         }
-        else if (isHoliday) {
-          // ✨ Holiday logic for days WITHOUT approved OT
+        else if (isHoliday || !isWork) {
+          // ✨ Holiday / Weekend logic for days WITHOUT approved OT
+          // Cuối tuần hoặc ngày lễ mà KHÔNG có đơn OT → không tính công
+          // Giữ lại checkInTime/checkOutTime để hiển thị trên lịch nhưng zeroes working units
           if (attendanceRecord && (attendanceRecord.checkInTime || attendanceRecord.checkOutTime)) {
-            // User worked on holiday but no OT app -> strictly speaking shouldn't be here if we follow "no app = no work"
-            // but we keep it for visibility, just won't have OT units.
-            dayRecord.dailyWorkingUnit = dayRecord.dailyWorkingUnit || 0;
+            // User checked in on holiday/weekend but no OT app -> keep times for display, zero units
+            dayRecord.dailyWorkingUnit = 0;
+            dayRecord.totalWorkingUnit = 0;
+            dayRecord.otWorkingUnit = 0;
+            dayRecord.overtimeHours = 0;
+            dayRecord.lateMinutes = 0;
+            dayRecord.earlyDepartureMinutes = 0;
+            dayRecord.lateArrivalPenalty = 0;
+            dayRecord.earlyLeavePenalty = 0;
+            console.log(`📅 [${dateKey}] Weekend/Holiday no OT app: keeping checkIn=${dayRecord.checkInTime}, checkOut=${dayRecord.checkOutTime}, units=0`);
           } else {
             dayRecord.shift = null;
             dayRecord.shiftName = null;
@@ -482,7 +517,8 @@ export class AttendanceCalculationService {
 
 
         // Final unit calculation for leave/trip markers
-        if (!attendanceRecord && !isHoliday) {
+        // ✨ FIX: Apply units regardless of attendanceRecord existence if it is a leave/trip day
+        if (!isHoliday) {
           if (dayRecord.hasApprovedLeave && dayRecord.isPaidLeave) {
             dayRecord.dailyWorkingUnit = 1.0;
             dayRecord.totalWorkingUnit = 1.0;
@@ -502,11 +538,17 @@ export class AttendanceCalculationService {
       let totalWorkDays = 0, totalWorkHours = 0, totalPenalty = 0, totalWorkingUnits = 0, totalOtWorkingUnits = 0;
       let totalOtHours = 0, totalPaidLeaveDays = 0, totalUnpaidLeaveDays = 0;
 
+      const todayStr = dayjs().format('YYYY-MM-DD');
       enrichedAttendanceData.forEach((r) => {
-        if (r.checkInTime && r.checkOutTime) totalWorkDays++;
+        if (dayjs(r.date).isAfter(todayStr, 'day')) return;
+
+        if (r.checkInTime && r.checkOutTime && r.isWorkingDay) totalWorkDays++;
         totalWorkHours += parseFloat((r.dailyTotalWorkHours || 0).toString());
         totalPenalty += parseFloat((r.lateArrivalPenalty || 0).toString()) + parseFloat((r.earlyLeavePenalty || 0).toString());
-        totalWorkingUnits += parseFloat((r.dailyWorkingUnit || 0).toString());
+
+        const units = parseFloat((r.totalWorkingUnit || 0).toString());
+        totalWorkingUnits += units;
+
         totalOtWorkingUnits += parseFloat((r.otWorkingUnit || 0).toString());
         totalOtHours += parseFloat((r.overtimeHours || 0).toString());
 
@@ -520,18 +562,43 @@ export class AttendanceCalculationService {
       const totalEarlyLeaveDays = await AttendanceCalculationService.calculateTotalEarlyLeaveDays(userId, month);
       const isApproved = await MonthlySummaryModel.isApproved(userId, month);
 
+      // ✨ FORCE SYNC: Ensure totalWorkingUnits matches the sum of dailyDetails
+      // Only sum up PAST days for totals? User complained "Total Work" is too high.
+
+
+      const finalUnits = enrichedAttendanceData.reduce((acc, r) => {
+        if (dayjs(r.date).isAfter(todayStr, 'day')) return acc;
+        return acc + (parseFloat(r.totalWorkingUnit?.toString() || '0'));
+      }, 0);
+
+      const finalOtUnits = enrichedAttendanceData.reduce((acc, r) => {
+        if (dayjs(r.date).isAfter(todayStr, 'day')) return acc;
+        return acc + (parseFloat(r.otWorkingUnit?.toString() || '0'));
+      }, 0);
+
+      // Recalculate working hours/penalty for past days only as well
+      const finalWorkHours = enrichedAttendanceData.reduce((acc, r) => {
+        if (dayjs(r.date).isAfter(todayStr, 'day')) return acc;
+        return acc + (parseFloat(r.dailyTotalWorkHours?.toString() || '0'));
+      }, 0);
+
+      const finalPenalty = enrichedAttendanceData.reduce((acc, r) => {
+        if (dayjs(r.date).isAfter(todayStr, 'day')) return acc;
+        return acc + (parseFloat(r.lateArrivalPenalty?.toString() || '0')) + (parseFloat(r.earlyLeavePenalty?.toString() || '0'));
+      }, 0);
+
       // Return real-time calculated totals to ensure UI accuracy
       return {
         userId, month,
-        user: { id: userId, name: 'N/A', email: 'N/A', departmentId: monthlyRecord?.departmentId || 0, department: { id: monthlyRecord?.departmentId || 0, name: 'N/A' } },
+        user: { id: userId, name: 'N/A', email: 'N/A' },
         presentDays: totalWorkDays,
-        totalWorkHours: Math.round(totalWorkHours * 100) / 100,
+        totalWorkHours: Math.round(finalWorkHours * 100) / 100,
         totalOvertimeHours: Math.round(totalOtHours * 100) / 100,
         totalLateDays: totalLateDays,
         totalEarlyLeaveDays: totalEarlyLeaveDays,
-        totalPenalty: Math.round(totalPenalty * 100) / 100,
-        totalWorkingUnits: Math.round(totalWorkingUnits * 100) / 100,
-        totalOtWorkingUnits: Math.round(totalOtWorkingUnits * 100) / 100,
+        totalPenalty: Math.round(finalPenalty * 100) / 100,
+        totalWorkingUnits: Number(finalUnits.toFixed(2)),
+        totalOtWorkingUnits: Number(finalOtUnits.toFixed(2)),
         totalPaidLeaveDays,
         totalUnpaidLeaveDays,
         approvedLeaveDays: totalPaidLeaveDays + totalUnpaidLeaveDays,
@@ -651,7 +718,7 @@ export class AttendanceCalculationService {
     return Math.round(penaltyAmount * 100) / 100; // Round to 2 decimal places
   }
 
-  private static async getSettings() {
+  public static async getSettings() {
     console.log('🔧 ATTENDANCE CALCULATION SERVICE - Getting settings...');
     try {
       // Use SettingsService (attendance-service) to fetch attendance-related settings
@@ -681,9 +748,9 @@ export class AttendanceCalculationService {
     }
   }
 
-  private static getDefaultSettings() {
+  public static getDefaultSettings() {
     return {
-      workingHours: { start: '09:00', end: '18:00' },
+      workingHours: { start: '08:00', end: '17:00' },
       lunchBreak: { start: '12:00', end: '13:00' },
       overtimeRate: { rate: 1.5 },
       holidayRate: { rate: 3.0 },
@@ -802,11 +869,11 @@ export class AttendanceCalculationService {
         const end = dayjs(endStr).tz('Asia/Ho_Chi_Minh');
         const diffMinutes = end.diff(start, 'minute');
 
-        // Deduct lunch break for long OT shifts (similar to standard shifts)
-        const lunchBreakMinutes = diffMinutes > 360 ? 60 : 0;
-        standardHours = (diffMinutes - lunchBreakMinutes) / 60;
+        // Deduct lunch break for holiday/weekend OT shifts using the setting
+        const lunchOverlap = this.calculateLunchBreakTime(start, end, lunchBreak, date);
+        standardHours = Math.max(0, (diffMinutes - lunchOverlap) / 60);
         approvedOtDurationHours = standardHours; // Lưu lại
-        console.log(`🎉 HOLIDAY/WEEKEND: Calculated standardHours based on OT: ${standardHours}h (Total: ${diffMinutes}m)`);
+        console.log(`🎉 HOLIDAY/WEEKEND: Calculated standardHours based on OT: ${standardHours}h (Duration: ${diffMinutes}m, Lunch: ${lunchOverlap}m)`);
       } else {
         // Không có OT vào ngày nghỉ -> Không có giờ làm chuẩn
         workingHours = { start: '00:00', end: '00:00' };
@@ -994,7 +1061,11 @@ export class AttendanceCalculationService {
         if (checkOut.isAfter(approvedOtStart) || checkOut.isSame(approvedOtStart)) {
           // Tính số phút OT thực tế: từ OT start đến MIN(checkout, OT end)
           const effectiveOtEnd = checkOut.isBefore(approvedOtEnd) ? checkOut : approvedOtEnd;
-          result.otMinutes = effectiveOtEnd.diff(approvedOtStart, 'minute');
+          const otTotalMinutes = effectiveOtEnd.diff(approvedOtStart, 'minute');
+
+          // ✨ Subtract lunch break from OT time if it overlaps
+          const otLunchMinutes = this.calculateLunchBreakTime(approvedOtStart, effectiveOtEnd, lunchBreak, date);
+          result.otMinutes = Math.max(0, otTotalMinutes - otLunchMinutes);
 
           // Tính số giờ OT (raw - chưa nhân hệ số)
           const otHours = result.otMinutes / 60;
@@ -1002,9 +1073,9 @@ export class AttendanceCalculationService {
           // ✨ Tính công OT dựa trên thời gian ca hành chính
           // 1 công = thời gian làm việc của ca (ví dụ: 8 tiếng cho ca hành chính)
           // Lấy thời gian ca từ shiftInfo hoặc mặc định 8 giờ
-          const shiftDurationHours = shiftInfo ?
-            (dayjs(`${date} ${shiftInfo.end_time}`).diff(dayjs(`${date} ${shiftInfo.start_time}`), 'hour', true)) :
-            8;
+          // Use standard working hours (excluding lunch) for calculation
+          // @ts-ignore
+          const shiftDurationHours = settings.standardHours || 8;
 
           // Công OT = (số giờ OT / thời gian ca) * hệ số OT
           const overtimeRateMultiplier = settings.overtimeRate?.rate || 1.5;
@@ -1109,32 +1180,17 @@ export class AttendanceCalculationService {
           // ✨ USER REQUEST: Dựa vào thời gian làm trong đơn OT
           // Nếu làm đủ giờ registered -> otUnits ~ 1. Nếu làm ít hơn -> < 1.
 
-          // Tuy nhiên, logic "1 công = 8 tiếng" có thể khác với "1 công = full ca OT".
-          // Nếu ca OT là 4 tiếng, làm đủ 4 tiếng => tính là 1 công ca đó? Hay 0.5 công chuẩn?
-          // Theo yêu cầu "có thể là 4 tiếng thì 0.5 công" -> vậy phải so với chuẩn 8 tiếng hoặc chuẩn ca hành chính.
+          // Logic mới:
+          // 1. Xác định khung giờ OT đc duyệt (Approved Window)
+          // 2. So sánh Check-in/Check-out với khung giờ này để tính muộn/sớm
+          // 3. Công thực nhận = (Tổng giờ đơn - Giờ muộn - Giờ về sớm) / 8.0 * Hệ số
 
-          // Giả sử working_unit của shiftInfo là chuẩn (thường là 1).
-          // standardHours ở đây là độ dài của ca OT (đã tính ở trên).
-
-          // Để nhất quán: Lấy số giờ OT thực tế (hoặc approved) chia cho 8 (giờ chuẩn hành chính) 
-          // rồi nhân hệ số.
-          // Hoặc nếu shiftInfo có working_unit = 1 (8h).
-
-          // Sử dụng approvedOtDurationHours (giờ đăng ký)
-          // Nếu approvedOtDurationHours = 4h. Thì base là 0.5.
-          // ✨ USER REQUEST: 
-          // Chữ xanh (totalWorkingUnit) = (Giờ đơn / 8.0) * Tỉ lệ
-          // Chữ nâu (otWorkingUnit) = ((Giờ đơn - Giờ muộn/về sớm) / 8.0) * Tỉ lệ
           const actualShiftWorkHours = 8.0;
-
           const holidayRateMultiplier = settings.holidayRate?.rate || 3.0;
+
+          // Tính thời gian của đơn (App Duration) - Sử dụng approvedOtDurationHours đã trừ nghỉ trưa
           const appHours = approvedOtDurationHours || 0;
 
-          // ✨ SAFETY FIX: Initialize to 0 to avoid DB validation errors
-          result.lateMinutes = 0;
-          result.earlyDepartureMinutes = 0;
-
-          // Parse OT times safely
           const otStart = (approvedOtStartTime && approvedOtStartTime.includes('T'))
             ? dayjs(approvedOtStartTime).tz('Asia/Ho_Chi_Minh')
             : dayjs(`${date} ${approvedOtStartTime}`).tz('Asia/Ho_Chi_Minh');
@@ -1142,33 +1198,53 @@ export class AttendanceCalculationService {
             ? dayjs(approvedOtEndTime).tz('Asia/Ho_Chi_Minh')
             : dayjs(`${date} ${approvedOtEndTime}`).tz('Asia/Ho_Chi_Minh');
 
+          // ✨ SAFETY FIX: Initialize to 0
+          result.lateMinutes = 0;
+          result.earlyDepartureMinutes = 0;
+
+          // Tính đi muộn so với giờ bắt đầu OT
           if (checkInTime) {
-            const checkInDayjs = dayjs(checkInTime).tz('Asia/Ho_Chi_Minh');
+            const checkInDayjs = dayjs.utc(checkInTime).tz('Asia/Ho_Chi_Minh');
             if (checkInDayjs.isValid() && otStart.isValid()) {
-              result.lateMinutes = Math.max(0, checkInDayjs.diff(otStart, 'minute')) || 0;
+              // Chỉ tính muộn nếu check-in SAU giờ bắt đầu OT
+              result.lateMinutes = Math.max(0, checkInDayjs.diff(otStart, 'minute'));
             }
           }
 
+          // Tính về sớm so với giờ kết thúc OT
           if (checkOutTime) {
             const checkOutDayjs = dayjs.utc(checkOutTime).tz('Asia/Ho_Chi_Minh');
             if (checkOutDayjs.isValid() && otEnd.isValid()) {
-              result.earlyDepartureMinutes = Math.max(0, otEnd.diff(checkOutDayjs, 'minute')) || 0;
+              // Chỉ tính về sớm nếu check-out TRƯỚC giờ kết thúc OT
+              result.earlyDepartureMinutes = Math.max(0, otEnd.diff(checkOutDayjs, 'minute'));
             }
           }
 
           const lateMinutesVal = Number(result.lateMinutes) || 0;
           const earlyMinutesVal = Number(result.earlyDepartureMinutes) || 0;
-          const penaltyHours = (lateMinutesVal + earlyMinutesVal) / 60;
-          const actualEarnedHours = Math.max(0, appHours - penaltyHours);
 
-          result.dailyWorkingUnit = 0;
-          // Chữ xanh (Blue): Công tối đa theo đơn
-          result.totalWorkingUnit = (appHours / actualShiftWorkHours) * holidayRateMultiplier;
-          // Chữ nâu (Brown): Công thực nhận sau khi trừ muộn/sớm
+          // Tổng thời gian bị trừ (tính bằng giờ)
+          const lostHours = (lateMinutesVal + earlyMinutesVal) / 60;
+
+          // Thời gian thực tế được tính công (không được < 0)
+          const actualEarnedHours = Math.max(0, appHours - lostHours);
+
+          result.dailyWorkingUnit = Math.round((actualEarnedHours / actualShiftWorkHours) * 100) / 100;
+          // Chữ nâu (Brown): Công thực nhận (Actual Earned)
           result.otWorkingUnit = (actualEarnedHours / actualShiftWorkHours) * holidayRateMultiplier;
 
-          console.log(`🎉 Holiday work CALCULATION (Safety Fixed):`);
-          console.log(`   - App Hours: ${appHours}, Penalty: ${penaltyHours}h`);
+          // Chữ xanh (Blue): Tổng công thực nhận (Total Earned) = OT Earned (vì ngày lễ base = 0)
+          result.totalWorkingUnit = result.otWorkingUnit;
+
+          // Cập nhật lại overtimeHours để hiển thị đúng số giờ làm được
+          result.overtimeHours = Math.round(actualEarnedHours * 100) / 100;
+
+          console.log(`🎉 Holiday work CALCULATION (Fixed Window):`);
+          console.log(`   - Window: ${otStart.format('HH:mm')} - ${otEnd.format('HH:mm')} (${appHours}h)`);
+          console.log(`   - Check: ${checkInTime ? dayjs(checkInTime).tz('Asia/Ho_Chi_Minh').format('HH:mm') : 'N/A'} - ${checkOutTime ? dayjs(checkOutTime).tz('Asia/Ho_Chi_Minh').format('HH:mm') : 'N/A'}`);
+          console.log(`   - Late: ${lateMinutesVal}m, Early: ${earlyMinutesVal}m -> Lost: ${lostHours.toFixed(2)}h`);
+          console.log(`   - Earned Hours: ${actualEarnedHours.toFixed(2)}h`);
+          console.log(`   - Multiplier: ${holidayRateMultiplier}`);
           console.log(`   - Blue (App): ${result.totalWorkingUnit.toFixed(4)}`);
           console.log(`   - Brown (Earned): ${result.otWorkingUnit.toFixed(4)}`);
         }
@@ -1214,7 +1290,8 @@ export class AttendanceCalculationService {
           const penaltyHours = (lateMinutesVal + earlyMinutesVal) / 60;
           const actualEarnedHours = Math.max(0, appHours - penaltyHours);
 
-          result.dailyWorkingUnit = 0;
+          // Chữ xanh (Blue): Số công (Raw units before multiplier)
+          result.dailyWorkingUnit = Math.round((actualEarnedHours / actualShiftWorkHours) * 100) / 100;
           result.totalWorkingUnit = (appHours / actualShiftWorkHours) * weekendRateMultiplier;
           result.otWorkingUnit = (actualEarnedHours / actualShiftWorkHours) * weekendRateMultiplier;
 
@@ -1279,6 +1356,38 @@ export class AttendanceCalculationService {
     console.log(`- Lunch break overlap: ${overlapMinutes} minutes`);
 
     return overlapMinutes;
+  }
+
+  /**
+   * Tính toán thời gian kết thúc mở rộng (bao gồm cả giờ nghỉ trưa)
+   * Để đảm bảo đủ số giờ làm việc thực tế (duration)
+   */
+  public static calculateExtendedEndTime(
+    startTime: dayjs.Dayjs,
+    durationHours: number,
+    lunchBreak: LunchBreak,
+    date: string
+  ): dayjs.Dayjs {
+    const durationMinutes = durationHours * 60;
+    // Thời gian kết thúc dự kiến (chưa tính nghỉ trưa)
+    let endTime = startTime.add(durationMinutes, 'minute');
+
+    // Nếu khoảng làm việc bao trùm hoặc giao thoa với giờ nghỉ trưa
+    // Chúng ta cần cộng thêm thời gian nghỉ trưa vào checkout
+    const overlapMinutes = this.calculateLunchBreakTime(startTime, endTime, lunchBreak, date);
+
+    if (overlapMinutes > 0) {
+      console.log(`🍱 Extending OT frame by ${overlapMinutes}m lunch break`);
+      endTime = endTime.add(overlapMinutes, 'minute');
+
+      // Re-verify in case the extension created more overlap (rare but possible)
+      const finalOverlap = this.calculateLunchBreakTime(startTime, endTime, lunchBreak, date);
+      if (finalOverlap > overlapMinutes) {
+        endTime = startTime.add(durationMinutes, 'minute').add(finalOverlap, 'minute');
+      }
+    }
+
+    return endTime;
   }
 
   // Helper method để format time cho logging

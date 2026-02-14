@@ -348,9 +348,9 @@ export class AttendanceService {
     }
   }
 
-  static async getUserMonthlyFull(userId: number, month: string, token?: string, userData?: any) {
+  static async getUserMonthlyFull(userId: number, month: string, token?: string) {
     try {
-      return await MonthlyReportService.buildMonthlyFull(userId, month, token, userData);
+      return await MonthlyReportService.buildMonthlyFull(userId, month, token);
     } catch (err) {
       logger.error('getUserMonthlyFull', err);
       return { success: false, message: 'Internal error' };

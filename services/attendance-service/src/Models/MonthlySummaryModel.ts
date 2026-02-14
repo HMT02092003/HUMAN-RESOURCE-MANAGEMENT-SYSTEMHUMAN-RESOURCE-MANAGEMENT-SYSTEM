@@ -17,7 +17,6 @@ class MonthlySummaryModel extends Model {
 
     id!: number;
     userId!: number;
-    departmentId!: number;
     month!: string; // Format: YYYY-MM
 
     // ========== MONTHLY SUMMARY FIELDS ==========
@@ -41,8 +40,6 @@ class MonthlySummaryModel extends Model {
     totalPenalty!: number;
     isApproved!: boolean;
 
-    baseSalary!: number | null;
-    finalSalary!: number | null;
 
     approvedBy!: number;
     approvedAt!: string;
@@ -60,7 +57,6 @@ class MonthlySummaryModel extends Model {
             properties: {
                 id: { type: 'integer' },
                 userId: { type: 'integer' },
-                departmentId: { type: ['integer', 'null'] },
                 month: { type: 'string', pattern: '^\\d{4}-\\d{2}$' }, // YYYY-MM format
 
                 totalScheduledDays: { type: 'integer', default: 0 },
@@ -79,18 +75,20 @@ class MonthlySummaryModel extends Model {
 
                 totalLatePenalty: { type: 'number', default: 0 },
                 totalEarlyLeavePenalty: { type: 'number', default: 0 },
+                totalUnauthorizedAbsencePenalty: { type: 'number', default: 0 },
                 totalPenalty: { type: 'number', default: 0 },
                 isApproved: { type: 'boolean', default: false },
 
-                baseSalary: { type: ['number', 'null'] },
-                finalSalary: { type: ['number', 'null'] },
+                totalOvertimeSalary: { oneOf: [{ type: 'number' }, { type: 'null' }] },
+                averageWorkHours: { oneOf: [{ type: 'number' }, { type: 'null' }] },
 
-                approvedBy: { type: ['integer', 'null'] },
-                approvedAt: { type: ['string', 'null'] },
-                notes: { type: ['string', 'null'] },
+                approvedBy: { oneOf: [{ type: 'integer' }, { type: 'null' }] },
+                approvedAt: { oneOf: [{ type: 'string' }, { type: 'null' }] },
+                notes: { oneOf: [{ type: 'string' }, { type: 'null' }] },
 
                 created_at: { type: 'string' },
-                updated_at: { type: 'string' }
+                updated_at: { type: 'string' },
+                dailyDetails: { oneOf: [{ type: 'string' }, { type: 'object' }, { type: 'null' }] }
             }
         };
     }
@@ -108,22 +106,15 @@ class MonthlySummaryModel extends Model {
             .first();
     }
 
-    static async getByDepartmentAndMonth(departmentId: number, month: string) {
-        // Return monthly summaries for a department and month. Do not eager-load
-        // user relations here — perform any necessary user enrichment in the
-        // service layer by calling the auth/employee service.
-        return this.query()
-            .where('departmentId', departmentId)
-            .where('month', month)
-            .orderBy('userId');
-    }
+    // Note: departmentId column removed from monthly_attendances.
+    // If department-based querying is needed, filter by userId list from auth-service.
 
     static async isApproved(userId: number, month: string): Promise<boolean> {
         const record = await this.query()
             .where('userId', userId)
             .where('month', month)
             .first();
-        return !!record;
+        return !!(record && record.isApproved);
     }
 
     static async getMonthlySummary(userId: number, month: string) {
@@ -144,8 +135,6 @@ class MonthlySummaryModel extends Model {
                 'totalLatePenalty',
                 'totalEarlyLeavePenalty',
                 'totalOvertimeSalary',
-                'baseSalary',
-                'finalSalary',
                 'approvedBy',
                 'approvedAt',
                 'notes'
@@ -159,8 +148,8 @@ class MonthlySummaryModel extends Model {
             'userId', 'month', 'totalScheduledDays', 'presentDays', 'absentDays', 'approvedLeaveDays', 'unauthorizedAbsenceDays', 'businessTripDays',
             'lateDays', 'earlyLeaveDays', 'totalLateMinutes', 'totalEarlyLeaveMinutes', 'totalWorkHours', 'averageWorkHours', 'totalWorkingUnits',
             'totalOvertimeHours', 'totalOtWorkingUnits', 'totalEffectiveOtWorkingUnits', 'totalLatePenalty', 'totalEarlyLeavePenalty', 'totalUnauthorizedAbsencePenalty', 'totalPenalty',
-            'totalOvertimeSalary', 'isApproved', 'approvedBy', 'approvedAt', 'notes', 'baseSalary', 'finalSalary', 'departmentId', 'created_at', 'updated_at',
-            'dailyDetails' // ✨ Add dailyDetails snapshot
+            'totalOvertimeSalary', 'isApproved', 'approvedBy', 'approvedAt', 'notes', 'created_at', 'updated_at',
+            'dailyDetails'
         ];
         for (const k of Object.keys(this)) {
             if (!allowed.includes(k) && k !== 'id') {
@@ -175,8 +164,8 @@ class MonthlySummaryModel extends Model {
             'userId', 'month', 'totalScheduledDays', 'presentDays', 'absentDays', 'approvedLeaveDays', 'unauthorizedAbsenceDays', 'businessTripDays',
             'lateDays', 'earlyLeaveDays', 'totalLateMinutes', 'totalEarlyLeaveMinutes', 'totalWorkHours', 'averageWorkHours', 'totalWorkingUnits',
             'totalOvertimeHours', 'totalOtWorkingUnits', 'totalEffectiveOtWorkingUnits', 'totalLatePenalty', 'totalEarlyLeavePenalty', 'totalUnauthorizedAbsencePenalty', 'totalPenalty',
-            'totalOvertimeSalary', 'isApproved', 'approvedBy', 'approvedAt', 'notes', 'baseSalary', 'finalSalary', 'departmentId', 'created_at', 'updated_at',
-            'dailyDetails' // ✨ Add dailyDetails snapshot
+            'totalOvertimeSalary', 'isApproved', 'approvedBy', 'approvedAt', 'notes', 'created_at', 'updated_at',
+            'dailyDetails'
         ];
         for (const k of Object.keys(this)) {
             if (!allowed.includes(k) && k !== 'id') {
