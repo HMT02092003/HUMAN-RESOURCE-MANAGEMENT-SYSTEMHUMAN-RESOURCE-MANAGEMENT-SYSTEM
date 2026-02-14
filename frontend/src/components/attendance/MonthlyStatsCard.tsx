@@ -128,7 +128,7 @@ const MonthlyStatsCard: React.FC<MonthlyStatsCardProps> = ({
       {/* ===== COLLAPSIBLE DETAILS ===== */}
       <Collapse
         ghost
-        defaultActiveKey={['days']}
+        defaultActiveKey={['days', 'hours', 'penalty']}
         expandIconPosition="end"
         style={{ background: '#fafafa', borderRadius: 8 }}
         items={[

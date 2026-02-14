@@ -254,11 +254,11 @@ const AttendanceSimplePage = () => {
 
           // Normalize monthlyStats to support fields coming from `monthly_attendances` table
           const normalizedMonthlyStats = {
-            totalDays: monthlyStats.totalDays ?? monthlyStats.totalScheduledDays ?? 0,
-            presentDays: monthlyStats.presentDays ?? 0,
-            absentDays: monthlyStats.absentDays ?? 0,
-            lateDays: monthlyStats.lateDays ?? 0,
-            earlyLeaveDays: monthlyStats.earlyLeaveDays ?? 0,
+            totalDays: monthlyStats.totalDays ?? dailyData?.summary?.totalDays ?? monthlyStats.totalScheduledDays ?? 0,
+            presentDays: monthlyStats.presentDays ?? dailyData?.summary?.attendedDays ?? 0,
+            absentDays: monthlyStats.absentDays ?? dailyData?.summary?.unauthorizedAbsenceDays ?? 0,
+            lateDays: monthlyStats.lateDays ?? dailyData?.summary?.lateDays ?? 0,
+            earlyLeaveDays: monthlyStats.earlyLeaveDays ?? dailyData?.summary?.earlyLeaveDays ?? 0,
             totalHours: monthlyStats.totalHours ?? monthlyStats.totalWorkHours ?? 0,
             averageHours: monthlyStats.averageHours ?? monthlyStats.averageWorkHours ?? 0,
             overtimeHours: monthlyStats.overtimeHours ?? monthlyStats.totalOvertimeHours ?? 0,
@@ -270,14 +270,14 @@ const AttendanceSimplePage = () => {
             totalWorkingUnits: monthlyStats.totalWorkingUnits ?? monthlyStats.totalWorkingUnits ?? 0,
             totalOtWorkingUnits: monthlyStats.totalOtWorkingUnits ?? monthlyStats.totalOtWorkingUnits ?? 0,
             totalEffectiveOtWorkingUnits: monthlyStats.totalEffectiveOtWorkingUnits ?? 0,
-            totalLateMinutes: monthlyStats.totalLateMinutes ?? monthlyStats.totalLateMinutes ?? 0,
-            totalEarlyLeaveMinutes: monthlyStats.totalEarlyLeaveMinutes ?? monthlyStats.totalEarlyLeaveMinutes ?? 0,
-            unauthorizedAbsenceDays: monthlyStats.unauthorizedAbsenceDays ?? monthlyStats.unauthorizedAbsenceDays ?? 0,
+            totalLateMinutes: monthlyStats.totalLateMinutes ?? dailyData?.summary?.totalLateMinutes ?? 0,
+            totalEarlyLeaveMinutes: monthlyStats.totalEarlyLeaveMinutes ?? dailyData?.summary?.totalEarlyLeaveMinutes ?? 0,
+            unauthorizedAbsenceDays: monthlyStats.unauthorizedAbsenceDays ?? dailyData?.summary?.unauthorizedAbsenceDays ?? 0,
             // Per-day penalty for unauthorized absence (required by MonthlyStats)
             unauthorizedAbsencePenaltyPerDay: monthlyStats.unauthorizedAbsencePenaltyPerDay ?? 0,
-            totalUnauthorizedAbsencePenalty: monthlyStats.totalUnauthorizedAbsencePenalty ?? monthlyStats.totalUnauthorizedAbsencePenalty ?? 0,
-            approvedLeaveDays: monthlyStats.approvedLeaveDays ?? monthlyStats.approvedLeaveDays ?? 0,
-            businessTripDays: monthlyStats.businessTripDays ?? monthlyStats.businessTripDays ?? 0
+            totalUnauthorizedAbsencePenalty: monthlyStats.totalUnauthorizedAbsencePenalty ?? dailyData?.summary?.totalUnauthorizedAbsencePenalty ?? 0,
+            approvedLeaveDays: monthlyStats.approvedLeaveDays ?? dailyData?.summary?.approvedLeaveDays ?? 0,
+            businessTripDays: monthlyStats.businessTripDays ?? 0
           };
 
           monthlyStats = normalizedMonthlyStats;
@@ -369,10 +369,10 @@ const AttendanceSimplePage = () => {
         // Fix: Check for attendance presence (either nested or flat)
         const hasData = detail.hasAttendance || detail.checkInTime || detail.checkOutTime;
         if (hasData) {
-          // ⭐ Ưu tiên lấy dữ liệu đã tính toán từ detail (top level), sau đó mới đến attendanceData (nếu có)
+          // ⭐ Merge carefully: Ưu tiên lấy dữ liệu thô từ attendanceData, sau đó bổ sung các trường tính toán từ detail
           const attData = {
+            ...detail,
             ...(detail.attendanceData || {}),
-            ...detail
           } as any;
 
           // Format checkIn/checkOut time để hiển thị
@@ -900,20 +900,6 @@ const AttendanceSimplePage = () => {
                       <Text style={{ fontSize: isMobile ? 11 : 12 }}>Công tác</Text>
                     </div>
                   </Col>
-                  <Col xs={12} sm={6}>
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      <div style={{
-                        width: 16,
-                        height: 16,
-                        background: '#e6fffb',
-                        border: '1px solid #87e8de',
-                        borderRadius: 4,
-                        marginRight: 8
-                      }} />
-                      <Text style={{ fontSize: isMobile ? 11 : 12 }}>Ngày lễ</Text>
-                    </div>
-                  </Col>
-
                   <Col xs={12} sm={6}>
                     <div style={{ display: 'flex', alignItems: 'center' }}>
                       <div style={{

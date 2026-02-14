@@ -105,6 +105,8 @@ export interface DailyAttendanceDetail {
   shift?: { name: string; start_time: string; end_time: string };
   checkInTime?: string | null;
   checkOutTime?: string | null;
+  totalWorkingUnit?: number;
+  otWorkingUnit?: number;
 }
 
 export interface MonthlyAttendanceDetailResponse {
@@ -124,6 +126,9 @@ export interface MonthlyAttendanceDetailResponse {
     weekendDays: number;
     totalLateMinutes: number;
     totalEarlyLeaveMinutes: number;
+    lateDays?: number;
+    earlyLeaveDays?: number;
+    businessTripDays?: number;
     onTimeDays: number;
   };
 }
