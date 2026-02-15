@@ -619,7 +619,7 @@ export class MonthlyReportService {
 
               if (!otEnd && (d.totalHours || d.overtimeHours)) {
                 const duration = d.totalHours || d.overtimeHours;
-                const startDerive = dayjs(`${dateKey} ${otStart}`).tz('Asia/Ho_Chi_Minh');
+                const startDerive = dayjs.tz(`${dateKey} ${otStart}`, 'Asia/Ho_Chi_Minh');
                 const settings = await AttendanceCalculationService.getSettings();
                 const extendedEnd = AttendanceCalculationService.calculateExtendedEndTime(startDerive, parseFloat(duration), settings.lunchBreak, dateKey);
                 otEnd = extendedEnd.format('HH:mm');

@@ -39,7 +39,7 @@ async function getUserStartDate(userId: number): Promise<string | null> {
       connection: {
         host: process.env['DB_HOST'] || 'localhost',
         port: Number(process.env['DB_PORT']) || 5432,
-        database: 'auth_service_final', // Auth service database name
+        database: 'auth_service', // Auth service database name
         user: process.env['DB_USER'] || 'postgres',
         password: process.env['DB_PASSWORD'] || '123456'
       }
@@ -247,7 +247,7 @@ export class AttendanceCalculationService {
 
       const attendanceMap = new Map<string, any>();
       rawAttendanceRows.forEach((r: any) => {
-        const dateKey = dayjs(r.date).format('YYYY-MM-DD');
+        const dateKey = dayjs.tz(r.date, 'Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
         attendanceMap.set(dateKey, r.toJSON ? r.toJSON() : { ...r });
       });
 
@@ -318,7 +318,7 @@ export class AttendanceCalculationService {
           const appDate = d.overtimeDate || d.date;
           if (!appDate) return false;
           // Use Vietnam timezone for consistency to avoid off-by-one errors
-          const normalizedAppDate = dayjs(appDate).tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
+          const normalizedAppDate = dayjs.tz(appDate, 'Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
           return normalizedAppDate === dateKey;
         });
         const hasApprovedOT = !!otApp;
@@ -360,20 +360,29 @@ export class AttendanceCalculationService {
         } else if (attendanceRecord) {
           Object.assign(dayRecord, {
             ...attendanceRecord,
-            date: dayjs(attendanceRecord.date).format('YYYY-MM-DD'),
+            lateMinutes: parseFloat((attendanceRecord.lateMinutes || 0).toString()),
+            earlyDepartureMinutes: parseFloat((attendanceRecord.earlyDepartureMinutes || 0).toString()),
+            lateArrivalPenalty: parseFloat((attendanceRecord.lateArrivalPenalty || 0).toString()),
+            earlyLeavePenalty: parseFloat((attendanceRecord.earlyLeavePenalty || 0).toString()),
+            dailyTotalWorkHours: parseFloat((attendanceRecord.dailyTotalWorkHours || 0).toString()),
+            totalWorkingUnit: parseFloat((attendanceRecord.totalWorkingUnit || 0).toString()),
+            otWorkingUnit: parseFloat((attendanceRecord.otWorkingUnit || 0).toString()),
+            dailyWorkingUnit: parseFloat((attendanceRecord.dailyWorkingUnit || 0).toString()),
+            overtimeHours: parseFloat((attendanceRecord.overtimeHours || 0).toString()),
+            date: dayjs.tz(attendanceRecord.date, 'Asia/Ho_Chi_Minh').format('YYYY-MM-DD'),
             // ✨ Format times safely to HH:mm in VN timezone for frontend
             checkInTime: (() => {
               const val = attendanceRecord.checkInTime;
               if (!val) return null;
               if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(val)) return val.substring(0, 5);
-              const d = dayjs(val);
+              const d = dayjs.utc(val);
               return d.isValid() ? d.tz('Asia/Ho_Chi_Minh').format('HH:mm') : null;
             })(),
             checkOutTime: (() => {
               const val = attendanceRecord.checkOutTime;
               if (!val) return null;
               if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(val)) return val.substring(0, 5);
-              const d = dayjs(val);
+              const d = dayjs.utc(val);
               return d.isValid() ? d.tz('Asia/Ho_Chi_Minh').format('HH:mm') : null;
             })()
           });
@@ -643,7 +652,7 @@ export class AttendanceCalculationService {
           return false;
         }
 
-        const normalizedOtDate = dayjs(otDate).tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
+        const normalizedOtDate = dayjs.tz(otDate, 'Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
         const normalizedCheckDate = dayjs(date).format('YYYY-MM-DD');
 
         console.log(`  📅 App ${app.id} date comparison:`, {
@@ -834,8 +843,8 @@ export class AttendanceCalculationService {
           end: shiftInfo.end_time.substring(0, 5)
         };
         // Tính số giờ chuẩn của ca (trừ nghỉ trưa)
-        const start = dayjs(`${date} ${shiftInfo.start_time}`).tz('Asia/Ho_Chi_Minh');
-        const end = dayjs(`${date} ${shiftInfo.end_time}`).tz('Asia/Ho_Chi_Minh');
+        const start = dayjs.tz(`${date} ${shiftInfo.start_time}`, 'Asia/Ho_Chi_Minh');
+        const end = dayjs.tz(`${date} ${shiftInfo.end_time}`, 'Asia/Ho_Chi_Minh');
         const diffMinutes = end.diff(start, 'minute');
         const lunchBreakMinutes = diffMinutes > 360 ? 60 : 0; // Nếu ca > 6h thì trừ 1h nghỉ trưa
         standardHours = (diffMinutes - lunchBreakMinutes) / 60;
@@ -843,8 +852,8 @@ export class AttendanceCalculationService {
       } else {
         // Fallback: dùng settings cũ
         workingHours = settings.workingHours as WorkingHours;
-        const start = dayjs(`${date} ${workingHours.start}`).tz('Asia/Ho_Chi_Minh');
-        const end = dayjs(`${date} ${workingHours.end}`).tz('Asia/Ho_Chi_Minh');
+        const start = dayjs.tz(`${date} ${workingHours.start}`, 'Asia/Ho_Chi_Minh');
+        const end = dayjs.tz(`${date} ${workingHours.end}`, 'Asia/Ho_Chi_Minh');
         const diff = end.diff(start, 'minute');
         if (diff > 0) standardHours = diff / 60;
         console.log(`📋 NORMAL DAY: Sử dụng default settings (${workingHours.start}-${workingHours.end})`);
@@ -854,8 +863,8 @@ export class AttendanceCalculationService {
       if (approvedOtEndTime && approvedOtStartTime) {
         const startStr = approvedOtStartTime.length <= 8 ? `${date} ${approvedOtStartTime}` : approvedOtStartTime;
         const endStr = approvedOtEndTime.length <= 8 ? `${date} ${approvedOtEndTime}` : approvedOtEndTime;
-        const start = dayjs(startStr).tz('Asia/Ho_Chi_Minh');
-        const end = dayjs(endStr).tz('Asia/Ho_Chi_Minh');
+        const start = dayjs.tz(startStr, 'Asia/Ho_Chi_Minh');
+        const end = dayjs.tz(endStr, 'Asia/Ho_Chi_Minh');
         approvedOtDurationHours = end.diff(start, 'hour', true);
         console.log(`🔥 NORMAL DAY has OT: ${approvedOtDurationHours}h. Keeping Shift as standard frame.`);
       }
@@ -874,8 +883,8 @@ export class AttendanceCalculationService {
         const startStr = approvedOtStartTime.length <= 8 ? `${date} ${approvedOtStartTime}` : approvedOtStartTime;
         const endStr = approvedOtEndTime.length <= 8 ? `${date} ${approvedOtEndTime}` : approvedOtEndTime;
 
-        const start = dayjs(startStr).tz('Asia/Ho_Chi_Minh');
-        const end = dayjs(endStr).tz('Asia/Ho_Chi_Minh');
+        const start = dayjs.tz(startStr, 'Asia/Ho_Chi_Minh');
+        const end = dayjs.tz(endStr, 'Asia/Ho_Chi_Minh');
         const diffMinutes = end.diff(start, 'minute');
 
         // Deduct lunch break for holiday/weekend OT shifts using the setting
@@ -925,8 +934,8 @@ export class AttendanceCalculationService {
 
     // Convert all times to Vietnam timezone (UTC+7) for consistent calculation
     const checkIn = dayjs.utc(checkInTime).tz('Asia/Ho_Chi_Minh');
-    const expectedCheckIn = dayjs(`${date} ${workingHours.start}`).tz('Asia/Ho_Chi_Minh');
-    const expectedCheckOut = dayjs(`${date} ${workingHours.end}`).tz('Asia/Ho_Chi_Minh');
+    const expectedCheckIn = dayjs.tz(`${date} ${workingHours.start}`, 'Asia/Ho_Chi_Minh');
+    const expectedCheckOut = dayjs.tz(`${date} ${workingHours.end}`, 'Asia/Ho_Chi_Minh');
 
     console.log('🕐 Time comparison (Vietnam timezone):');
     console.log('- Check-in raw input:', checkInTime);
@@ -1213,11 +1222,11 @@ export class AttendanceCalculationService {
           const appHours = approvedOtDurationHours || 0;
 
           const otStart = (approvedOtStartTime && approvedOtStartTime.includes('T'))
-            ? dayjs(approvedOtStartTime).tz('Asia/Ho_Chi_Minh')
-            : dayjs(`${date} ${approvedOtStartTime}`).tz('Asia/Ho_Chi_Minh');
+            ? dayjs.utc(approvedOtStartTime).tz('Asia/Ho_Chi_Minh')
+            : dayjs.tz(`${date} ${approvedOtStartTime}`, 'Asia/Ho_Chi_Minh');
           const otEnd = (approvedOtEndTime && approvedOtEndTime.includes('T'))
-            ? dayjs(approvedOtEndTime).tz('Asia/Ho_Chi_Minh')
-            : dayjs(`${date} ${approvedOtEndTime}`).tz('Asia/Ho_Chi_Minh');
+            ? dayjs.utc(approvedOtEndTime).tz('Asia/Ho_Chi_Minh')
+            : dayjs.tz(`${date} ${approvedOtEndTime}`, 'Asia/Ho_Chi_Minh');
 
           // ✨ SAFETY FIX: Initialize to 0
           result.lateMinutes = 0;
@@ -1286,11 +1295,11 @@ export class AttendanceCalculationService {
           result.earlyDepartureMinutes = 0;
 
           const otStart = (approvedOtStartTime && approvedOtStartTime.includes('T'))
-            ? dayjs(approvedOtStartTime).tz('Asia/Ho_Chi_Minh')
-            : dayjs(`${date} ${approvedOtStartTime}`).tz('Asia/Ho_Chi_Minh');
+            ? dayjs.utc(approvedOtStartTime).tz('Asia/Ho_Chi_Minh')
+            : dayjs.tz(`${date} ${approvedOtStartTime}`, 'Asia/Ho_Chi_Minh');
           const otEnd = (approvedOtEndTime && approvedOtEndTime.includes('T'))
-            ? dayjs(approvedOtEndTime).tz('Asia/Ho_Chi_Minh')
-            : dayjs(`${date} ${approvedOtEndTime}`).tz('Asia/Ho_Chi_Minh');
+            ? dayjs.utc(approvedOtEndTime).tz('Asia/Ho_Chi_Minh')
+            : dayjs.tz(`${date} ${approvedOtEndTime}`, 'Asia/Ho_Chi_Minh');
 
           if (checkInTime) {
             const checkInDayjs = dayjs.utc(checkInTime).tz('Asia/Ho_Chi_Minh');
@@ -1356,8 +1365,8 @@ export class AttendanceCalculationService {
     lunchBreak: LunchBreak,
     date: string
   ): number {
-    const lunchStart = dayjs(`${date} ${lunchBreak.start}`).tz('Asia/Ho_Chi_Minh');
-    const lunchEnd = dayjs(`${date} ${lunchBreak.end}`).tz('Asia/Ho_Chi_Minh');
+    const lunchStart = dayjs.tz(`${date} ${lunchBreak.start}`, 'Asia/Ho_Chi_Minh');
+    const lunchEnd = dayjs.tz(`${date} ${lunchBreak.end}`, 'Asia/Ho_Chi_Minh');
 
     console.log('🍽️ Lunch break calculation:');
     console.log('- Lunch break period:', `${lunchStart.format('HH:mm')} - ${lunchEnd.format('HH:mm')}`);

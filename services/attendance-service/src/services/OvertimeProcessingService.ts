@@ -301,8 +301,8 @@ export class OvertimeProcessingService {
         // Sử dụng Vietnam timezone để so sánh ngày chính xác, tránh lệch múi giờ (ví dụ 00:00 UTC là 07:00 VN)
         const attendanceRecord = attendanceRecords.find(
           record => {
-            const recordDate = dayjs(record.date).format('YYYY-MM-DD');
-            const normalizedOtDate = dayjs(overtimeDate).tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
+            const recordDate = dayjs.tz(record.date, 'Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
+            const normalizedOtDate = dayjs.tz(overtimeDate, 'Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
             return recordDate === normalizedOtDate;
           }
         );
