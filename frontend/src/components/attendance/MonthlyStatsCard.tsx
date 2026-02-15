@@ -57,7 +57,7 @@ const MonthlyStatsCard: React.FC<MonthlyStatsCardProps> = ({
           }}>
             <div style={{ fontSize: 13, color: '#15803d', fontWeight: 500 }}>Tổng công</div>
             <div style={{ fontSize: 20, fontWeight: 'bold', color: '#16a34a' }}>
-              {(monthlyStats.totalWorkingUnits || 0).toFixed(1)}
+              {(monthlyStats.totalWorkingUnits || 0).toFixed(2)}
             </div>
           </div>
         </Col>

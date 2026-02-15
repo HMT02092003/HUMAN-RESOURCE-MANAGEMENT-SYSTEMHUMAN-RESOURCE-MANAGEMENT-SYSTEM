@@ -850,16 +850,16 @@ const AttendanceSimplePage = () => {
                       ) : attendance ? (
                         // Có chấm công: hiển thị giờ vào - giờ ra (nền xanh nếu là ngày lễ)
                         <div className="calendar-cell-info">
-                          {/* ✨ MODIFIED: Only show OT indicator if there is an approved OT application */}
+                          {/* ✨ Display Daily Working Unit (base) - Công cơ bản KHÔNG bao gồm OT */}
+                          {(attendance.dailyWorkingUnit > 0) && (
+                            <div style={{ color: '#4096ff', fontSize: isMobile ? 9 : 11, fontWeight: 400 }}>
+                              Công: {attendance.dailyWorkingUnit.toFixed(2)}
+                            </div>
+                          )}
+                          {/* ✨ Display OT indicator separately if there is approved OT */}
                           {(attendance.hasApprovedOT && (attendance.effectiveOtWorkingUnit > 0 || attendance.otWorkingUnit > 0 || attendance.overtime > 0)) && (
                             <div style={{ color: '#d97706', fontSize: isMobile ? 9 : 11, fontWeight: 'bold' }}>
                               +{(attendance.effectiveOtWorkingUnit || attendance.otWorkingUnit || 0).toFixed(2)}
-                            </div>
-                          )}
-                          {/* ✨ Display Total Daily Units clearly */}
-                          {(attendance.totalWorkingUnit > 0 || (attendance.totalWorkingUnits > 0)) && (
-                            <div style={{ color: '#4096ff', fontSize: isMobile ? 9 : 11, fontWeight: 400 }}>
-                              Công: {(attendance.totalWorkingUnit || attendance.totalWorkingUnits).toFixed(2)}
                             </div>
                           )}
                           <div style={{ color: hasTimePenalty ? '#ff4d4f' : '#666', fontSize: isMobile ? 9 : 11 }}>

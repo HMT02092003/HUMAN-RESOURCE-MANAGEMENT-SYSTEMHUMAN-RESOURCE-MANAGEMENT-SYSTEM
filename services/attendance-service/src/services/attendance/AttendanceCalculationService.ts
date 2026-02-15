@@ -1399,10 +1399,12 @@ export class AttendanceCalculationService {
       }
     } else {
       result.dailyWorkingUnit = 0;
+      result.totalWorkingUnit = 0;
+      result.otWorkingUnit = 0;
     }
 
-    // ✨ Tổng công = Công cơ bản + Công OT
-    result.totalWorkingUnit = result.dailyWorkingUnit + result.otWorkingUnit;
+    // ✨ Note: totalWorkingUnit đã được tính ở các nhánh trên (holiday/weekend/regular)
+    // Không cần tính lại ở đây để tránh cộng sai
 
     console.log('📊 Working units calculation:');
     console.log('- Standard hours:', standardHours);
