@@ -12,70 +12,23 @@ import { Platform } from 'react-native';
 
 class APIConfig {
   constructor() {
-    this._baseURL = null;
-    this.initialized = false;
-  }
-
-  /**
-   * Determine best URL
-   * Strictly uses LAN IP from .env as per requirements
-   */
-  async determineBestUrl() {
+    // Luôn lấy trực tiếp từ process.env để đảm bảo tính thực tế 100%
     const envUrl = process.env.EXPO_PUBLIC_API_GATEWAY_URL;
 
-    if (envUrl) {
-      const cleanBase = envUrl.replace(/\/api$/, '');
-      console.log(`📡 [APIConfig] Using API URL from .env: ${cleanBase}`);
-
-      // Still good practice to check if it's reachable
-      if (await this.checkConnection(cleanBase)) {
-        console.log('✅ [APIConfig] Connection successful');
-      } else {
-        console.warn('⚠️ [APIConfig] Connection test failed, but using .env URL as requested.');
-      }
-
-      this._baseURL = cleanBase;
-    } else {
-      console.error('❌ [APIConfig] EXPO_PUBLIC_API_GATEWAY_URL not found in .env');
-      this._baseURL = 'http://192.168.1.8:4100'; // Fallback to a default if missing
+    if (!envUrl) {
+      console.error('❌ [APIConfig] CRITICAL: EXPO_PUBLIC_API_GATEWAY_URL is not defined in .env!');
     }
-  }
 
-  async checkConnection(baseUrl) {
-    if (!baseUrl) return false;
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
-      const healthUrl = `${baseUrl}/health`; // Assuming /health exists at root of gateway
-
-      console.log(`   Testing: ${healthUrl}`);
-      const response = await fetch(healthUrl, { method: 'GET', signal: controller.signal });
-      clearTimeout(timeoutId);
-      return response.ok;
-    } catch (e) {
-      // console.log(`   Failed: ${baseUrl} (${e.message})`);
-      return false;
-    }
+    // Remove trailing /api if present to keep it a clean base URL
+    this._baseURL = (envUrl || '').replace(/\/api$/, '');
+    console.log(`📡 [APIConfig] Loaded Gateway URL: ${this._baseURL}`);
   }
 
   /**
    * Get Gateway Base URL
    */
   getGatewayURL() {
-    if (this._baseURL) return this._baseURL;
-
-    // Fallback if not initialized
-    return (process.env.EXPO_PUBLIC_API_GATEWAY_URL || 'http://192.168.1.8:4100').replace(/\/api$/, '');
-  }
-
-  /**
-   * Initialize API Config
-   */
-  async initialize() {
-    if (this.initialized) return;
-    await this.determineBestUrl();
-    this.initialized = true;
-    console.log('[APIConfig] Initialized with URL:', this._baseURL);
+    return this._baseURL;
   }
 
   /**
@@ -83,8 +36,15 @@ class APIConfig {
    */
   getURL(endpoint) {
     const base = this.getGatewayURL();
+    if (!base) return '';
     const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     return `${base}${path}`;
+  }
+
+  // Khử bỏ các hàm không cần thiết để tối giản
+  async initialize() {
+    this.initialized = true;
+    return Promise.resolve();
   }
 }
 
@@ -92,9 +52,9 @@ class APIConfig {
  * API Endpoints - Centralized endpoint paths
  */
 export const API_ENDPOINTS = {
-  // Face Recognition endpoints (via /api/ai gateway -> AI service /api/v1/...)
-  REGISTER_FACE: '/api/ai/v1/face/register-face',
-  RECOGNIZE_FACE: '/api/ai/v1/face/recognize-face',
+  // Face Recognition endpoints (via /api/ai gateway -> AI service /api/v1/face/enhanced/...)
+  REGISTER_FACE: '/api/ai/v1/face/enhanced/register-face',
+  RECOGNIZE_FACE: '/api/ai/v1/face/enhanced/recognize-face',
   VIDEO_REGISTER_MULTI: '/api/ai/v1/batch/register-face-video-multi',
 
   // Attendance endpoints

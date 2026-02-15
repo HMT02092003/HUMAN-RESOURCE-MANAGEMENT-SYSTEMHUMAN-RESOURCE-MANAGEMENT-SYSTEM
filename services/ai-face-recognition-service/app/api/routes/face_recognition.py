@@ -551,7 +551,8 @@ async def confirm_attendance(
         attendance_result = service._send_to_attendance_service(
             user_match, 
             recognition_log.recognition_type, 
-            recognition_log.similarity_score
+            recognition_log.similarity_score,
+            timestamp=recognition_log.checkin_time
         )
         
         # Update recognition log status

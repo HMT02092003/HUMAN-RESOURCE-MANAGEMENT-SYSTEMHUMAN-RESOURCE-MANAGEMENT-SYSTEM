@@ -292,24 +292,36 @@ class InsightFaceRecognitionService:
                 "message": str(e)
             }
 
-    def _send_to_attendance_service(self, user_match: dict, recognition_type: str, confidence_score: int):
+    def _send_to_attendance_service(self, user_match: dict, recognition_type: str, confidence_score: float, timestamp=None):
         """Send attendance confirmation to API gateway (synchronous)."""
         try:
-            url = f"{settings.API_GATEWAY_URL.rstrip('/')}/attendance/confirm-attendance"
+            # url should be /api/attendance/record (mapped to /api/record in attendance-service)
+            url = f"{settings.API_GATEWAY_URL.rstrip('/')}/attendance/record"
             headers = {"Content-Type": "application/json"}
             if settings.SERVICE_API_TOKEN:
                 headers['Authorization'] = f"Bearer {settings.SERVICE_API_TOKEN}"
 
+            # Prepare ISO timestamp
+            if timestamp is None:
+                from datetime import datetime
+                time_str = datetime.now().isoformat()
+            elif hasattr(timestamp, 'isoformat'):
+                time_str = timestamp.isoformat()
+            else:
+                time_str = str(timestamp)
+
             payload = {
-                "user_id": user_match.get('user_id'),
-                "username": user_match.get('username'),
-                "recognition_type": recognition_type,
-                "confidence_score": confidence_score
+                "userId": user_match.get('user_id'), # Attendance service expects userId
+                "time": time_str                    # Attendance service expects time
             }
 
+            logger.info(f"📡 Sending attendance record to {url}: {payload}")
             resp = requests.post(url, json=payload, headers=headers, timeout=5)
+            
             try:
-                return resp.json()
+                result = resp.json()
+                logger.info(f"✅ Attendance service response: {result}")
+                return result
             except Exception:
                 return {
                     "success": resp.status_code == 200,
