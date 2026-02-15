@@ -124,11 +124,15 @@ const OvertimeApplicationScreen = ({ navigation, route }) => {
         
         setSubmitting(true);
         try {
+            // Tính endTime dựa trên startTime + overtimeHours
+            const endTime = dayjs(startTime).add(overtimeHours, 'hour');
+
             const payload = {
                 type: 'overtime',
                 data: {
-                    overtimeDate: dayjs(overtimeDate).format('YYYY-MM-DD'),
-                    startTime: formatTime(startTime),
+                    overtimeDate: dayjs(overtimeDate).toISOString(),
+                    startTime: dayjs(startTime).toISOString(),
+                    endTime: endTime.toISOString(),
                     overtimeHours,
                     reason: reason.trim(),
                 },

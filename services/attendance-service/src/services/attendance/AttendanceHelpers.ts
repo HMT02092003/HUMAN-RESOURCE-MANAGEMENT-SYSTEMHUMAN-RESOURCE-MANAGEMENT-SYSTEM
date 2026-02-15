@@ -12,7 +12,8 @@ export function parseDBDate(date: any): dayjs.Dayjs {
   if (!date) return dayjs.tz(undefined, TZ_VN);
   // If it's a string containing T and Z, it's likely a UTC ISO string from DB
   if (typeof date === 'string' && date.includes('T')) {
-    return dayjs.utc(date).tz(TZ_VN);
+    const res = dayjs.utc(date).tz(TZ_VN);
+    return res;
   }
   return dayjs.tz(date, TZ_VN);
 }

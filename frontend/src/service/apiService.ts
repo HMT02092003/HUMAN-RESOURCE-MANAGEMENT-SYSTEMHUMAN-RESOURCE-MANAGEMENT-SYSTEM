@@ -18,15 +18,15 @@ const getApiBaseUrl = () => {
 
     // Nếu đang chạy Localhost (máy tính dev)
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      return process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:4100';
+      return process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:4000';
     }
 
     // Nếu đang chạy qua LAN IP
-    return `http://${hostname}:4100`;
+    return `http://${hostname}:4000`;
   }
 
   // 2. Môi trường Server (SSR)
-  return process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:4100';
+  return process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:4000';
 };
 
 const API_BASE_URL = getApiBaseUrl();

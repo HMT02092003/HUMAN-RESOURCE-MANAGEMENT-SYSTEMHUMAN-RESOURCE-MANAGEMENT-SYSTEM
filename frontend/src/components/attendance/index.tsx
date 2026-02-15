@@ -1373,16 +1373,10 @@ const AttendanceSimplePage = () => {
                             // Use more robust data access
                             const data = app?.data || app || {};
                             const rawStart = data.startTime;
-                            const rawEnd = data.endTime;
+                            let rawEnd = data.endTime;
+                            const overtimeHours = data.overtimeHours || data.totalHours || data.duration || data.hours || 0;
 
-                            // Try to find a duration source
-                            // 1. App-defined duration
-                            const appDuration = data.duration || data.hours || data.totalHours;
-                            // 2. Actual OT hours from attendance
-                            const actualOT = selectedDateData?.overtime || 0;
-                            // 3. Total working hours (fallback for holidays/special cases where overtime field might be 0 but total hours counts)
-                            const actualTotal = selectedDateData?.totalHours || 0;
-
+                            // Format time strings to HH:mm
                             const fmt = (t: any) => {
                               if (!t) return null;
                               if (typeof t === 'string' && (t.includes('T') || t.includes('-'))) {
@@ -1395,28 +1389,23 @@ const AttendanceSimplePage = () => {
                               return String(t);
                             };
 
-                            let startStr = fmt(rawStart);
+                            let startStr = fmt(rawStart) || '??:??';
                             let endStr = fmt(rawEnd);
 
-                            // Calculate End Time if missing
-                            if (startStr && !endStr) {
-                              // Determine best duration to use
-                              let duration = parseFloat(appDuration || '0');
-                              if (!duration && actualOT > 0) duration = actualOT;
-                              if (!duration && isHoliday && actualTotal > 0) duration = actualTotal;
-
-                              if (duration > 0) {
-                                const [h, m] = startStr.split(':').map(Number);
-                                if (!isNaN(h)) {
-                                  const totalMin = h * 60 + (m || 0) + Math.round(duration * 60);
-                                  const endH = Math.floor(totalMin / 60) % 24;
-                                  const endM = totalMin % 60;
-                                  endStr = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
-                                }
+                            // Tính endTime nếu thiếu dựa trên startTime + overtimeHours
+                            if (!endStr && rawStart && overtimeHours > 0) {
+                              const startParsed = dayjs(rawStart);
+                              if (startParsed.isValid()) {
+                                const endParsed = startParsed.add(overtimeHours, 'hour');
+                                endStr = endParsed.format('HH:mm');
+                              } else {
+                                endStr = '??:??';
                               }
+                            } else if (!endStr) {
+                              endStr = '??:??';
                             }
 
-                            return `(Đơn ID: ${app?.id || 'N/A'} • ${startStr || '??:??'} - ${endStr || '??:??'})`;
+                            return `(Đơn ID: ${app?.id || 'N/A'} • ${overtimeHours || '?'} giờ • ${startStr} - ${endStr})`;
                           })()}
                         </Text>
                       </div>

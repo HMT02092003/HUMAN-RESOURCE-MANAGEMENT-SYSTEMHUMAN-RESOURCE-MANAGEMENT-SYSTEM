@@ -416,7 +416,7 @@ export class MonthlyReportService {
             if (app.type !== 'overtime') return false;
             const d = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
             const appDate = d.overtimeDate || d.date;
-            const normalizedAppDate = appDate ? dayjs.tz(appDate, TZ_VN).format('YYYY-MM-DD') : null;
+            const normalizedAppDate = appDate ? parseDBDate(appDate).format('YYYY-MM-DD') : null;
             return normalizedAppDate === dateKey;
           });
 
@@ -427,11 +427,15 @@ export class MonthlyReportService {
             if (d.startTime) otStartTime = d.startTime;
             if (d.endTime) {
               otEndTime = d.endTime;
-            } else if (d.startTime && d.totalHours) {
+            } else if (d.startTime && (d.overtimeHours || d.totalHours || d.hours || d.duration)) {
               // ✨ Calculate end time if missing but totalHours provided
-              const duration = d.totalHours || d.hours || d.duration;
+              const duration = d.overtimeHours || d.totalHours || d.hours || d.duration;
               if (duration) {
-                const startTimeDerive = dayjs.tz(`${dateKey} ${d.startTime}`, 'Asia/Ho_Chi_Minh');
+                // ✨ Improved: Handle ISO strings vs HH:mm strings
+                const startTimeDerive = d.startTime.includes('T')
+                  ? parseDBDate(d.startTime)
+                  : dayjs.tz(`${dateKey} ${d.startTime}`, TZ_VN);
+
                 const lunchBreakDerive = await AttendanceCalculationService.getSettings().then(s => s.lunchBreak);
                 const extendedEnd = AttendanceCalculationService.calculateExtendedEndTime(
                   startTimeDerive,
@@ -439,12 +443,13 @@ export class MonthlyReportService {
                   lunchBreakDerive,
                   dateKey
                 );
+                // Use the derived end time's HH:mm format if the input was HH:mm, or keep ISO?
+                // Better to keep it consistent. If start was ISO, end should probably be ISO or we pass it correctly.
+                // AttendanceCalculationService internally handles both.
                 otEndTime = extendedEnd.format('HH:mm');
               }
             }
-            console.log(`⏱️ [attendance] Found OT app for ${dateKey}: ${otStartTime} - ${otEndTime}`);
           }
-
           const calc = await AttendanceCalculationService.calculateAttendance(
             r.checkInTime || null,
             r.checkOutTime || null,
@@ -592,7 +597,7 @@ export class MonthlyReportService {
             const otApp = approvedApplications.find(app => {
               if (app.type !== 'overtime') return false;
               const d = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
-              const appDate = d.startDate || d.date;
+              const appDate = d.overtimeDate || d.startDate || d.date;
               if (!appDate) return false;
               const normalizedOtDate = parseDBDate(appDate).format('YYYY-MM-DD');
               return normalizedOtDate === dateKey;
@@ -604,9 +609,13 @@ export class MonthlyReportService {
               const otStart = d.startTime || d.start_time;
               let otEnd = d.endTime || d.end_time;
 
-              if (!otEnd && (d.totalHours || d.overtimeHours)) {
-                const duration = d.totalHours || d.overtimeHours;
-                const startDerive = dayjs.tz(`${dateKey} ${otStart}`, 'Asia/Ho_Chi_Minh');
+              if (!otEnd && (d.totalHours || d.overtimeHours || d.hours)) {
+                const duration = d.totalHours || d.overtimeHours || d.hours;
+                // ✨ Improved: Handle ISO strings vs HH:mm strings
+                const startDerive = otStart.includes('T')
+                  ? parseDBDate(otStart)
+                  : dayjs.tz(`${dateKey} ${otStart}`, TZ_VN);
+
                 const settings = await AttendanceCalculationService.getSettings();
                 const extendedEnd = AttendanceCalculationService.calculateExtendedEndTime(startDerive, parseFloat(duration), settings.lunchBreak, dateKey);
                 otEnd = extendedEnd.format('HH:mm');

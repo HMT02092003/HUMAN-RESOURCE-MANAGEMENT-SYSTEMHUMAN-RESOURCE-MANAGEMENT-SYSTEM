@@ -165,6 +165,18 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                 <Descriptions.Item label={<Text><ClockCircleOutlined /> Giờ bắt đầu tăng ca</Text>}>
                     <Text strong>{parseTime(data.startTime)}</Text>
                 </Descriptions.Item>
+                <Descriptions.Item label={<Text><ClockCircleOutlined /> Giờ kết thúc tăng ca</Text>}>
+                    <Text strong>{(() => {
+                        const endTimeDisplay = parseTime(data.endTime);
+                        if (endTimeDisplay === '--:--' && data.startTime && data.overtimeHours) {
+                            const startParsed = dayjs(data.startTime);
+                            if (startParsed.isValid()) {
+                                return startParsed.add(data.overtimeHours, 'hour').format('HH:mm');
+                            }
+                        }
+                        return endTimeDisplay;
+                    })()}</Text>
+                </Descriptions.Item>
                 <Descriptions.Item label={<Text><ClockCircleOutlined /> Số giờ tăng ca</Text>}>
                     <Text strong>{data.overtimeHours} giờ</Text>
                 </Descriptions.Item>

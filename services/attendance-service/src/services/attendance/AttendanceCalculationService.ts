@@ -473,7 +473,7 @@ export class AttendanceCalculationService {
           let rawStart = appData.startTime || appData.start_time || '08:00';
           let startTimeFormatted = rawStart;
           if (rawStart.includes('T') || rawStart.length > 8) {
-            startTimeFormatted = dayjs.tz(rawStart, 'Asia/Ho_Chi_Minh').format('HH:mm');
+            startTimeFormatted = parseDBDate(rawStart).format('HH:mm');
           }
 
           let endTimeFormatted: string;
@@ -481,7 +481,7 @@ export class AttendanceCalculationService {
 
           if (!rawEnd && otDuration > 0) {
             const fullStart = startTimeFormatted.length <= 5 ? `${dateKey} ${startTimeFormatted}` : startTimeFormatted;
-            const startTimeDerive = dayjs(fullStart).tz('Asia/Ho_Chi_Minh');
+            const startTimeDerive = parseDBDate(fullStart);
             const lunchBreak = await AttendanceCalculationService.getSettings().then(s => s.lunchBreak);
 
             const extendedEnd = AttendanceCalculationService.calculateExtendedEndTime(
@@ -495,7 +495,7 @@ export class AttendanceCalculationService {
             endTimeFormatted = '17:00';
           } else {
             endTimeFormatted = rawEnd.includes('T') || rawEnd.length > 8
-              ? dayjs.tz(rawEnd, 'Asia/Ho_Chi_Minh').format('HH:mm')
+              ? parseDBDate(rawEnd).format('HH:mm')
               : rawEnd.substring(0, 5);
           }
 
@@ -713,8 +713,8 @@ export class AttendanceCalculationService {
           return false;
         }
 
-        const normalizedOtDate = dayjs.tz(otDate, 'Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
-        const normalizedCheckDate = dayjs.tz(date, 'Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
+        const normalizedOtDate = parseDBDate(otDate).format('YYYY-MM-DD');
+        const normalizedCheckDate = parseDBDate(date).format('YYYY-MM-DD');
 
         console.log(`  📅 App ${app.id} date comparison:`, {
           otDateUTC: otDate,
@@ -933,8 +933,8 @@ export class AttendanceCalculationService {
       // 🔴 NGÀY LỄ / CUỐI TUẦN: Ưu tiên Đơn Tăng Ca (OT Application)
       if (approvedOtEndTime && approvedOtStartTime) {
         // Extract HH:mm from ISO strings if needed, or use as is if already HH:mm
-        const startTime = approvedOtStartTime.includes('T') ? dayjs(approvedOtStartTime).format('HH:mm') : approvedOtStartTime.substring(0, 5);
-        const endTime = approvedOtEndTime.includes('T') ? dayjs(approvedOtEndTime).format('HH:mm') : approvedOtEndTime.substring(0, 5);
+        const startTime = approvedOtStartTime.includes('T') ? parseDBDate(approvedOtStartTime).format('HH:mm') : approvedOtStartTime.substring(0, 5);
+        const endTime = approvedOtEndTime.includes('T') ? parseDBDate(approvedOtEndTime).format('HH:mm') : approvedOtEndTime.substring(0, 5);
 
         workingHours = {
           start: startTime,
@@ -944,8 +944,8 @@ export class AttendanceCalculationService {
         const startStr = approvedOtStartTime.length <= 8 ? `${date} ${approvedOtStartTime}` : approvedOtStartTime;
         const endStr = approvedOtEndTime.length <= 8 ? `${date} ${approvedOtEndTime}` : approvedOtEndTime;
 
-        const start = dayjs.tz(startStr, 'Asia/Ho_Chi_Minh');
-        const end = dayjs.tz(endStr, 'Asia/Ho_Chi_Minh');
+        const start = parseDBDate(startStr);
+        const end = parseDBDate(endStr);
         const diffMinutes = end.diff(start, 'minute');
 
         // Deduct lunch break for holiday/weekend OT shifts using the setting
@@ -1115,13 +1115,13 @@ export class AttendanceCalculationService {
       if (approvedOtEndTime && !isHoliday) {
         // ✨ Handle full date or time string for approvedOtEndTime
         const otEndStr = approvedOtEndTime.length <= 8 ? `${date} ${approvedOtEndTime}` : approvedOtEndTime;
-        const approvedOtEnd = dayjs(otEndStr).tz('Asia/Ho_Chi_Minh');
+        const approvedOtEnd = parseDBDate(otEndStr);
 
         // ✨ Handle full date or time string for approvedOtStartTime
         let approvedOtStart: dayjs.Dayjs;
         if (approvedOtStartTime) {
           const otStartStr = approvedOtStartTime.length <= 8 ? `${date} ${approvedOtStartTime}` : approvedOtStartTime;
-          approvedOtStart = dayjs(otStartStr).tz('Asia/Ho_Chi_Minh');
+          approvedOtStart = parseDBDate(otStartStr);
         } else {
           // Fallback to expectedCheckOut if not provided
           approvedOtStart = expectedCheckOut;
@@ -1283,10 +1283,10 @@ export class AttendanceCalculationService {
           const appHours = approvedOtDurationHours || 0;
 
           const otStart = (approvedOtStartTime && approvedOtStartTime.includes('T'))
-            ? dayjs.utc(approvedOtStartTime).tz('Asia/Ho_Chi_Minh')
+            ? parseDBDate(approvedOtStartTime)
             : dayjs.tz(`${date} ${approvedOtStartTime}`, 'Asia/Ho_Chi_Minh');
           const otEnd = (approvedOtEndTime && approvedOtEndTime.includes('T'))
-            ? dayjs.utc(approvedOtEndTime).tz('Asia/Ho_Chi_Minh')
+            ? parseDBDate(approvedOtEndTime)
             : dayjs.tz(`${date} ${approvedOtEndTime}`, 'Asia/Ho_Chi_Minh');
 
           // ✨ SAFETY FIX: Initialize to 0
@@ -1356,10 +1356,10 @@ export class AttendanceCalculationService {
           result.earlyDepartureMinutes = 0;
 
           const otStart = (approvedOtStartTime && approvedOtStartTime.includes('T'))
-            ? dayjs.utc(approvedOtStartTime).tz('Asia/Ho_Chi_Minh')
+            ? parseDBDate(approvedOtStartTime)
             : dayjs.tz(`${date} ${approvedOtStartTime}`, 'Asia/Ho_Chi_Minh');
           const otEnd = (approvedOtEndTime && approvedOtEndTime.includes('T'))
-            ? dayjs.utc(approvedOtEndTime).tz('Asia/Ho_Chi_Minh')
+            ? parseDBDate(approvedOtEndTime)
             : dayjs.tz(`${date} ${approvedOtEndTime}`, 'Asia/Ho_Chi_Minh');
 
           if (checkInTime) {
@@ -1484,7 +1484,7 @@ export class AttendanceCalculationService {
   // Helper method để format time cho logging
   static formatTimeForLog(time: string | null): string {
     if (!time) return 'N/A';
-    return dayjs(time).format('HH:mm:ss');
+    return parseDBDate(time).format('HH:mm:ss');
   }
 
   // Helper method để validate working hours format

@@ -63,10 +63,14 @@ const OvertimeForm: React.FC<OvertimeFormProps> = ({ onCancel }) => {
         }
       }
 
+      // Tính endTime dựa trên startTime + overtimeHours
+      const endTime = values.startTime.add(values.overtimeHours, 'hour');
+
       await ApplicationService.createApplication({
         type: 'overtime',
         data: {
           ...values,
+          endTime: endTime.toISOString(),
         },
       });
       message.success('Gửi đơn tăng ca thành công!');
