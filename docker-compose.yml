@@ -357,6 +357,7 @@ services:
     build:
       context: ./services/salary-service
       dockerfile: Dockerfile
+    image: hrms-salary-service:latest
     container_name: hrms-salary-service
     restart: unless-stopped
     volumes:
@@ -397,6 +398,7 @@ services:
     build:
       context: ./services/job-service
       dockerfile: Dockerfile
+    image: hrms-job-service:latest
     container_name: hrms-job-service
     restart: unless-stopped
     volumes:
@@ -467,9 +469,7 @@ services:
   # Deploy 3 replicas for parallel processing with Round-Robin
   # --------------------------------------------------------------------------
   cv-worker:
-    build:
-      context: ./services/job-service
-      dockerfile: Dockerfile
+    image: hrms-job-service:latest
     # Remove container_name to allow multiple instances
     restart: unless-stopped
     command: [ "yarn", "worker" ]
@@ -503,9 +503,7 @@ services:
   # Deploy 3 replicas for parallel processing with Round-Robin
   # --------------------------------------------------------------------------
   salary-worker:
-    build:
-      context: ./services/salary-service
-      dockerfile: Dockerfile
+    image: hrms-salary-service:latest
     # Remove container_name to allow multiple instances
     restart: unless-stopped
     command: [ "yarn", "worker" ]

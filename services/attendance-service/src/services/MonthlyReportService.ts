@@ -605,7 +605,10 @@ export class MonthlyReportService {
             const otApp = approvedApplications.find(app => {
               if (app.type !== 'overtime') return false;
               const d = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
-              return d.date === dateKey || d.overtimeDate === dateKey;
+              const appDate = d.date || d.overtimeDate;
+              if (!appDate) return false;
+              const normalizedOtDate = dayjs(appDate).tz(TZ_VN).format('YYYY-MM-DD');
+              return normalizedOtDate === dateKey;
             });
 
             if (otApp) {

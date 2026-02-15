@@ -316,7 +316,9 @@ export class AttendanceCalculationService {
           if (a.type !== 'overtime') return false;
           const d = typeof a.data === 'string' ? JSON.parse(a.data) : a.data;
           const appDate = d.overtimeDate || d.date;
-          const normalizedAppDate = appDate ? dayjs(appDate).format('YYYY-MM-DD') : null;
+          if (!appDate) return false;
+          // Use Vietnam timezone for consistency to avoid off-by-one errors
+          const normalizedAppDate = dayjs(appDate).tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
           return normalizedAppDate === dateKey;
         });
         const hasApprovedOT = !!otApp;
@@ -780,6 +782,13 @@ export class AttendanceCalculationService {
       if (isHoliday) console.log(`🎉 Auto-detected holiday: ${holidayCheck.holidayName || 'Unknown'}`);
     }
 
+    // ✨ Auto-detect weekend if not explicit
+    if (isWeekend === undefined) {
+      const dayOfWeek = dayjs(date).day();
+      isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // 0: Sunday, 6: Saturday
+      if (isWeekend) console.log(`🏖️ Auto-detected weekend: ${dayOfWeek === 0 ? 'Sunday' : 'Saturday'}`);
+    }
+
     const settings = await this.getSettings();
     const lunchBreak = settings.lunchBreak as LunchBreak;
     const penaltyRate = (settings.penaltyRate as PenaltyConfig).rate;
@@ -931,18 +940,27 @@ export class AttendanceCalculationService {
     const allowedLateMinutes = allowedLateMinutesVal ? parseInt(allowedLateMinutesVal.value) : 0;
 
     // Tính late minutes - trừ đi thời gian cho phép đi muộn
-    const rawLateMinutes = checkIn.isAfter(expectedCheckIn)
-      ? checkIn.diff(expectedCheckIn, 'minute')
-      : 0;
-    const lateMinutes = Math.max(0, rawLateMinutes - allowedLateMinutes);
+    // ⚠️ CRITICAL FIX: Chỉ tính muộn nếu là ngày làm việc bình thường.
+    // Đối với Ngày Lễ/Cuối Tuần, việc tính muộn/sớm sẽ được thực hiện riêng trong khối logic phía dưới (nếu có OT).
+    let lateMinutes = 0;
+    if (isNormalWorkingDay) {
+      const rawLateMinutes = checkIn.isAfter(expectedCheckIn)
+        ? checkIn.diff(expectedCheckIn, 'minute')
+        : 0;
+      lateMinutes = Math.max(0, rawLateMinutes - allowedLateMinutes);
 
-    if (rawLateMinutes > 0 && lateMinutes === 0) {
-      console.log(`✅ [attendance] Late but within grace period (${rawLateMinutes} <= ${allowedLateMinutes}m) -> Not late.`);
+      if (rawLateMinutes > 0 && lateMinutes === 0) {
+        console.log(`✅ [attendance] Late but within grace period (${rawLateMinutes} <= ${allowedLateMinutes}m) -> Not late.`);
+      }
     }
 
     console.log('⏰ Late calculation:');
-    console.log('- checkIn.isAfter(expectedCheckIn):', checkIn.isAfter(expectedCheckIn));
-    console.log('- Diff in minutes:', checkIn.diff(expectedCheckIn, 'minute'));
+    if (isNormalWorkingDay) {
+      console.log('- checkIn.isAfter(expectedCheckIn):', checkIn.isAfter(expectedCheckIn));
+      console.log('- Diff in minutes:', checkIn.diff(expectedCheckIn, 'minute'));
+    } else {
+      console.log('- Holiday/Weekend: Default lateMinutes set to 0. OT specific calculation will follow.');
+    }
     console.log('- Final lateMinutes:', lateMinutes);
 
     let result: AttendanceCalculation = {
@@ -977,10 +995,13 @@ export class AttendanceCalculationService {
       const checkOut = dayjs.utc(checkOutTime).tz('Asia/Ho_Chi_Minh');
       console.log('- Actual check-out:', checkOut.format('YYYY-MM-DD HH:mm:ss'));
 
-      // Tính early departure minutes - chỉ tính nếu check-out sớm hơn giờ quy định
-      const earlyDepartureMinutes = checkOut.isBefore(expectedCheckOut)
-        ? expectedCheckOut.diff(checkOut, 'minute')
-        : 0;
+      // Tính early departure minutes - chỉ tính nếu check-out sớm hơn giờ quy định và là ngày thường
+      let earlyDepartureMinutes = 0;
+      if (isNormalWorkingDay) {
+        earlyDepartureMinutes = checkOut.isBefore(expectedCheckOut)
+          ? expectedCheckOut.diff(checkOut, 'minute')
+          : 0;
+      }
 
       result.earlyDepartureMinutes = earlyDepartureMinutes;
       result.isEarlyLeave = earlyDepartureMinutes > 0;

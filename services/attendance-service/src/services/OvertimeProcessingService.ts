@@ -55,21 +55,21 @@ export class OvertimeProcessingService {
    * Lấy danh sách đơn tăng ca đã được duyệt trong tháng
    */
   static async getApprovedOvertimeApplications(
-    userId: number, 
+    userId: number,
     month: string,
     token: string
   ): Promise<OvertimeApplication[]> {
     try {
       console.log(`📋 Fetching approved overtime applications for user ${userId} in ${month}`);
-      
+
       const [year, monthNum] = month.split('-');
-      
+
       // Gọi API sang application-service
       const response = await axios.get(
         `${API_GATEWAY_URL}/api/applications/user/${userId}/approved`,
         {
           params: { year, month: monthNum },
-          headers: { 
+          headers: {
             'Authorization': `Bearer ${token}`,
             'Cookie': `token=${token}`
           },
@@ -83,7 +83,7 @@ export class OvertimeProcessingService {
       }
 
       // Lọc chỉ lấy đơn tăng ca
-      const overtimeApps = response.data.data.filter((app: any) => 
+      const overtimeApps = response.data.data.filter((app: any) =>
         app.type === 'overtime' && app.status === 'approved'
       );
 
@@ -193,7 +193,7 @@ export class OvertimeProcessingService {
 
     // Tính giờ tăng ca thực tế
     let actualOvertimeHours = 0;
-    
+
     // Nếu checkout >= thời gian kết thúc đăng ký -> tính full
     if (checkOutTime.isAfter(requestedEndTime) || checkOutTime.isSame(requestedEndTime)) {
       actualOvertimeHours = overtimeHours;
@@ -202,7 +202,7 @@ export class OvertimeProcessingService {
       // Tính theo thời gian thực tế
       const minutesDiff = checkOutTime.diff(requestedStartTime, 'minute');
       actualOvertimeHours = Math.max(0, minutesDiff / 60);
-      
+
       // Yêu cầu tối thiểu 80% thời gian đăng ký
       const minRequiredHours = overtimeHours * 0.8;
       if (actualOvertimeHours < minRequiredHours) {
@@ -215,8 +215,8 @@ export class OvertimeProcessingService {
           reason: `Không đủ thời gian tăng ca (cần tối thiểu ${minRequiredHours}h, thực tế ${actualOvertimeHours.toFixed(2)}h)`
         };
       }
-      
-      console.log(`   ⚠️ Partial overtime hours: ${actualOvertimeHours.toFixed(2)} (${((actualOvertimeHours/overtimeHours)*100).toFixed(0)}%)`);
+
+      console.log(`   ⚠️ Partial overtime hours: ${actualOvertimeHours.toFixed(2)} (${((actualOvertimeHours / overtimeHours) * 100).toFixed(0)}%)`);
     }
 
     // ⭐ Tính lương tăng ca dựa trên actualOvertimeHours (giờ)
@@ -260,7 +260,7 @@ export class OvertimeProcessingService {
 
       // 1. Lấy danh sách đơn tăng ca đã duyệt
       const overtimeApps = await this.getApprovedOvertimeApplications(userId, month, token);
-      
+
       if (overtimeApps.length === 0) {
         console.log('ℹ️ No overtime applications to process');
         return {
@@ -296,10 +296,15 @@ export class OvertimeProcessingService {
 
       for (const overtimeApp of overtimeApps) {
         const { overtimeDate } = overtimeApp.data;
-        
+
         // Tìm bản ghi chấm công tương ứng
+        // Sử dụng Vietnam timezone để so sánh ngày chính xác, tránh lệch múi giờ (ví dụ 00:00 UTC là 07:00 VN)
         const attendanceRecord = attendanceRecords.find(
-          record => dayjs(record.date).format('YYYY-MM-DD') === overtimeDate
+          record => {
+            const recordDate = dayjs(record.date).format('YYYY-MM-DD');
+            const normalizedOtDate = dayjs(overtimeDate).tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
+            return recordDate === normalizedOtDate;
+          }
         );
 
         // Validate và tính toán
@@ -317,21 +322,17 @@ export class OvertimeProcessingService {
           totalOvertimeHours += result.actualHours;
           totalOvertimeSalary += result.overtimeSalary;
 
-          // ⭐ Cập nhật vào bảng time_attendances với otMinutes (phút) và otSalary
+          // ⭐ Cập nhật vào bảng time_attendances với overtimeHours (hệ số sẽ được tính khi aggregate)
           if (attendanceRecord) {
-            const otMinutes = Math.round(result.actualHours * 60);
-            
             await TimeAttendanceModel.query()
               .where('id', attendanceRecord.id)
               .patch({
-                otMinutes: otMinutes,  // Lưu số phút
-                otSalary: result.overtimeSalary,
+                overtimeHours: result.actualHours,
                 updated_at: dayjs().toISOString()
               });
 
             console.log(`   ✅ Updated attendance record for ${overtimeDate}:`);
-            console.log(`      - otMinutes: ${otMinutes}`);
-            console.log(`      - otSalary: ${result.overtimeSalary}`);
+            console.log(`      - overtimeHours: ${result.actualHours}`);
           }
         } else {
           totalInvalid++;
