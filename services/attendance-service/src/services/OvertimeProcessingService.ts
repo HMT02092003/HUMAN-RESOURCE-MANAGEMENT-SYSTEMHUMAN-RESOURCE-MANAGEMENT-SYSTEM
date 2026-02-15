@@ -171,8 +171,8 @@ export class OvertimeProcessingService {
     console.log(`   - Is working day: ${isWorkDay}`);
 
     // Tính toán thời gian
-    const checkOutTime = dayjs(attendanceRecord.checkOutTime);
-    const requestedStartTime = dayjs(`${overtimeDate} ${startTime}`);
+    const checkOutTime = dayjs.utc(attendanceRecord.checkOutTime).tz('Asia/Ho_Chi_Minh');
+    const requestedStartTime = dayjs.tz(`${overtimeDate} ${startTime}`, 'Asia/Ho_Chi_Minh');
     const requestedEndTime = requestedStartTime.add(overtimeHours, 'hour');
 
     console.log(`   - Checkout time: ${checkOutTime.format('HH:mm:ss')}`);
@@ -278,8 +278,8 @@ export class OvertimeProcessingService {
       console.log(`📅 Working days config:`, workingDaysConfig.workingDays);
 
       // 3. Lấy tất cả bản ghi chấm công trong tháng
-      const startDate = dayjs(`${month}-01`).startOf('month').format('YYYY-MM-DD');
-      const endDate = dayjs(`${month}-01`).endOf('month').format('YYYY-MM-DD');
+      const startDate = dayjs.tz(`${month}-01`, 'Asia/Ho_Chi_Minh').startOf('month').format('YYYY-MM-DD');
+      const endDate = dayjs.tz(`${month}-01`, 'Asia/Ho_Chi_Minh').endOf('month').format('YYYY-MM-DD');
 
       const attendanceRecords = await TimeAttendanceModel.query()
         .where('userId', userId)

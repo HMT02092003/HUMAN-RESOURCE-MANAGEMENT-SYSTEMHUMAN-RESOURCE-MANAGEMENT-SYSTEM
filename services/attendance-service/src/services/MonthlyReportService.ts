@@ -13,7 +13,8 @@ import axios from 'axios';
 import HolidayModel from '@/Models/HolidayModel';
 import SettingsService from './SettingsService';
 import SalaryService from './SalaryService';
-import AttendanceCalculationService from './attendance/AttendanceCalculationService';
+import AttendanceCalculationService, { fetchApplicationsDirectly } from './attendance/AttendanceCalculationService';
+import { parseDBDate } from './attendance/AttendanceHelpers';
 import knex from 'knex';
 
 // Helper function to get user startDate from auth-service database directly
@@ -61,6 +62,7 @@ async function getUserStartDate(userId: number): Promise<string | null> {
  */
 export class MonthlyReportService {
   static async buildMonthlyFull(userId: number, month: string, token?: string) {
+    console.log("🚀 [MonthlyReportService] I AM THE LATEST VERSION (Fixed TZs)");
     // ✨ New simplified buildMonthlyFull logic: Read-only from DB (requested by user)
     // 1. Fetch pre-calculated summary from DB (fast path)
     const summary = await AttendanceCalculationService.getUserMonthlyAttendance(userId, month, token, true);
@@ -107,7 +109,7 @@ export class MonthlyReportService {
     const mappedDetails = dailyDetails.map((d: any) => {
       let statusText = '';
       let color = '';
-      const isFuture = dayjs(d.date).isAfter(dayjs(), 'day');
+      const isFuture = dayjs.tz(d.date, TZ_VN).isAfter(dayjs.tz(undefined, TZ_VN), 'day');
 
       if (d.isHoliday) {
         statusText = d.holidayName || 'Ngày lễ';
@@ -181,12 +183,12 @@ export class MonthlyReportService {
    */
   static async calculateAndSaveMonthlyAttendance(userId: number, date: string, userData?: any, token?: string) {
     try {
-      console.log(`\n📊 [attendance] Starting calculateAndSaveMonthlyAttendance for user ${userId}, date ${date}`);
+      console.log(`\n📊 [MonthlyReportService] I AM THE LATEST VERSION - Recalculating User ${userId}, date ${date}`);
       console.log(`🎫 Token provided: ${token ? 'Yes' : 'No'}, userData: ${userData ? 'Yes' : 'No'}`);
 
-      const m = dayjs(date).format('YYYY-MM');
-      const startDate = dayjs(`${m}-01`).startOf('month').format('YYYY-MM-DD');
-      const endDate = dayjs(`${m}-01`).endOf('month').format('YYYY-MM-DD');
+      const m = dayjs.tz(date, TZ_VN).format('YYYY-MM');
+      const startDate = dayjs.tz(`${m}-01`, TZ_VN).startOf('month').format('YYYY-MM-DD');
+      const endDate = dayjs.tz(`${m}-01`, TZ_VN).endOf('month').format('YYYY-MM-DD');
 
       // ✨ Lấy thông tin user startDate trực tiếp từ database của auth-service
       const userStartDate = await getUserStartDate(userId);
@@ -204,13 +206,12 @@ export class MonthlyReportService {
 
       // 2️⃣ Load settings and holidays
       const workingDaysConfig = await SettingsService.getWorkingDays();
-      console.log(`⚙️ [attendance] Working days config:`, workingDaysConfig);
 
       // Load holidays using Objection.js HolidayModel
       const holidayRows: any[] = await HolidayModel.query()
         .where(function () {
           this.whereBetween('start_date', [startDate, endDate])
-            .orWhereBetween('end_date', [startDate, endDate])
+            .orWhereBetween('start_date', [startDate, endDate])
             .orWhere(function () {
               this.where('start_date', '<=', startDate).andWhere('end_date', '>=', endDate);
             });
@@ -222,8 +223,8 @@ export class MonthlyReportService {
       for (const hr of holidayRows) {
         // Bảng holidays chỉ có start_date và end_date
         if (hr.start_date && hr.end_date) {
-          let cur = dayjs(hr.start_date);
-          const end = dayjs(hr.end_date);
+          let cur = dayjs.tz(hr.start_date, TZ_VN);
+          const end = dayjs.tz(hr.end_date, TZ_VN);
           while (cur.isBefore(end) || cur.isSame(end, 'day')) {
             holidaySet.add(cur.format('YYYY-MM-DD'));
             cur = cur.add(1, 'day');
@@ -233,42 +234,28 @@ export class MonthlyReportService {
       console.log(`🎉 [attendance] Found ${holidaySet.size} holiday dates:`, Array.from(holidaySet));
 
       // 3️⃣ Fetch approved applications (leave/business trip)
-      let approvedApplications: any[] = [];
-      try {
-        const [yearStr, monthStr] = m.split('-');
-        const appUrl = (process.env['APPLICATION_SERVICE_URL'] || 'http://127.0.0.1:4008') as string;
-        const resp = await axios.get(`${appUrl}/api/applications/user/${userId}/approved`, {
-          params: { year: parseInt(yearStr || '0'), month: parseInt(monthStr || '0') }
-        });
-        approvedApplications = resp.data.data || [];
-        console.log(`✅ [attendance] Found ${approvedApplications.length} approved applications`);
-        // Debugging: Log all app dates/ids
-        approvedApplications.forEach((app: any) => {
-          const d = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
-          console.log(`   - App ID: ${app.id}, Type: ${app.type}, Date: ${d.date || d.overtimeDate}, Status: ${app.status}`);
-        });
-      } catch (e) {
-        console.log(`⚠️ [attendance] Failed to fetch applications, using fallback`);
-      }
+      const approvedApplications = await fetchApplicationsDirectly(userId, m);
+      console.log(`✅ [attendance] Found ${approvedApplications.length} approved applications`);
+
 
       // 4️⃣ Tính tổng số ngày làm việc trong tháng (loại trừ ngày nghỉ theo setting)
       const daysInMonth = dayjs(`${m}-01`).daysInMonth();
       let totalScheduledDays = 0;
       // We also compute scheduled working days up to today (for unauthorized absence calculation)
-      const todayStr = dayjs().format('YYYY-MM-DD');
-      const isCurrentMonth = dayjs().format('YYYY-MM') === m;
+      const todayStr = dayjs.tz(undefined, TZ_VN).format('YYYY-MM-DD');
+      const isCurrentMonth = dayjs.tz(undefined, TZ_VN).format('YYYY-MM') === m;
       let totalScheduledDaysUpToToday = 0;
 
       for (let d = 1; d <= daysInMonth; d++) {
-        const dateKey = dayjs(`${m}-${String(d).padStart(2, '0')}`).format('YYYY-MM-DD');
+        const dateKey = dayjs.tz(`${m}-${String(d).padStart(2, '0')}`, TZ_VN).format('YYYY-MM-DD');
 
         // ✨ Chỉ tính những ngày từ startDate trở đi
-        if (userStartDate && dayjs(dateKey).isBefore(userStartDate, 'day')) {
+        if (userStartDate && dayjs.tz(dateKey, TZ_VN).isBefore(dayjs.tz(userStartDate, TZ_VN), 'day')) {
           console.log(`⏭️ [attendance] Skipping ${dateKey} (before startDate ${userStartDate})`);
           continue; // Bỏ qua những ngày trước khi user bắt đầu làm việc
         }
 
-        const dow = dayjs(dateKey).day(); // 0-6 Sun-Sat
+        const dow = dayjs.tz(dateKey, TZ_VN).day(); // 0-6 Sun-Sat
         const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         const dayKey = dayNames[dow] || 'monday';
 
@@ -301,10 +288,10 @@ export class MonthlyReportService {
 
           if (isLeaveType) {
             if (data.date) {
-              leaveDaysSet.add(dayjs(data.date).tz(TZ_VN).format('YYYY-MM-DD'));
+              leaveDaysSet.add(dayjs.tz(data.date, TZ_VN).format('YYYY-MM-DD'));
             } else if (data.startDate && data.endDate) {
-              let start = dayjs(data.startDate).tz(TZ_VN).startOf('day');
-              let end = dayjs(data.endDate).tz(TZ_VN).startOf('day');
+              let start = dayjs.tz(data.startDate, TZ_VN).startOf('day');
+              let end = dayjs.tz(data.endDate, TZ_VN).startOf('day');
               if (start.isAfter(end)) { const tmp = start; start = end; end = tmp; }
               let cur = start;
               while (cur.isBefore(end) || cur.isSame(end, 'day')) {
@@ -316,10 +303,10 @@ export class MonthlyReportService {
 
           if (app.type === 'business-trip' || app.type === 'business_trip') {
             if (data.date) {
-              businessTripDaysSet.add(dayjs(data.date).tz(TZ_VN).format('YYYY-MM-DD'));
+              businessTripDaysSet.add(dayjs.tz(data.date, TZ_VN).format('YYYY-MM-DD'));
             } else if (data.startDate && data.endDate) {
-              let start = dayjs(data.startDate).tz(TZ_VN).startOf('day');
-              let end = dayjs(data.endDate).tz(TZ_VN).startOf('day');
+              let start = dayjs.tz(data.startDate, TZ_VN).startOf('day');
+              let end = dayjs.tz(data.endDate, TZ_VN).startOf('day');
               if (start.isAfter(end)) { const tmp = start; start = end; end = tmp; }
               let cur = start;
               while (cur.isBefore(end) || cur.isSame(end, 'day')) {
@@ -347,7 +334,7 @@ export class MonthlyReportService {
 
       const dayOffDaysSet = new Set<string>();
       for (const schedule of dayOffSchedules) {
-        dayOffDaysSet.add(dayjs(schedule.date).format('YYYY-MM-DD'));
+        dayOffDaysSet.add(dayjs.tz(schedule.date, TZ_VN).format('YYYY-MM-DD'));
       }
       console.log(`📝 [attendance] Day-off days (nghỉ ngày đã duyệt): ${dayOffDaysSet.size}`, Array.from(dayOffDaysSet));
 
@@ -397,7 +384,7 @@ export class MonthlyReportService {
         const isLeave = leaveDaysSet.has(dateKey);
         const isTrip = businessTripDaysSet.has(dateKey);
 
-        // ✨ ƯU TIÊN: Nếu có đơn nghỉ phép hoặc công tác -> BỎ QUA dữ liệu chấm công ngày này
+        // ✨ ƯU TIÊN: Nếu có đơn nghỉ phép hoặc công tác → BỎ QUA dữ liệu chấm công ngày này
         if (isLeave || isTrip) {
           console.log(`ℹ️ [attendance] Ignoring attendance for ${dateKey} due to Approved Leave/Trip`);
           continue;
@@ -429,7 +416,7 @@ export class MonthlyReportService {
             if (app.type !== 'overtime') return false;
             const d = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
             const appDate = d.overtimeDate || d.date;
-            const normalizedAppDate = appDate ? dayjs(appDate).tz(TZ_VN).format('YYYY-MM-DD') : null;
+            const normalizedAppDate = appDate ? dayjs.tz(appDate, TZ_VN).format('YYYY-MM-DD') : null;
             return normalizedAppDate === dateKey;
           });
 
@@ -444,7 +431,7 @@ export class MonthlyReportService {
               // ✨ Calculate end time if missing but totalHours provided
               const duration = d.totalHours || d.hours || d.duration;
               if (duration) {
-                const startTimeDerive = dayjs(`${dateKey} ${d.startTime}`).tz('Asia/Ho_Chi_Minh');
+                const startTimeDerive = dayjs.tz(`${dateKey} ${d.startTime}`, 'Asia/Ho_Chi_Minh');
                 const lunchBreakDerive = await AttendanceCalculationService.getSettings().then(s => s.lunchBreak);
                 const extendedEnd = AttendanceCalculationService.calculateExtendedEndTime(
                   startTimeDerive,
@@ -565,10 +552,10 @@ export class MonthlyReportService {
 
             if (isPaid) {
               if (data.date) {
-                paidLeaveDaysSet.add(dayjs(data.date).tz(TZ_VN).format('YYYY-MM-DD'));
+                paidLeaveDaysSet.add(dayjs.tz(data.date, TZ_VN).format('YYYY-MM-DD'));
               } else if (data.startDate && data.endDate) {
-                let start = dayjs(data.startDate).tz(TZ_VN).startOf('day');
-                let end = dayjs(data.endDate).tz(TZ_VN).startOf('day');
+                let start = dayjs.tz(data.startDate, TZ_VN).startOf('day');
+                let end = dayjs.tz(data.endDate, TZ_VN).startOf('day');
                 if (start.isAfter(end)) { const tmp = start; start = end; end = tmp; }
                 let cur = start;
                 while (cur.isBefore(end) || cur.isSame(end, 'day')) {
@@ -584,11 +571,11 @@ export class MonthlyReportService {
       }
 
       // Days processed with attendance records in the first loop
-      const processedRowsSet = new Set(rows.map(r => dayjs(r.date).format('YYYY-MM-DD')));
+      const processedRowsSet = new Set(rows.map(r => dayjs.tz(r.date, TZ_VN).format('YYYY-MM-DD')));
 
       for (const dateKey of allDaysInMonth) {
         // Bỏ qua những ngày trước startDate
-        if (userStartDate && dayjs(dateKey).isBefore(userStartDate, 'day')) {
+        if (userStartDate && dayjs.tz(dateKey, TZ_VN).isBefore(dayjs.tz(userStartDate, TZ_VN), 'day')) {
           continue;
         }
 
@@ -605,9 +592,9 @@ export class MonthlyReportService {
             const otApp = approvedApplications.find(app => {
               if (app.type !== 'overtime') return false;
               const d = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
-              const appDate = d.date || d.overtimeDate;
+              const appDate = d.startDate || d.date;
               if (!appDate) return false;
-              const normalizedOtDate = dayjs(appDate).tz(TZ_VN).format('YYYY-MM-DD');
+              const normalizedOtDate = parseDBDate(appDate).format('YYYY-MM-DD');
               return normalizedOtDate === dateKey;
             });
 
@@ -665,20 +652,20 @@ export class MonthlyReportService {
       const enrichedRows = summary.attendanceData || [];
 
       const presentDaysSet = new Set(rows.filter(r => {
-        const dateKey = dayjs(r.date).format('YYYY-MM-DD');
-        return isScheduledWorkingDay(dateKey) && !!(r.checkInTime || r.checkOutTime) && dayjs(dateKey).isSameOrBefore(todayStr, 'day');
+        const dateKey = dayjs.tz(r.date, TZ_VN).format('YYYY-MM-DD');
+        return isScheduledWorkingDay(dateKey) && !!(r.checkInTime || r.checkOutTime) && dayjs.tz(dateKey, TZ_VN).isSameOrBefore(todayStr, 'day');
       }).map(r => dayjs(r.date).format('YYYY-MM-DD')));
 
       const approvedLeaveDaysSetCombined = new Set(
         enrichedRows
-          .filter((r: any) => r.hasApprovedLeave && dayjs(r.date).isSameOrBefore(todayStr, 'day'))
-          .map((r: any) => dayjs(r.date).format('YYYY-MM-DD'))
+          .filter((r: any) => r.hasApprovedLeave && dayjs.tz(r.date, TZ_VN).isSameOrBefore(todayStr, 'day'))
+          .map((r: any) => dayjs.tz(r.date, TZ_VN).format('YYYY-MM-DD'))
       );
 
       const businessTripDaysSetCombined = new Set(
         enrichedRows
-          .filter((r: any) => r.hasBusinessTrip && dayjs(r.date).isSameOrBefore(todayStr, 'day'))
-          .map((r: any) => dayjs(r.date).format('YYYY-MM-DD'))
+          .filter((r: any) => r.hasBusinessTrip && dayjs.tz(r.date, TZ_VN).isSameOrBefore(todayStr, 'day'))
+          .map((r: any) => dayjs.tz(r.date, TZ_VN).format('YYYY-MM-DD'))
       );
 
       const unauthorizedAbsenceDates: string[] = [];
@@ -712,11 +699,6 @@ export class MonthlyReportService {
       let calcTotalEarlyLeavePenalty = 0;
       let calcBusinessTripDays = 0;
 
-      console.log(`ℹ️ [attendance] Found ${approvedApplications.length} approved applications`);
-
-      // 4️⃣ ... existing code ...
-
-      // ... jump to line 712 ...
       const dailyRows = summary.attendanceData || [];
 
       for (const row of dailyRows) {

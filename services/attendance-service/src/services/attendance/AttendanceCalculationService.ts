@@ -13,11 +13,11 @@ dayjs.extend(isSameOrBefore);
 import TimeAttendanceModel from '@/Models/TimeAttendanceModel';
 import MonthlySummaryModel from '@/Models/MonthlySummaryModel';
 import {
+  isWorkingDay,
   checkDateHasLeave,
   checkDateHasBusinessTrip,
   getWorkingDaysConfig,
-  isWorkingDay,
-  // checkDateHasHoliday as checkHasHoliday
+  parseDBDate
 } from './AttendanceHelpers';
 import * as AttendanceHelpers from './AttendanceHelpers';
 import HolidayModel from '@/Models/HolidayModel';
@@ -30,6 +30,67 @@ dayjs.extend(isSameOrBefore);
 
 
 // Helper function to get user startDate from auth-service database directly
+// Helper function to get user applications from database directly if API fails
+export async function fetchApplicationsDirectly(userId: number, month: string): Promise<ApprovedLeaveApplication[]> {
+  const [year, monthNum] = month.split('-');
+  const url = `${process.env['APPLICATION_SERVICE_URL'] || 'http://127.0.0.1:4008'}/api/applications/user/${userId}/approved`;
+
+  try {
+    const appResp = await axios.get(url, {
+      params: { year: parseInt(year || ''), month: parseInt(monthNum || '') },
+      timeout: 5000
+    });
+    return appResp.data.data || [];
+  } catch (error) {
+    console.warn(`⚠️ [fetchApplicationsDirectly] API failed for User ${userId}, matching from DB directly...`);
+
+    let appDbConnection: any = null;
+    try {
+      appDbConnection = knex({
+        client: 'pg',
+        connection: {
+          host: process.env['DB_HOST'] || '127.0.0.1',
+          port: Number(process.env['DB_PORT']) || 5433,
+          database: 'application_service',
+          user: process.env['DB_USER'] || 'postgres',
+          password: process.env['DB_PASSWORD'] || '123456'
+        }
+      });
+
+      console.log(`🔗 [fetchApplicationsDirectly] Connecting to DB for User ${userId}...`);
+      // Fetch all overtime, leave, business trip apps for this user
+      const query = appDbConnection('applications')
+        .where('userId', userId)
+        .whereIn('type', ['overtime', 'leave', 'business-trip', 'business_trip', 'sick_leave', 'paid_leave', 'unpaid_leave'])
+        .where(function (this: any) {
+          this.where('status', 1);
+        });
+
+      const apps = await query;
+      console.log(`✅ [fetchApplicationsDirectly] Found ${apps.length} applications from DB for User ${userId}`);
+
+
+      // Post-filter by month since parsing JSON 'data' in SQL across variations is tricky
+      const filtered = apps.filter((app: any) => {
+        const d = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
+        const appDate = d.overtimeDate || d.date || d.startDate;
+        if (!appDate) return false;
+        const appMonth = parseDBDate(appDate).format('YYYY-MM');
+        return appMonth === month.substring(0, 7);
+      });
+
+      console.log(`✅ [fetchApplicationsDirectly] Found ${filtered.length} applications from DB for User ${userId} in ${month}`);
+      return filtered as ApprovedLeaveApplication[];
+    } catch (dbError) {
+      console.error(`❌ [fetchApplicationsDirectly] DB fallback failed:`, (dbError as any)?.message);
+      return [];
+    } finally {
+      if (appDbConnection) await appDbConnection.destroy();
+    }
+  }
+}
+
+
 async function getUserStartDate(userId: number): Promise<string | null> {
   let authDbConnection: any = null;
   try {
@@ -136,8 +197,8 @@ export class AttendanceCalculationService {
 
     // 1. Delete ALL auto-generated "Absent" records for this month to allow fresh detection
     // Auto-generated records typically have checkInTime=null and NO associated application causing them to be valid leave
-    const startOfMonth = dayjs(`${month}-01`).startOf('month').format('YYYY-MM-DD');
-    const endOfMonth = dayjs(`${month}-01`).endOf('month').format('YYYY-MM-DD');
+    const startOfMonth = dayjs.tz(`${month}-01`, 'Asia/Ho_Chi_Minh').startOf('month').format('YYYY-MM-DD');
+    const endOfMonth = dayjs.tz(`${month}-01`, 'Asia/Ho_Chi_Minh').endOf('month').format('YYYY-MM-DD');
 
     await TimeAttendanceModel.query()
       .delete()
@@ -157,8 +218,8 @@ export class AttendanceCalculationService {
 
   public static async calculateTotalLateDays(userId: number, month: string): Promise<number> {
     try {
-      const startDate = dayjs(`${month}-01`).startOf('month').format('YYYY-MM-DD');
-      const endDate = dayjs(`${month}-01`).endOf('month').format('YYYY-MM-DD');
+      const startDate = dayjs.tz(`${month}-01`, 'Asia/Ho_Chi_Minh').startOf('month').format('YYYY-MM-DD');
+      const endDate = dayjs.tz(`${month}-01`, 'Asia/Ho_Chi_Minh').endOf('month').format('YYYY-MM-DD');
 
       const result = await TimeAttendanceModel.query()
         .where('userId', userId)
@@ -177,8 +238,8 @@ export class AttendanceCalculationService {
 
   public static async calculateTotalEarlyLeaveDays(userId: number, month: string): Promise<number> {
     try {
-      const startDate = dayjs(`${month}-01`).startOf('month').format('YYYY-MM-DD');
-      const endDate = dayjs(`${month}-01`).endOf('month').format('YYYY-MM-DD');
+      const startDate = dayjs.tz(`${month}-01`, 'Asia/Ho_Chi_Minh').startOf('month').format('YYYY-MM-DD');
+      const endDate = dayjs.tz(`${month}-01`, 'Asia/Ho_Chi_Minh').endOf('month').format('YYYY-MM-DD');
 
       const result = await TimeAttendanceModel.query()
         .where('userId', userId)
@@ -198,8 +259,8 @@ export class AttendanceCalculationService {
   public static async getUserMonthlyAttendance(userId: number, month: string, _token?: string, useMonthlySummaryOnly: boolean = false, preFetchedApps?: any[]): Promise<any | null> {
     console.log(`🔍 [AttendanceCalculationService] getUserMonthlyAttendance: userId=${userId}, month=${month}`);
     try {
-      const startDate = dayjs(`${month}-01`).startOf('month').format('YYYY-MM-DD');
-      const endDate = dayjs(`${month}-01`).endOf('month').format('YYYY-MM-DD');
+      const startDate = dayjs.tz(`${month}-01`, 'Asia/Ho_Chi_Minh').startOf('month').format('YYYY-MM-DD');
+      const endDate = dayjs.tz(`${month}-01`, 'Asia/Ho_Chi_Minh').endOf('month').format('YYYY-MM-DD');
 
       const userStartDate = await getUserStartDate(userId);
       const monthlyRecord = await MonthlySummaryModel.getByUserAndMonth(userId, month);
@@ -282,20 +343,15 @@ export class AttendanceCalculationService {
       if (preFetchedApps) {
         approvedApplications.push(...preFetchedApps);
       } else {
-        try {
-          const [year, monthNum] = month.split('-');
-          const url = `${process.env['APPLICATION_SERVICE_URL'] || 'http://127.0.0.1:4008'}/api/applications/user/${userId}/approved`;
-          const appResp = await axios.get(url, { params: { year: parseInt(year || ''), month: parseInt(monthNum || '') } });
-          const apps = appResp.data.data || [];
-          approvedApplications.push(...apps);
-        } catch (e) { console.error('Error fetching apps:', (e as any).message); }
+        // Robust fetch: try API, then fallback to direct DB if needed
+        approvedApplications.push(...await fetchApplicationsDirectly(userId, month));
       }
 
       const daysInMonth = dayjs(`${month}-01`).daysInMonth();
       const enrichedAttendanceData: any[] = [];
 
       for (let day = 1; day <= daysInMonth; day++) {
-        const currentDate = dayjs(`${month}-${String(day).padStart(2, '0')}`);
+        const currentDate = dayjs.tz(`${month}-${String(day).padStart(2, '0')}`, 'Asia/Ho_Chi_Minh');
         const dateKey = currentDate.format('YYYY-MM-DD');
 
         if (userStartDate && dayjs(dateKey).isBefore(userStartDate, 'day')) continue;
@@ -317,8 +373,13 @@ export class AttendanceCalculationService {
           const d = typeof a.data === 'string' ? JSON.parse(a.data) : a.data;
           const appDate = d.overtimeDate || d.date;
           if (!appDate) return false;
-          // Use Vietnam timezone for consistency to avoid off-by-one errors
-          const normalizedAppDate = dayjs.tz(appDate, 'Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
+          // Use parseDBDate for consistent parsing across UTC strings and local date strings
+          const normalizedAppDate = parseDBDate(appDate).format('YYYY-MM-DD');
+
+          if (userId === 3 && (dateKey === '2026-02-14' || dateKey === '2026-02-15')) {
+            console.log(`🔍 [DEBUG OT] User 3, DateKey=${dateKey}, AppId=${a.id}, AppDateRaw=${appDate}, Normalized=${normalizedAppDate}, Match=${normalizedAppDate === dateKey}`);
+          }
+
           return normalizedAppDate === dateKey;
         });
         const hasApprovedOT = !!otApp;
@@ -412,7 +473,7 @@ export class AttendanceCalculationService {
           let rawStart = appData.startTime || appData.start_time || '08:00';
           let startTimeFormatted = rawStart;
           if (rawStart.includes('T') || rawStart.length > 8) {
-            startTimeFormatted = dayjs(rawStart).tz('Asia/Ho_Chi_Minh').format('HH:mm');
+            startTimeFormatted = dayjs.tz(rawStart, 'Asia/Ho_Chi_Minh').format('HH:mm');
           }
 
           let endTimeFormatted: string;
@@ -434,7 +495,7 @@ export class AttendanceCalculationService {
             endTimeFormatted = '17:00';
           } else {
             endTimeFormatted = rawEnd.includes('T') || rawEnd.length > 8
-              ? dayjs(rawEnd).tz('Asia/Ho_Chi_Minh').format('HH:mm')
+              ? dayjs.tz(rawEnd, 'Asia/Ho_Chi_Minh').format('HH:mm')
               : rawEnd.substring(0, 5);
           }
 
@@ -653,7 +714,7 @@ export class AttendanceCalculationService {
         }
 
         const normalizedOtDate = dayjs.tz(otDate, 'Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
-        const normalizedCheckDate = dayjs(date).format('YYYY-MM-DD');
+        const normalizedCheckDate = dayjs.tz(date, 'Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
 
         console.log(`  📅 App ${app.id} date comparison:`, {
           otDateUTC: otDate,

@@ -8,6 +8,15 @@ dayjs.extend(timezone);
 
 const TZ_VN = 'Asia/Ho_Chi_Minh';
 
+export function parseDBDate(date: any): dayjs.Dayjs {
+  if (!date) return dayjs.tz(undefined, TZ_VN);
+  // If it's a string containing T and Z, it's likely a UTC ISO string from DB
+  if (typeof date === 'string' && date.includes('T')) {
+    return dayjs.utc(date).tz(TZ_VN);
+  }
+  return dayjs.tz(date, TZ_VN);
+}
+
 interface WorkingDaysConfig {
   monday: boolean;
   tuesday: boolean;
@@ -63,7 +72,7 @@ export async function getWorkingDaysConfig(): Promise<WorkingDaysConfig> {
 }
 
 export function isWorkingDay(date: string, config: WorkingDaysConfig): boolean {
-  const dayOfWeek = dayjs(date).day(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+  const dayOfWeek = dayjs.tz(date, TZ_VN).day(); // 0=Sunday, 1=Monday, ..., 6=Saturday
   const daysMap: { [key: number]: keyof WorkingDaysConfig } = {
     0: 'sunday',
     1: 'monday',
@@ -112,21 +121,21 @@ export function checkDateHasLeave(date: string, applications: ApprovedLeaveAppli
 
       if (appData.startDate && appData.endDate) {
         // Chuyển date từ UTC sang local VN để so sánh ngày chính xác
-        const checkDate = dayjs(date).tz(TZ_VN).startOf('day');
-        const startDate = dayjs(appData.startDate).tz(TZ_VN).startOf('day');
-        const endDate = dayjs(appData.endDate).tz(TZ_VN).startOf('day');
+        const checkDate = dayjs.tz(date, TZ_VN).startOf('day');
+        const startDate = parseDBDate(appData.startDate).startOf('day');
+        const endDate = parseDBDate(appData.endDate).endOf('day');
 
         if ((checkDate.isSame(startDate) || checkDate.isAfter(startDate)) &&
           (checkDate.isSame(endDate) || checkDate.isBefore(endDate))) {
           return { hasLeave: true, leaveType: app.type, isPaidLeave: isPaid, leaveInfo };
         }
       }
-      if (appData.date && dayjs(appData.date).isSame(dayjs(date), 'day')) {
+      if (appData.date && parseDBDate(appData.date).format('YYYY-MM-DD') === dayjs.tz(date, TZ_VN).format('YYYY-MM-DD')) {
         return { hasLeave: true, leaveType: app.type, isPaidLeave: isPaid, leaveInfo };
       }
       if (appData.requestedDates && Array.isArray(appData.requestedDates)) {
         for (const reqDate of appData.requestedDates) {
-          if (dayjs(reqDate.date || reqDate).isSame(dayjs(date), 'day')) {
+          if (parseDBDate(reqDate.date || reqDate).format('YYYY-MM-DD') === dayjs.tz(date, TZ_VN).format('YYYY-MM-DD')) {
             return { hasLeave: true, leaveType: app.type, isPaidLeave: isPaid, leaveInfo };
           }
         }
@@ -145,9 +154,9 @@ export function checkDateHasBusinessTrip(date: string, applications: ApprovedLea
     if (app.type === 'business-trip' || app.type === 'business_trip') {
       const appData = typeof app.data === 'string' ? JSON.parse(app.data) : app.data;
       if (appData.startDate && appData.endDate) {
-        const checkDate = dayjs(date).tz(TZ_VN).startOf('day');
-        const startDate = dayjs(appData.startDate).tz(TZ_VN).startOf('day');
-        const endDate = dayjs(appData.endDate).tz(TZ_VN).startOf('day');
+        const checkDate = dayjs.tz(date, TZ_VN).startOf('day');
+        const startDate = parseDBDate(appData.startDate).startOf('day');
+        const endDate = parseDBDate(appData.endDate).endOf('day');
 
         if ((checkDate.isSame(startDate) || checkDate.isAfter(startDate)) &&
           (checkDate.isSame(endDate) || checkDate.isBefore(endDate))) {
