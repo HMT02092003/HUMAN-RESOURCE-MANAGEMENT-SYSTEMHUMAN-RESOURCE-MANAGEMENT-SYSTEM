@@ -62,48 +62,57 @@ async function getUserStartDate(userId: number): Promise<string | null> {
  */
 export class MonthlyReportService {
   static async buildMonthlyFull(userId: number, month: string, token?: string) {
-    console.log("🚀 [MonthlyReportService] I AM THE LATEST VERSION (Fixed TZs)");
-    // ✨ New simplified buildMonthlyFull logic: Read-only from DB (requested by user)
-    // 1. Fetch pre-calculated summary from DB (fast path)
-    const summary = await AttendanceCalculationService.getUserMonthlyAttendance(userId, month, token, false);
+    console.log("🚀 [MonthlyReportService] I AM THE LATEST VERSION (Read-only from DB)");
+    // ✨ Trả về mode CHỈ ĐỌC dữ liệu từ DB, không fetch realtime/tính lại toàn bộ (theo ý USER: "chỉ khi chấm công mới tính thôi còn lấy dữ liệu thì lấy thuần 100%").
 
-    if (!summary) {
-      console.log(`⚠️ [attendance] No summary found for user ${userId} month ${month}. Returning null/empty.`);
+    // 1. DỮ LIỆU THÁNG: Lấy 100% từ bảng monthly_attendances (Theo đúng yêu cầu DB > UI)
+    const monthlyRecord: any = await MonthlySummaryModel.query()
+      .where('userId', userId)
+      .where('month', month)
+      .first();
+
+    // 2. DỮ LIỆU NGÀY: Lấy từ time_attendances, đính kèm kết quả ghép Lễ/Phép (không cache/không tính lại DB)
+    const dailyDataRecalc: any = await AttendanceCalculationService.getUserMonthlyAttendance(userId, month, token, false);
+
+    if (!monthlyRecord) {
+      console.log(`⚠️ [attendance] Không tìm thấy dữ liệu thống kê tháng cho userId ${userId} tháng ${month} trong bảng monthly_attendances.`);
       return null;
     }
 
     const [yearStr, monthStr] = (month || '').split('-');
 
-    // 2. Map directly to response structure without re-calculation
+    // 3. Map directly to response structure for MonthlyStats
     const monthlyStats = {
-      totalDays: summary.totalScheduledDays || 0,
-      presentDays: summary.presentDays || 0,
-      absentDays: summary.absentDays || 0,
-      lateDays: summary.totalLateDays || 0,
-      earlyLeaveDays: summary.totalEarlyLeaveDays || 0,
-      totalHours: summary.totalWorkHours || 0,
-      averageHours: summary.averageWorkHours || 0,
-      overtimeHours: summary.totalOvertimeHours || 0,
-      totalLatePenalty: summary.totalLatePenalty || 0,
-      totalEarlyLeavePenalty: summary.totalEarlyLeavePenalty || 0,
-      totalPenalty: summary.totalPenalty || 0,
-      totalOvertimePay: summary.totalOvertimeSalary || 0,
-      totalLateMinutes: summary.totalLateMinutes || 0,
-      totalEarlyLeaveMinutes: summary.totalEarlyLeaveMinutes || 0,
-      unauthorizedAbsenceDays: summary.unauthorizedAbsenceDays || 0,
-      totalUnauthorizedAbsencePenalty: summary.totalUnauthorizedAbsencePenalty || 0,
+      totalDays: Number(monthlyRecord.totalScheduledDays || 0),
+      presentDays: Number(monthlyRecord.presentDays || 0),
+      absentDays: Number(monthlyRecord.absentDays || 0),
+      lateDays: Number(monthlyRecord.lateDays || 0),
+      earlyLeaveDays: Number(monthlyRecord.earlyLeaveDays || 0),
+      totalHours: Number(monthlyRecord.totalWorkHours || 0),
+      averageHours: Number(monthlyRecord.averageWorkHours || 0),
+      overtimeHours: Number(monthlyRecord.totalOvertimeHours || 0),
+      totalLatePenalty: Number(monthlyRecord.totalLatePenalty || 0),
+      totalEarlyLeavePenalty: Number(monthlyRecord.totalEarlyLeavePenalty || 0),
+      totalPenalty: Number(monthlyRecord.totalPenalty || 0),
+      totalOvertimePay: Number(monthlyRecord.totalOvertimeSalary || 0),
+      totalLateMinutes: Number(monthlyRecord.totalLateMinutes || 0),
+      totalEarlyLeaveMinutes: Number(monthlyRecord.totalEarlyLeaveMinutes || 0),
+      unauthorizedAbsenceDays: Number(monthlyRecord.unauthorizedAbsenceDays || 0),
+      totalUnauthorizedAbsencePenalty: Number(monthlyRecord.totalUnauthorizedAbsencePenalty || 0),
       // Derived for display
-      unauthorizedAbsencePenaltyPerDay: Math.round(summary.unauthorizedAbsenceDays > 0 ? summary.totalUnauthorizedAbsencePenalty / summary.unauthorizedAbsenceDays : 0),
-      approvedLeaveDays: summary.approvedLeaveDays || 0,
-      businessTripDays: summary.businessTripDays || 0,
-      totalWorkingUnits: summary.totalWorkingUnits || 0,
-      totalOtWorkingUnits: summary.totalOtWorkingUnits || 0,
-      totalEffectiveOtWorkingUnits: summary.totalOtWorkingUnits || 0,
-      totalOvertimeHours: summary.totalOvertimeHours || 0
+      unauthorizedAbsencePenaltyPerDay: Number(monthlyRecord.unauthorizedAbsenceDays > 0 ? Math.round(Number(monthlyRecord.totalUnauthorizedAbsencePenalty || 0) / Number(monthlyRecord.unauthorizedAbsenceDays)) : 0),
+      approvedLeaveDays: Number(monthlyRecord.approvedLeaveDays || 0),
+      businessTripDays: Number(monthlyRecord.businessTripDays || 0),
+      totalWorkingUnits: Number(monthlyRecord.totalWorkingUnits || 0),
+      totalOtWorkingUnits: Number(monthlyRecord.totalOtWorkingUnits || 0),
+      totalEffectiveOtWorkingUnits: Number(monthlyRecord.totalOtWorkingUnits || 0)
     };
 
-    // 3. Use snapshot directly from DB JSON
-    const dailyDetails = summary.attendanceData || [];
+    // 4. Lấy danh sách record hằng ngày đã format để gán cho Lịch
+    let dailyDetails = dailyDataRecalc?.attendanceData || [];
+    if (typeof dailyDetails === 'string') {
+      try { dailyDetails = JSON.parse(dailyDetails); } catch (e) { dailyDetails = []; }
+    }
 
     // 4. Lightweight formatting for UI (Status Text, Color)
     const mappedDetails = dailyDetails.map((d: any) => {
@@ -146,31 +155,31 @@ export class MonthlyReportService {
       data: {
         monthlyStats,
         dailyData: {
-          userId: summary.userId,
+          userId: monthlyRecord.userId,
           year: parseInt(yearStr || '0'),
           month: parseInt(monthStr || '0'),
-          monthlySalary: (summary as any).baseSalary || 0,
+          monthlySalary: monthlyRecord.baseSalary || 0,
           penaltyRate: 0,
           dailyDetails: mappedDetails,
           summary: {
             totalDays: mappedDetails.length,
             workingDays: mappedDetails.filter((d: any) => d.isWorkingDay !== false).length,
-            attendedDays: summary.presentDays || 0,
-            presentDays: summary.presentDays || 0,
-            lateDays: summary.totalLateDays || 0,
-            earlyLeaveDays: summary.totalEarlyLeaveDays || 0,
-            totalHours: summary.totalWorkHours || 0,
-            totalWorkingUnits: summary.totalWorkingUnits || 0,
-            totalOtWorkingUnits: summary.totalOtWorkingUnits || 0,
-            approvedLeaveDays: summary.approvedLeaveDays,
-            unauthorizedAbsenceDays: summary.unauthorizedAbsenceDays,
-            totalUnauthorizedAbsencePenalty: Math.round(summary.totalUnauthorizedAbsencePenalty),
-            unauthorizedAbsencePenaltyPerDay: Math.round(summary.unauthorizedAbsenceDays > 0 ? summary.totalUnauthorizedAbsencePenalty / summary.unauthorizedAbsenceDays : 0),
+            attendedDays: monthlyRecord.presentDays || 0,
+            presentDays: monthlyRecord.presentDays || 0,
+            lateDays: monthlyRecord.lateDays || 0,
+            earlyLeaveDays: monthlyRecord.earlyLeaveDays || 0,
+            totalHours: monthlyRecord.totalWorkHours || 0,
+            totalWorkingUnits: monthlyRecord.totalWorkingUnits || 0,
+            totalOtWorkingUnits: monthlyRecord.totalOtWorkingUnits || 0,
+            approvedLeaveDays: monthlyRecord.approvedLeaveDays,
+            unauthorizedAbsenceDays: monthlyRecord.unauthorizedAbsenceDays,
+            totalUnauthorizedAbsencePenalty: Math.round(monthlyRecord.totalUnauthorizedAbsencePenalty || 0),
+            unauthorizedAbsencePenaltyPerDay: Math.round(monthlyRecord.unauthorizedAbsenceDays > 0 ? (monthlyRecord.totalUnauthorizedAbsencePenalty || 0) / monthlyRecord.unauthorizedAbsenceDays : 0),
             weekendDays: 0,
-            totalLateMinutes: summary.totalLateMinutes,
-            totalEarlyLeaveMinutes: summary.totalEarlyLeaveMinutes,
+            totalLateMinutes: monthlyRecord.totalLateMinutes,
+            totalEarlyLeaveMinutes: monthlyRecord.totalEarlyLeaveMinutes,
             onTimeDays: 0,
-            totalOvertimeHours: summary.totalOvertimeHours
+            totalOvertimeHours: monthlyRecord.totalOvertimeHours
           }
         }
       }
@@ -766,14 +775,14 @@ export class MonthlyReportService {
         console.log(`🔍 [attendance] Patching monthly id=${existing.id} with updated_at=${payload.updated_at}, businessTripDays=${payload.businessTripDays}`);
         const patchResult = await MonthlySummaryModel.query().patch(payload).where({ id: existing.id });
         console.log(`✅ [attendance] Updated monthly summary for user ${userId} month ${m}, patchResult=${patchResult}`);
-        return { success: true, action: 'updated', data: payload, id: existing.id };
+        return { success: true, action: 'updated', data: { ...payload, baseSalary: fetchedBaseSalary }, id: existing.id };
       } else {
         const inserted = await MonthlySummaryModel.query().insert({
           ...payload,
           created_at: new Date().toISOString()
         });
         console.log(`✅ [attendance] Created monthly summary for user ${userId} month ${m}`);
-        return { success: true, action: 'inserted', data: inserted };
+        return { success: true, action: 'inserted', data: { ...inserted, baseSalary: fetchedBaseSalary } };
       }
     } catch (error: any) {
       console.error('❌ [attendance] Error in calculateAndSaveMonthlyAttendance:', error);
