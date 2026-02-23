@@ -65,7 +65,7 @@ export class MonthlyReportService {
     console.log("🚀 [MonthlyReportService] I AM THE LATEST VERSION (Fixed TZs)");
     // ✨ New simplified buildMonthlyFull logic: Read-only from DB (requested by user)
     // 1. Fetch pre-calculated summary from DB (fast path)
-    const summary = await AttendanceCalculationService.getUserMonthlyAttendance(userId, month, token, true);
+    const summary = await AttendanceCalculationService.getUserMonthlyAttendance(userId, month, token, false);
 
     if (!summary) {
       console.log(`⚠️ [attendance] No summary found for user ${userId} month ${month}. Returning null/empty.`);

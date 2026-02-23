@@ -205,7 +205,7 @@ export const getDailyAttendanceForExport = async (req: Request, res: Response) =
 // ⭐ CẬP NHẬT: Tính toán chính xác theo yêu cầu mới
 export const getUserMonthlyFull = async (req: Request, res: Response) => {
   try {
-    console.log('\n📊 === GET USER MONTHLY FULL (Compatibility) ===');
+    console.log('\n📊 === GET USER MONTHLY FULL ===');
 
     const { userId } = req.params;
     const { year, month } = req.query;
@@ -225,72 +225,9 @@ export const getUserMonthlyFull = async (req: Request, res: Response) => {
     // Format month
     const monthStr = `${year}-${String(month).padStart(2, '0')}`;
 
-    // First try to read monthly summary row (monthly_attendances)
-    const monthlyRecord = await MonthlySummaryModel.getByUserAndMonth(parseInt(userId), monthStr);
+    console.log(`Bypassing cache for user ${userId} month ${monthStr}, calculating on-the-fly...`);
 
-    if (monthlyRecord && (monthlyRecord as any).dailyDetails) {
-      // Return 100% from monthly_attendances if record exists
-      let dailyDetails: any[] = [];
-      try {
-        const raw = (monthlyRecord as any).dailyDetails;
-        if (typeof raw === 'string') {
-          dailyDetails = JSON.parse(raw);
-        } else if (typeof raw === 'object') {
-          dailyDetails = raw; // Already parsed by pg driver
-        }
-      } catch (e) { dailyDetails = []; }
-
-      const db: any = monthlyRecord as any;
-
-      // Use values directly from DB columns as requested (no re-calculation)
-      const monthlyStats = {
-        totalDays: Number(db.totalScheduledDays || 0),
-        presentDays: Number(db.presentDays || 0),
-        absentDays: Number(db.absentDays || 0),
-        lateDays: Number(db.lateDays || 0),
-        earlyLeaveDays: Number(db.earlyLeaveDays || 0),
-        totalHours: Number(db.totalWorkHours || 0),
-        averageHours: Number(db.averageWorkHours || 0),
-        overtimeHours: Number(db.totalOvertimeHours || 0),
-        totalOvertimeHours: Number(db.totalOvertimeHours || 0),
-        totalLatePenalty: Number(db.totalLatePenalty || 0),
-        totalEarlyLeavePenalty: Number(db.totalEarlyLeavePenalty || 0),
-        totalPenalty: Number(db.totalPenalty || 0),
-        totalOvertimePay: Number(db.totalOvertimeSalary || 0),
-        totalLateMinutes: Number(db.totalLateMinutes || 0),
-        totalEarlyLeaveMinutes: Number(db.totalEarlyLeaveMinutes || 0),
-        unauthorizedAbsenceDays: Number(db.unauthorizedAbsenceDays || 0),
-        totalUnauthorizedAbsencePenalty: Number(db.totalUnauthorizedAbsencePenalty || 0),
-        unauthorizedAbsencePenaltyPerDay: Number(db.unauthorizedAbsenceDays > 0 ? Math.round(Number(db.totalUnauthorizedAbsencePenalty || 0) / Number(db.unauthorizedAbsenceDays)) : 0),
-        approvedLeaveDays: Number(db.approvedLeaveDays || 0),
-        businessTripDays: Number(db.businessTripDays || 0),
-        totalWorkingUnits: Number(db.totalWorkingUnits || 0),
-        totalOtWorkingUnits: Number(db.totalOtWorkingUnits || 0),
-        totalEffectiveOtWorkingUnits: Number(db.totalOtWorkingUnits || 0)
-      };
-
-      return res.status(200).json({
-        success: true,
-        data: {
-          monthlyStats,
-          dailyData: {
-            userId: parseInt(userId),
-            month: Number(monthStr.split('-')[1]),
-            year: Number(monthStr.split('-')[0]),
-            dailyDetails,
-            monthlySalary: Number(db.baseSalary || 0),
-            penaltyRate: 0,
-            summary: {
-              ...monthlyStats,
-              workingDays: Number(db.totalScheduledDays || 0),
-              attendedDays: Number(db.presentDays || 0)
-            }
-          }
-        }
-      });
-    }
-
-    // Fallback: delegate to existing service to compute on the fly
+    // Delegate to existing service to compute on the fly ALWAYS
     const payload = await AttendanceService.getUserMonthlyFull(parseInt(userId), monthStr, token);
 
     if (!payload) return res.status(404).json({ success: false, message: 'Không tìm thấy dữ liệu chấm công' });
