@@ -1009,13 +1009,31 @@ export class AttendanceCalculationService {
     const allowedLateMinutesVal = await SettingsService.getSettingValue('AllowedLateMinutes');
     const allowedLateMinutes = allowedLateMinutesVal ? parseInt(allowedLateMinutesVal.value) : 0;
 
+    // 🔥 TÍNH TOÁN HIỆU LỰC TRONG CA TRÁNH TRƯỜNG HỢP CHẤM CÔNG NGOÀI CA:
+    let effectiveCheckIn = checkIn.clone();
+    let effectiveCheckOut = checkOutTime ? dayjs.utc(checkOutTime).tz('Asia/Ho_Chi_Minh') : null;
+
+    // Giới hạn thời gian nằm trong đoạn [expectedCheckIn, expectedCheckOut]
+    if (effectiveCheckIn.isBefore(expectedCheckIn)) effectiveCheckIn = expectedCheckIn;
+    if (effectiveCheckIn.isAfter(expectedCheckOut)) effectiveCheckIn = expectedCheckOut;
+
+    if (effectiveCheckOut) {
+      if (effectiveCheckOut.isAfter(expectedCheckOut)) effectiveCheckOut = expectedCheckOut;
+      if (effectiveCheckOut.isBefore(expectedCheckIn)) effectiveCheckOut = expectedCheckIn;
+    }
+
+    // Nếu thời gian hiệu lực coi như không có làm việc trong ca (nằm hoàn toàn ngoài ca)
+    const isOutofShiftBoundary = effectiveCheckOut
+      ? !effectiveCheckIn.isBefore(effectiveCheckOut)
+      : !checkIn.isBefore(expectedCheckOut); // Nếu ko có checkout, chỉ checkin thì xem checkin có lố ca ko
+
     // Tính late minutes - trừ đi thời gian cho phép đi muộn
     // ⚠️ CRITICAL FIX: Chỉ tính muộn nếu là ngày làm việc bình thường.
     // Đối với Ngày Lễ/Cuối Tuần, việc tính muộn/sớm sẽ được thực hiện riêng trong khối logic phía dưới (nếu có OT).
     let lateMinutes = 0;
-    if (isNormalWorkingDay) {
-      const rawLateMinutes = checkIn.isAfter(expectedCheckIn)
-        ? checkIn.diff(expectedCheckIn, 'minute')
+    if (isNormalWorkingDay && !isOutofShiftBoundary) {
+      const rawLateMinutes = effectiveCheckIn.isAfter(expectedCheckIn)
+        ? effectiveCheckIn.diff(expectedCheckIn, 'minute')
         : 0;
       lateMinutes = Math.max(0, rawLateMinutes - allowedLateMinutes);
 
@@ -1026,8 +1044,9 @@ export class AttendanceCalculationService {
 
     console.log('⏰ Late calculation:');
     if (isNormalWorkingDay) {
-      console.log('- checkIn.isAfter(expectedCheckIn):', checkIn.isAfter(expectedCheckIn));
-      console.log('- Diff in minutes:', checkIn.diff(expectedCheckIn, 'minute'));
+      console.log('- effectiveCheckIn.isAfter(expectedCheckIn):', effectiveCheckIn.isAfter(expectedCheckIn));
+      console.log('- Diff in minutes:', effectiveCheckIn.diff(expectedCheckIn, 'minute'));
+      if (isOutofShiftBoundary) console.log('- 🔴 Out of shift boundary! set late/early to 0.');
     } else {
       console.log('- Holiday/Weekend: Default lateMinutes set to 0. OT specific calculation will follow.');
     }
@@ -1067,9 +1086,9 @@ export class AttendanceCalculationService {
 
       // Tính early departure minutes - chỉ tính nếu check-out sớm hơn giờ quy định và là ngày thường
       let earlyDepartureMinutes = 0;
-      if (isNormalWorkingDay) {
-        earlyDepartureMinutes = checkOut.isBefore(expectedCheckOut)
-          ? expectedCheckOut.diff(checkOut, 'minute')
+      if (isNormalWorkingDay && !isOutofShiftBoundary) {
+        earlyDepartureMinutes = effectiveCheckOut!.isBefore(expectedCheckOut)
+          ? expectedCheckOut.diff(effectiveCheckOut, 'minute')
           : 0;
       }
 
@@ -1079,15 +1098,21 @@ export class AttendanceCalculationService {
       console.log('🏃 Early departure calculation:', { earlyDepartureMinutes });
 
       // Tính tổng giờ làm việc (trừ lunch break)
-      const totalMinutes = checkOut.diff(checkIn, 'minute');
-      const lunchBreakMinutes = this.calculateLunchBreakTime(
-        checkIn,
-        checkOut,
-        lunchBreak,
-        date
-      );
+      let workMinutes = 0;
+      let totalMinutes = 0;
+      let lunchBreakMinutes = 0;
 
-      const workMinutes = Math.max(0, totalMinutes - lunchBreakMinutes);
+      if (!isOutofShiftBoundary && effectiveCheckOut) {
+        totalMinutes = effectiveCheckOut.diff(effectiveCheckIn, 'minute');
+        lunchBreakMinutes = this.calculateLunchBreakTime(
+          effectiveCheckIn,
+          effectiveCheckOut,
+          lunchBreak,
+          date
+        );
+        workMinutes = Math.max(0, totalMinutes - lunchBreakMinutes);
+      }
+
       result.workHours = Math.round((workMinutes / 60) * 100) / 100; // Round to 2 decimal places
 
       console.log('💼 Work hours calculation:');

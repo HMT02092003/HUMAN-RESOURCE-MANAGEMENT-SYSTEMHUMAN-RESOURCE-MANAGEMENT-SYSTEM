@@ -700,7 +700,7 @@ const ShiftRegistrationManagement = () => {
                                 </div>
 
                                 {fields.map((field, index) => (
-                                    <Space key={field.key} style={{ display: 'flex', marginBottom: 8, alignItems: 'flex-start' }} align="baseline">
+                                    <div key={field.key} style={{ display: 'flex', marginBottom: 8, alignItems: 'flex-start', width: '100%', gap: 8 }}>
                                         <Form.Item
                                             {...field}
                                             name={[field.name, 'date']}
@@ -720,7 +720,7 @@ const ShiftRegistrationManagement = () => {
                                                     }
                                                 }
                                             ]}
-                                            style={{ marginBottom: 0, width: 180 }}
+                                            style={{ marginBottom: 0, width: 140 }}
                                         >
                                             <DatePicker format="DD/MM/YYYY" placeholder="Chọn ngày" style={{ width: '100%' }} />
                                         </Form.Item>
@@ -729,7 +729,7 @@ const ShiftRegistrationManagement = () => {
                                             {...field}
                                             name={[field.name, 'shift_id']}
                                             rules={[{ required: true, message: 'Chọn ca' }]}
-                                            style={{ marginBottom: 0, width: 220 }}
+                                            style={{ marginBottom: 0, width: 340 }}
                                         >
                                             <Select placeholder="Chọn ca làm việc" style={{ width: '100%' }}>
                                                 {configurations.map(config => (
@@ -753,8 +753,9 @@ const ShiftRegistrationManagement = () => {
                                             danger
                                             icon={<DeleteOutlined />}
                                             onClick={() => remove(field.name)}
+                                            style={{ marginTop: 4 }}
                                         />
-                                    </Space>
+                                    </div>
                                 ))}
 
                                 {fields.length === 0 && (
