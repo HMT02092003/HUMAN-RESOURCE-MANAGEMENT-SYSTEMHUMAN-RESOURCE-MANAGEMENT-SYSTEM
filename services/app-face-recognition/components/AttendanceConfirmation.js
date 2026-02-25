@@ -159,26 +159,28 @@ export default function AttendanceConfirmation({
         </View>
 
         <View style={styles.infoContainer}>
-          <View style={styles.infoRow}>
-            <Ionicons name="person" size={24} color="#007AFF" />
-            <Text style={styles.infoLabel}>Tên nhân viên:</Text>
-            <Text style={[styles.infoValue, (!isRecognitionSuccessful && !isSpoof) && styles.errorText]}>
-              {fullName !== 'N/A' ? fullName : (isRecognitionSuccessful ? 'Xác định' : 'Chưa nhận diện')}
-            </Text>
-          </View>
+          {!isSpoof ? (
+            <>
+              <View style={styles.infoRow}>
+                <Ionicons name="person" size={24} color="#007AFF" />
+                <Text style={styles.infoLabel}>Tên nhân viên:</Text>
+                <Text style={[styles.infoValue, !isRecognitionSuccessful && styles.errorText]}>
+                  {isRecognitionSuccessful ? fullName : 'Chưa nhận diện'}
+                </Text>
+              </View>
 
-          <View style={styles.infoRow}>
-            <Ionicons name="person-circle" size={24} color="#007AFF" />
-            <Text style={styles.infoLabel}>Tài khoản:</Text>
-            <Text style={[styles.infoValue, (!isRecognitionSuccessful && !isSpoof) && styles.errorText]}>
-              {username !== 'N/A' ? username : (isRecognitionSuccessful ? 'Xác định' : 'Chưa nhận diện')}
-            </Text>
-          </View>
-
-          {isSpoof && (
+              <View style={styles.infoRow}>
+                <Ionicons name="person-circle" size={24} color="#007AFF" />
+                <Text style={styles.infoLabel}>Tài khoản:</Text>
+                <Text style={[styles.infoValue, !isRecognitionSuccessful && styles.errorText]}>
+                  {isRecognitionSuccessful ? username : 'Chưa nhận diện'}
+                </Text>
+              </View>
+            </>
+          ) : (
             <View style={styles.infoRow}>
               <Ionicons name="shield-checkmark" size={24} color="#FF3B30" />
-              <Text style={[styles.infoValue, styles.errorText, { marginLeft: 10, fontSize: 16 }]}>
+              <Text style={[styles.infoValue, styles.errorText, { marginLeft: 10, fontSize: 16, fontWeight: '700' }]}>
                 HỆ THỐNG AN NINH
               </Text>
             </View>
@@ -194,30 +196,28 @@ export default function AttendanceConfirmation({
               }
             </Text>
           </View>
-        </View>
 
-        {/* Hiển thị warning nếu confidence thấp (35-50%) */}
-        {/* Hiển thị thông tin từ server (ví dụ: Liveness failed, lỗi chất lượng, mô tả) */}
-        {serverMessage ? (
-          <View style={isRecognitionSuccessful ? styles.infoContainerSmall : styles.errorContainer}>
-            <Ionicons name={isRecognitionSuccessful ? "information-circle" : "alert-circle"} size={20} color={isRecognitionSuccessful ? "#007AFF" : "#FF3B30"} />
-            <Text style={[isRecognitionSuccessful ? styles.infoText : styles.errorMessage, { marginLeft: 8 }]}>
-              {isRecognitionSuccessful && serverMessage.includes('Nhận diện thành công')
-                ? `Nhận diện thành công: ${fullName}`
-                : serverMessage}
-            </Text>
-          </View>
-        ) : (
-          // Nếu không có server message, giữ cảnh báo confidence thấp như fallback
-          isRecognitionSuccessful && confidence < 50 && confidence >= 35 && (
-            <View style={styles.warningContainer}>
-              <Ionicons name="alert-circle" size={24} color="#FF9500" />
-              <Text style={styles.warningMessage}>
-                ⚠️ Độ tin cậy thấp ({confidence}%). Có thể do đeo khẩu trang hoặc ánh sáng kém. Vui lòng kiểm tra kỹ thông tin trước khi xác nhận.
+          {/* Di chuyển thông báo lỗi vào bên trong khung kết quả */}
+          {serverMessage ? (
+            <View style={[isRecognitionSuccessful ? styles.infoContainerSmall : styles.errorContainer, { marginTop: 15, marginHorizontal: 0, width: '100%', elevation: 0, shadowOpacity: 0 }]}>
+              <Ionicons name={isRecognitionSuccessful ? "information-circle" : "alert-circle"} size={20} color={isRecognitionSuccessful ? "#007AFF" : "#FF3B30"} />
+              <Text style={[isRecognitionSuccessful ? styles.infoText : styles.errorMessage, { marginLeft: 8 }]}>
+                {isRecognitionSuccessful && serverMessage.includes('Nhận diện thành công')
+                  ? `Nhận diện thành công: ${fullName}`
+                  : serverMessage}
               </Text>
             </View>
-          )
-        )}
+          ) : (
+            isRecognitionSuccessful && confidence < 50 && confidence >= 35 && (
+              <View style={[styles.warningContainer, { marginTop: 15 }]}>
+                <Ionicons name="alert-circle" size={24} color="#FF9500" />
+                <Text style={styles.warningMessage}>
+                  ⚠️ Độ tin cậy thấp ({confidence}%). Vui lòng kiểm tra lại.
+                </Text>
+              </View>
+            )
+          )}
+        </View>
       </View>
 
       <View style={styles.buttonContainer}>

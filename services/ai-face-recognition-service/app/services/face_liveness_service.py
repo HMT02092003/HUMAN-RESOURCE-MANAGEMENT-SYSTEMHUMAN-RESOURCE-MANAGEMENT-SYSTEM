@@ -162,8 +162,8 @@ class FaceLivenessDetector:
             )
         
         try:
-            # Crop face nếu có bbox. Use scale factor 2.7 required by MiniFASNetV2.
-            scale = 2.7
+            # Crop face nếu có bbox. Use scale factor 3.5 to capture more context for spoofing detection.
+            scale = 3.5
             if bbox is not None:
                 # Ensure bbox are ints
                 x1, y1, x2, y2 = list(map(int, bbox))
