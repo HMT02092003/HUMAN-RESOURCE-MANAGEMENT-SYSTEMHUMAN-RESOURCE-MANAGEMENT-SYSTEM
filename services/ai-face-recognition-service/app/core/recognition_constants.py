@@ -25,8 +25,8 @@ class RecognitionConfig:
 
     # 2. Độ nét (Blur Score - Laplacian Variance)
     # Càng cao càng nét. Camera trước điện thoại thường bị noise/mờ.
-    # Giảm xuống 30 để chấp nhận ảnh hơi mờ/rung nhẹ (theo yêu cầu user).
-    MIN_BLUR_SCORE = 30
+    # Giảm xuống 12 để chấp nhận ảnh hơi mờ/rung nhẹ (đặc biệt cho camera điện thoại đời thấp).
+    MIN_BLUR_SCORE = 12.0
 
     # --- CẤU HÌNH PHÁT HIỆN KHUÔN MẶT (DETECTION) ---
     # Kích thước khuôn mặt tối thiểu (pixel) để chấp nhận xử lý

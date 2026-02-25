@@ -185,7 +185,7 @@ export default function AttendanceConfirmation({
               <Ionicons name={isRecognitionSuccessful ? "information-circle" : "alert-circle"} size={20} color={isRecognitionSuccessful ? "#007AFF" : "#FF3B30"} />
               <Text style={[isRecognitionSuccessful ? styles.infoText : styles.errorMessage, { marginLeft: 8 }]}>
                 {isRecognitionSuccessful && serverMessage.includes('Nhận diện thành công')
-                  ? serverMessage.replace(user.username, '').replace(':', ': ').trim() + ` ${fullName}`
+                  ? `Nhận diện thành công: ${fullName}`
                   : serverMessage}
               </Text>
             </View>

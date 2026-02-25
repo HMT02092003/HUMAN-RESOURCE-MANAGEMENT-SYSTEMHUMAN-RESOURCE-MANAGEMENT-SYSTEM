@@ -11,6 +11,7 @@ import onnxruntime as ort
 from typing import Dict, Tuple, Optional
 from dataclasses import dataclass
 import os
+from app.config.rate_config import LIVENESS_THRESHOLD
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +34,8 @@ class FaceLivenessDetector:
     
     _instance = None
     
-    # Ngưỡng confidence
-    REAL_THRESHOLD = 0.4  # Nếu score > 0.4 => REAL, ngược lại => FAKE
+    # Ngưỡng confidence (0-1). Lấy từ config trung tâm (rate_config)
+    REAL_THRESHOLD = float(LIVENESS_THRESHOLD)
     
     # Kích thước input model
     INPUT_SIZE = (80, 80)  # Hoặc (224, 224) tùy model bạn dùng
@@ -292,9 +293,12 @@ class FaceLivenessDetector:
             label = "REAL" if is_real else "FAKE"
             
             if is_real:
-                message = f"✅ Ảnh thật (confidence={confidence:.2%})"
+                message = "Xác thực ảnh thật thành công"
             else:
-                message = f"❌ Ảnh giả mạo (confidence={confidence:.2%})"
+                if confidence > 0.15:
+                    message = "Không xác thực được tính chính chủ. Vui lòng căn chỉnh lại ánh sáng."
+                else:
+                    message = "Phát hiện dấu hiệu giả mạo (Ảnh in/Màn hình)."
             
             logger.info(f"Liveness check: {label} (confidence={confidence:.2%})")
             

@@ -96,7 +96,7 @@ class MultiAngleFaceService:
             if blur_score < recognition_settings.MIN_BLUR_SCORE:
                 return {
                     "success": False, 
-                    "message": f"Ảnh bị mờ (Score: {int(blur_score)}). Vui lòng giữ chắc tay."
+                    "message": "Ảnh chưa được rõ nét. Vui lòng giữ chắc tay và chụp lại."
                 }
             # -----------------------------------
 
@@ -114,26 +114,8 @@ class MultiAngleFaceService:
             # Get largest face
             face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
             
-            # --- 3. Check Liveness (Anti-Spoofing) ---
-            from app.services.face_liveness_service import face_liveness_detector
-            
-            # Chỉ kiểm tra nếu model đã load thành công
-            if face_liveness_detector.is_available():
-                # Pass original image and face bbox for precise cropping
-                liveness_result = face_liveness_detector.check_liveness(img, face.bbox)
-                
-                # Log kết quả kiểm tra
-                if not liveness_result.is_real:
-                    logger.warning(f"⚠️ Spoof detected! {liveness_result.message} (Score: {liveness_result.confidence:.2f})")
-                    return {
-                        "success": False, 
-                        "message": f"PHÁT HIỆN GIẢ MẠO: {liveness_result.message}",
-                        "is_spoof": True,
-                        "spoof_score": liveness_result.confidence
-                    }
-                else:
-                    logger.info(f"✅ Liveness check passed: {liveness_result.confidence:.2f}")
-            # -----------------------------------------
+            # Liveness check will be handled separately in recognition flow
+            # to provide better error messages for unknown users.
 
             # --- 4. Check Face Size (Resolution) ---
             face_w = face.bbox[2] - face.bbox[0]
@@ -411,6 +393,40 @@ class MultiAngleFaceService:
             
             embedding = process_result["embedding"]
             
+            # --- STAGE: Liveness Check (Anti-Spoofing) ---
+            # Perform liveness check after basic validation but before final confirmation
+            from app.services.face_liveness_service import face_liveness_detector
+            if face_liveness_detector.is_available():
+                # Extract bbox from process_result
+                face_obj = process_result["face"]
+                # Decode image again for liveness (or we could pass it from process_result)
+                nparr = np.frombuffer(image_bytes, np.uint8)
+                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                
+                liveness_result = face_liveness_detector.check_liveness(img, face_obj.bbox)
+                
+                if not liveness_result.is_real:
+                    # Log spoof attempt
+                    log = AttendanceLog(
+                        user_id=0,
+                        username='spoof_detected',
+                        recognition_type=recognition_type,
+                        similarity_score=0.0,
+                        status='spoof_detected',
+                        notes=liveness_result.message,
+                        image_snapshot_url=snapshot_url
+                    )
+                    db.add(log)
+                    db.commit()
+                    
+                    return {
+                        "success": False,
+                        "message": liveness_result.message,
+                        "is_spoof": True,
+                        "image_snapshot_url": snapshot_url
+                    }
+            # ---------------------------------------------
+
             # Search in database
             match = self.search_face(db, embedding, threshold)
             

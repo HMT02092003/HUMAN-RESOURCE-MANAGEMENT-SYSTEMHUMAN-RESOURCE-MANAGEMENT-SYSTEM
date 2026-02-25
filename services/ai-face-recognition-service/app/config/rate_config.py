@@ -4,8 +4,8 @@ Put tunable thresholds here so they can be changed without editing service code.
 """
 
 # --- Quality thresholds (server-side) ---
-# Baseline blur threshold (Laplacian variance). Lowered to 15.0 per user request.
-BLUR_THRESHOLD = 15.0
+# Baseline blur threshold (Laplacian variance). Lowered to 8.0 to accommodate lower resolution cameras.
+BLUR_THRESHOLD = 8.0
 
 # Brightness range (0-255)
 BRIGHTNESS_MIN = 35
@@ -25,7 +25,7 @@ HORIZONTAL_MARGIN_LEFT_PERCENT = 0.12
 HORIZONTAL_MARGIN_RIGHT_PERCENT = 0.20
 VERTICAL_MARGIN_PERCENT = 0.15
 
-# Liveness / anti-spoof threshold (0-1)
+# Liveness / anti-spoof threshold (0-1). Increased to 0.85 for high security.
 LIVENESS_THRESHOLD = 0.85
 
 # Recognition thresholds

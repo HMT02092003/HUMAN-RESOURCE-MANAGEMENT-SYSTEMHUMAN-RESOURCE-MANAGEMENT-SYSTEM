@@ -86,7 +86,7 @@ class FaceQualityChecker:
         details['blur_score'] = blur_score
         details['is_sharp'] = is_sharp
         if not is_sharp:
-            messages.append(f"Ảnh bị mờ (score={blur_score:.1f}, cần >={self.BLUR_THRESHOLD})")
+            messages.append("Ảnh bị mờ, vui lòng giữ yên điện thoại.")
         
         # 2. Kiểm tra độ sáng
         brightness, brightness_ok, brightness_msg = self.check_brightness(image)
