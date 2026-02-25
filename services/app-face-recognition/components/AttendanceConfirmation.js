@@ -19,6 +19,7 @@ export default function AttendanceConfirmation({
   const confidence = user?.confidence_score ?? recognitionData?.data?.confidence ?? 0;
   const fullName = user?.fullName || user?.full_name || user?.fullname || user?.name || recognitionData?.data?.fullName || recognitionData?.data?.full_name || recognitionData?.data?.fullname || user?.username || 'Chưa xác định';
   const isRecognitionSuccessful = Boolean(recognitionData?.success && user?.user_id);
+  const isSpoof = Boolean(recognitionData?.is_spoof || recognitionData?.data?.is_spoof);
   const serverMessage = recognitionData?.message || recognitionData?.error || recognitionData?.data?.message || recognitionData?.data?.error || recognitionData?.details?.message || '';
 
   const handleConfirm = async () => {
@@ -128,6 +129,12 @@ export default function AttendanceConfirmation({
           <Text style={styles.confidenceText}>Xác định</Text>
         </View>
       );
+    } else if (isSpoof) {
+      return (
+        <View style={[styles.confidenceBadge, { backgroundColor: '#FF3B30' }]}>
+          <Text style={styles.confidenceText}>GIẢ MẠO</Text>
+        </View>
+      );
     } else {
       return (
         <View style={[styles.confidenceBadge, { backgroundColor: '#FF3B30' }]}>
@@ -154,16 +161,16 @@ export default function AttendanceConfirmation({
           <View style={styles.infoRow}>
             <Ionicons name="person" size={24} color="#007AFF" />
             <Text style={styles.infoLabel}>Tên nhân viên:</Text>
-            <Text style={[styles.infoValue, !isRecognitionSuccessful && styles.errorText]}>
-              {isRecognitionSuccessful ? fullName : 'Chưa nhận diện'}
+            <Text style={[styles.infoValue, (!isRecognitionSuccessful || isSpoof) && styles.errorText]}>
+              {isRecognitionSuccessful ? fullName : (isSpoof ? 'Cảnh báo bảo mật' : 'Chưa nhận diện')}
             </Text>
           </View>
 
           <View style={styles.infoRow}>
             <Ionicons name="person-circle" size={24} color="#007AFF" />
             <Text style={styles.infoLabel}>Tài khoản:</Text>
-            <Text style={[styles.infoValue, !isRecognitionSuccessful && styles.errorText]}>
-              {isRecognitionSuccessful ? user.username : 'Chưa nhận diện'}
+            <Text style={[styles.infoValue, (!isRecognitionSuccessful || isSpoof) && styles.errorText]}>
+              {isRecognitionSuccessful ? user.username : (isSpoof ? 'Phát hiện giả mạo' : 'Chưa nhận diện')}
             </Text>
           </View>
 

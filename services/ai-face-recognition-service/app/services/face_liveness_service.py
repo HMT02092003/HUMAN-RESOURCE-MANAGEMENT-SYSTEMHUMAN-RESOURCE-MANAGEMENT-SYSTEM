@@ -296,9 +296,9 @@ class FaceLivenessDetector:
                 message = "Xác thực ảnh thật thành công"
             else:
                 if confidence > 0.15:
-                    message = "Không xác thực được tính chính chủ. Vui lòng căn chỉnh lại ánh sáng."
+                    message = "KHÔNG XÁC THỰC ĐƯỢC CHÍNH CHỦ. Vui lòng căn chỉnh lại ánh sáng và nhìn thẳng camera."
                 else:
-                    message = "Phát hiện dấu hiệu giả mạo (Ảnh in/Màn hình)."
+                    message = "PHÁT HIỆN ẢNH GIẢ MẠO (Ảnh in/Màn hình điện thoại)."
             
             logger.info(f"Liveness check: {label} (confidence={confidence:.2%})")
             
