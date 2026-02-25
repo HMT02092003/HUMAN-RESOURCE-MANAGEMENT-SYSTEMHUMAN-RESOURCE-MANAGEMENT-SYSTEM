@@ -25,8 +25,8 @@ HORIZONTAL_MARGIN_LEFT_PERCENT = 0.12
 HORIZONTAL_MARGIN_RIGHT_PERCENT = 0.20
 VERTICAL_MARGIN_PERCENT = 0.15
 
-# Liveness / anti-spoof threshold (0-1). Set to 0.75 for balanced security.
-LIVENESS_THRESHOLD = 0.75
+# Liveness / anti-spoof threshold (0-1). Set to 0.90 to block high-quality screen spoofs.
+LIVENESS_THRESHOLD = 0.90
 
 # Recognition thresholds
 MIN_THRESHOLD = 0.35

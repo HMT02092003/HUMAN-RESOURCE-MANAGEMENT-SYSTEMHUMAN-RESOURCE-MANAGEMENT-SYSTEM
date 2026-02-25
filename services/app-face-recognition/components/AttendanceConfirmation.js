@@ -158,21 +158,34 @@ export default function AttendanceConfirmation({
         </View>
 
         <View style={styles.infoContainer}>
-          <View style={styles.infoRow}>
-            <Ionicons name="person" size={24} color="#007AFF" />
-            <Text style={styles.infoLabel}>Tên nhân viên:</Text>
-            <Text style={[styles.infoValue, (!isRecognitionSuccessful || isSpoof) && styles.errorText]}>
-              {isRecognitionSuccessful ? fullName : (isSpoof ? 'Cảnh báo bảo mật' : 'Chưa nhận diện')}
-            </Text>
-          </View>
+          {!isSpoof && (
+            <>
+              <View style={styles.infoRow}>
+                <Ionicons name="person" size={24} color="#007AFF" />
+                <Text style={styles.infoLabel}>Tên nhân viên:</Text>
+                <Text style={[styles.infoValue, !isRecognitionSuccessful && styles.errorText]}>
+                  {isRecognitionSuccessful ? fullName : 'Chưa nhận diện'}
+                </Text>
+              </View>
 
-          <View style={styles.infoRow}>
-            <Ionicons name="person-circle" size={24} color="#007AFF" />
-            <Text style={styles.infoLabel}>Tài khoản:</Text>
-            <Text style={[styles.infoValue, (!isRecognitionSuccessful || isSpoof) && styles.errorText]}>
-              {isRecognitionSuccessful ? user.username : (isSpoof ? 'Phát hiện giả mạo' : 'Chưa nhận diện')}
-            </Text>
-          </View>
+              <View style={styles.infoRow}>
+                <Ionicons name="person-circle" size={24} color="#007AFF" />
+                <Text style={styles.infoLabel}>Tài khoản:</Text>
+                <Text style={[styles.infoValue, !isRecognitionSuccessful && styles.errorText]}>
+                  {isRecognitionSuccessful ? user.username : 'Chưa nhận diện'}
+                </Text>
+              </View>
+            </>
+          )}
+
+          {isSpoof && (
+            <View style={styles.infoRow}>
+              <Ionicons name="shield-checkmark" size={24} color="#FF3B30" />
+              <Text style={[styles.infoValue, styles.errorText, { marginLeft: 10, fontSize: 16 }]}>
+                HỆ THỐNG AN NINH
+              </Text>
+            </View>
+          )}
 
           <View style={styles.infoRow}>
             <Ionicons name="time" size={24} color="#007AFF" />

@@ -295,10 +295,11 @@ class FaceLivenessDetector:
             if is_real:
                 message = "Xác thực ảnh thật thành công"
             else:
-                if confidence > 0.15:
-                    message = "KHÔNG XÁC THỰC ĐƯỢC CHÍNH CHỦ. Vui lòng căn chỉnh lại ánh sáng và nhìn thẳng camera."
+                # Ngưỡng 0.90 là rất cao, nên nếu trượt thì khả năng cao là giả mạo
+                if confidence < 0.85:
+                    message = "PHÁT HIỆN ẢNH GIẢ MẠO (Ảnh in/Màn hình)."
                 else:
-                    message = "PHÁT HIỆN ẢNH GIẢ MẠO (Ảnh in/Màn hình điện thoại)."
+                    message = "KHÔNG XÁC THỰC ĐƯỢC CHÍNH CHỦ. Vui lòng không sử dụng ảnh chụp và căn chỉnh lại ánh sáng."
             
             logger.info(f"Liveness check: {label} (confidence={confidence:.2%})")
             
