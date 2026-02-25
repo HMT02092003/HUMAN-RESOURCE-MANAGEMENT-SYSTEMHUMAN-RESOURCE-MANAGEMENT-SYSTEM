@@ -321,37 +321,33 @@ class FaceLivenessDetector:
     
     def _preprocess(self, face_image: np.ndarray) -> np.ndarray:
         """
-        Tiền xử lý ảnh cho model
+        Tiền xử lý ảnh cho model (Chuẩn MiniFASNet)
         
         Args:
             face_image: Ảnh khuôn mặt (BGR)
         
         Returns:
-            Tensor đã chuẩn hóa shape (1, 3, H, W)
+            Tensor shape (1, 3, H, W)
         """
-        # Resize về kích thước model yêu cầu
-        # If face_image is tiny, cv2.resize will upsample; ensure non-empty
         if face_image.size == 0:
             raise ValueError("Empty face image passed to liveness preprocess")
 
+        # Resize về kích thước model (80x80)
         resized = cv2.resize(face_image, self.INPUT_SIZE)
 
-        # Convert BGR -> RGB (model expects RGB)
+        # Convert BGR -> RGB (MiniFASNet expects RGB)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         
-        # Chuẩn hóa về [0, 1]
+        # CHỈ chuẩn hóa về [0, 1]. KHÔNG dùng ImageNet mean/std trừ khi chắc chắn.
+        # Đa số các model ONNX của MiniVision/Silent-Face đã bao hàm hoặc không dùng ImageNet norm.
+        # Dùng ImageNet norm lệch lạc sẽ làm điểm số bị thấp đi vô lý.
         normalized = rgb.astype(np.float32) / 255.0
-        
-        # Chuẩn hóa theo ImageNet mean/std (nếu model yêu cầu)
-        mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-        std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-        normalized = (normalized - mean) / std
         
         # Chuyển về (C, H, W)
         transposed = normalized.transpose(2, 0, 1)
         
         # Thêm batch dimension: (1, C, H, W)
-        tensor = np.expand_dims(transposed, axis=0)
+        tensor = np.expand_dims(transposed, axis=0).copy()
         
         return tensor.astype(np.float32)
     

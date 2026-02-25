@@ -217,11 +217,12 @@ async def recognize_face_multi_angle(
         
         if not result["success"]:
             return JSONResponse(
-                status_code=status.HTTP_404_NOT_FOUND, # Or 200 depending on preference, but 404 for 'not recognized' is common
+                status_code=status.HTTP_200_OK,
                 content={
                     "success": False,
                     "message": result["message"],
-                    "error_code": "RECOGNITION_FAILED",
+                    "error_code": result.get("error_code", "RECOGNITION_FAILED"),
+                    "is_spoof": result.get("is_spoof", False),
                     "image_snapshot_url": result.get("image_snapshot_url")
                 }
             )

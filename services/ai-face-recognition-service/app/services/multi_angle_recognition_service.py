@@ -423,6 +423,7 @@ class MultiAngleFaceService:
                         "success": False,
                         "message": liveness_result.message,
                         "is_spoof": True,
+                        "error_code": "SPOOF_DETECTED",
                         "image_snapshot_url": snapshot_url
                     }
             # ---------------------------------------------
@@ -446,7 +447,8 @@ class MultiAngleFaceService:
                 
                 return {
                     "success": False,
-                    "message": "Không nhận diện được khuôn mặt. Vui lòng đăng ký trước.",
+                    "message": "Khuôn mặt chưa được đăng ký trong hệ thống.",
+                    "error_code": "UNKNOWN_FACE",
                     "image_snapshot_url": snapshot_url
                 }
             

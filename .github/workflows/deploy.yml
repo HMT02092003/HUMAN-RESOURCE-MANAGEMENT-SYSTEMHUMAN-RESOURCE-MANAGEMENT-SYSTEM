@@ -80,27 +80,7 @@ jobs:
     - name: Build and Deploy
       run: |
         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-        Write-Host "--- BUILDING SERVICES ---"
-        $env:DOCKER_BUILDKIT=1
-        $env:COMPOSE_DOCKER_CLI_BUILD=1
-        docker-compose build --parallel
-        docker-compose up -d
+        Write-Host "--- BUILDING AND STARTING SERVICES ---"
+        # Reverting to simple build to ensure better incremental performance on self-hosted runner
+        docker-compose up -d --build
         Write-Host "--- DEPLOY SUCCESSFUL ---"
-
-    # 5. Optimized Cleanup (Balance space vs speed)
-    - name: Optimized Cleanup
-      run: |
-        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-        Write-Host "--- STARTING SYSTEM CLEANUP ---"
-        
-        # Remove Dangling Images (Old versions replaced by build)
-        docker image prune -f
-        
-        # Remove only UNUSED build cache (Dangling cache)
-        # We don't use -a to avoid redownloading base layers every build (prevents 502/timeout)
-        docker builder prune -f
-        
-        Write-Host "Final Docker Disk Usage:"
-        docker system df
-        
-        Write-Host "--- CLEANUP COMPLETED ---"
