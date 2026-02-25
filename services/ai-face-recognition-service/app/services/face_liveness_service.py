@@ -292,11 +292,11 @@ class FaceLivenessDetector:
             if is_real:
                 message = "Xác thực ảnh thật thành công"
             else:
-                # Với ngưỡng 0.85, nếu dưới 0.70 thì khả năng cao là giả mạo rõ rệt
+                # Phân loại thông báo dựa trên độ tin cậy
                 if confidence < 0.70:
-                    message = "PHÁT HIỆN ẢNH GIẢ MẠO (Ảnh in/Màn hình)."
+                    message = "PHÁT HIỆN GIAN LẬN: Sử dụng ảnh in hoặc màn hình điện thoại."
                 else:
-                    message = "KHÔNG XÁC THỰC ĐƯỢC CHÍNH CHỦ. Vui lòng không sử dụng ảnh chụp và căn chỉnh lại ánh sáng."
+                    message = "CẢNH BÁO GIAN LẬN: Hệ thống nghi ngờ ảnh không phải thực thể sống."
             
             logger.info(f"Liveness check: {label} (confidence={confidence:.2%})")
             

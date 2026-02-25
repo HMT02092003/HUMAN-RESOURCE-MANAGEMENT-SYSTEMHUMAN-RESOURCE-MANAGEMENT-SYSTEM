@@ -199,12 +199,14 @@ export default function AttendanceConfirmation({
 
           {/* Di chuyển thông báo lỗi vào bên trong khung kết quả */}
           {serverMessage ? (
-            <View style={[isRecognitionSuccessful ? styles.infoContainerSmall : styles.errorContainer, { marginTop: 15, marginHorizontal: 0, width: '100%', elevation: 0, shadowOpacity: 0 }]}>
-              <Ionicons name={isRecognitionSuccessful ? "information-circle" : "alert-circle"} size={20} color={isRecognitionSuccessful ? "#007AFF" : "#FF3B30"} />
-              <Text style={[isRecognitionSuccessful ? styles.infoText : styles.errorMessage, { marginLeft: 8 }]}>
-                {isRecognitionSuccessful && serverMessage.includes('Nhận diện thành công')
+            <View style={[isRecognitionSuccessful && !isSpoof ? styles.infoContainerSmall : styles.errorContainer, { marginTop: 15, marginHorizontal: 0, width: '100%', elevation: 0, shadowOpacity: 0 }]}>
+              <Ionicons name={isRecognitionSuccessful && !isSpoof ? "information-circle" : "alert-circle"} size={20} color={isRecognitionSuccessful && !isSpoof ? "#007AFF" : "#FF3B30"} />
+              <Text style={[isRecognitionSuccessful && !isSpoof ? styles.infoText : styles.errorMessage, { marginLeft: 8 }]}>
+                {isRecognitionSuccessful && !isSpoof && serverMessage.includes('Nhận diện thành công')
                   ? `Nhận diện thành công: ${fullName}`
-                  : serverMessage}
+                  : isSpoof
+                    ? serverMessage // Hiện chính xác thông báo CẢNH BÁO GIAN LẬN từ server
+                    : (serverMessage || 'Không xác định được danh tính')}
               </Text>
             </View>
           ) : (
