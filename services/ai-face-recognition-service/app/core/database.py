@@ -32,6 +32,7 @@ class FaceEmbedding(Base):
     # Reference to user in auth-service (from auth DB)
     user_id = Column(Integer, nullable=False, index=True)
     username = Column(String(100), nullable=False, index=True)  # Employee code
+    full_name = Column(String(255), nullable=True)
     
     # Store vector using pgvector (512 dimensions for Buffalo_L)
     # Was Text, changing to Vector to enable l2_distance method
@@ -53,6 +54,7 @@ class AttendanceLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, nullable=True, index=True) # Nullable for unknown users
     username = Column(String(100), nullable=True)
+    full_name = Column(String(255), nullable=True)
     checkin_time = Column(DateTime(timezone=True), server_default=func.now(), index=True)
     
     # Snapshot image for evidence

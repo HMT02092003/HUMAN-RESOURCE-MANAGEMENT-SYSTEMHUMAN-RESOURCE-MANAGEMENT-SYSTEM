@@ -68,7 +68,7 @@ const STATUS_COLORS = {
 const AttendanceListScreen = ({ route }) => {
   const theme = useTheme();
   const { user } = useAuth();
-  
+
   // State
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -126,29 +126,69 @@ const AttendanceListScreen = ({ route }) => {
     dailyDetails.forEach((detail) => {
       const dateKey = detail.date?.split('T')[0];
       if (dateKey) {
-        // Format check-in/check-out time
         let checkInTime = null;
         let checkOutTime = null;
-        
-        if (detail.attendanceData) {
-          const att = detail.attendanceData;
-          if (att.checkInTime) {
-            const d = new Date(att.checkInTime);
+
+        // Handle new flattened structure
+        const checkInRaw = detail.checkInTime || detail.attendanceData?.checkInTime;
+        if (checkInRaw) {
+          if (checkInRaw.length <= 5) checkInTime = checkInRaw;
+          else {
+            const d = new Date(checkInRaw);
             checkInTime = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
           }
-          if (att.checkOutTime) {
-            const d = new Date(att.checkOutTime);
+        }
+
+        const checkOutRaw = detail.checkOutTime || detail.attendanceData?.checkOutTime;
+        if (checkOutRaw) {
+          if (checkOutRaw.length <= 5) checkOutTime = checkOutRaw;
+          else {
+            const d = new Date(checkOutRaw);
             checkOutTime = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
           }
         }
+
+        const hasAttendance = !!(checkInTime || checkOutTime);
+        const lateMins = parseFloat(detail.lateMinutes || detail.attendanceData?.lateMinutes || 0);
+        const earlyMins = parseFloat(detail.earlyDepartureMinutes || detail.attendanceData?.earlyDepartureMinutes || 0);
+        const otHours = parseFloat(detail.overtimeHours || detail.attendanceData?.overtimeHours || 0);
+
+        let status = 'weekend';
+        if (detail.hasApprovedLeave) status = 'approved_leave';
+        else if (detail.hasBusinessTrip) status = 'business_trip';
+        else if (detail.isHoliday) status = 'holiday';
+        else if (hasAttendance) status = 'attendance';
+        else if (detail.isWorkingDay) status = 'absent';
 
         map.set(dateKey, {
           ...detail,
           checkInTime,
           checkOutTime,
-          overtime: detail.attendanceData?.otMinutes ? Math.round((parseFloat(detail.attendanceData.otMinutes) / 60) * 100) / 100 : 0,
-          lateMinutes: parseFloat(detail.attendanceData?.lateMinutes || 0),
-          earlyDepartureMinutes: parseFloat(detail.attendanceData?.earlyDepartureMinutes || 0),
+          status,
+          hasAttendance,
+          overtime: otHours,
+          lateMinutes: lateMins,
+          earlyDepartureMinutes: earlyMins,
+          holidayData: {
+            ...detail.holidayData,
+            isHoliday: detail.isHoliday || detail.holidayData?.isHoliday,
+            holidayName: detail.holidayName || detail.holidayData?.holidayName
+          },
+          leaveData: {
+            ...detail.leaveData,
+            leaveType: detail.leaveType || detail.leaveData?.leaveType
+          },
+          businessTripData: {
+            ...detail.businessTripData,
+            businessTripDestination: detail.businessTripDestination || detail.businessTripData?.businessTripDestination
+          },
+          attendanceData: hasAttendance ? {
+            ...(detail.attendanceData || detail),
+            lateArrivalPenalty: detail.lateArrivalPenalty || detail.attendanceData?.lateArrivalPenalty || 0,
+            earlyLeavePenalty: detail.earlyLeavePenalty || detail.attendanceData?.earlyLeavePenalty || 0,
+            dailyWorkingUnit: detail.dailyWorkingUnit || detail.attendanceData?.dailyWorkingUnit || 0,
+            dailyTotalWorkHours: detail.dailyTotalWorkHours || detail.attendanceData?.dailyTotalWorkHours || 0
+          } : null
         });
       }
     });
@@ -715,7 +755,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#8c8c8c',
   },
-  
+
   // Month Navigation
   monthNav: {
     flexDirection: 'row',

@@ -310,7 +310,7 @@ class MultiAngleFaceService:
             return {
                 "user_id": match_obj.user_id,
                 "username": match_obj.username,
-                "full_name": getattr(match_obj, 'username', ''),
+                "full_name": getattr(match_obj, 'full_name', None) or match_obj.username,
                 "matched_pose": getattr(match_obj, 'face_type', 'unknown'),
                 "distance": distance,
                 "confidence": confidence,
@@ -348,6 +348,7 @@ class MultiAngleFaceService:
                 new_face = FaceEmbedding(
                     user_id=user_id,
                     username=username,
+                    full_name=full_name or username,
                     embedding_vector=emb, # Pass list directly to pgvector
                     face_type=pose["pose_type"],
                     created_at=None # Let DB handle defaults or add if needed
@@ -437,6 +438,7 @@ class MultiAngleFaceService:
             log = AttendanceLog(
                 user_id=match["user_id"],
                 username=match["username"],
+                full_name=match["full_name"],
                 recognition_type=recognition_type,
                 similarity_score=match["confidence"] / 100.0,
                 matched_by_type=match["matched_pose"],

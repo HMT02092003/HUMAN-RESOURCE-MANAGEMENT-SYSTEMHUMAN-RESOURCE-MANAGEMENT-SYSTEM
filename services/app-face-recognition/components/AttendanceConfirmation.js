@@ -7,17 +7,17 @@ import AuthTokenManager from '../services/AuthTokenManager';
 
 const { width, height } = Dimensions.get('window');
 
-export default function AttendanceConfirmation({ 
-  imageUri, 
+export default function AttendanceConfirmation({
+  imageUri,
   recognitionData, // Dữ liệu từ AI service
-  onReset, 
-  onConfirm 
+  onReset,
+  onConfirm
 }) {
   const [isConfirming, setIsConfirming] = useState(false);
   // Kiểm tra và xử lý dữ liệu nhận diện (đặt trước các hàm xử lý)
   const user = recognitionData?.data?.user || recognitionData?.user || {};
   const confidence = user?.confidence_score ?? recognitionData?.data?.confidence ?? 0;
-  const fullName = user?.fullName || user?.full_name || user?.username || 'Chưa xác định';
+  const fullName = user?.fullName || user?.full_name || user?.fullname || user?.name || recognitionData?.data?.fullName || recognitionData?.data?.full_name || recognitionData?.data?.fullname || user?.username || 'Chưa xác định';
   const isRecognitionSuccessful = Boolean(recognitionData?.success && user?.user_id);
   const serverMessage = recognitionData?.message || recognitionData?.error || recognitionData?.data?.message || recognitionData?.data?.error || recognitionData?.details?.message || '';
 
@@ -119,7 +119,7 @@ export default function AttendanceConfirmation({
     hasUserId: !!user.user_id,
     finalSuccess: isRecognitionSuccessful
   });
-  
+
   // Hiển thị trạng thái nhận diện
   const getRecognitionStatusBadge = () => {
     if (isRecognitionSuccessful) {
@@ -171,7 +171,7 @@ export default function AttendanceConfirmation({
             <Ionicons name="time" size={24} color="#007AFF" />
             <Text style={styles.infoLabel}>Thời gian:</Text>
             <Text style={styles.infoValue}>
-              {recognitionData?.data?.timestamp ? 
+              {recognitionData?.data?.timestamp ?
                 new Date(recognitionData.data.timestamp).toLocaleString('vi-VN') :
                 new Date().toLocaleString('vi-VN')
               }
@@ -179,25 +179,27 @@ export default function AttendanceConfirmation({
           </View>
 
           {/* Hiển thị warning nếu confidence thấp (35-50%) */}
-                  {/* Hiển thị thông tin từ server (ví dụ: Liveness failed, lỗi chất lượng, mô tả) */}
-                  {serverMessage ? (
-                    <View style={isRecognitionSuccessful ? styles.infoContainerSmall : styles.errorContainer}>
-                      <Ionicons name={isRecognitionSuccessful ? "information-circle" : "alert-circle"} size={20} color={isRecognitionSuccessful ? "#007AFF" : "#FF3B30"} />
-                      <Text style={[isRecognitionSuccessful ? styles.infoText : styles.errorMessage, { marginLeft: 8 }]}> 
-                        {serverMessage}
-                      </Text>
-                    </View>
-                  ) : (
-                    // Nếu không có server message, giữ cảnh báo confidence thấp như fallback
-                    isRecognitionSuccessful && confidence < 50 && confidence >= 35 && (
-                      <View style={styles.warningContainer}>
-                        <Ionicons name="alert-circle" size={24} color="#FF9500" />
-                        <Text style={styles.warningMessage}>
-                          ⚠️ Độ tin cậy thấp ({confidence}%). Có thể do đeo khẩu trang hoặc ánh sáng kém. Vui lòng kiểm tra kỹ thông tin trước khi xác nhận.
-                        </Text>
-                      </View>
-                    )
-                  )}
+          {/* Hiển thị thông tin từ server (ví dụ: Liveness failed, lỗi chất lượng, mô tả) */}
+          {serverMessage ? (
+            <View style={isRecognitionSuccessful ? styles.infoContainerSmall : styles.errorContainer}>
+              <Ionicons name={isRecognitionSuccessful ? "information-circle" : "alert-circle"} size={20} color={isRecognitionSuccessful ? "#007AFF" : "#FF3B30"} />
+              <Text style={[isRecognitionSuccessful ? styles.infoText : styles.errorMessage, { marginLeft: 8 }]}>
+                {isRecognitionSuccessful && serverMessage.includes('Nhận diện thành công')
+                  ? serverMessage.replace(user.username, '').replace(':', ': ').trim() + ` ${fullName}`
+                  : serverMessage}
+              </Text>
+            </View>
+          ) : (
+            // Nếu không có server message, giữ cảnh báo confidence thấp như fallback
+            isRecognitionSuccessful && confidence < 50 && confidence >= 35 && (
+              <View style={styles.warningContainer}>
+                <Ionicons name="alert-circle" size={24} color="#FF9500" />
+                <Text style={styles.warningMessage}>
+                  ⚠️ Độ tin cậy thấp ({confidence}%). Có thể do đeo khẩu trang hoặc ánh sáng kém. Vui lòng kiểm tra kỹ thông tin trước khi xác nhận.
+                </Text>
+              </View>
+            )
+          )}
         </View>
 
         <View style={styles.buttonContainer}>
@@ -206,12 +208,12 @@ export default function AttendanceConfirmation({
             <Text style={styles.retakeButtonText}>Chụp lại</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[
-              styles.confirmButton, 
+              styles.confirmButton,
               isConfirming && styles.confirmButtonDisabled,
               !isRecognitionSuccessful && styles.confirmButtonDisabled
-            ]} 
+            ]}
             onPress={handleConfirm}
             disabled={isConfirming || !isRecognitionSuccessful}
           >
@@ -353,6 +355,23 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     color: '#FF3B30',
+    marginLeft: 8,
+    lineHeight: 20,
+  },
+  infoContainerSmall: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#E6F2FF',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: '#007AFF',
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#007AFF',
     marginLeft: 8,
     lineHeight: 20,
   },

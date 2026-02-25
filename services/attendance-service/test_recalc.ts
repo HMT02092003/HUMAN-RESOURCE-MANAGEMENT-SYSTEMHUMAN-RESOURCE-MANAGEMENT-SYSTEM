@@ -1,0 +1,1 @@
+import { MonthlyReportService } from './src/services/MonthlyReportService.ts'; import connection from '@/lib/Databases/Connection'; async function run() { try { const result = await MonthlyReportService.calculateAndSaveMonthlyAttendance(3, '2026-02-24', { id: 3 }, 'dummy-token'); console.log(result); } catch (e) { console.error(e); } finally { process.exit(0); } } run();

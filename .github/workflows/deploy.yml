@@ -81,7 +81,10 @@ jobs:
       run: |
         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
         Write-Host "--- BUILDING SERVICES ---"
-        docker-compose up -d --build
+        $env:DOCKER_BUILDKIT=1
+        $env:COMPOSE_DOCKER_CLI_BUILD=1
+        docker-compose build --parallel
+        docker-compose up -d
         Write-Host "--- DEPLOY SUCCESSFUL ---"
 
     # 5. Optimized Cleanup (Balance space vs speed)

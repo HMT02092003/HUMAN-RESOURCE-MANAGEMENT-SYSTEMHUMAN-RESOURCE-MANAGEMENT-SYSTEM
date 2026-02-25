@@ -165,6 +165,7 @@ class InsightFaceRecognitionService:
                 log = AttendanceLog(
                     user_id=best_match.user_id,
                     username=best_match.username,
+                    full_name=getattr(best_match, 'full_name', best_match.username),
                     recognition_type=recognition_type,
                     similarity_score=best_similarity,
                     matched_by_type='MASTER',
@@ -182,7 +183,8 @@ class InsightFaceRecognitionService:
                     "data": {
                         "user": {
                             "user_id": best_match.user_id,
-                            "username": best_match.username
+                            "username": best_match.username,
+                            "full_name": getattr(best_match, 'full_name', None) or best_match.username
                         },
                         "confidence": best_similarity,
                         "similarity": best_similarity,
@@ -264,6 +266,7 @@ class InsightFaceRecognitionService:
             new_embedding = FaceEmbedding(
                 user_id=user_id,
                 username=username,
+                full_name=username, # Default to username if not provided (legacy register)
                 embedding_vector=emb_json,
                 face_type='MASTER'
             )

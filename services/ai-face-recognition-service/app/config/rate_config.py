@@ -4,8 +4,8 @@ Put tunable thresholds here so they can be changed without editing service code.
 """
 
 # --- Quality thresholds (server-side) ---
-# Baseline blur threshold (Laplacian variance). Lowered to 30 per user request.
-BLUR_THRESHOLD = 30.0
+# Baseline blur threshold (Laplacian variance). Lowered to 15.0 per user request.
+BLUR_THRESHOLD = 15.0
 
 # Brightness range (0-255)
 BRIGHTNESS_MIN = 35
