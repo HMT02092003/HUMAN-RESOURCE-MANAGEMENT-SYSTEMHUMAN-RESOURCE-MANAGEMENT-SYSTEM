@@ -339,13 +339,9 @@ class FaceLivenessDetector:
         # Convert BGR -> RGB (MiniFASNet expects RGB)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         
-        # Chuẩn hóa về [0, 1]
+        # CHỈ chuẩn hóa về [0, 1].
+        # Sử dụng chuẩn [0, 1] như commit 28396c5 đã chạy ổn định.
         normalized = rgb.astype(np.float32) / 255.0
-        
-        # CHUẨN HÓA THEO IMAGENET (Bắt buộc cho model này)
-        mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-        std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-        normalized = (normalized - mean) / std
         
         # Chuyển về (C, H, W)
         transposed = normalized.transpose(2, 0, 1)
