@@ -295,8 +295,8 @@ class FaceLivenessDetector:
             if is_real:
                 message = "Xác thực ảnh thật thành công"
             else:
-                # Ngưỡng 0.90 là rất cao, nên nếu trượt thì khả năng cao là giả mạo
-                if confidence < 0.85:
+                # Với ngưỡng 0.85, nếu dưới 0.70 thì khả năng cao là giả mạo rõ rệt
+                if confidence < 0.70:
                     message = "PHÁT HIỆN ẢNH GIẢ MẠO (Ảnh in/Màn hình)."
                 else:
                     message = "KHÔNG XÁC THỰC ĐƯỢC CHÍNH CHỦ. Vui lòng không sử dụng ảnh chụp và căn chỉnh lại ánh sáng."
@@ -339,10 +339,13 @@ class FaceLivenessDetector:
         # Convert BGR -> RGB (MiniFASNet expects RGB)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         
-        # CHỈ chuẩn hóa về [0, 1]. KHÔNG dùng ImageNet mean/std trừ khi chắc chắn.
-        # Đa số các model ONNX của MiniVision/Silent-Face đã bao hàm hoặc không dùng ImageNet norm.
-        # Dùng ImageNet norm lệch lạc sẽ làm điểm số bị thấp đi vô lý.
+        # Chuẩn hóa về [0, 1]
         normalized = rgb.astype(np.float32) / 255.0
+        
+        # CHUẨN HÓA THEO IMAGENET (Bắt buộc cho model này)
+        mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+        std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+        normalized = (normalized - mean) / std
         
         # Chuyển về (C, H, W)
         transposed = normalized.transpose(2, 0, 1)
