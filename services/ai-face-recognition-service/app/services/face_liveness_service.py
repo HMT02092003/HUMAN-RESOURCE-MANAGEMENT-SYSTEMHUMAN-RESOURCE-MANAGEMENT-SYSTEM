@@ -191,9 +191,6 @@ class FaceLivenessDetector:
                 cx2 = min(face_image.shape[1], nx2)
                 cy2 = min(face_image.shape[0], ny2)
 
-                logger.debug(f"Liveness crop coords pre-pad: nx1={nx1},ny1={ny1},nx2={nx2},ny2={ny2}")
-                logger.debug(f"Clamped crop coords: cx1={cx1},cy1={cy1},cx2={cx2},cy2={cy2}, pads={(pad_left,pad_top,pad_right,pad_bottom)}")
-
                 face_crop = face_image[cy1:cy2, cx1:cx2]
 
                 # If padding needed, pad with black (constant) to avoid replicate artifacts
@@ -224,7 +221,7 @@ class FaceLivenessDetector:
                 pad_right = max(0, nx2 - w)
                 pad_bottom = max(0, ny2 - h)
 
-                # pad original crop first (use black padding to avoid replicate stripes)
+                # pad original crop first
                 padded = cv2.copyMakeBorder(
                     face_image,
                     pad_top,
@@ -339,9 +336,13 @@ class FaceLivenessDetector:
         # Convert BGR -> RGB (MiniFASNet expects RGB)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         
-        # CHỈ chuẩn hóa về [0, 1].
-        # Sử dụng chuẩn [0, 1] như commit 28396c5 đã chạy ổn định.
+        # Chuẩn hóa về [0, 1]
         normalized = rgb.astype(np.float32) / 255.0
+        
+        # CHUẨN HÓA THEO IMAGENET (Bắt buộc cho model này)
+        mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+        std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+        normalized = (normalized - mean) / std
         
         # Chuyển về (C, H, W)
         transposed = normalized.transpose(2, 0, 1)

@@ -223,6 +223,8 @@ async def recognize_face_multi_angle(
                     "message": result["message"],
                     "error_code": result.get("error_code", "RECOGNITION_FAILED"),
                     "is_spoof": result.get("is_spoof", False),
+                    "username": result.get("username"),
+                    "full_name": result.get("full_name"),
                     "image_snapshot_url": result.get("image_snapshot_url")
                 }
             )

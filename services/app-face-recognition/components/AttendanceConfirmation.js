@@ -17,7 +17,8 @@ export default function AttendanceConfirmation({
   // Kiểm tra và xử lý dữ liệu nhận diện (đặt trước các hàm xử lý)
   const user = recognitionData?.data?.user || recognitionData?.user || {};
   const confidence = user?.confidence_score ?? recognitionData?.data?.confidence ?? 0;
-  const fullName = user?.fullName || user?.full_name || user?.fullname || user?.name || recognitionData?.data?.fullName || recognitionData?.data?.full_name || recognitionData?.data?.fullname || user?.username || 'Chưa xác định';
+  const fullName = user?.fullName || user?.full_name || user?.fullname || user?.name || recognitionData?.data?.fullName || recognitionData?.data?.full_name || recognitionData?.data?.fullname || user?.username || recognitionData?.full_name || 'Chưa xác định';
+  const username = user?.username || recognitionData?.username || recognitionData?.data?.username || 'N/A';
   const isRecognitionSuccessful = Boolean(recognitionData?.success && user?.user_id);
   const isSpoof = Boolean(recognitionData?.is_spoof || recognitionData?.data?.is_spoof);
   const serverMessage = recognitionData?.message || recognitionData?.error || recognitionData?.data?.message || recognitionData?.data?.error || recognitionData?.details?.message || '';
@@ -158,25 +159,21 @@ export default function AttendanceConfirmation({
         </View>
 
         <View style={styles.infoContainer}>
-          {!isSpoof && (
-            <>
-              <View style={styles.infoRow}>
-                <Ionicons name="person" size={24} color="#007AFF" />
-                <Text style={styles.infoLabel}>Tên nhân viên:</Text>
-                <Text style={[styles.infoValue, !isRecognitionSuccessful && styles.errorText]}>
-                  {isRecognitionSuccessful ? fullName : 'Chưa nhận diện'}
-                </Text>
-              </View>
+          <View style={styles.infoRow}>
+            <Ionicons name="person" size={24} color="#007AFF" />
+            <Text style={styles.infoLabel}>Tên nhân viên:</Text>
+            <Text style={[styles.infoValue, (!isRecognitionSuccessful && !isSpoof) && styles.errorText]}>
+              {fullName !== 'N/A' ? fullName : (isRecognitionSuccessful ? 'Xác định' : 'Chưa nhận diện')}
+            </Text>
+          </View>
 
-              <View style={styles.infoRow}>
-                <Ionicons name="person-circle" size={24} color="#007AFF" />
-                <Text style={styles.infoLabel}>Tài khoản:</Text>
-                <Text style={[styles.infoValue, !isRecognitionSuccessful && styles.errorText]}>
-                  {isRecognitionSuccessful ? user.username : 'Chưa nhận diện'}
-                </Text>
-              </View>
-            </>
-          )}
+          <View style={styles.infoRow}>
+            <Ionicons name="person-circle" size={24} color="#007AFF" />
+            <Text style={styles.infoLabel}>Tài khoản:</Text>
+            <Text style={[styles.infoValue, (!isRecognitionSuccessful && !isSpoof) && styles.errorText]}>
+              {username !== 'N/A' ? username : (isRecognitionSuccessful ? 'Xác định' : 'Chưa nhận diện')}
+            </Text>
+          </View>
 
           {isSpoof && (
             <View style={styles.infoRow}>
@@ -197,58 +194,58 @@ export default function AttendanceConfirmation({
               }
             </Text>
           </View>
+        </View>
 
-          {/* Hiển thị warning nếu confidence thấp (35-50%) */}
-          {/* Hiển thị thông tin từ server (ví dụ: Liveness failed, lỗi chất lượng, mô tả) */}
-          {serverMessage ? (
-            <View style={isRecognitionSuccessful ? styles.infoContainerSmall : styles.errorContainer}>
-              <Ionicons name={isRecognitionSuccessful ? "information-circle" : "alert-circle"} size={20} color={isRecognitionSuccessful ? "#007AFF" : "#FF3B30"} />
-              <Text style={[isRecognitionSuccessful ? styles.infoText : styles.errorMessage, { marginLeft: 8 }]}>
-                {isRecognitionSuccessful && serverMessage.includes('Nhận diện thành công')
-                  ? `Nhận diện thành công: ${fullName}`
-                  : serverMessage}
+        {/* Hiển thị warning nếu confidence thấp (35-50%) */}
+        {/* Hiển thị thông tin từ server (ví dụ: Liveness failed, lỗi chất lượng, mô tả) */}
+        {serverMessage ? (
+          <View style={isRecognitionSuccessful ? styles.infoContainerSmall : styles.errorContainer}>
+            <Ionicons name={isRecognitionSuccessful ? "information-circle" : "alert-circle"} size={20} color={isRecognitionSuccessful ? "#007AFF" : "#FF3B30"} />
+            <Text style={[isRecognitionSuccessful ? styles.infoText : styles.errorMessage, { marginLeft: 8 }]}>
+              {isRecognitionSuccessful && serverMessage.includes('Nhận diện thành công')
+                ? `Nhận diện thành công: ${fullName}`
+                : serverMessage}
+            </Text>
+          </View>
+        ) : (
+          // Nếu không có server message, giữ cảnh báo confidence thấp như fallback
+          isRecognitionSuccessful && confidence < 50 && confidence >= 35 && (
+            <View style={styles.warningContainer}>
+              <Ionicons name="alert-circle" size={24} color="#FF9500" />
+              <Text style={styles.warningMessage}>
+                ⚠️ Độ tin cậy thấp ({confidence}%). Có thể do đeo khẩu trang hoặc ánh sáng kém. Vui lòng kiểm tra kỹ thông tin trước khi xác nhận.
               </Text>
             </View>
+          )
+        )}
+      </View>
+
+      <View style={styles.buttonContainer}>
+        <TouchableOpacity style={styles.retakeButton} onPress={handleRetake}>
+          <Ionicons name="camera-reverse" size={24} color="#FF3B30" />
+          <Text style={styles.retakeButtonText}>Chụp lại</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.confirmButton,
+            isConfirming && styles.confirmButtonDisabled,
+            !isRecognitionSuccessful && styles.confirmButtonDisabled
+          ]}
+          onPress={handleConfirm}
+          disabled={isConfirming || !isRecognitionSuccessful}
+        >
+          {isConfirming ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
           ) : (
-            // Nếu không có server message, giữ cảnh báo confidence thấp như fallback
-            isRecognitionSuccessful && confidence < 50 && confidence >= 35 && (
-              <View style={styles.warningContainer}>
-                <Ionicons name="alert-circle" size={24} color="#FF9500" />
-                <Text style={styles.warningMessage}>
-                  ⚠️ Độ tin cậy thấp ({confidence}%). Có thể do đeo khẩu trang hoặc ánh sáng kém. Vui lòng kiểm tra kỹ thông tin trước khi xác nhận.
-                </Text>
-              </View>
-            )
+            <>
+              <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
+              <Text style={styles.confirmButtonText}>
+                {isRecognitionSuccessful ? 'Xác nhận chấm công' : 'Không thể chấm công'}
+              </Text>
+            </>
           )}
-        </View>
-
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.retakeButton} onPress={handleRetake}>
-            <Ionicons name="camera-reverse" size={24} color="#FF3B30" />
-            <Text style={styles.retakeButtonText}>Chụp lại</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.confirmButton,
-              isConfirming && styles.confirmButtonDisabled,
-              !isRecognitionSuccessful && styles.confirmButtonDisabled
-            ]}
-            onPress={handleConfirm}
-            disabled={isConfirming || !isRecognitionSuccessful}
-          >
-            {isConfirming ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
-                <Text style={styles.confirmButtonText}>
-                  {isRecognitionSuccessful ? 'Xác nhận chấm công' : 'Không thể chấm công'}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
