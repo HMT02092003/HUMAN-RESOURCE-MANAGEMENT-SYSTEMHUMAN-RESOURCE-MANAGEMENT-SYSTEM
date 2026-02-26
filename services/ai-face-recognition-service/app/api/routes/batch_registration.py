@@ -28,6 +28,8 @@ async def register_face_batch(
     images: List[UploadFile] = File(..., description="15-20 ảnh chụp từ nhiều góc"),
     user_id: int = Form(..., description="User ID từ auth-service"),
     username: str = Form(..., description="Username/Employee code"),
+    full_name: str = Form(None, description="Full name"),
+    fullName: str = Form(None, description="Cấu trúc của Auth service"),
     db: Session = Depends(get_db)
 ):
     """
@@ -115,10 +117,14 @@ async def register_face_batch(
                 }
             )
         
+        # Xử lý hợp nhất tên dựa trên DB Auth
+        final_full_name = full_name or fullName or username
+
         # Save vector to database directly
         new_embedding = FaceEmbedding(
             user_id=user_id,
             username=username,
+            full_name=final_full_name,
             embedding_vector=result["vector"],
             face_type='MASTER',
             quality_score=result["metadata"].get("average_quality_score", 0.0)
@@ -201,6 +207,8 @@ async def register_face_video(
     video_file: UploadFile = File(..., description="Video 4 giây quay khuôn mặt"),
     user_id: int = Form(..., description="User ID từ auth-service"),
     username: str = Form(..., description="Username/Employee code"),
+    full_name: str = Form(None, description="Full name"),
+    fullName: str = Form(None, description="Cấu trúc của Auth service"),
     target_frames: int = Form(40, description="Số frame cần trích xuất từ video"),
     db: Session = Depends(get_db)
 ):
@@ -300,10 +308,14 @@ async def register_face_video(
                 }
             )
         
+        # Xử lý hợp nhất tên dựa trên DB Auth
+        final_full_name = full_name or fullName or username
+
         # Save vector to database directly (pgvector handles conversion)
         new_embedding = FaceEmbedding(
             user_id=user_id,
             username=username,
+            full_name=final_full_name,
             embedding_vector=result["vector"],
             face_type='MASTER',
             quality_score=result["metadata"].get("average_quality_score", 0.0)
@@ -372,6 +384,8 @@ async def register_face_video_multi(
     video_file: UploadFile = File(..., description="Video 3 giây quay một góc cụ thể"),
     user_id: int = Form(..., description="User ID từ auth-service"),
     username: str = Form(..., description="Username/Employee code"),
+    full_name: str = Form(None, description="Full name"),
+    fullName: str = Form(None, description="Cấu trúc của Auth service"),
     angle_type: str = Form(..., description="Loại góc: CENTER, LEFT, RIGHT, MASK"),
     target_frames: int = Form(90, description="Số frame cần trích xuất (~90 cho 3s)"),
     db: Session = Depends(get_db)
@@ -488,9 +502,13 @@ async def register_face_video_multi(
         # Save vector to database
         # vector_json = json.dumps(result["vector"])  # REMOVED: pgvector expects list, not json string
         
+        # Xử lý hợp nhất tên dựa trên DB Auth
+        final_full_name = full_name or fullName or username
+
         if existing_embedding:
             # Update existing
             existing_embedding.embedding_vector = result["vector"]
+            existing_embedding.full_name = final_full_name
             existing_embedding.quality_score = result["metadata"].get("average_quality_score", 0.0)
             logger.info(f"🔄 Updated existing {angle_type} embedding for {username}")
         else:
@@ -498,6 +516,7 @@ async def register_face_video_multi(
             new_embedding = FaceEmbedding(
                 user_id=user_id,
                 username=username,
+                full_name=final_full_name,
                 embedding_vector=result["vector"],
                 face_type=angle_type,  # CENTER, LEFT, RIGHT, or MASK
                 quality_score=result["metadata"].get("average_quality_score", 0.0)
