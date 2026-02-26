@@ -13,6 +13,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+import requests
 
 from app.core.database import get_db, FaceEmbedding
 from app.services import batch_image_processor
@@ -20,6 +21,36 @@ from app.utils.video_frame_extractor import video_extractor
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+def fetch_user_full_name(user_id: int) -> str:
+    """Fetch user's full name from auth-service."""
+    try:
+        base_url = getattr(settings, 'API_GATEWAY_URL', "http://api-gateway:4000")
+        urls_to_try = [
+            f"{base_url}/api/auth/users/bulk",
+            "http://auth-service:4001/api/users/bulk",
+            "http://localhost:4001/api/users/bulk"
+        ]
+        
+        payload = {"userIds": [user_id]}
+        headers = {"Content-Type": "application/json"}
+        
+        for url in urls_to_try:
+            try:
+                resp = requests.post(url, json=payload, headers=headers, timeout=5)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    fetched_users = data.get("data", [])
+                    if fetched_users:
+                        u_info = fetched_users[0]
+                        fn = u_info.get("fullName") or u_info.get("full_name") or u_info.get("name")
+                        if fn:
+                            return fn
+            except Exception:
+                pass
+    except Exception as e:
+        logger.error(f"Error fetching user full name: {e}")
+    return None
 router = APIRouter()
 
 
@@ -118,7 +149,13 @@ async def register_face_batch(
             )
         
         # Xử lý hợp nhất tên dựa trên DB Auth
-        final_full_name = full_name or fullName or username
+        final_full_name = full_name or fullName
+        if not final_full_name:
+            fetched_name = fetch_user_full_name(user_id)
+            if fetched_name:
+                final_full_name = fetched_name
+                logger.info(f"✅ Fetched full_name from auth-service for userId={user_id}: {final_full_name}")
+        final_full_name = final_full_name or username
 
         # Save vector to database directly
         new_embedding = FaceEmbedding(
@@ -309,7 +346,13 @@ async def register_face_video(
             )
         
         # Xử lý hợp nhất tên dựa trên DB Auth
-        final_full_name = full_name or fullName or username
+        final_full_name = full_name or fullName
+        if not final_full_name:
+            fetched_name = fetch_user_full_name(user_id)
+            if fetched_name:
+                final_full_name = fetched_name
+                logger.info(f"✅ Fetched full_name from auth-service for userId={user_id}: {final_full_name}")
+        final_full_name = final_full_name or username
 
         # Save vector to database directly (pgvector handles conversion)
         new_embedding = FaceEmbedding(
@@ -503,7 +546,13 @@ async def register_face_video_multi(
         # vector_json = json.dumps(result["vector"])  # REMOVED: pgvector expects list, not json string
         
         # Xử lý hợp nhất tên dựa trên DB Auth
-        final_full_name = full_name or fullName or username
+        final_full_name = full_name or fullName
+        if not final_full_name:
+            fetched_name = fetch_user_full_name(user_id)
+            if fetched_name:
+                final_full_name = fetched_name
+                logger.info(f"✅ Fetched full_name from auth-service for userId={user_id}: {final_full_name}")
+        final_full_name = final_full_name or username
 
         if existing_embedding:
             # Update existing
