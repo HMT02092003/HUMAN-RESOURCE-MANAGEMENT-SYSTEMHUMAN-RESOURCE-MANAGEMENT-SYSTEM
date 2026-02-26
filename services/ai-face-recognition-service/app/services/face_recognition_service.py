@@ -112,8 +112,8 @@ class FaceRecognizer:
                 root=os.path.expanduser("~/.insightface")
             )
 
-            # Always prepare with CPU ctx_id = -1, lower det_thresh to 0.05 to allow MASK angle detection
-            self.app.prepare(ctx_id=-1, det_thresh=0.05, det_size=self.det_size)
+            # Always prepare with CPU ctx_id = -1, lower det_thresh to 0.05 to allow MASK angle detection, and larger det_size to improve detection of masks and small faces
+            self.app.prepare(ctx_id=-1, det_thresh=0.05, det_size=(1080, 1080))
             
             logger.info("✅ FaceRecognizer initialized successfully!")
             logger.info(f"   Detection size: {self.det_size}")
@@ -195,29 +195,10 @@ class FaceRecognizer:
 
             logger.info(f"✅ Face detected (selected largest): bbox={bbox}, confidence={face.det_score:.3f}")
             
-            # === STEP 2: QUALITY CHECK ===
-            quality_result = None
-            if self.enable_quality_check and not skip_quality_check:
-                logger.info("🔍 Step 2: Quality check...")
-                quality_result = face_quality_checker.check_all(
-                    image=image,
-                    landmarks=face.kps  # numpy array (5, 2)
-                )
-                
-                if not quality_result.is_valid:
-                    logger.warning(f"Quality check failed: {quality_result.messages}")
-                    return RecognitionResult(
-                        success=False,
-                        message=f"Chất lượng ảnh không đạt: {'; '.join(quality_result.messages)}",
-                        quality_result=quality_result
-                    )
-                
-                logger.info("✅ Quality check passed")
-            
-            # === STEP 3: LIVENESS CHECK ===
+            # === STEP 2: LIVENESS CHECK ===
             liveness_result = None
             if self.enable_liveness_check and not skip_liveness_check:
-                logger.info("🔍 Step 3: Liveness check...")
+                logger.info("🔍 Step 2: Liveness check...")
 
                 # IMPORTANT: pass the full image + bbox to liveness detector
                 # so the detector can expand the crop (e.g. 2.7x) and see
@@ -233,11 +214,31 @@ class FaceRecognizer:
                     return RecognitionResult(
                         success=False,
                         message=liveness_result.message,
-                        quality_result=quality_result,
+                        quality_result=None,
                         liveness_result=liveness_result
                     )
 
                 logger.info("✅ Liveness check passed")
+
+            # === STEP 3: QUALITY CHECK ===
+            quality_result = None
+            if self.enable_quality_check and not skip_quality_check:
+                logger.info("🔍 Step 3: Quality check...")
+                quality_result = face_quality_checker.check_all(
+                    image=image,
+                    landmarks=face.kps  # numpy array (5, 2)
+                )
+                
+                if not quality_result.is_valid:
+                    logger.warning(f"Quality check failed: {quality_result.messages}")
+                    return RecognitionResult(
+                        success=False,
+                        message=f"Chất lượng ảnh không đạt: {'; '.join(quality_result.messages)}",
+                        quality_result=quality_result,
+                        liveness_result=liveness_result
+                    )
+                
+                logger.info("✅ Quality check passed")
             
             # === STEP 4: EXTRACT EMBEDDING ===
             logger.info("🔍 Step 4: Extracting embedding...")

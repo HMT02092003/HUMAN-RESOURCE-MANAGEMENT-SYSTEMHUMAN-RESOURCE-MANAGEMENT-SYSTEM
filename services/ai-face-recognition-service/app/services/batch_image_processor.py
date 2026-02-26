@@ -25,7 +25,7 @@ MIN_LIVENESS_CONFIDENCE = 0.80
 TOP_K_IMAGES = 7  # Lấy top 7 ảnh tốt nhất (default cho single video)
 TOP_K_IMAGES_MULTI = 15  # Lấy top 15 cho multi-angle (có nhiều frames hơn)
 MIN_IMAGES_AFTER_FILTER = 1  # Số ảnh tối thiểu sau khi lọc - Cho phép qua dù chỉ có 1 vài frame tốt
-OPTIMAL_IMAGE_WIDTH = 640  # Resize ảnh về 640px width
+OPTIMAL_IMAGE_WIDTH = 1080  # Resize ảnh về 1080px width để tối ưu cho case MASK
 
 # ===== YAW ANGLE RANGES (Góc quay mặt) =====
 ANGLE_RANGES = {

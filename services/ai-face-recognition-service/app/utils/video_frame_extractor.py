@@ -23,7 +23,7 @@ class VideoFrameExtractor:
     def extract_frames(
         video_path: str, 
         target_count: int = 40,
-        max_dimension: int = 640
+        max_dimension: int = 1080
     ) -> List[np.ndarray]:
         """
         Extract evenly-distributed frames from video
@@ -121,7 +121,7 @@ class VideoFrameExtractor:
     async def extract_frames_from_upload(
         video_bytes: bytes,
         target_count: int = 40,
-        max_dimension: int = 640
+        max_dimension: int = 1080
     ) -> List[np.ndarray]:
         """
         Extract frames from uploaded video bytes

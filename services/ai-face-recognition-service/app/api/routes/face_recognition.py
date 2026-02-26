@@ -276,11 +276,11 @@ async def recognize_face(
         logger.info("=" * 50)
         
         # ============================================
-        # STAGE 1: QUALITY CHECK (using face_quality_service)
+        # STAGE 1: LIVENESS & HEAD POSE CHECK (using face_liveness_service)
         # ============================================
-        logger.info("📋 STAGE 1: Quality Check")
+        logger.info("📋 STAGE 1: Liveness & Head Pose Check")
 
-        # Detect faces first to get landmarks
+        # Detect faces first to get landmarks and bbox
         faces = face_recognizer.app.get(img)
         if not faces or len(faces) == 0:
             return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={
@@ -301,6 +301,43 @@ async def recognize_face(
 
         face = faces[0]
         kps = face.kps if hasattr(face, 'kps') else None
+
+        # Build bbox as integers if available
+        bbox = None
+        if hasattr(face, 'bbox'):
+            try:
+                b = getattr(face, 'bbox')
+                x1, y1, x2, y2 = int(b[0]), int(b[1]), int(b[2]), int(b[3])
+                bbox = [x1, y1, x2, y2]
+            except Exception:
+                bbox = None
+
+        # Use singleton liveness detector
+        from app.services.face_liveness_service import face_liveness_detector
+        liv_result = face_liveness_detector.check_liveness(img, bbox=bbox)
+
+        if not liv_result.is_real:
+            logger.warning(f"❌ Liveness check failed: {liv_result.message}")
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "success": False,
+                    "error": "LIVENESS_FAILED",
+                    "message": liv_result.message,
+                    "details": {
+                        "confidence": float(liv_result.confidence),
+                        "label": liv_result.label,
+                        "liveness_message": liv_result.message
+                    }
+                }
+            )
+
+        logger.info(f"✅ Liveness passed (confidence={liv_result.confidence:.2%})")
+
+        # ============================================
+        # STAGE 2: QUALITY CHECK (using face_quality_service)
+        # ============================================
+        logger.info("📋 STAGE 2: Quality Check")
 
         # Use the existing face_quality_checker singleton
         quality_result = face_quality_checker.check_all(img, landmarks=kps)
@@ -335,45 +372,6 @@ async def recognize_face(
             )
 
         logger.info("✅ Quality check passed")
-
-        # ============================================
-        # STAGE 2: LIVENESS & HEAD POSE CHECK (using face_liveness_service)
-        # ============================================
-        logger.info("📋 STAGE 2: Liveness & Head Pose Check")
-
-        # Build bbox as integers if available
-        bbox = None
-        if hasattr(face, 'bbox'):
-            try:
-                b = getattr(face, 'bbox')
-                x1, y1, x2, y2 = int(b[0]), int(b[1]), int(b[2]), int(b[3])
-                bbox = [x1, y1, x2, y2]
-            except Exception:
-                bbox = None
-
-        # Use singleton liveness detector
-        from app.services.face_liveness_service import face_liveness_detector
-        liv_result = face_liveness_detector.check_liveness(img, bbox=bbox)
-
-        if not liv_result.is_real:
-            logger.warning(f"❌ Liveness check failed: {liv_result.message}")
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "success": False,
-                    "error": "LIVENESS_FAILED",
-                    "message": liv_result.message,
-                    "details": {
-                        "confidence": float(liv_result.confidence),
-                        "label": liv_result.label,
-                        "liveness_message": liv_result.message,
-                        "head_pose": getattr(quality_result, 'head_pose_angles', None),
-                        "quality_details": getattr(quality_result, 'details', None)
-                    }
-                }
-            )
-
-        logger.info(f"✅ Liveness passed (confidence={liv_result.confidence:.2%})")
 
         # ============================================
         # STAGE 3: FACE RECOGNITION
