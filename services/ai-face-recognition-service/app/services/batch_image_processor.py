@@ -17,13 +17,11 @@ logger = logging.getLogger(__name__)
 
 # ===== CẤU HÌNH QUAN TRỌNG =====
 MIN_FACE_SIZE = 50  # Kích thước mặt tối thiểu (pixel) - Giảm nhẹ để bắt được mặt khi quay
-MIN_DETECTION_SCORE = 0.45  # Ngưỡng detection - Giảm xuống đáng kể vì mặt quay ngang/đeo khẩu trang sẽ có det_score thấp
+MIN_DETECTION_SCORE = 0.60  # Ngưỡng detection chặt chẽ hơn cho các trường hợp bình thường
+MIN_DETECTION_SCORE_MASK = 0.35  # Ngưỡng nới lỏng riêng cho trường hợp đeo khẩu trang
 MIN_BLUR_SCORE = 30.0  # Laplacian variance tối thiểu - Giảm nhẹ để chống rung video
-# Ngưỡng liveness cho đăng ký: Tại sao lại thấp? 
-# Vì model Liveness (MiniFASNetV2) vốn chỉ được train cho mặt CHÍNH DIỆN.
-# Khi bạn quay mặt sang trái/phải hoặc đeo khẩu trang, model không hiểu cấu trúc và cho điểm cực kỳ thấp (< 20%).
-# Do đó trong lúc đăng ký (đã có video và giám sát), ta nới lỏng ngưỡng này.
-MIN_LIVENESS_CONFIDENCE = 0.2 
+# Ngưỡng liveness check thắt chặt theo yêu cầu
+MIN_LIVENESS_CONFIDENCE = 0.80 
 TOP_K_IMAGES = 7  # Lấy top 7 ảnh tốt nhất (default cho single video)
 TOP_K_IMAGES_MULTI = 15  # Lấy top 15 cho multi-angle (có nhiều frames hơn)
 MIN_IMAGES_AFTER_FILTER = 1  # Số ảnh tối thiểu sau khi lọc - Cho phép qua dù chỉ có 1 vài frame tốt
@@ -124,7 +122,8 @@ class BatchImageProcessor:
     def detect_and_score_face(
         self, 
         img_array: np.ndarray, 
-        img_index: int
+        img_index: int,
+        angle_type: Optional[str] = None
     ) -> Tuple[bool, Optional[Dict[str, Any]], Optional[str]]:
         """
         BƯỚC 2.1 & 2.2: Face Detection + Basic Check + Scoring
@@ -161,8 +160,9 @@ class BatchImageProcessor:
             
             # Step 3: Check detection score
             detection_score = face.det_score
-            if detection_score < MIN_DETECTION_SCORE:
-                logger.debug(f"❌ Image {img_index}: Low detection score ({detection_score:.3f})")
+            required_det_score = MIN_DETECTION_SCORE_MASK if angle_type == 'MASK' else MIN_DETECTION_SCORE
+            if detection_score < required_det_score:
+                logger.debug(f"❌ Image {img_index}: Low detection score ({detection_score:.3f} < {required_det_score})")
                 return False, None, "low_detection"
             
             # Step 4: Calculate blur score
@@ -438,7 +438,9 @@ class BatchImageProcessor:
                 continue
             
             # Detect and score (with detailed rejection tracking)
-            is_valid, face_data, rejection_reason = self.detect_and_score_face(img_array, idx)
+            is_valid, face_data, rejection_reason = self.detect_and_score_face(
+                img_array, idx, angle_type=angle_type
+            )
             
             if not is_valid or not face_data:
                 if rejection_reason:

@@ -193,7 +193,7 @@ class FaceLivenessDetector:
 
                 face_crop = face_image[cy1:cy2, cx1:cx2]
 
-                # If padding needed, pad with black (constant) to avoid replicate artifacts
+                # If padding needed, pad with borders replicated to avoid black border fake trigger
                 if pad_left or pad_top or pad_right or pad_bottom:
                     face_crop = cv2.copyMakeBorder(
                         face_crop,
@@ -201,8 +201,7 @@ class FaceLivenessDetector:
                         pad_bottom,
                         pad_left,
                         pad_right,
-                        borderType=cv2.BORDER_CONSTANT,
-                        value=[0, 0, 0]
+                        borderType=cv2.BORDER_REPLICATE
                     )
             else:
                 # If bbox not provided, treat face_image as crop and expand/pad by scale
@@ -228,8 +227,7 @@ class FaceLivenessDetector:
                     pad_bottom,
                     pad_left,
                     pad_right,
-                    borderType=cv2.BORDER_CONSTANT,
-                    value=[0, 0, 0]
+                    borderType=cv2.BORDER_REPLICATE
                 )
                 # then extract centered region
                 start_x = max(0, nx1 + pad_left)
