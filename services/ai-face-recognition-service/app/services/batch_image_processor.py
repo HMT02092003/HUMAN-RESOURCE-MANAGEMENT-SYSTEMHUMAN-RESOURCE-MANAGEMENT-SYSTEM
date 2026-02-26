@@ -16,13 +16,17 @@ from .face_liveness_service import face_liveness_detector
 logger = logging.getLogger(__name__)
 
 # ===== CẤU HÌNH QUAN TRỌNG =====
-MIN_FACE_SIZE = 60  # Kích thước mặt tối thiểu (pixel)
-MIN_DETECTION_SCORE = 0.65  # Ngưỡng detection (Hạ xuống để chấp nhận ảnh tầm trung)
-MIN_BLUR_SCORE = 50.0  # Laplacian variance tối thiểu
-MIN_LIVENESS_CONFIDENCE = 0.6  # Ngưỡng liveness (ảnh thật) - QUAN TRỌNG!
+MIN_FACE_SIZE = 50  # Kích thước mặt tối thiểu (pixel) - Giảm nhẹ để bắt được mặt khi quay
+MIN_DETECTION_SCORE = 0.45  # Ngưỡng detection - Giảm xuống đáng kể vì mặt quay ngang/đeo khẩu trang sẽ có det_score thấp
+MIN_BLUR_SCORE = 30.0  # Laplacian variance tối thiểu - Giảm nhẹ để chống rung video
+# Ngưỡng liveness cho đăng ký: Tại sao lại thấp? 
+# Vì model Liveness (MiniFASNetV2) vốn chỉ được train cho mặt CHÍNH DIỆN.
+# Khi bạn quay mặt sang trái/phải hoặc đeo khẩu trang, model không hiểu cấu trúc và cho điểm cực kỳ thấp (< 20%).
+# Do đó trong lúc đăng ký (đã có video và giám sát), ta nới lỏng ngưỡng này.
+MIN_LIVENESS_CONFIDENCE = 0.2 
 TOP_K_IMAGES = 7  # Lấy top 7 ảnh tốt nhất (default cho single video)
 TOP_K_IMAGES_MULTI = 15  # Lấy top 15 cho multi-angle (có nhiều frames hơn)
-MIN_IMAGES_AFTER_FILTER = 3  # Số ảnh tối thiểu sau khi lọc
+MIN_IMAGES_AFTER_FILTER = 1  # Số ảnh tối thiểu sau khi lọc - Cho phép qua dù chỉ có 1 vài frame tốt
 OPTIMAL_IMAGE_WIDTH = 640  # Resize ảnh về 640px width
 
 # ===== YAW ANGLE RANGES (Góc quay mặt) =====
@@ -167,13 +171,16 @@ class BatchImageProcessor:
                 logger.debug(f"❌ Image {img_index}: Too blurry ({blur_score:.2f})")
                 return False, None, "too_blurry"
             
-            # Step 5: Liveness Check (Anti-spoofing) - QUAN TRỌNG!
+            # Step 5: Liveness Check (Anti-spoofing) - Nới lỏng cho góc nghiêng
             # Important: pass a copy of img_array to avoid any caching issues
             liveness_result = face_liveness_detector.check_liveness(
                 img_array.copy(), 
                 bbox.astype(int).tolist()
             )
-            if not liveness_result.is_real or liveness_result.confidence < MIN_LIVENESS_CONFIDENCE:
+            
+            # Chỉ check liveness gắt gao nếu đang xử lý ảnh chính diện tĩnh,
+            # Tuy nhiên batch processing chủ yếu dùng cho video quay ngang/mặt nạ nên ta dùng ngưỡng thấp
+            if liveness_result.confidence < MIN_LIVENESS_CONFIDENCE:
                 logger.debug(
                     f"❌ Image {img_index}: Liveness check failed - "
                     f"{liveness_result.label} (confidence: {liveness_result.confidence:.3f})"
