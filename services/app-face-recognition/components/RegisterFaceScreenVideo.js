@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { 
-  View, Text, TouchableOpacity, StyleSheet, 
-  Alert, Dimensions, StatusBar, ActivityIndicator, Platform 
+import {
+  View, Text, TouchableOpacity, StyleSheet,
+  Alert, Dimensions, StatusBar, ActivityIndicator, Platform
 } from 'react-native';
 import { Camera } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,82 +16,83 @@ import { API_ENDPOINTS } from '../config/apiConfig';
 const { width, height } = Dimensions.get('window');
 
 // --- CẤU HÌNH UI ---
-const OVAL_WIDTH = width * 0.8; 
+const OVAL_WIDTH = width * 0.8;
 const OVAL_HEIGHT = OVAL_WIDTH * 1.3;
 
 const STEP_CONFIG = [
-  { 
-    id: 1, 
-    key: 'CENTER', 
-    name: 'Chính diện', 
-    instruction: 'NHÌN THẸNG vào máy ảnh', 
+  {
+    id: 1,
+    key: 'CENTER',
+    name: 'Chính diện',
+    instruction: 'NHÌN THẲNG vào máy ảnh',
     icon: 'person',
     yawRange: [-10, 10],  // Cho phép quay +/- 10 độ
     rollRange: [-10, 10]  // Cho phép nghiêng +/- 10 độ
   },
-  { 
-    id: 2, 
-    key: 'LEFT', 
-    name: 'Quay trái', 
-    instruction: 'Quay mặt nhẹ sang TRÁI', 
+  {
+    id: 2,
+    key: 'LEFT',
+    name: 'Quay trái',
+    instruction: 'Quay mặt nhẹ sang TRÁI',
     icon: 'arrow-back',
     yawRange: [-45, -15],  // Quay trái 15-45 độ
     rollRange: [-15, 15]
   },
-  { 
-    id: 3, 
-    key: 'RIGHT', 
-    name: 'Quay phải', 
-    instruction: 'Quay mặt nhẹ sang PHẢI', 
+  {
+    id: 3,
+    key: 'RIGHT',
+    name: 'Quay phải',
+    instruction: 'Quay mặt nhẹ sang PHẢI',
     icon: 'arrow-forward',
     yawRange: [15, 45],  // Quay phải 15-45 độ
     rollRange: [-15, 15]
-  },
-  { 
-    id: 4, 
-    key: 'MASK', 
-    name: 'Khẩu trang', 
-    instruction: 'ĐEO KHẨU TRANG và nhìn thẳng', 
-    icon: 'medical',
-    yawRange: [-10, 10],
-    rollRange: [-10, 10],
-    allowMask: true  // Cho phép khẩu trang
   }
+  // Tạm ẩn bước khẩu trang theo yêu cầu
+  // { 
+  //   id: 4, 
+  //   key: 'MASK', 
+  //   name: 'Khẩu trang', 
+  //   instruction: 'ĐEO KHẨU TRANG và nhìn thẳng', 
+  //   icon: 'medical',
+  //   yawRange: [-10, 10],
+  //   rollRange: [-10, 10],
+  //   allowMask: true  // Cho phép khẩu trang
+  // }
 ];
 
 const STEP_DURATION = 3; // Thời gian quay quy định
 const VIDEO_QUALITY = Camera.Constants.VideoQuality['480p'];
 
 const COLORS = {
-    PRIMARY: '#FFD700', // Vàng kim
-    BG_DARK: '#121212',
-    BG_PANEL: '#1E1E1E', 
-    SUCCESS: '#4CD964',
-    DANGER: '#FF3B30',
-    TEXT_GRAY: '#A0A0A0',
-    WHITE: '#FFFFFF'
+  PRIMARY: '#FFD700', // Vàng kim
+  BG_DARK: '#121212',
+  BG_PANEL: '#1E1E1E',
+  SUCCESS: '#4CD964',
+  DANGER: '#FF3B30',
+  TEXT_GRAY: '#A0A0A0',
+  WHITE: '#FFFFFF'
 };
 
 export default function RegisterFaceScreenVideo({ user, onCancel }) {
   const cameraRef = useRef(null);
   const isMounted = useRef(true);
-  
+
   const [userInfo, setUserInfo] = useState(user || null);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  
+
   // State quản lý quay
   const [isRecording, setIsRecording] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [countdown, setCountdown] = useState(null);
   const [recordingTime, setRecordingTime] = useState(0);
-  
+
   // State quản lý khuôn mặt (Validation chặt chẽ giống màn nhận diện)
   const [faceDetected, setFaceDetected] = useState(false);
   const [hasPermission, setHasPermission] = useState(null);
-  const [faceValidation, setFaceValidation] = useState({ 
-    isValid: false, 
-    message: 'Đưa mặt vào khung', 
-    color: '#A0A0A0' 
+  const [faceValidation, setFaceValidation] = useState({
+    isValid: false,
+    message: 'Đưa mặt vào khung',
+    color: '#A0A0A0'
   });
   const [largestFace, setLargestFace] = useState(null);
 
@@ -103,7 +104,7 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
     (async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
       setHasPermission(status === 'granted');
-      
+
       // Load user info from props only (no auto-login)
       if (!userInfo) {
         console.log('⚠️ No user info provided, please login first');
@@ -131,14 +132,14 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
     if (isRecording || countdown !== null) return;
 
     const currentStep = STEP_CONFIG[currentStepIndex];
-    
+
     // 1. Kiểm tra số lượng mặt - Cho phép nhiều nhưng lấy mặt lớn nhất
     if (!faces || faces.length === 0) {
       setFaceDetected(false);
-      setFaceValidation({ 
-        isValid: false, 
-        message: 'KHÔNG THẤY MẶT', 
-        color: '#FF3B30' 
+      setFaceValidation({
+        isValid: false,
+        message: 'KHÔNG THẤY MẶT',
+        color: '#FF3B30'
       });
       setLargestFace(null);
       return;
@@ -155,13 +156,13 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
 
     // 3. Validate khuôn mặt (chỉ check size, không check góc)
     const validation = FaceValidationHelper.validateFaceLocally(face, { width, height });
-    
+
     // 4. Cập nhật trạng thái
     if (validation.isValid) {
       setFaceDetected(true);
       setFaceValidation({
         isValid: true,
-        message: faces.length > 1 
+        message: faces.length > 1
           ? `✅ CHỌN 1/${faces.length} NGƯỜI - SẴN SÀNG`
           : '✅ SẴN SÀNG QUAY',
         color: '#4CD964'
@@ -175,11 +176,11 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
   // --- LOGIC QUAY VIDEO VỚI VALIDATION CHẶT CHẼ ---
   const startRecording = async () => {
     const currentStep = STEP_CONFIG[currentStepIndex];
-    
+
     // 1. Kiểm tra khuôn mặt (chặt chẽ hơn)
     if (!faceValidation.isValid && currentStep.key !== 'MASK') {
       Alert.alert(
-        'Cảnh báo', 
+        'Cảnh báo',
         faceValidation.message || 'Vui lòng đưa khuôn mặt vào khung hình và đảm bảo đúng tư thế.'
       );
       return;
@@ -203,7 +204,7 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
       // 4. Bắt đầu quay
       setIsRecording(true);
       setRecordingTime(0);
-      
+
       // Timer chạy thanh hiển thị thời gian
       const timer = setInterval(() => {
         setRecordingTime(prev => {
@@ -223,21 +224,21 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
       // 5. Kết thúc quay
       clearInterval(timer);
       if (!isMounted.current) return;
-      
+
       setIsRecording(false);
       setRecordingTime(STEP_DURATION); // Set full thanh thời gian
-      
+
       // Lưu video
       setCapturedVideos(prev => ({ ...prev, [currentStep.key]: videoData.uri }));
-      
+
       // Reset validation cho bước tiếp theo (không tự động chuyển)
       setTimeout(() => {
         if (isMounted.current) {
           setRecordingTime(0);
-          setFaceValidation({ 
-            isValid: false, 
-            message: 'Đưa mặt vào khung', 
-            color: '#A0A0A0' 
+          setFaceValidation({
+            isValid: false,
+            message: 'Đưa mặt vào khung',
+            color: '#A0A0A0'
           });
         }
       }, 800);
@@ -291,21 +292,21 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
           if (!res || !res.ok) {
             const status = res && res.status ? res.status : 'NO_RESPONSE';
             console.warn(`Upload failed for ${step.key}: ${status}`);
-            
+
             // Try to parse detailed error message from response
             let errorDetail = 'Lỗi không xác định';
             try {
               if (res) {
                 const errorData = await res.json();
                 console.log(`Error data for ${step.key}:`, errorData);
-                
+
                 // Parse detailed error from backend
                 if (errorData && errorData.message) {
                   errorDetail = errorData.message;
                 } else if (errorData && errorData.detail) {
                   errorDetail = errorData.detail;
                 }
-                
+
                 // Add metadata if available (rejection stats)
                 if (errorData && errorData.metadata && errorData.metadata.rejection_stats) {
                   const stats = errorData.metadata.rejection_stats;
@@ -329,7 +330,7 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
       // Build status message showing which steps succeeded/failed with DETAILS
       const statusDetails = [];
       const errorMap = new Map(); // Map step.key -> error message
-      
+
       // Build error map from errors array
       errors.forEach(errObj => {
         errorMap.set(errObj.stepKey, errObj.message);
@@ -337,7 +338,7 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
 
       STEP_CONFIG.forEach(step => {
         if (!capturedVideos[step.key]) return;
-        
+
         const errorMsg = errorMap.get(step.key);
         if (errorMsg) {
           // Show detailed error message with proper formatting
@@ -349,10 +350,10 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
 
       if (errors.length === 0) {
         Alert.alert(
-          '✅ Đăng ký hoàn tất!', 
+          '✅ Đăng ký hoàn tất!',
           `Đã đăng ký thành công ${successCount} góc:\n\n${statusDetails.join('\n\n')}`,
-          [{ 
-            text: 'OK', 
+          [{
+            text: 'OK',
             onPress: () => {
               // Reset state after success
               setCapturedVideos({ CENTER: null, LEFT: null, RIGHT: null, MASK: null });
@@ -367,8 +368,8 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
           successCount > 0 ? '⚠️ Đăng ký một phần' : '❌ Đăng ký thất bại',
           `${statusDetails.join('\n\n')}\n\n${errors.length === anglesToSend.length ? 'Tất cả góc quay đều thất bại.' : `Đã đăng ký ${successCount}/${anglesToSend.length} góc.`}\n\nHãy quay lại các góc bị lỗi và gửi lại.`,
           [
-            { 
-              text: 'Đóng', 
+            {
+              text: 'Đóng',
               onPress: () => {
                 // Keep failed videos, clear successful ones
                 const newVideos = { ...capturedVideos };
@@ -380,10 +381,10 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
                 });
                 setCapturedVideos(newVideos);
               },
-              style: 'cancel' 
+              style: 'cancel'
             },
-            { 
-              text: 'Quay lại tất cả', 
+            {
+              text: 'Quay lại tất cả',
               onPress: () => {
                 setCapturedVideos({ CENTER: null, LEFT: null, RIGHT: null, MASK: null });
                 setCurrentStepIndex(0);
@@ -400,15 +401,15 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
   };
 
   const getDisplayName = () => {
-      if (!userInfo) return 'Đang tải...';
-      const fullName = userInfo.full_name || '';
-      const userName = userInfo.username || '';
-      if (fullName && userName) return `${fullName} - ${userName}`;
-      return fullName || userName || 'Người dùng';
+    if (!userInfo) return 'Đang tải...';
+    const fullName = userInfo.full_name || '';
+    const userName = userInfo.username || '';
+    if (fullName && userName) return `${fullName} - ${userName}`;
+    return fullName || userName || 'Người dùng';
   };
 
   if (hasPermission === null || hasPermission === false) {
-    return <View style={styles.centerBox}><Text style={{color: 'white'}}>Cần quyền Camera</Text></View>;
+    return <View style={styles.centerBox}><Text style={{ color: 'white' }}>Cần quyền Camera</Text></View>;
   }
 
   const currentStep = STEP_CONFIG[currentStepIndex];
@@ -417,7 +418,7 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-      
+
       {/* 1. CAMERA LAYER */}
       <Camera
         ref={cameraRef}
@@ -437,137 +438,137 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
 
       {/* 2. KHUNG GUIDELINE & ĐẾM NGƯỢC */}
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
-         <View style={styles.guideContainer}>
-            <View style={[
-                styles.ovalFrame,
-                { 
-                  borderColor: isRecording ? COLORS.DANGER : (faceDetected || currentStep.key === 'MASK' ? COLORS.PRIMARY : '#666'),
-                  borderWidth: isRecording ? 4 : 3
-                }
-            ]}>
-                {/* Hiển thị số đếm ngược 3-2-1 giữa màn hình */}
-                {countdown && (
-                   <View style={styles.countdownContainer}>
-                      <Text style={styles.countdownText}>{countdown}</Text>
-                   </View>
-                )}
-            </View>
-         </View>
+        <View style={styles.guideContainer}>
+          <View style={[
+            styles.ovalFrame,
+            {
+              borderColor: isRecording ? COLORS.DANGER : (faceDetected || currentStep.key === 'MASK' ? COLORS.PRIMARY : '#666'),
+              borderWidth: isRecording ? 4 : 3
+            }
+          ]}>
+            {/* Hiển thị số đếm ngược 3-2-1 giữa màn hình */}
+            {countdown && (
+              <View style={styles.countdownContainer}>
+                <Text style={styles.countdownText}>{countdown}</Text>
+              </View>
+            )}
+          </View>
+        </View>
       </View>
 
       {/* 3. UI LAYER */}
       <SafeAreaView style={styles.uiContainer}>
-        
+
         {/* HEADER */}
         <View style={styles.header}>
-            <TouchableOpacity onPress={onCancel} style={styles.iconBtn}>
-                <Ionicons name="close" size={28} color={COLORS.WHITE} />
-            </TouchableOpacity>
+          <TouchableOpacity onPress={onCancel} style={styles.iconBtn}>
+            <Ionicons name="close" size={28} color={COLORS.WHITE} />
+          </TouchableOpacity>
 
-            <View style={styles.headerInfo}>
-                <Text style={styles.headerTitle}>ĐĂNG KÝ KHUÔN MẶT</Text>
-                <View style={styles.nameTag}>
-                    <Ionicons name="person-circle" size={16} color={COLORS.PRIMARY} />
-                    <Text style={styles.userName}>{getDisplayName()}</Text>
-                </View>
+          <View style={styles.headerInfo}>
+            <Text style={styles.headerTitle}>ĐĂNG KÝ KHUÔN MẶT</Text>
+            <View style={styles.nameTag}>
+              <Ionicons name="person-circle" size={16} color={COLORS.PRIMARY} />
+              <Text style={styles.userName}>{getDisplayName()}</Text>
             </View>
-            
-            {/* Removed logout button - user must login each time */}
-            <View style={styles.iconBtn} />
+          </View>
+
+          {/* Removed logout button - user must login each time */}
+          <View style={styles.iconBtn} />
         </View>
 
         {/* FOOTER PANEL */}
         <View style={styles.footerPanel}>
-            
-            {/* Hiển thị trạng thái validation */}
-            <View style={[styles.validationBox, { backgroundColor: faceValidation.color + '33' }]}>
-                <Text style={[styles.validationText, { color: faceValidation.color }]}>
-                    {faceValidation.message}
-                </Text>
-            </View>
 
-            <View style={styles.instructionBox}>
-                <Text style={styles.stepLabel}>BƯỚC {currentStepIndex + 1}/{STEP_CONFIG.length}</Text>
-                <Text style={styles.instructionText}>{currentStep.instruction}</Text>
-            </View>
+          {/* Hiển thị trạng thái validation */}
+          <View style={[styles.validationBox, { backgroundColor: faceValidation.color + '33' }]}>
+            <Text style={[styles.validationText, { color: faceValidation.color }]}>
+              {faceValidation.message}
+            </Text>
+          </View>
 
-            {/* Các bước chọn */}
-            <View style={styles.stepSelectorContainer}>
-                {STEP_CONFIG.map((step, index) => {
-                    const isActive = index === currentStepIndex;
-                    const isDone = capturedVideos[step.key] !== null;
-                    
-                    let bgColor = '#333';
-                    let iconColor = '#888';
-                    let iconName = step.icon + '-outline';
+          <View style={styles.instructionBox}>
+            <Text style={styles.stepLabel}>BƯỚC {currentStepIndex + 1}/{STEP_CONFIG.length}</Text>
+            <Text style={styles.instructionText}>{currentStep.instruction}</Text>
+          </View>
 
-                    if (isDone) {
-                        bgColor = COLORS.SUCCESS;
-                        iconColor = 'white';
-                        iconName = 'checkmark';
-                    } else if (isActive) {
-                        bgColor = 'rgba(255, 215, 0, 0.2)';
-                        iconColor = COLORS.PRIMARY;
-                        iconName = step.icon;
-                    }
+          {/* Các bước chọn */}
+          <View style={styles.stepSelectorContainer}>
+            {STEP_CONFIG.map((step, index) => {
+              const isActive = index === currentStepIndex;
+              const isDone = capturedVideos[step.key] !== null;
 
-                    return (
-                        <TouchableOpacity 
-                            key={step.id}
-                            onPress={() => !isRecording && !countdown && setCurrentStepIndex(index)}
-                            disabled={isRecording || countdown !== null}
-                            style={[
-                                styles.stepButton,
-                                { backgroundColor: bgColor },
-                                isActive && styles.stepButtonActive
-                            ]}
-                        >
-                            <Ionicons name={iconName} size={isDone ? 26 : 24} color={iconColor} />
-                        </TouchableOpacity>
-                    );
-                })}
-            </View>
+              let bgColor = '#333';
+              let iconColor = '#888';
+              let iconName = step.icon + '-outline';
 
-            {/* Vùng điều khiển */}
-            <View style={styles.actionArea}>
-                {!isUploading ? (
-                    (isRecording || countdown) ? (
-                        <View style={styles.recordingState}>
-                             {/* Nếu đang đếm ngược thì hiện text chuẩn bị, đang quay thì hiện giây */}
-                             {countdown ? (
-                               <Text style={styles.timerText}>Chuẩn bị...</Text>
-                             ) : (
-                               <>
-                                 <Text style={styles.timerText}>{recordingTime.toFixed(1)}s</Text>
-                                 <ActivityIndicator size="small" color={COLORS.DANGER} />
-                               </>
-                             )}
-                        </View>
-                    ) : (
-                        <View style={styles.controlsRow}>
-                             {/* Nút Quay */}
-                             <TouchableOpacity style={styles.mainCaptureBtn} onPress={startRecording}>
-                                 <View style={styles.innerCaptureBtn}>
-                                     <Ionicons name="videocam" size={34} color="black" />
-                                 </View>
-                             </TouchableOpacity>
+              if (isDone) {
+                bgColor = COLORS.SUCCESS;
+                iconColor = 'white';
+                iconName = 'checkmark';
+              } else if (isActive) {
+                bgColor = 'rgba(255, 215, 0, 0.2)';
+                iconColor = COLORS.PRIMARY;
+                iconName = step.icon;
+              }
 
-                             {/* Nút Gửi */}
-                             {capturedCount > 0 && (
-                                 <TouchableOpacity style={styles.sendBtn} onPress={handleUploadAll}>
-                                     <Ionicons name="cloud-upload" size={20} color="white" />
-                                     <Text style={styles.sendBtnText}>Gửi ({capturedCount})</Text>
-                                 </TouchableOpacity>
-                             )}
-                        </View>
-                    )
-                ) : (
-                    <View style={styles.loadingBox}>
-                        <ActivityIndicator size="large" color={COLORS.PRIMARY} />
-                        <Text style={{color: '#aaa', marginTop: 8}}>Đang xử lý...</Text>
+              return (
+                <TouchableOpacity
+                  key={step.id}
+                  onPress={() => !isRecording && !countdown && setCurrentStepIndex(index)}
+                  disabled={isRecording || countdown !== null}
+                  style={[
+                    styles.stepButton,
+                    { backgroundColor: bgColor },
+                    isActive && styles.stepButtonActive
+                  ]}
+                >
+                  <Ionicons name={iconName} size={isDone ? 26 : 24} color={iconColor} />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Vùng điều khiển */}
+          <View style={styles.actionArea}>
+            {!isUploading ? (
+              (isRecording || countdown) ? (
+                <View style={styles.recordingState}>
+                  {/* Nếu đang đếm ngược thì hiện text chuẩn bị, đang quay thì hiện giây */}
+                  {countdown ? (
+                    <Text style={styles.timerText}>Chuẩn bị...</Text>
+                  ) : (
+                    <>
+                      <Text style={styles.timerText}>{recordingTime.toFixed(1)}s</Text>
+                      <ActivityIndicator size="small" color={COLORS.DANGER} />
+                    </>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.controlsRow}>
+                  {/* Nút Quay */}
+                  <TouchableOpacity style={styles.mainCaptureBtn} onPress={startRecording}>
+                    <View style={styles.innerCaptureBtn}>
+                      <Ionicons name="videocam" size={34} color="black" />
                     </View>
-                )}
-            </View>
+                  </TouchableOpacity>
+
+                  {/* Nút Gửi */}
+                  {capturedCount > 0 && (
+                    <TouchableOpacity style={styles.sendBtn} onPress={handleUploadAll}>
+                      <Ionicons name="cloud-upload" size={20} color="white" />
+                      <Text style={styles.sendBtnText}>Gửi ({capturedCount})</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )
+            ) : (
+              <View style={styles.loadingBox}>
+                <ActivityIndicator size="large" color={COLORS.PRIMARY} />
+                <Text style={{ color: '#aaa', marginTop: 8 }}>Đang xử lý...</Text>
+              </View>
+            )}
+          </View>
 
         </View>
 
@@ -582,59 +583,59 @@ const styles = StyleSheet.create({
   uiContainer: { flex: 1, justifyContent: 'space-between' },
 
   header: {
-      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
-      paddingHorizontal: 20, paddingTop: 10, zIndex: 10,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
+    paddingHorizontal: 20, paddingTop: 10, zIndex: 10,
   },
   headerInfo: { alignItems: 'center', flex: 1, marginTop: 5 },
-  headerTitle: { 
-      color: COLORS.WHITE, fontSize: 18, fontWeight: 'bold', 
-      marginBottom: 6, textTransform: 'uppercase',
-      textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 3,
+  headerTitle: {
+    color: COLORS.WHITE, fontSize: 18, fontWeight: 'bold',
+    marginBottom: 6, textTransform: 'uppercase',
+    textShadowColor: 'rgba(0,0,0,0.5)', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 3,
   },
   nameTag: {
-      flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)',
-      paddingVertical: 4, paddingHorizontal: 12, borderRadius: 15, gap: 5
+    flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingVertical: 4, paddingHorizontal: 12, borderRadius: 15, gap: 5
   },
   userName: { color: COLORS.PRIMARY, fontSize: 14, fontWeight: '600' },
   iconBtn: { padding: 8, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 20 },
 
-  guideContainer: { 
-      flex: 1, justifyContent: 'center', alignItems: 'center',
-      marginTop: -120, // Đẩy lên cao
+  guideContainer: {
+    flex: 1, justifyContent: 'center', alignItems: 'center',
+    marginTop: -120, // Đẩy lên cao
   },
   ovalFrame: {
-      width: OVAL_WIDTH, height: OVAL_HEIGHT, borderRadius: OVAL_WIDTH, 
-      borderStyle: 'dashed', backgroundColor: 'transparent',
-      justifyContent: 'center', alignItems: 'center'
+    width: OVAL_WIDTH, height: OVAL_HEIGHT, borderRadius: OVAL_WIDTH,
+    borderStyle: 'dashed', backgroundColor: 'transparent',
+    justifyContent: 'center', alignItems: 'center'
   },
   countdownContainer: {
-      width: 100, height: 100, borderRadius: 50,
-      backgroundColor: 'rgba(0,0,0,0.5)',
-      justifyContent: 'center', alignItems: 'center'
+    width: 100, height: 100, borderRadius: 50,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center', alignItems: 'center'
   },
   countdownText: {
-      fontSize: 60, fontWeight: 'bold', color: COLORS.PRIMARY
+    fontSize: 60, fontWeight: 'bold', color: COLORS.PRIMARY
   },
 
   footerPanel: {
-      backgroundColor: COLORS.BG_PANEL,
-      borderTopLeftRadius: 25, borderTopRightRadius: 25,
-      padding: 15, alignItems: 'center', width: '100%', paddingBottom: 20,
-      shadowColor: "#000", shadowOffset: {width: 0, height: -4}, shadowOpacity: 0.5, shadowRadius: 10, elevation: 15,
+    backgroundColor: COLORS.BG_PANEL,
+    borderTopLeftRadius: 25, borderTopRightRadius: 25,
+    padding: 15, alignItems: 'center', width: '100%', paddingBottom: 20,
+    shadowColor: "#000", shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.5, shadowRadius: 10, elevation: 15,
   },
   validationBox: {
-      paddingVertical: 6,
-      paddingHorizontal: 12,
-      borderRadius: 15,
-      marginBottom: 8,
-      minWidth: '80%',
-      alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 15,
+    marginBottom: 8,
+    minWidth: '80%',
+    alignItems: 'center',
   },
   validationText: {
-      fontSize: 14,
-      fontWeight: 'bold',
-      textAlign: 'center',
-      letterSpacing: 0.5,
+    fontSize: 14,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    letterSpacing: 0.5,
   },
   instructionBox: { alignItems: 'center', marginBottom: 12 },
   stepLabel: { color: COLORS.PRIMARY, fontSize: 11, fontWeight: 'bold', letterSpacing: 1, marginBottom: 3 },
@@ -642,23 +643,23 @@ const styles = StyleSheet.create({
 
   stepSelectorContainer: { flexDirection: 'row', gap: 10, marginBottom: 15 },
   stepButton: { width: 45, height: 45, borderRadius: 23, justifyContent: 'center', alignItems: 'center' },
-  stepButtonActive: { borderWidth: 2, borderColor: COLORS.PRIMARY, transform: [{scale: 1.05}] },
+  stepButtonActive: { borderWidth: 2, borderColor: COLORS.PRIMARY, transform: [{ scale: 1.05 }] },
 
   actionArea: { height: 65, justifyContent: 'center', width: '100%' },
   controlsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%' },
-  
+
   mainCaptureBtn: {
-      width: 65, height: 65, borderRadius: 33, backgroundColor: 'rgba(255, 215, 0, 0.3)',
-      justifyContent: 'center', alignItems: 'center',
+    width: 65, height: 65, borderRadius: 33, backgroundColor: 'rgba(255, 215, 0, 0.3)',
+    justifyContent: 'center', alignItems: 'center',
   },
   innerCaptureBtn: {
-      width: 50, height: 50, borderRadius: 25, backgroundColor: COLORS.PRIMARY,
-      justifyContent: 'center', alignItems: 'center',
-      shadowColor: COLORS.PRIMARY, shadowOpacity: 0.6, shadowRadius: 8, elevation: 5
+    width: 50, height: 50, borderRadius: 25, backgroundColor: COLORS.PRIMARY,
+    justifyContent: 'center', alignItems: 'center',
+    shadowColor: COLORS.PRIMARY, shadowOpacity: 0.6, shadowRadius: 8, elevation: 5
   },
   sendBtn: {
-      position: 'absolute', right: 0, flexDirection: 'row', alignItems: 'center', gap: 5,
-      backgroundColor: COLORS.SUCCESS, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20,
+    position: 'absolute', right: 0, flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: COLORS.SUCCESS, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20,
   },
   sendBtnText: { color: 'white', fontWeight: 'bold', fontSize: 12 },
   recordingState: { alignItems: 'center' },

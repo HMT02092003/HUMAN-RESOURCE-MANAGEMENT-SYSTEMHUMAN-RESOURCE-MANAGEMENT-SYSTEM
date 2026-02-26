@@ -239,6 +239,26 @@ class FaceLivenessDetector:
                 logger.warning("Liveness crop is empty. Returning FAKE result to be safe.")
                 return LivenessResult(is_real=False, confidence=0.0, label="FAKE", message="Empty crop for liveness check")
 
+            # --- 🛠️ XỬ LÝ ẢNH MÔI TRƯỜNG KÉM BẰNG THUẬT TOÁN CLAHE ---
+            # Xử lý vấn đề hắt sáng, chói, tường phẳng làm AI lầm tưởng là ảnh 2D in trên giấy.
+            try:
+                # 1. Chuyển ảnh sang hệ màu LAB (Lightness, A-color, B-color) để tách biệt Ánh sáng
+                lab = cv2.cvtColor(face_crop, cv2.COLOR_BGR2LAB)
+                l_channel, a, b = cv2.split(lab)
+                
+                # 2. Áp dụng CLAHE (Contrast Limited Adaptive Histogram Equalization) lên kênh Ánh Sáng (L)
+                # ClipLimit: 2.0 (Giới hạn độ tương phản để không làm cháy ảnh)
+                # TileGridSize: (8,8) (Chia ảnh thành các khối 8x8 để cân bằng sáng cục bộ)
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                l_clahe = clahe.apply(l_channel)
+                
+                # 3. Gộp lại và chuyển về BGR
+                merged_lab = cv2.merge((l_clahe, a, b))
+                face_crop = cv2.cvtColor(merged_lab, cv2.COLOR_LAB2BGR)
+                logger.debug("Đã áp dụng CLAHE để tăng cường chiều sâu 3D cho ảnh.")
+            except Exception as ex:
+                logger.warning(f"Lỗi khi áp dụng CLAHE: {ex}. Tiếp tục với ảnh gốc.")
+            # ---------------------------------------------------------
 
             # Preprocess ảnh (ensure RGB conversion and resize to model input)
             input_tensor = self._preprocess(face_crop)
