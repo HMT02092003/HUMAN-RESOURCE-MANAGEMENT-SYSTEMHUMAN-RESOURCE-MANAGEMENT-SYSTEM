@@ -149,27 +149,33 @@ class BatchImageProcessor:
             
             face = faces[0]
             
-            # Step 2: Check face size
-            bbox = face.bbox
-            face_width = bbox[2] - bbox[0]
-            face_height = bbox[3] - bbox[1]
-            
-            if face_width < MIN_FACE_SIZE or face_height < MIN_FACE_SIZE:
-                logger.debug(f"❌ Image {img_index}: Face too small ({face_width}x{face_height})")
-                return False, None, "too_small"
-            
-            # Step 3: Check detection score
-            detection_score = face.det_score
-            required_det_score = MIN_DETECTION_SCORE_MASK if angle_type == 'MASK' else MIN_DETECTION_SCORE
-            if detection_score < required_det_score:
-                logger.debug(f"❌ Image {img_index}: Low detection score ({detection_score:.3f} < {required_det_score})")
-                return False, None, "low_detection"
-            
-            # Step 4: Calculate blur score
-            blur_score = self.calculate_blur_score(img_array)
-            if blur_score < MIN_BLUR_SCORE:
-                logger.debug(f"❌ Image {img_index}: Too blurry ({blur_score:.2f})")
-                return False, None, "too_blurry"
+            # Nếu là MASK thì bỏ qua hầu hết các bước kiểm tra (chỉ bắt buộc phải tìm thấy 1 cái mặt để nhúng vector + check liveness)
+            if angle_type != 'MASK':
+                # Step 2: Check face size
+                bbox = face.bbox
+                face_width = bbox[2] - bbox[0]
+                face_height = bbox[3] - bbox[1]
+                
+                if face_width < MIN_FACE_SIZE or face_height < MIN_FACE_SIZE:
+                    logger.debug(f"❌ Image {img_index}: Face too small ({face_width}x{face_height})")
+                    return False, None, "too_small"
+                
+                # Step 3: Check detection score
+                detection_score = face.det_score
+                if detection_score < MIN_DETECTION_SCORE:
+                    logger.debug(f"❌ Image {img_index}: Low detection score ({detection_score:.3f} < {MIN_DETECTION_SCORE})")
+                    return False, None, "low_detection"
+                
+                # Step 4: Calculate blur score
+                blur_score = self.calculate_blur_score(img_array)
+                if blur_score < MIN_BLUR_SCORE:
+                    logger.debug(f"❌ Image {img_index}: Too blurry ({blur_score:.2f})")
+                    return False, None, "too_blurry"
+            else:
+                # Vẫn phải lấy điểm score nhưng không bị block
+                detection_score = getattr(face, 'det_score', 0.5)
+                blur_score = self.calculate_blur_score(img_array)
+                bbox = face.bbox
             
             # Step 5: Liveness Check (Anti-spoofing) - Nới lỏng cho góc nghiêng
             # Important: pass a copy of img_array to avoid any caching issues
