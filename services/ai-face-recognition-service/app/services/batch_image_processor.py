@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # ===== CẤU HÌNH QUAN TRỌNG =====
 MIN_FACE_SIZE = 50  # Kích thước mặt tối thiểu (pixel) - Giảm nhẹ để bắt được mặt khi quay
 MIN_DETECTION_SCORE = 0.60  # Ngưỡng detection chặt chẽ hơn cho các trường hợp bình thường
-MIN_DETECTION_SCORE_MASK = 0.35  # Ngưỡng nới lỏng riêng cho trường hợp đeo khẩu trang
+MIN_DETECTION_SCORE_MASK = 0.15  # Ngưỡng nới lỏng riêng cho trường hợp đeo khẩu trang
 MIN_BLUR_SCORE = 30.0  # Laplacian variance tối thiểu - Giảm nhẹ để chống rung video
 # Ngưỡng liveness check thắt chặt theo yêu cầu
 MIN_LIVENESS_CONFIDENCE = 0.80 

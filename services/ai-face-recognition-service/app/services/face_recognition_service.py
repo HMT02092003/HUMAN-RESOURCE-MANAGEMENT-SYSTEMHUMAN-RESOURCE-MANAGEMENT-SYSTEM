@@ -112,8 +112,8 @@ class FaceRecognizer:
                 root=os.path.expanduser("~/.insightface")
             )
 
-            # Always prepare with CPU ctx_id = -1, lower det_thresh to 0.35 to allow MASK angle detection
-            self.app.prepare(ctx_id=-1, det_thresh=0.35, det_size=self.det_size)
+            # Always prepare with CPU ctx_id = -1, lower det_thresh to 0.15 to allow MASK angle detection
+            self.app.prepare(ctx_id=-1, det_thresh=0.15, det_size=self.det_size)
             
             logger.info("✅ FaceRecognizer initialized successfully!")
             logger.info(f"   Detection size: {self.det_size}")
