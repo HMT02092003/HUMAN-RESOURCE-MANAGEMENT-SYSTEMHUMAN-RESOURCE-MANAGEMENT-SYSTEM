@@ -393,7 +393,42 @@ class MultiAngleFaceService:
             
             embedding = process_result["embedding"]
             
-            # Search in database first
+            # --- STAGE 1: Liveness Check (Anti-Spoofing) ---
+            # Perform liveness check BEFORE matching
+            from app.services.face_liveness_service import face_liveness_detector
+            if face_liveness_detector.is_available():
+                # Extract bbox from process_result
+                face_obj = process_result["face"]
+                # Decode image again for liveness (or we could pass it from process_result)
+                nparr = np.frombuffer(image_bytes, np.uint8)
+                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                
+                liveness_result = face_liveness_detector.check_liveness(img, face_obj.bbox)
+                
+                if not liveness_result.is_real:
+                    # Log spoof attempt
+                    log = AttendanceLog(
+                        user_id=0,
+                        username='unknown',
+                        recognition_type=recognition_type,
+                        similarity_score=0.0,
+                        status='spoof_detected',
+                        notes=f"PHÁT HIỆN GIẢ MẠO: {liveness_result.message}",
+                        image_snapshot_url=snapshot_url
+                    )
+                    db.add(log)
+                    db.commit()
+                    
+                    return {
+                        "success": False,
+                        "message": liveness_result.message,
+                        "is_spoof": True,
+                        "error_code": "SPOOF_DETECTED",
+                        "image_snapshot_url": snapshot_url
+                    }
+            # ---------------------------------------------
+            
+            # --- STAGE 2: Search in database ---
             match = self.search_face(db, embedding, threshold)
             
             if not match:
@@ -416,44 +451,6 @@ class MultiAngleFaceService:
                     "error_code": "UNKNOWN_FACE",
                     "image_snapshot_url": snapshot_url
                 }
-
-            # --- STAGE: Liveness Check (Anti-Spoofing) ---
-            # Perform liveness check AFTER matching to know WHO is being spoofed
-            from app.services.face_liveness_service import face_liveness_detector
-            if face_liveness_detector.is_available():
-                # Extract bbox from process_result
-                face_obj = process_result["face"]
-                # Decode image again for liveness (or we could pass it from process_result)
-                nparr = np.frombuffer(image_bytes, np.uint8)
-                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                
-                liveness_result = face_liveness_detector.check_liveness(img, face_obj.bbox)
-                
-                if not liveness_result.is_real:
-                    # Log spoof attempt with the matched username!
-                    log = AttendanceLog(
-                        user_id=match["user_id"],
-                        username=match["username"],
-                        full_name=match["full_name"],
-                        recognition_type=recognition_type,
-                        similarity_score=match["confidence"] / 100.0,
-                        status='spoof_detected',
-                        notes=f"PHÁT HIỆN GIẢ MẠO: {liveness_result.message}",
-                        image_snapshot_url=snapshot_url
-                    )
-                    db.add(log)
-                    db.commit()
-                    
-                    return {
-                        "success": False,
-                        "message": liveness_result.message,
-                        "is_spoof": True,
-                        "error_code": "SPOOF_DETECTED",
-                        "username": match["username"],
-                        "full_name": match["full_name"],
-                        "image_snapshot_url": snapshot_url
-                    }
-            # ---------------------------------------------
             
             # Log successful recognition
             log = AttendanceLog(
