@@ -172,8 +172,10 @@ class FaceLivenessDetector:
                 cx = x1 + w // 2
                 cy = y1 + h // 2
 
-                new_w = int(w * scale)
-                new_h = int(h * scale)
+                # Đảm bảo khung hình cắt ra là HÌNH VUÔNG để khi resize xuống 80x80 ảnh không bị bóp méo tỷ lệ (squashed)
+                side = max(w, h)
+                new_w = int(side * scale)
+                new_h = int(side * scale)
                 nx1 = int(cx - new_w // 2)
                 ny1 = int(cy - new_h // 2)
                 nx2 = nx1 + new_w
@@ -208,8 +210,10 @@ class FaceLivenessDetector:
                 h, w = face_image.shape[:2]
                 cx = w // 2
                 cy = h // 2
-                new_w = int(w * scale)
-                new_h = int(h * scale)
+                # Đảm bảo khung vuông
+                side = max(w, h)
+                new_w = int(side * scale)
+                new_h = int(side * scale)
                 nx1 = int(cx - new_w // 2)
                 ny1 = int(cy - new_h // 2)
                 nx2 = nx1 + new_w
@@ -238,6 +242,15 @@ class FaceLivenessDetector:
             if face_crop is None or face_crop.size == 0:
                 logger.warning("Liveness crop is empty. Returning FAKE result to be safe.")
                 return LivenessResult(is_real=False, confidence=0.0, label="FAKE", message="Empty crop for liveness check")
+
+            # --- CẢI THIỆN CHẤT LƯỢNG ẢNH ĐẦU VÀO ---
+            # Do camera kém, ảnh mờ hoặc lóa làm AI bắt hụt texture (viền, vân da) dẫn đến báo FAKE.
+            # Dùng Kernel Sharpening nhẹ để làm nổi bật lại các chi tiết cạnh (edges) trong vùng crop
+            kernel_sharpening = np.array([[-1, -1, -1], 
+                                          [-1,  9, -1], 
+                                          [-1, -1, -1]])
+            face_crop = cv2.filter2D(face_crop, -1, kernel_sharpening)
+            # ---------------------------------------
 
             # Preprocess ảnh (ensure RGB conversion and resize to model input)
             input_tensor = self._preprocess(face_crop)

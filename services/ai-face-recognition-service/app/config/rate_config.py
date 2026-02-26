@@ -25,8 +25,8 @@ HORIZONTAL_MARGIN_LEFT_PERCENT = 0.12
 HORIZONTAL_MARGIN_RIGHT_PERCENT = 0.20
 VERTICAL_MARGIN_PERCENT = 0.15
 
-# Liveness / anti-spoof threshold (0-1). Set to 0.85 per user request.
-LIVENESS_THRESHOLD = 0.85
+# Liveness / anti-spoof threshold (0-1). Set to 0.80 per user request.
+LIVENESS_THRESHOLD = 0.80
 
 # Recognition thresholds
 MIN_THRESHOLD = 0.35
