@@ -3,11 +3,12 @@ Face Liveness Detection Service
 Kiểm tra ảnh thật/giả bằng Silent-Face-Anti-Spoofing model (ONNX)
 Chống giả mạo: ảnh in, màn hình, mặt nạ
 
-Phase 2: Two-Stage Liveness (Model + Moiré Detection)
-- Tầng 1: Multi-model ensemble (threshold 0.55 cho camera kém)
-- Tầng 2: FFT Moiré detection (phát hiện pattern pixel màn hình)
-→ Camera kém: ảnh thật ~60-70% → vượt 0.55 ✅, không có Moiré ✅ → PASS
-→ Ảnh giả: có thể vượt 0.55 nhưng bị Moiré detector chặn 🚫
+Multi-Model Ensemble — Per-Model Aggregation
+- 2 models: MiniFASNetV2 + MiniFASNetV1SE
+- Scale 2.7 (chuẩn Silent-Face-Anti-Spoofing)
+- Mỗi model: avg(original, CLAHE)
+- Final: MAX of per-model averages
+- Threshold: 0.50 (phù hợp camera chất lượng kém)
 """
 
 import cv2
@@ -120,36 +121,25 @@ class _OnnxModel:
 class FaceLivenessDetector:
     """
     Service kiểm tra liveness (Anti-spoofing)
-    Phase 2: Two-Stage Liveness
+    Multi-Model Ensemble + Per-Model Aggregation
     
-    Tầng 1 — Model Anti-Spoofing:
-      - Multi-model ensemble (MiniFASNetV2 + MiniFASNetV1SE)
-      - Threshold 0.55 (thấp hơn để phù hợp camera chất lượng kém)
-      - Per-model avg → MAX across models
-    
-    Tầng 2 — Moiré Screen Detection:
-      - Phân tích FFT phát hiện pattern pixel đặc trưng của màn hình
-      - Ảnh từ screen có high-frequency peaks do pixel grid LCD/OLED
-      - Nếu phát hiện Moiré → FAKE (dù model cho điểm cao)
-    
-    Kết hợp:
-      - Ảnh thật (camera kém): model ~60% > 0.55 ✅, không Moiré ✅ → PASS
-      - Ảnh giả (screen): model ~55-60%, nhưng Moiré detected → FAIL
+    Chiến lược:
+    - Scale 2.7 (chuẩn Silent-Face-Anti-Spoofing)
+    - Mỗi model chạy 2 pass: original + CLAHE
+    - Per-model confidence = trung bình 2 pass
+    - Final = MAX of per-model confidences
+    - Threshold 0.50 (phù hợp camera chất lượng kém)
     
     Singleton pattern
     """
 
     _instance = None
 
-    # Ngưỡng confidence (0.55 cho camera chất lượng thấp)
+    # Ngưỡng confidence
     REAL_THRESHOLD = float(LIVENESS_THRESHOLD)
 
     # Scale chuẩn Silent-Face-Anti-Spoofing
     CROP_SCALE = 2.7
-
-    # Ngưỡng Moiré detection (tỷ lệ high-freq energy)
-    # Ảnh từ màn hình có high-freq ratio > ngưỡng này
-    MOIRE_THRESHOLD = 0.35
 
     def __new__(cls):
         if cls._instance is None:
@@ -174,7 +164,6 @@ class FaceLivenessDetector:
         """
         user_home = os.path.expanduser("~")
 
-        # Danh sách candidate (tên hiển thị, danh sách path ưu tiên)
         model_candidates = [
             ("MiniFASNetV2", [
                 os.path.join(user_home, ".insightface", "models", "anti_spoofing", "2.7_80x80_MiniFASNetV2.onnx"),
@@ -182,7 +171,6 @@ class FaceLivenessDetector:
                 "models/anti_spoofing/2.7_80x80_MiniFASNetV2.onnx",
                 "models/2.7_80x80_MiniFASNetV2.onnx",
                 "/app/models/2.7_80x80_MiniFASNetV2.onnx",
-                # Docker: COPY models → /root/.insightface/models
                 "/root/.insightface/models/2.7_80x80_MiniFASNetV2.onnx",
             ]),
             ("MiniFASNetV1SE", [
@@ -196,7 +184,6 @@ class FaceLivenessDetector:
                 "models/4_0_0_80x80_MiniFASNetV1SE.onnx",
                 "/app/models/MiniFASNetV1SE.onnx",
                 "/app/models/4_0_0_80x80_MiniFASNetV1SE.onnx",
-                # Docker
                 "/root/.insightface/models/MiniFASNetV1SE.onnx",
                 "/root/.insightface/models/4_0_0_80x80_MiniFASNetV1SE.onnx",
             ]),
@@ -259,69 +246,7 @@ class FaceLivenessDetector:
         return crop
 
     # ------------------------------------------------------------------
-    # TẦNG 2: MOIRÉ SCREEN DETECTION (FFT-based)
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _detect_screen_moire(face_crop: np.ndarray) -> Tuple[bool, float]:
-        """
-        Phát hiện Moiré pattern đặc trưng của màn hình LCD/OLED.
-        
-        Nguyên lý: Khi chụp ảnh màn hình, lưới pixel (pixel grid) của LCD/OLED
-        tạo ra pattern lặp lại ở tần số cao trong phổ Fourier. Ảnh chụp trực tiếp
-        từ camera không có pattern này.
-        
-        Returns:
-            (is_screen, high_freq_ratio)
-            - is_screen: True nếu phát hiện pattern màn hình
-            - high_freq_ratio: Tỉ lệ năng lượng high-freq (debug)
-        """
-        try:
-            # Chuyển sang grayscale
-            gray = cv2.cvtColor(face_crop, cv2.COLOR_BGR2GRAY)
-            
-            # Resize về kích thước chuẩn để kết quả nhất quán
-            gray = cv2.resize(gray, (256, 256))
-            
-            # FFT 2D
-            f = np.fft.fft2(gray.astype(np.float32))
-            fshift = np.fft.fftshift(f)
-            magnitude = np.abs(fshift)
-            
-            # Log transform để dễ phân tích
-            magnitude = np.log1p(magnitude)
-            
-            h, w = magnitude.shape
-            center_h, center_w = h // 2, w // 2
-            
-            # Chia phổ thành low-freq (trung tâm) và high-freq (rìa)
-            # Low-freq: vùng tròn bán kính 30% từ tâm
-            # High-freq: phần còn lại
-            radius_low = int(min(h, w) * 0.3)
-            
-            # Tạo mask cho low-freq
-            Y, X = np.ogrid[:h, :w]
-            dist = np.sqrt((X - center_w)**2 + (Y - center_h)**2)
-            low_mask = dist <= radius_low
-            
-            low_energy = magnitude[low_mask].sum()
-            total_energy = magnitude.sum()
-            high_energy = total_energy - low_energy
-            
-            # Tỉ lệ high-freq / total
-            # Ảnh từ màn hình: high_freq_ratio cao (do pixel grid pattern)
-            # Ảnh thật: high_freq_ratio thấp hơn
-            high_freq_ratio = float(high_energy / (total_energy + 1e-6))
-            
-            is_screen = high_freq_ratio > 0.35
-            
-            return is_screen, high_freq_ratio
-            
-        except Exception as e:
-            logger.warning(f"Moiré detection error: {e}")
-            return False, 0.0
-
-    # ------------------------------------------------------------------
-    # MAIN LIVENESS CHECK (Two-Stage)
+    # MAIN LIVENESS CHECK
     # ------------------------------------------------------------------
     def check_liveness(
         self,
@@ -329,18 +254,14 @@ class FaceLivenessDetector:
         bbox: Optional[list] = None
     ) -> LivenessResult:
         """
-        Kiểm tra ảnh có phải thật không — Hệ thống 2 tầng.
+        Kiểm tra ảnh có phải thật không.
         
-        Tầng 1 — Model Anti-Spoofing:
-          - Crop face ở scale 2.7
-          - Mỗi model: avg(original, CLAHE)
-          - Final = MAX of per-model averages
-          - Threshold 0.55 (phù hợp camera chất lượng thấp)
-          
-        Tầng 2 — Moiré Screen Detection:
-          - FFT phân tích phổ tần số
-          - Nếu confidence >= threshold → kiểm tra thêm Moiré
-          - Phát hiện Moiré → FAKE (dù model cho điểm cao)
+        Chiến lược:
+          1. Crop face ở scale 2.7 (chuẩn Silent-Face-Anti-Spoofing)
+          2. Mỗi model chạy 2 pass: original + CLAHE
+          3. Per-model confidence = trung bình 2 pass
+          4. Final = MAX of per-model confidences
+          5. So sánh với threshold 0.50
         """
         if not self.models:
             return LivenessResult(is_real=True, confidence=1.0, label="UNKNOWN", message="Liveness disabled")
@@ -357,12 +278,12 @@ class FaceLivenessDetector:
                     message="Ảnh quá mờ, vui lòng giữ yên điện thoại khi chụp."
                 )
 
-            # ========== TẦNG 1: MODEL ANTI-SPOOFING ==========
+            # 1. Crop face ở scale 2.7
             face_crop = self._crop_face(face_image, bbox, self.CROP_SCALE)
             if face_crop is None or face_crop.size == 0:
                 return LivenessResult(False, 0.0, "FAKE", "Empty crop")
 
-            # CLAHE variant
+            # 2. CLAHE variant
             face_crop_clahe = None
             try:
                 lab = cv2.cvtColor(face_crop, cv2.COLOR_BGR2LAB)
@@ -373,7 +294,7 @@ class FaceLivenessDetector:
             except Exception as e:
                 logger.warning(f"CLAHE preparation error: {e}")
 
-            # Per-model inference
+            # 3. Per-model inference
             per_model_scores: Dict[str, float] = {}
             all_confs: List[float] = []
 
@@ -400,35 +321,16 @@ class FaceLivenessDetector:
             if not per_model_scores:
                 return LivenessResult(False, 0.0, "FAKE", "No valid inference results")
 
+            # 4. Final = MAX of per-model averages
             confidence = max(per_model_scores.values())
 
-            # ========== TẦNG 2: MOIRÉ SCREEN DETECTION ==========
-            moire_detected = False
-            moire_ratio = 0.0
-            
-            if confidence >= self.REAL_THRESHOLD:
-                # Model nói REAL → kiểm tra thêm Moiré để chắc chắn
-                moire_detected, moire_ratio = self._detect_screen_moire(face_crop)
-                
-                if moire_detected:
-                    # Moiré phát hiện pattern màn hình → override sang FAKE
-                    logger.warning(
-                        f"🚨 Moiré override: model={confidence:.2%} nhưng phát hiện screen pattern "
-                        f"(ratio={moire_ratio:.3f} > {self.MOIRE_THRESHOLD})"
-                    )
-                    # Không reject ngay — giảm confidence xuống dưới threshold
-                    confidence = confidence * 0.6  # Penalty
-
-            # ========== QUYẾT ĐỊNH CUỐI CÙNG ==========
             is_real = confidence >= self.REAL_THRESHOLD
             label = "REAL" if is_real else "FAKE"
 
             if is_real:
                 message = "Xác thực ảnh thật thành công"
             else:
-                if moire_detected:
-                    message = "PHÁT HIỆN GIAN LẬN: Sử dụng ảnh in hoặc màn hình điện thoại."
-                elif confidence < 0.40:
+                if confidence < 0.30:
                     message = "PHÁT HIỆN GIAN LẬN: Sử dụng ảnh in hoặc màn hình điện thoại."
                 else:
                     message = "CẢNH BÁO GIAN LẬN: Hệ thống nghi ngờ ảnh không phải thực thể sống."
@@ -438,7 +340,6 @@ class FaceLivenessDetector:
                 f"Liveness check: {label} (confidence={confidence:.2%}) | "
                 f"models={len(self.models)}, scale={self.CROP_SCALE}, "
                 f"per_model={{{', '.join(f'{k}={v:.3f}' for k,v in per_model_scores.items())}}}, "
-                f"moire={moire_detected}(ratio={moire_ratio:.3f}), "
                 f"all_raw={[f'{c:.3f}' for c in all_confs]}"
             )
 
@@ -460,33 +361,3 @@ class FaceLivenessDetector:
 
 # Singleton instance
 face_liveness_detector = FaceLivenessDetector()
-
-
-# ============================================================================
-# HƯỚNG DẪN SỬ DỤNG (Phase 1 v2 — Multi-Model Ensemble)
-# ============================================================================
-"""
-## Models cần có (đặt trong thư mục models/):
-  1. 2.7_80x80_MiniFASNetV2.onnx     (~1.3 MB) — Nhẹ, nhanh
-  2. MiniFASNetV1SE.onnx              (~1.7 MB) — SE-Attention, chính xác hơn
-
-## Chiến lược (v2 — sửa lỗi MAX):
-  - 2 scales (2.7, 4.0) × 2 models × 2 passes (original + CLAHE)
-  - Tổng tối đa 8 inferences
-  - Aggregation: AVERAGE (trung bình) — consensus voting
-  
-## Tại sao bỏ scale 1.0 và MAX?
-  - Scale 1.0 (tight crop) mất hết viền màn hình → model chỉ thấy khuôn mặt
-    → cho điểm rất cao (99%) kể cả ảnh giả → sai hoàn toàn
-  - MAX: chỉ cần 1 inference cao → pass → ảnh giả dễ qua
-  - AVERAGE: đa số phải đồng ý → ảnh giả bị kéo xuống
-
-## Sử dụng:
-   from app.services.face_liveness_service import face_liveness_detector
-
-   result = face_liveness_detector.check_liveness(face_image, bbox)
-   if result.is_real:
-       print("Ảnh thật!")
-   else:
-       print("Ảnh giả mạo!")
-"""
