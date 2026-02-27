@@ -165,10 +165,8 @@ class FaceLivenessDetector:
     def _infer(self, face_crop: np.ndarray) -> tuple:
         """
         Chạy model, trả về (is_real, real_confidence).
-        Model output 2 class: [fake_score, real_score]
-        → argmax → model tự quyết định, không threshold.
         """
-        # Preprocessing chuẩn MiniFASNet
+        # 1. Preprocessing chuẩn MiniFASNet (80x80, ImageNet normalize)
         resized = cv2.resize(face_crop, self.input_size, interpolation=cv2.INTER_AREA)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
         mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -176,39 +174,33 @@ class FaceLivenessDetector:
         normalized = (rgb - mean) / std
         tensor = np.expand_dims(normalized.transpose(2, 0, 1), axis=0).astype(np.float32).copy()
 
-        # Run model
+        # 2. Run model
         outputs = self.session.run([self.output_name], {self.input_name: tensor})
         raw = np.array(outputs[0][0], dtype=np.float32)
 
-        # DEBUG: Log raw output để xác định thứ tự class
-        logger.info(f"🔍 MODEL DEBUG: raw_output={raw}, size={raw.size}, shape={raw.shape}")
+        # 3. Softmax để ra xác suất
+        ex = np.exp(raw - np.max(raw))
+        probs = ex / ex.sum()
 
-        # Model output → softmax → argmax (model tự quyết định)
-        if raw.size >= 2:
-            # Softmax
-            ex = np.exp(raw - np.max(raw))
-            probs = ex / ex.sum()
+        # LOG DEBUG CHI TIẾT
+        probs_str = ", ".join([f"cl{i}={p:.4f}" for i, p in enumerate(probs)])
+        logger.info(f"🔍 [LIVENESS DEBUG] Raw: {raw} | Probs: {probs_str}")
 
-            # DEBUG: Log tất cả probabilities
-            logger.info(f"🔍 MODEL DEBUG: probs={[f'{p:.4f}' for p in probs]}")
-
-            if raw.size == 3:
-                # 3-class model: [real, 2D-fake, 3D-fake] hoặc thứ tự khác
-                logger.info(f"🔍 3-class model: class0={probs[0]:.4f}, class1={probs[1]:.4f}, class2={probs[2]:.4f}")
-                # Thử cả 2 cách: index 0 = real, hoặc index 1 = real
-                real_prob_v1 = float(probs[0])  # nếu index 0 = real
-                real_prob_v2 = float(probs[1])  # nếu index 1 = real
-                logger.info(f"🔍 Nếu index0=real: {real_prob_v1:.2%} | Nếu index1=real: {real_prob_v2:.2%}")
-
-            fake_prob = float(probs[0])
-            real_prob = float(probs[1])
-
-            is_real = real_prob > fake_prob
+        if probs.size == 3:
+            # Model 3 class: thường là [Real, Fake1, Fake2]
+            # Ta lấy class 0 làm Real
+            real_prob = float(probs[0])
+            is_real = np.argmax(probs) == 0
             return is_real, real_prob
-        else:
-            val = float(raw[0])
-            prob = float(1.0 / (1.0 + np.exp(-val))) if (val < 0.0 or val > 1.0) else val
-            return prob > 0.5, prob
+        elif probs.size == 2:
+            # Model 2 class: có thể là [Fake, Real] hoặc [Real, Fake]
+            # Tạm thời giả định index 1 là Real (như thiết kế cũ)
+            # Nhưng log ở trên sẽ giúp ta biết nếu bị ngược
+            real_prob = float(probs[1]) 
+            is_real = real_prob > 0.5
+            return is_real, real_prob
+        
+        return False, 0.0
 
     # ------------------------------------------------------------------
     # MAIN
@@ -237,11 +229,11 @@ class FaceLivenessDetector:
             if face_crop is None:
                 return LivenessResult(False, 0.0, "FAKE", "Không crop được khuôn mặt")
 
-            # Chỉnh độ sáng + sắc nét
-            enhanced = self._enhance_image(face_crop)
+            # BỎ ENHANCE ĐỂ LOẠI TRỪ NGUYÊN NHÂN (Exclude sharpening artifacts)
+            # enhanced = self._enhance_image(face_crop)
 
-            # Model tự quyết định
-            is_real, confidence = self._infer(enhanced)
+            # Model tự quyết định trên ảnh gốc
+            is_real, confidence = self._infer(face_crop)
             label = "REAL" if is_real else "FAKE"
 
             if is_real:
