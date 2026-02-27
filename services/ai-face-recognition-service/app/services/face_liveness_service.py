@@ -2,12 +2,11 @@
 Face Liveness Detection Service (Ensemble Multi-Model)
 Tích hợp MiniFASNetV1SE (Crop 4.0) và MiniFASNetV2 (Crop 2.7)
 
-Luồng xử lý:
-1. V1SE: Crop 4.0 → Dự đoán → Hiệu chuẩn (calibrated) lên thang đo mới.
-2. Vòng 1 (Cảnh báo): Nếu V1SE calibrated < 30% → FAKE (Nghi ngờ bối cảnh).
-3. V2: Crop 2.7 → Dự đoán.
-4. Vòng 2 (Xác thực): Nếu V2 > 80% & V1SE calibrated > 50% → REAL.
-5. Trọng số: 60% V2 + 40% V1SE_calibrated.
+Luồng xử lý mới:
+1. Resize 112x112, (image - 127.5) / 128.0, NCHW (1, 3, 112, 112).
+2. Hiệu chuẩn: V1SE (0-0.1 -> 0-1), V2 (0.3-0.98 -> 0-1)
+3. Veto: v1_raw < 0.01 -> FAKE
+4. Ensemble: 70% V2_calib + 30% V1SE_calib
 """
 
 import cv2
@@ -44,7 +43,7 @@ class FaceLivenessDetector:
             self._initialized = True
             self.v1_session = None
             self.v2_session = None
-            self.input_size = (80, 80)
+            self.input_size = (112, 112) # Đổi thành 112x112 theo yêu cầu model
             self._load_models()
 
     def _load_models(self):
@@ -133,14 +132,28 @@ class FaceLivenessDetector:
     # INFERENCE
     # ------------------------------------------------------------------
     def _infer_model(self, session, face_crop: np.ndarray) -> float:
-        """Chuẩn hóa ImageNet và lấy Real Prob."""
-        resized = cv2.resize(face_crop, self.input_size, interpolation=cv2.INTER_AREA)
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        """
+        Tiền xử lý mới:
+        - Resize 112x112
+        - (image - 127.5) / 128.0
+        - NCHW (1, 3, 112, 112)
+        """
+        # Xác định kích thước đầu vào của model (ưu tiên lấy từ model, không thì mặc định 112x112)
+        input_shape = session.get_inputs()[0].shape
+        target_size = self.input_size
+        if input_shape and len(input_shape) >= 4:
+            if isinstance(input_shape[-1], int) and isinstance(input_shape[-2], int):
+                target_size = (input_shape[-1], input_shape[-2])
+                
+        resized = cv2.resize(face_crop, target_size, interpolation=cv2.INTER_AREA)
         
-        # Chuẩn hóa (Normalize) đúng Mean và Std
-        mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-        std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-        normalized = (rgb - mean) / std
+        # Bỏ cvtColor BGR2RGB nếu model được huấn luyện với BGR, nhưng thường chuẩn hóa (x-127.5)/128
+        # áp dụng cho RGB. Thử nghiệm thực tế các mạng FasNet thường dùng BGR hoặc RGB.
+        # Ở đây ta giữ nguyên ảnh BGR (đọc bằng OpenCV) hoặc chuyển sang RGB, ở đây chuyển RGB.
+        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32)
+        
+        # Chuẩn hóa (image - 127.5) / 128.0
+        normalized = (rgb - 127.5) / 128.0
         tensor = np.expand_dims(normalized.transpose(2, 0, 1), axis=0).astype(np.float32).copy()
 
         input_name = session.get_inputs()[0].name
@@ -153,19 +166,32 @@ class FaceLivenessDetector:
         if raw.size >= 2:
             ex = np.exp(raw - np.max(raw))
             probs = ex / ex.sum()
-            return float(probs[1]) # Thường 1 là Real class (theo index framework cũ)
+            # Thường index 1 là Real
+            return float(probs[1]) 
+        elif raw.size == 1:
+            val = float(raw[0])
+            prob = float(1.0 / (1.0 + np.exp(-val))) if (val < 0.0 or val > 1.0) else val
+            return prob
         return 0.0
 
     # ------------------------------------------------------------------
-    # HIỆU CHUẨN V1SE
+    # SCORE CALIBRATION
     # ------------------------------------------------------------------
     def _calibrate_v1(self, raw_score: float) -> float:
-        """
-        Hiệu chuẩn chỉ số (Calibration) cho V1SE
-        V1SE trả về rất thấp (2-6%). Ta lấy mốc 5% (0.05) = 80% (0.80) tin cậy.
-        """
-        calibrated = (raw_score / 0.05) * 0.80
-        return min(max(calibrated, 0.0), 1.0)
+        """Đưa v1_score từ (0 - 0.1) về (0.0 - 1.0)"""
+        if raw_score >= 0.1:
+            return 1.0
+        return raw_score / 0.1
+
+    def _calibrate_v2(self, raw_score: float) -> float:
+        """Đưa v2_score từ (0.3 - 0.98) về (0.0 - 1.0)"""
+        min_v = 0.3
+        max_v = 0.98
+        if raw_score <= min_v:
+            return 0.0
+        if raw_score >= max_v:
+            return 1.0
+        return (raw_score - min_v) / (max_v - min_v)
 
     # ------------------------------------------------------------------
     # ENSEMBLE LIVENESS CHECK
@@ -194,11 +220,11 @@ class FaceLivenessDetector:
             v1_raw = self._infer_model(self.v1_session, crop_v1)
             v1_calibrated = self._calibrate_v1(v1_raw)
 
-            # Vòng 1 (Cảnh báo): V1SE calibrated < 30% đánh là giả bối cảnh
-            if v1_calibrated < 0.30:
-                msg = f"Nghi ngờ giả mạo bối cảnh (V1_calib={v1_calibrated:.2%})"
+            # Cơ chế Veto (Phủ quyết): Nếu raw < 1% -> đánh Fake ngay lập tức
+            if v1_raw < 0.01:
+                msg = f"Nghi ngờ giả mạo bối cảnh (V1_raw={v1_raw:.2%} < 1%)"
                 logger.warning(msg)
-                return LivenessResult(False, v1_calibrated, "FAKE", msg)
+                return LivenessResult(False, 0.0, "FAKE", msg)
 
             # ==========================================
             # STEP B: V2 (Crop 2.7)
@@ -208,26 +234,33 @@ class FaceLivenessDetector:
                 return LivenessResult(False, 0.0, "FAKE", "Face crop failed (2.7)")
             
             v2_raw = self._infer_model(self.v2_session, crop_v2)
+            v2_calibrated = self._calibrate_v2(v2_raw)
 
             # ==========================================
-            # STEP C: LOGIC QUYẾT ĐỊNH ĐA TẦNG
+            # STEP C: ENSEMBLE LOGIC
             # ==========================================
-            # Trọng số: 60% V2 + 40% V1SE_calibrated
-            final_score = (0.60 * v2_raw) + (0.40 * v1_calibrated)
+            # Trọng số: 70% V2 (soi chi tiết) + 30% V1SE (soi bối cảnh)
+            final_score = (0.70 * v2_calibrated) + (0.30 * v1_calibrated)
 
-            # Vòng 2 (Xác thực)
-            is_real = (v2_raw > 0.80) and (v1_calibrated > 0.50)
+            is_real = final_score >= 0.50
             label = "REAL" if is_real else "FAKE"
             
-            msg = f"Diagnostics - V2={v2_raw:.2%}, V1_raw={v1_raw:.2%}, V1_calib={v1_calibrated:.2%}"
-            logger.info(f"Liveness Ensemble: {label} (Final={final_score:.2%}) | {msg}")
+            # Ghi chú Diagnostics
+            diagnostics = (
+                f"Diagnostics - "
+                f"V2_raw={v2_raw:.2%} (calib={v2_calibrated:.2%}) | "
+                f"V1_raw={v1_raw:.2%} (calib={v1_calibrated:.2%})"
+            )
+            logger.info(f"Liveness Ensemble ({label}, Final={final_score:.2%}) | {diagnostics}")
 
-            if is_real:
-                user_msg = "Xác thực ảnh thật thành công."
-            else:
-                user_msg = f"Phát hiện giả mạo. ({msg})"
+            message = "Xác thực ảnh thật thành công." if is_real else f"Phát hiện giả mạo. {diagnostics}"
 
-            return LivenessResult(is_real, final_score, label, user_msg)
+            return LivenessResult(
+                is_real=is_real,
+                confidence=final_score,
+                label=label,
+                message=message
+            )
 
         except Exception as e:
             logger.error(f"Liveness error: {e}")
@@ -235,6 +268,5 @@ class FaceLivenessDetector:
 
     def is_available(self) -> bool:
         return self.v1_session is not None and self.v2_session is not None
-
 
 face_liveness_detector = FaceLivenessDetector()
