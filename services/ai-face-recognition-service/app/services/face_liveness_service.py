@@ -3,11 +3,13 @@ Face Liveness Detection Service
 Kiểm tra ảnh thật/giả bằng Silent-Face-Anti-Spoofing model (ONNX)
 Chống giả mạo: ảnh in, màn hình, mặt nạ
 
-Phase 1 v2: Multi-Model Ensemble + Multi-Scale Crop
+Phase 1 v3: Multi-Model Ensemble + Per-Model Aggregation
 - 2 models: MiniFASNetV2 + MiniFASNetV1SE
-- 2 scales: 2.7 (medium), 4.0 (wide) — Bỏ scale 1.0 vì tight crop mất viền màn hình
-- Aggregation: AVERAGE (consensus) thay vì MAX
-→ Ảnh giả KHÔNG thể qua nếu đa số inferences đều cho điểm thấp
+- Scale 2.7 (chuẩn Silent-Face-Anti-Spoofing — đủ context để thấy viền màn hình)
+- Mỗi model: avg(original, CLAHE)
+- Final: MAX of per-model averages
+→ Model V2 calibration tốt "cứu" kết quả khi V1SE cho điểm thấp cho ảnh thật
+→ Ảnh giả: cả 2 model đều thấy viền Screen ở scale 2.7 → cả 2 thấp → FAIL
 """
 
 import cv2
@@ -120,12 +122,17 @@ class _OnnxModel:
 class FaceLivenessDetector:
     """
     Service kiểm tra liveness (Anti-spoofing)
-    Phase 1 v2: Multi-Model Ensemble + Multi-Scale Crop
+    Phase 1 v3: Multi-Model Ensemble + Per-Model Aggregation
     
-    Chiến lược aggregation TRUNG BÌNH (AVERAGE):
-    - Ảnh thật: đa số inferences cho điểm cao → average cao → PASS
-    - Ảnh giả: tight crop có thể cho điểm cao, nhưng wide crop
-      (thấy viền màn hình/giấy) cho điểm thấp → average bị kéo xuống → FAIL
+    Chiến lược:
+    - Scale 2.7 (chuẩn mặc định Silent-Face-Anti-Spoofing)
+    - Mỗi model chạy 2 pass: original + CLAHE
+    - Per-model confidence = trung bình 2 pass
+    - Final = MAX of per-model confidences
+    
+    Tại sao MAX of per-model averages?
+    - Ảnh thật: V2 cho ~0.9, V1SE cho ~0.5 → MAX = 0.9 → PASS ✅
+    - Ảnh giả (scale 2.7 thấy viền): V2 cho ~0.3, V1SE cho ~0.2 → MAX = 0.3 → FAIL ✅
     
     Singleton pattern
     """
@@ -135,10 +142,9 @@ class FaceLivenessDetector:
     # Ngưỡng confidence
     REAL_THRESHOLD = float(LIVENESS_THRESHOLD)
 
-    # Multi-scale crop scales
-    # BỎ scale 1.0 — tight crop mất hết contextual cues (viền màn hình, phản chiếu)
-    # Giữ scale 2.7 (chuẩn Silent-Face-Anti-Spoofing) và 4.0 (wide, bắt viền)
-    CROP_SCALES = [2.7, 4.0]
+    # Scale chuẩn Silent-Face-Anti-Spoofing
+    # 2.7x: đủ rộng để thấy viền màn hình/giấy, không quá rộng gây nhiễu
+    CROP_SCALE = 2.7
 
     def __new__(cls):
         if cls._instance is None:
@@ -258,15 +264,17 @@ class FaceLivenessDetector:
         """
         Kiểm tra ảnh có phải thật không.
         
-        Chiến lược Phase 1 v2:
-          - Multi-Scale Crop (2 scales: 2.7, 4.0) — bỏ tight crop 1.0
-          - Multi-Model Ensemble (lên tới 2 models)
-          - CLAHE augmentation
-          - Aggregation: TRUNG BÌNH (average) — consensus voting
+        Chiến lược Phase 1 v3 — Per-Model Aggregation:
+          1. Crop face ở scale 2.7 (chuẩn Silent-Face-Anti-Spoofing)
+          2. Mỗi model chạy 2 pass: original + CLAHE
+          3. Per-model confidence = trung bình 2 pass
+          4. Final = MAX of per-model confidences
           
-        Tại sao dùng AVERAGE thay vì MAX?
-          - MAX: chỉ cần 1 inference cho cao → pass → ảnh giả dễ qua
-          - AVERAGE: đa số phải đồng ý → ảnh giả bị kéo average xuống
+        Tại sao MAX of per-model averages?
+          - V2 → calibration tốt → ảnh thật cho ~0.9
+          - V1SE → calibration thấp hơn → ảnh thật chỉ ~0.5
+          - MAX(0.9, 0.5) = 0.9 → ảnh thật PASS ✅
+          - Ảnh giả ở scale 2.7: cả 2 model đều thấp → MAX vẫn thấp → FAIL ✅
         """
         if not self.models:
             return LivenessResult(is_real=True, confidence=1.0, label="UNKNOWN", message="Liveness disabled")
@@ -283,54 +291,57 @@ class FaceLivenessDetector:
                     message="Ảnh quá mờ, vui lòng giữ yên điện thoại khi chụp."
                 )
 
-            # 1. Multi-Scale Crop + Multi-Model Ensemble
-            all_confidences: List[float] = []
-            details: Dict[str, List[float]] = {}
+            # 1. Crop face ở scale 2.7 chuẩn
+            face_crop = self._crop_face(face_image, bbox, self.CROP_SCALE)
+            if face_crop is None or face_crop.size == 0:
+                return LivenessResult(False, 0.0, "FAKE", "Empty crop")
 
-            for scale in self.CROP_SCALES:
-                face_crop = self._crop_face(face_image, bbox, scale)
-                if face_crop is None or face_crop.size == 0:
-                    continue
+            # 2. Chuẩn bị CLAHE variant
+            face_crop_clahe = None
+            try:
+                lab = cv2.cvtColor(face_crop, cv2.COLOR_BGR2LAB)
+                l_ch, a_ch, b_ch = cv2.split(lab)
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                l_clahe = clahe.apply(l_ch)
+                face_crop_clahe = cv2.cvtColor(cv2.merge((l_clahe, a_ch, b_ch)), cv2.COLOR_LAB2BGR)
+            except Exception as e:
+                logger.warning(f"CLAHE preparation error: {e}")
 
-                for model in self.models:
-                    model_confs = []
+            # 3. Chạy mỗi model: original + CLAHE → avg per model
+            per_model_scores: Dict[str, float] = {}
+            all_confs: List[float] = []
 
-                    # Pass 1: Ảnh gốc (Original)
+            for model in self.models:
+                model_confs = []
+
+                # Pass 1: Original
+                try:
+                    conf = model.run(face_crop)
+                    model_confs.append(conf)
+                    all_confs.append(conf)
+                except Exception as e:
+                    logger.warning(f"Inference error [{model.name}]: {e}")
+
+                # Pass 2: CLAHE
+                if face_crop_clahe is not None:
                     try:
-                        conf = model.run(face_crop)
-                        model_confs.append(conf)
-                        all_confidences.append(conf)
-                    except Exception as e:
-                        logger.warning(f"Inference error [{model.name}] scale={scale}: {e}")
-
-                    # Pass 2: CLAHE (tăng chi tiết texture — phát hiện pattern pixel màn hình)
-                    try:
-                        lab = cv2.cvtColor(face_crop, cv2.COLOR_BGR2LAB)
-                        l_ch, a_ch, b_ch = cv2.split(lab)
-                        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-                        l_clahe = clahe.apply(l_ch)
-                        face_crop_clahe = cv2.cvtColor(cv2.merge((l_clahe, a_ch, b_ch)), cv2.COLOR_LAB2BGR)
                         conf_clahe = model.run(face_crop_clahe)
                         model_confs.append(conf_clahe)
-                        all_confidences.append(conf_clahe)
+                        all_confs.append(conf_clahe)
                     except Exception as e:
-                        logger.warning(f"CLAHE error [{model.name}]: {e}")
+                        logger.warning(f"CLAHE inference error [{model.name}]: {e}")
 
-                    key = f"{model.name}_s{scale}"
-                    details[key] = model_confs
+                # Per-model score = trung bình các pass của model đó
+                if model_confs:
+                    per_model_scores[model.name] = float(np.mean(model_confs))
+                    logger.debug(f"  [{model.name}] confs={[f'{c:.3f}' for c in model_confs]} → avg={per_model_scores[model.name]:.3f}")
 
-            if not all_confidences:
+            if not per_model_scores:
                 return LivenessResult(False, 0.0, "FAKE", "No valid inference results")
 
-            # 2. AGGREGATION: Dùng TRUNG BÌNH (AVERAGE) thay vì MAX
-            # 
-            # Giải thích:
-            # - Ảnh THẬT: tất cả scales/models đều cho điểm cao → average cao
-            # - Ảnh GIẢ (màn hình): scale 2.7 và 4.0 bắt được viền/pattern 
-            #   → cho điểm thấp → kéo average xuống dưới ngưỡng
-            #
-            # Trước đây dùng MAX: ảnh giả chỉ cần 1 inference cao → qua luôn (SAI!)
-            confidence = float(np.mean(all_confidences))
+            # 4. Final = MAX of per-model averages
+            # Model có calibration tốt nhất quyết định kết quả
+            confidence = max(per_model_scores.values())
 
             is_real = confidence >= self.REAL_THRESHOLD
             label = "REAL" if is_real else "FAKE"
@@ -346,13 +357,11 @@ class FaceLivenessDetector:
                     message = "CẢNH BÁO: Độ tin cậy không đủ cao để xác thực."
 
             # Log chi tiết để debug
-            sorted_confs = sorted(all_confidences, reverse=True)
             logger.info(
-                f"Liveness check: {label} (avg_confidence={confidence:.2%}) | "
-                f"models={len(self.models)}, scales={self.CROP_SCALES}, "
-                f"total_inferences={len(all_confidences)}, "
-                f"max={max(all_confidences):.3f}, min={min(all_confidences):.3f}, "
-                f"all_confs={[f'{c:.3f}' for c in sorted_confs]}"
+                f"Liveness check: {label} (confidence={confidence:.2%}) | "
+                f"models={len(self.models)}, scale={self.CROP_SCALE}, "
+                f"per_model={{{', '.join(f'{k}={v:.3f}' for k,v in per_model_scores.items())}}}, "
+                f"all_raw={[f'{c:.3f}' for c in all_confs]}"
             )
 
             return LivenessResult(
