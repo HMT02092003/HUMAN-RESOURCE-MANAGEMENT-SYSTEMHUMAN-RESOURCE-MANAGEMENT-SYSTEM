@@ -170,7 +170,8 @@ class FaceLivenessDetector:
             # 1. Blur check
             blur_score, is_sharp = face_quality_checker.check_blur(face_image)
             if not is_sharp:
-                return LivenessResult(False, 0.0, "FAKE", f"Ảnh mờ (score={blur_score:.2f})")
+                logger.warning(f"❌ FAKE: Too blurry (score={blur_score:.2f})")
+                return LivenessResult(False, 0.0, "FAKE", "Ảnh quá mờ, vui lòng giữ yên điện thoại.")
 
             # 2. V1SE (Crop 4.0)
             crop_v1 = self._crop_face(face_image, bbox, 4.0)
@@ -193,19 +194,13 @@ class FaceLivenessDetector:
             # 5. LOGIC QUYẾT ĐỊNH — If/Else trực tiếp trên RAW
             if v1_raw < LIVENESS_V1_THRESHOLD:
                 reason = f"V1 bất thường ({v1_raw:.4%} < {LIVENESS_V1_THRESHOLD:.2%})"
-                logger.warning(f"❌ FAKE: {reason}")
-                return LivenessResult(
-                    False, v1_raw, "FAKE",
-                    f"Phát hiện giả mạo. {reason} | V2={v2_raw:.2%}"
-                )
+                logger.warning(f"❌ FAKE: {reason} | V2={v2_raw:.2%}")
+                return LivenessResult(False, v1_raw, "FAKE", "Phát hiện giả mạo.")
 
             if v2_raw < LIVENESS_V2_THRESHOLD:
                 reason = f"V2 quá thấp ({v2_raw:.2%} < {LIVENESS_V2_THRESHOLD:.2%})"
-                logger.warning(f"❌ FAKE: {reason}")
-                return LivenessResult(
-                    False, v2_raw, "FAKE",
-                    f"Phát hiện giả mạo. {reason} | V1={v1_raw:.4%}"
-                )
+                logger.warning(f"❌ FAKE: {reason} | V1={v1_raw:.4%}")
+                return LivenessResult(False, v2_raw, "FAKE", "Phát hiện giả mạo.")
 
             # Qua cả 2 ngưỡng → REAL
             logger.info(f"✅ REAL: V1={v1_raw:.4%}, V2={v2_raw:.2%}")
