@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import AuthTokenManager from './AuthTokenManager';
+import { setOnUnauthorizedCallback } from './api';
 
 const AuthContext = createContext();
 
@@ -10,6 +11,15 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     checkAuthStatus();
+
+    // Đăng ký callback xử lý 401 từ API
+    setOnUnauthorizedCallback(() => {
+      console.log('🚪 [AuthContext] Unauthorized access detected, logging out...');
+      setIsAuthenticated(false);
+      setUser(null);
+    });
+
+    return () => setOnUnauthorizedCallback(null);
   }, []);
 
   const checkAuthStatus = async () => {
@@ -18,11 +28,11 @@ export const AuthProvider = ({ children }) => {
       const token = await AuthTokenManager.getAccessToken();
       const refreshToken = await AuthTokenManager.getRefreshToken();
       const userData = await AuthTokenManager.getUser();
-      
+
       console.log('🔑 [AuthContext] Token:', token ? 'EXISTS' : 'NULL');
       console.log('🔄 [AuthContext] Refresh token:', refreshToken ? 'EXISTS' : 'NULL');
       console.log('👤 [AuthContext] User:', userData ? userData.username : 'NULL');
-      
+
       if (token || refreshToken) {
         console.log('✅ [AuthContext] User is authenticated');
         setIsAuthenticated(true);
@@ -68,12 +78,12 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider 
-      value={{ 
-        isAuthenticated, 
-        isLoading, 
-        user, 
-        login, 
+    <AuthContext.Provider
+      value={{
+        isAuthenticated,
+        isLoading,
+        user,
+        login,
         logout,
         checkAuthStatus // Expose để có thể refresh auth state
       }}

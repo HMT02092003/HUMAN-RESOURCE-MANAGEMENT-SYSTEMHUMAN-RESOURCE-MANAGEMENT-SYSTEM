@@ -25,8 +25,8 @@ HORIZONTAL_MARGIN_LEFT_PERCENT = 0.12
 HORIZONTAL_MARGIN_RIGHT_PERCENT = 0.20
 VERTICAL_MARGIN_PERCENT = 0.15
 
-# Liveness / anti-spoof threshold (0-1). Set to 0.75 (Khuyến nghị thực tế của MiniFASNet)
-LIVENESS_THRESHOLD = 0.75
+# Liveness / anti-spoof threshold (0-1). Set to 0.70 (Cân bằng giữa bảo mật và trải nghiệm người dùng)
+LIVENESS_THRESHOLD = 0.70
 
 # Recognition thresholds
 MIN_THRESHOLD = 0.35

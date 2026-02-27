@@ -12,6 +12,7 @@ from typing import Dict, Tuple, Optional
 from dataclasses import dataclass
 import os
 from app.config.rate_config import LIVENESS_THRESHOLD
+from app.services.face_quality_service import face_quality_checker
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +178,18 @@ class FaceLivenessDetector:
             return LivenessResult(is_real=True, confidence=1.0, label="UNKNOWN", message="Liveness disabled")
         
         try:
+            # 0. Kiểm tra chất lượng ảnh sơ bộ (Blur)
+            # Nếu ảnh quá mờ, texture-based anti-spoofing sẽ sai lệch
+            blur_score, is_sharp = face_quality_checker.check_blur(face_image)
+            if not is_sharp:
+                logger.warning(f"Liveness aborted: Image too blurry (score={blur_score:.2f})")
+                return LivenessResult(
+                    is_real=False, 
+                    confidence=0.0, 
+                    label="FAKE", 
+                    message="Ảnh quá mờ, vui lòng giữ yên điện thoại khi chụp."
+                )
+
             # 1. Cắt ảnh khuôn mặt (Crop)
             scale = 2.7
             if bbox is not None:

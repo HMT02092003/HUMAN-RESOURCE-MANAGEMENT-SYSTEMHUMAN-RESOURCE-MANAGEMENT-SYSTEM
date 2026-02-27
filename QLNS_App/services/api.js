@@ -23,6 +23,13 @@ const api = axios.create({
 // Biến để theo dõi nếu đang sử dụng fallback
 let isUsingFallback = false;
 
+// Callback khi bị 401 mà không refresh được (dùng để redirect login)
+let onUnauthorizedCallback = null;
+
+export const setOnUnauthorizedCallback = (callback) => {
+    onUnauthorizedCallback = callback;
+};
+
 // Request interceptor
 api.interceptors.request.use(
     async (config) => {
@@ -78,7 +85,11 @@ api.interceptors.response.use(
                 }
             } catch (refreshError) {
                 await AuthTokenManager.clearTokens();
-                Alert.alert('Phiên đăng nhập hết hạn', 'Vui lòng đăng nhập lại');
+                if (onUnauthorizedCallback) {
+                    onUnauthorizedCallback();
+                } else {
+                    Alert.alert('Phiên đăng nhập hết hạn', 'Vui lòng đăng nhập lại');
+                }
                 return Promise.reject({ ...error, needsReauth: true });
             }
         }
