@@ -1,19 +1,20 @@
 """
-Face Liveness Detection Service
-Phát hiện giả mạo: ảnh chụp từ màn hình, điện thoại, ảnh in
+Face Liveness Detection Service (Ensemble Multi-Model)
+Tích hợp MiniFASNetV1SE (Crop 4.0) và MiniFASNetV2 (Crop 2.7)
 
 Luồng xử lý:
-1. Crop face (scale 2.7)
-2. Chỉnh độ sáng + sắc nét
-3. Feed vào MiniFASNetV1SE
-4. Model tự quyết định: real_score > fake_score → REAL, ngược lại → FAKE
+1. V1SE: Crop 4.0 → Dự đoán → Hiệu chuẩn (calibrated) lên thang đo mới.
+2. Vòng 1 (Cảnh báo): Nếu V1SE calibrated < 30% → FAKE (Nghi ngờ bối cảnh).
+3. V2: Crop 2.7 → Dự đoán.
+4. Vòng 2 (Xác thực): Nếu V2 > 80% & V1SE calibrated > 50% → REAL.
+5. Trọng số: 60% V2 + 40% V1SE_calibrated.
 """
 
 import cv2
 import numpy as np
 import logging
 import onnxruntime as ort
-from typing import Optional
+from typing import Optional, Tuple
 from dataclasses import dataclass
 import os
 from app.services.face_quality_service import face_quality_checker
@@ -31,14 +32,7 @@ class LivenessResult:
 
 
 class FaceLivenessDetector:
-    """
-    Anti-spoofing — để model tự quyết định.
-    Model output 2 class: [fake_score, real_score]
-    → argmax quyết định → không threshold thủ công.
-    """
-
     _instance = None
-    CROP_SCALE = 4.0
 
     def __new__(cls):
         if cls._instance is None:
@@ -48,90 +42,55 @@ class FaceLivenessDetector:
     def __init__(self):
         if not hasattr(self, '_initialized'):
             self._initialized = True
-            self.session = None
-            self.input_name = None
-            self.output_name = None
+            self.v1_session = None
+            self.v2_session = None
             self.input_size = (80, 80)
-            self._load_model()
+            self._load_models()
 
-    def _load_model(self):
+    def _load_models(self):
         user_home = os.path.expanduser("~")
-        candidates = [
+        
+        # Đường dẫn V1SE
+        paths_v1 = [
             os.path.join(user_home, ".insightface", "models", "anti_spoofing", "MiniFASNetV1SE.onnx"),
-            os.path.join(user_home, ".insightface", "models", "MiniFASNetV1SE.onnx"),
             os.path.join(user_home, ".insightface", "models", "anti_spoofing", "4_0_0_80x80_MiniFASNetV1SE.onnx"),
-            os.path.join(user_home, ".insightface", "models", "4_0_0_80x80_MiniFASNetV1SE.onnx"),
             "models/anti_spoofing/MiniFASNetV1SE.onnx",
-            "models/MiniFASNetV1SE.onnx",
-            "models/anti_spoofing/4_0_0_80x80_MiniFASNetV1SE.onnx",
-            "models/4_0_0_80x80_MiniFASNetV1SE.onnx",
             "/app/models/MiniFASNetV1SE.onnx",
             "/app/models/4_0_0_80x80_MiniFASNetV1SE.onnx",
-            "/root/.insightface/models/MiniFASNetV1SE.onnx",
-            "/root/.insightface/models/4_0_0_80x80_MiniFASNetV1SE.onnx",
+        ]
+        
+        # Đường dẫn V2
+        paths_v2 = [
+            os.path.join(user_home, ".insightface", "models", "anti_spoofing", "2.7_80x80_MiniFASNetV2.onnx"),
+            os.path.join(user_home, ".insightface", "models", "anti_spoofing", "MiniFASNetV2.onnx"),
+            "models/anti_spoofing/2.7_80x80_MiniFASNetV2.onnx",
+            "/app/models/2.7_80x80_MiniFASNetV2.onnx",
         ]
 
-        model_path = None
-        for p in candidates:
-            if os.path.exists(p):
-                model_path = p
-                break
+        def get_path(candidates):
+            for p in candidates:
+                if os.path.exists(p): return p
+            return None
 
-        if not model_path:
-            logger.warning("⚠️ MiniFASNetV1SE not found — anti-spoofing disabled")
-            return
+        v1_path = get_path(paths_v1)
+        v2_path = get_path(paths_v2)
 
-        try:
-            logger.info(f"Loading MiniFASNetV1SE from: {model_path}")
-            self.session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
-            inputs = self.session.get_inputs()
-            outputs = self.session.get_outputs()
-            self.input_name = inputs[0].name
-            self.output_name = outputs[0].name
-
+        if v1_path:
             try:
-                shape = inputs[0].shape
-                if shape and len(shape) >= 4:
-                    h, w = shape[-2], shape[-1]
-                    if isinstance(h, int) and isinstance(w, int):
-                        self.input_size = (int(w), int(h))
-            except Exception:
-                pass
+                self.v1_session = ort.InferenceSession(v1_path, providers=['CPUExecutionProvider'])
+                logger.info(f"✅ Loaded V1SE: {v1_path}")
+            except Exception as e:
+                logger.error(f"Failed V1SE: {e}")
 
-            logger.info(f"✅ MiniFASNetV1SE loaded — input size: {self.input_size}")
-        except Exception as e:
-            logger.error(f"Failed to load model: {e}")
-            self.session = None
-
-    # ------------------------------------------------------------------
-    # CHỈNH ĐỘ SÁNG + SẬc NÉT
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _enhance_image(image: np.ndarray) -> np.ndarray:
-        """
-        Chỉnh độ sáng và sắc nét trước khi detect.
-        1. CLAHE trên L channel: cân bằng độ sáng cục bộ
-        2. Unsharp mask: làm nét chi tiết
-        """
-        try:
-            # 1. Cân bằng độ sáng (CLAHE trên L channel)
-            lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
-            l_ch, a_ch, b_ch = cv2.split(lab)
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-            l_enhanced = clahe.apply(l_ch)
-            bright = cv2.cvtColor(cv2.merge((l_enhanced, a_ch, b_ch)), cv2.COLOR_LAB2BGR)
-
-            # 2. Làm nét (Unsharp mask)
-            gaussian = cv2.GaussianBlur(bright, (0, 0), 3)
-            sharp = cv2.addWeighted(bright, 1.5, gaussian, -0.5, 0)
-            return sharp
-        except Exception:
-            return image
-
-
+        if v2_path:
+            try:
+                self.v2_session = ort.InferenceSession(v2_path, providers=['CPUExecutionProvider'])
+                logger.info(f"✅ Loaded V2: {v2_path}")
+            except Exception as e:
+                logger.error(f"Failed V2: {e}")
 
     # ------------------------------------------------------------------
-    # CROP
+    # UTILS
     # ------------------------------------------------------------------
     @staticmethod
     def _crop_face(image: np.ndarray, bbox: Optional[list], scale: float) -> Optional[np.ndarray]:
@@ -160,97 +119,111 @@ class FaceLivenessDetector:
         return crop if crop is not None and crop.size > 0 else None
 
     # ------------------------------------------------------------------
-    # INFERENCE — model tự quyết định
+    # INFERENCE
     # ------------------------------------------------------------------
-    def _infer(self, face_crop: np.ndarray) -> tuple:
-        """
-        Chạy model, trả về (is_real, real_confidence).
-        """
-        # 1. Preprocessing chuẩn MiniFASNet (80x80, ImageNet normalize)
+    def _infer_model(self, session, face_crop: np.ndarray) -> float:
+        """Chuẩn hóa ImageNet và lấy Real Prob."""
         resized = cv2.resize(face_crop, self.input_size, interpolation=cv2.INTER_AREA)
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        
+        # Chuẩn hóa (Normalize) đúng Mean và Std
         mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
         std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
         normalized = (rgb - mean) / std
         tensor = np.expand_dims(normalized.transpose(2, 0, 1), axis=0).astype(np.float32).copy()
 
-        # 2. Run model
-        outputs = self.session.run([self.output_name], {self.input_name: tensor})
+        input_name = session.get_inputs()[0].name
+        output_name = session.get_outputs()[0].name
+        
+        outputs = session.run([output_name], {input_name: tensor})
         raw = np.array(outputs[0][0], dtype=np.float32)
 
-        # 3. Softmax để ra xác suất
-        ex = np.exp(raw - np.max(raw))
-        probs = ex / ex.sum()
-
-        # LOG DEBUG CHI TIẾT
-        probs_str = ", ".join([f"cl{i}={p:.4f}" for i, p in enumerate(probs)])
-        logger.info(f"🔍 [LIVENESS DEBUG] Raw: {raw} | Probs: {probs_str}")
-
-        if probs.size == 3:
-            # Model 3 class: thường là [Real, Fake1, Fake2]
-            # Ta lấy class 0 làm Real
-            real_prob = float(probs[0])
-            is_real = np.argmax(probs) == 0
-            return is_real, real_prob
-        elif probs.size == 2:
-            # Model 2 class: có thể là [Fake, Real] hoặc [Real, Fake]
-            # Tạm thời giả định index 1 là Real (như thiết kế cũ)
-            # Nhưng log ở trên sẽ giúp ta biết nếu bị ngược
-            real_prob = float(probs[1]) 
-            is_real = real_prob > 0.5
-            return is_real, real_prob
-        
-        return False, 0.0
+        # Softmax để lấy % tin cậy thật
+        if raw.size >= 2:
+            ex = np.exp(raw - np.max(raw))
+            probs = ex / ex.sum()
+            return float(probs[1]) # Thường 1 là Real class (theo index framework cũ)
+        return 0.0
 
     # ------------------------------------------------------------------
-    # MAIN
+    # HIỆU CHUẨN V1SE
+    # ------------------------------------------------------------------
+    def _calibrate_v1(self, raw_score: float) -> float:
+        """
+        Hiệu chuẩn chỉ số (Calibration) cho V1SE
+        V1SE trả về rất thấp (2-6%). Ta lấy mốc 5% (0.05) = 80% (0.80) tin cậy.
+        """
+        calibrated = (raw_score / 0.05) * 0.80
+        return min(max(calibrated, 0.0), 1.0)
+
+    # ------------------------------------------------------------------
+    # ENSEMBLE LIVENESS CHECK
     # ------------------------------------------------------------------
     def check_liveness(
         self,
         face_image: np.ndarray,
         bbox: Optional[list] = None
     ) -> LivenessResult:
-        """
-        Kiểm tra giả mạo.
-        1. Kiểm tra blur
-        2. Crop face (scale 2.7)
-        3. Feed ảnh gốc vào model → model tự quyết định
-        """
-        if self.session is None:
-            return LivenessResult(True, 1.0, "UNKNOWN", "Anti-spoofing disabled")
+        if not self.v1_session or not self.v2_session:
+            return LivenessResult(True, 1.0, "UNKNOWN", "Thiếu model liveness.")
 
         try:
+            # 1. Blur check
             blur_score, is_sharp = face_quality_checker.check_blur(face_image)
             if not is_sharp:
-                logger.warning(f"Too blurry (score={blur_score:.2f})")
-                return LivenessResult(False, 0.0, "FAKE", "Ảnh quá mờ, vui lòng giữ yên điện thoại khi chụp.")
+                return LivenessResult(False, 0.0, "FAKE", f"Ảnh mờ (score={blur_score:.2f})")
 
-            face_crop = self._crop_face(face_image, bbox, self.CROP_SCALE)
-            if face_crop is None:
-                return LivenessResult(False, 0.0, "FAKE", "Không crop được khuôn mặt")
+            # ==========================================
+            # STEP A: V1SE (Crop 4.0)
+            # ==========================================
+            crop_v1 = self._crop_face(face_image, bbox, 4.0)
+            if crop_v1 is None:
+                return LivenessResult(False, 0.0, "FAKE", "Face crop failed (4.0)")
+            
+            v1_raw = self._infer_model(self.v1_session, crop_v1)
+            v1_calibrated = self._calibrate_v1(v1_raw)
 
-            # BỎ ENHANCE ĐỂ LOẠI TRỪ NGUYÊN NHÂN (Exclude sharpening artifacts)
-            # enhanced = self._enhance_image(face_crop)
+            # Vòng 1 (Cảnh báo): V1SE calibrated < 30% đánh là giả bối cảnh
+            if v1_calibrated < 0.30:
+                msg = f"Nghi ngờ giả mạo bối cảnh (V1_calib={v1_calibrated:.2%})"
+                logger.warning(msg)
+                return LivenessResult(False, v1_calibrated, "FAKE", msg)
 
-            # Model tự quyết định trên ảnh gốc
-            is_real, confidence = self._infer(face_crop)
+            # ==========================================
+            # STEP B: V2 (Crop 2.7)
+            # ==========================================
+            crop_v2 = self._crop_face(face_image, bbox, 2.7)
+            if crop_v2 is None:
+                return LivenessResult(False, 0.0, "FAKE", "Face crop failed (2.7)")
+            
+            v2_raw = self._infer_model(self.v2_session, crop_v2)
+
+            # ==========================================
+            # STEP C: LOGIC QUYẾT ĐỊNH ĐA TẦNG
+            # ==========================================
+            # Trọng số: 60% V2 + 40% V1SE_calibrated
+            final_score = (0.60 * v2_raw) + (0.40 * v1_calibrated)
+
+            # Vòng 2 (Xác thực)
+            is_real = (v2_raw > 0.80) and (v1_calibrated > 0.50)
             label = "REAL" if is_real else "FAKE"
+            
+            msg = f"Diagnostics - V2={v2_raw:.2%}, V1_raw={v1_raw:.2%}, V1_calib={v1_calibrated:.2%}"
+            logger.info(f"Liveness Ensemble: {label} (Final={final_score:.2%}) | {msg}")
 
             if is_real:
-                message = "Xác thực thành công"
+                user_msg = "Xác thực ảnh thật thành công."
             else:
-                message = "Phát hiện giả mạo"
+                user_msg = f"Phát hiện giả mạo. ({msg})"
 
-            logger.info(f"Liveness: {label} ({confidence:.2%})")
-
-            return LivenessResult(is_real=is_real, confidence=confidence, label=label, message=message)
+            return LivenessResult(is_real, final_score, label, user_msg)
 
         except Exception as e:
             logger.error(f"Liveness error: {e}")
             return LivenessResult(False, 0.0, "ERROR", str(e))
 
     def is_available(self) -> bool:
-        return self.session is not None
+        return self.v1_session is not None and self.v2_session is not None
 
 
 face_liveness_detector = FaceLivenessDetector()
