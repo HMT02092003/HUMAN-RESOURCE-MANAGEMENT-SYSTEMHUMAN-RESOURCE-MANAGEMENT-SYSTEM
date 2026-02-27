@@ -25,8 +25,8 @@ HORIZONTAL_MARGIN_LEFT_PERCENT = 0.12
 HORIZONTAL_MARGIN_RIGHT_PERCENT = 0.20
 VERTICAL_MARGIN_PERCENT = 0.15
 
-# Liveness / anti-spoof threshold (0-1). Hạ xuống 0.50 để phù hợp camera chất lượng thấp.
-LIVENESS_THRESHOLD = 0.50
+# Liveness threshold: 0.65 (nằm giữa: fake ~50-60%, real ~70-84%)
+LIVENESS_THRESHOLD = 0.65
 
 # Recognition thresholds
 MIN_THRESHOLD = 0.35
