@@ -136,205 +136,117 @@ class FaceLivenessDetector:
             logger.error(f"Failed to load liveness model: {e}")
             self.session = None
     
+    def _run_inference(self, face_crop: np.ndarray) -> float:
+        """Thực hiện inference cho một ảnh cụ thể và trả về confidence"""
+        # Preprocess ảnh (ensure RGB conversion and resize to model input)
+        input_tensor = self._preprocess(face_crop)
+        
+        # Inference - ensure fresh computation each time
+        outputs = self.session.run(
+            [self.output_name],
+            {self.input_name: input_tensor.copy()}
+        )
+        
+        # Parse output
+        output = np.array(outputs[0][0], dtype=np.float32)
+        
+        if output.size == 2:
+            # 2-class output: [fake_score, real_score]
+            if (np.any(output < 0) or np.any(output > 1)) or (not np.isclose(np.sum(output), 1.0, rtol=1e-3)):
+                ex = np.exp(output - np.max(output))
+                probs = ex / ex.sum()
+            else:
+                probs = output / np.sum(output)
+            return float(probs[1])  # real_prob
+        else:
+            # 1-class output: logit or probability
+            val = float(output[0])
+            if val < 0.0 or val > 1.0:
+                return float(1.0 / (1.0 + np.exp(-val)))
+            return val
+
     def check_liveness(
         self, 
         face_image: np.ndarray,
         bbox: Optional[list] = None
     ) -> LivenessResult:
         """
-        Kiểm tra ảnh có phải thật không
-        
-        Args:
-            face_image: Ảnh khuôn mặt (BGR format)
-            bbox: Bounding box [x1, y1, x2, y2] để crop (optional)
-        
-        Returns:
-            LivenessResult với đầy đủ thông tin
+        Kiểm tra ảnh có phải thật không bằng chiến lược đa tầng (Multi-pass)
         """
-        # Nếu không có model, trả về kết quả mặc định
         if self.session is None:
-            logger.warning("Liveness model not loaded, skipping check")
-            return LivenessResult(
-                is_real=True,  # Mặc định cho qua
-                confidence=1.0,
-                label="UNKNOWN",
-                message="Liveness detection disabled (model not found)"
-            )
+            return LivenessResult(is_real=True, confidence=1.0, label="UNKNOWN", message="Liveness disabled")
         
         try:
-            # Crop face nếu có bbox. Use scale factor 2.7 (chuẩn của MiniFASNetV2)
+            # 1. Cắt ảnh khuôn mặt (Crop)
             scale = 2.7
             if bbox is not None:
-                # Ensure bbox are ints
                 x1, y1, x2, y2 = list(map(int, bbox))
-                w = x2 - x1
-                h = y2 - y1
-                cx = x1 + w // 2
-                cy = y1 + h // 2
+                w, h = x2 - x1, y2 - y1
+                cx, cy = x1 + w // 2, y1 + h // 2
+                new_w, new_h = int(w * scale), int(h * scale)
+                nx1, ny1 = int(cx - new_w // 2), int(cy - new_h // 2)
+                nx2, ny2 = nx1 + new_w, ny1 + new_h
 
-                new_w = int(w * scale)
-                new_h = int(h * scale)
-                nx1 = int(cx - new_w // 2)
-                ny1 = int(cy - new_h // 2)
-                nx2 = nx1 + new_w
-                ny2 = ny1 + new_h
+                cx1, cy1 = max(0, nx1), max(0, ny1)
+                cx2, cy2 = min(face_image.shape[1], nx2), min(face_image.shape[0], ny2)
+                face_crop_orig = face_image[cy1:cy2, cx1:cx2].copy()
 
-                # Compute padding if out of bounds
-                pad_left = max(0, -nx1)
-                pad_top = max(0, -ny1)
-                pad_right = max(0, nx2 - face_image.shape[1])
-                pad_bottom = max(0, ny2 - face_image.shape[0])
-
-                # Clamp coords to image
-                cx1 = max(0, nx1)
-                cy1 = max(0, ny1)
-                cx2 = min(face_image.shape[1], nx2)
-                cy2 = min(face_image.shape[0], ny2)
-
-                face_crop = face_image[cy1:cy2, cx1:cx2]
-
-                # If padding needed, pad with borders replicated to avoid black border fake trigger
-                if pad_left or pad_top or pad_right or pad_bottom:
-                    face_crop = cv2.copyMakeBorder(
-                        face_crop,
-                        pad_top,
-                        pad_bottom,
-                        pad_left,
-                        pad_right,
-                        borderType=cv2.BORDER_REPLICATE
-                    )
+                pad_left, pad_top = max(0, -nx1), max(0, -ny1)
+                pad_right, pad_bottom = max(0, nx2 - face_image.shape[1]), max(0, ny2 - face_image.shape[0])
+                if any([pad_left, pad_top, pad_right, pad_bottom]):
+                    face_crop_orig = cv2.copyMakeBorder(face_crop_orig, pad_top, pad_bottom, pad_left, pad_right, cv2.BORDER_REPLICATE)
             else:
-                # If bbox not provided, treat face_image as crop and expand/pad by scale
                 h, w = face_image.shape[:2]
-                cx = w // 2
-                cy = h // 2
-                new_w = int(w * scale)
-                new_h = int(h * scale)
-                nx1 = int(cx - new_w // 2)
-                ny1 = int(cy - new_h // 2)
-                nx2 = nx1 + new_w
-                ny2 = ny1 + new_h
+                new_w, new_h = int(w * scale), int(h * scale)
+                nx1, ny1 = int(w//2 - new_w//2), int(h//2 - new_h//2)
+                nx2, ny2 = nx1 + new_w, ny1 + new_h
 
-                pad_left = max(0, -nx1)
-                pad_top = max(0, -ny1)
-                pad_right = max(0, nx2 - w)
-                pad_bottom = max(0, ny2 - h)
+                pad_left, pad_top = max(0, -nx1), max(0, -ny1)
+                pad_right, pad_bottom = max(0, nx2 - w), max(0, ny2 - h)
+                padded = cv2.copyMakeBorder(face_image, pad_top, pad_bottom, pad_left, pad_right, cv2.BORDER_REPLICATE)
+                start_x, start_y = max(0, nx1 + pad_left), max(0, ny1 + pad_top)
+                face_crop_orig = padded[start_y:start_y + new_h, start_x:start_x + new_w].copy()
 
-                # pad original crop first
-                padded = cv2.copyMakeBorder(
-                    face_image,
-                    pad_top,
-                    pad_bottom,
-                    pad_left,
-                    pad_right,
-                    borderType=cv2.BORDER_REPLICATE
-                )
-                # then extract centered region
-                start_x = max(0, nx1 + pad_left)
-                start_y = max(0, ny1 + pad_top)
-                face_crop = padded[start_y:start_y + new_h, start_x:start_x + new_w]
+            if face_crop_orig is None or face_crop_orig.size == 0:
+                return LivenessResult(False, 0.0, "FAKE", "Empty crop")
 
-            # Validate crop
-            if face_crop is None or face_crop.size == 0:
-                logger.warning("Liveness crop is empty. Returning FAKE result to be safe.")
-                return LivenessResult(is_real=False, confidence=0.0, label="FAKE", message="Empty crop for liveness check")
-
-            # --- 🛠️ XỬ LÝ ẢNH MÔI TRƯỜNG KÉM BẰNG THUẬT TOÁN CLAHE ---
-            # Xử lý vấn đề hắt sáng, chói, tường phẳng làm AI lầm tưởng là ảnh 2D in trên giấy.
+            # --- CHIẾN LƯỢC MULTI-PASS ---
+            
+            # Pass 1: Ảnh gốc (Original)
+            conf_orig = self._run_inference(face_crop_orig)
+            
+            # Pass 2: Ảnh qua CLAHE (Tăng chi tiết khối)
+            conf_clahe = 0.0
             try:
-                # 1. Chuyển ảnh sang hệ màu LAB (Lightness, A-color, B-color) để tách biệt Ánh sáng
-                lab = cv2.cvtColor(face_crop, cv2.COLOR_BGR2LAB)
-                l_channel, a, b = cv2.split(lab)
-                
-                # 2. Áp dụng CLAHE (Contrast Limited Adaptive Histogram Equalization) lên kênh Ánh Sáng (L)
-                # ClipLimit: 2.0 (Giới hạn độ tương phản để không làm cháy ảnh)
-                # TileGridSize: (8,8) (Chia ảnh thành các khối 8x8 để cân bằng sáng cục bộ)
-                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-                l_clahe = clahe.apply(l_channel)
-                
-                # 3. Gộp lại và chuyển về BGR
-                merged_lab = cv2.merge((l_clahe, a, b))
-                face_crop = cv2.cvtColor(merged_lab, cv2.COLOR_LAB2BGR)
-                logger.debug("Đã áp dụng CLAHE để tăng cường chiều sâu 3D cho ảnh.")
-            except Exception as ex:
-                logger.warning(f"Lỗi khi áp dụng CLAHE: {ex}. Tiếp tục với ảnh gốc.")
-            # ---------------------------------------------------------
+                lab = cv2.cvtColor(face_crop_orig, cv2.COLOR_BGR2LAB)
+                l, a, b = cv2.split(lab)
+                clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)) # Nâng nhẹ clipLimit lên 3.0
+                l_clahe = clahe.apply(l)
+                face_crop_clahe = cv2.cvtColor(cv2.merge((l_clahe, a, b)), cv2.COLOR_LAB2BGR)
+                conf_clahe = self._run_inference(face_crop_clahe)
+            except Exception as e:
+                logger.warning(f"CLAHE pass failed: {e}")
 
-            # Preprocess ảnh (ensure RGB conversion and resize to model input)
-            input_tensor = self._preprocess(face_crop)
+            # Lấy confidence cao nhất từ các lần quét
+            # Điều này giúp nếu ảnh gốc bị lóa hắt sáng làm AI nhầm là 2D, 
+            # thì bản CLAHE sẽ cứu lại bằng cách làm rõ khối 3D.
+            confidence = max(conf_orig, conf_clahe)
             
-            # Log input statistics for debugging
-            logger.debug(f"Input tensor shape: {input_tensor.shape}, mean: {input_tensor.mean():.3f}, std: {input_tensor.std():.3f}")
-            
-            # Inference - ensure fresh computation each time
-            # Force no caching by using new dict for inputs
-            outputs = self.session.run(
-                [self.output_name],
-                {self.input_name: input_tensor.copy()}  # Use copy to avoid any state retention
-            )
-            
-            # Parse output
-            # Output shape thường là (1, 2) hoặc (1, 1)
-            # Tùy model có thể khác nhau. ONNX often returns logits -> convert to probabilities.
-            output = np.array(outputs[0][0], dtype=np.float32)
-            logger.debug(f"Raw liveness model output: {output}")
-
-            if output.size == 2:
-                # 2-class output: [fake_score, real_score] format
-                # Convert logits -> probabilities with softmax when needed
-                # If values are already probabilities (sum ~= 1 and in [0,1]) we keep them.
-                if (np.any(output < 0) or np.any(output > 1)) or (not np.isclose(np.sum(output), 1.0, rtol=1e-3)):
-                    ex = np.exp(output - np.max(output))
-                    probs = ex / ex.sum()
-                else:
-                    probs = output / np.sum(output)
-
-                # Model outputs [fake_prob, real_prob]
-                fake_prob = float(probs[0])  # Index 0 is FAKE
-                real_prob = float(probs[1])  # Index 1 is REAL
-                confidence = real_prob
-                logger.debug(f"Liveness probs (fake,real): {(fake_prob, real_prob)}")
-            else:
-                # 1-class output: often a logit that needs sigmoid, or already a probability
-                val = float(output[0])
-                if val < 0.0 or val > 1.0:
-                    # Apply sigmoid
-                    confidence = float(1.0 / (1.0 + np.exp(-val)))
-                else:
-                    confidence = val
-                logger.debug(f"Liveness single-output confidence: {confidence}")
-            
-            # Xác định REAL/FAKE
+            # Nếu background có đường thẳng gây nhiễu, việc lấy max giúp tăng cơ hội 
+            # vượt qua nếu một trong hai bản xử lý giảm bớt được sự nhầm lẫn của model.
             is_real = confidence >= self.REAL_THRESHOLD
             label = "REAL" if is_real else "FAKE"
+            message = "Xác thực ảnh thật thành công" if is_real else \
+                      ("PHÁT HIỆN GIAN LẬN: Sử dụng ảnh in hoặc màn hình." if confidence < 0.7 else "CẢNH BÁO: Nghi ngờ thực thể không sống.")
+
+            logger.info(f"Multi-pass Liveness: {label} (Orig: {conf_orig:.2%}, CLAHE: {conf_clahe:.2%}) -> Best: {confidence:.2%}")
             
-            if is_real:
-                message = "Xác thực ảnh thật thành công"
-            else:
-                # Phân loại thông báo dựa trên độ tin cậy
-                if confidence < 0.70:
-                    message = "PHÁT HIỆN GIAN LẬN: Sử dụng ảnh in hoặc màn hình điện thoại."
-                else:
-                    message = "CẢNH BÁO GIAN LẬN: Hệ thống nghi ngờ ảnh không phải thực thể sống."
-            
-            logger.info(f"Liveness check: {label} (confidence={confidence:.2%})")
-            
-            return LivenessResult(
-                is_real=is_real,
-                confidence=confidence,
-                label=label,
-                message=message
-            )
-            
+            return LivenessResult(is_real, confidence, label, message)
+
         except Exception as e:
-            logger.error(f"Error in liveness check: {e}")
-            # Trường hợp lỗi, báo lỗi và trả về kết quả không hợp lệ
-            return LivenessResult(
-                is_real=False,
-                confidence=0.0,
-                label="ERROR",
-                message=f"Lỗi kiểm tra liveness: {str(e)}"
-            )
+            logger.error(f"Liveness error: {e}")
+            return LivenessResult(False, 0.0, "ERROR", str(e))
+
     
     def _preprocess(self, face_image: np.ndarray) -> np.ndarray:
         """
