@@ -25,8 +25,9 @@ HORIZONTAL_MARGIN_LEFT_PERCENT = 0.12
 HORIZONTAL_MARGIN_RIGHT_PERCENT = 0.20
 VERTICAL_MARGIN_PERCENT = 0.15
 
-# Liveness / anti-spoof threshold (0-1). Set to 0.70 (Cân bằng giữa bảo mật và trải nghiệm người dùng)
-LIVENESS_THRESHOLD = 0.70
+# Liveness / anti-spoof threshold (0-1). Hạ xuống 0.55 để phù hợp camera chất lượng thấp.
+# Bù lại bằng tầng 2: Moiré screen detection trong face_liveness_service.py
+LIVENESS_THRESHOLD = 0.55
 
 # Recognition thresholds
 MIN_THRESHOLD = 0.35
