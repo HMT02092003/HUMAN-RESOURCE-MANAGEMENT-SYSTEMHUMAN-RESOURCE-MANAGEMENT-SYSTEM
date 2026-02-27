@@ -52,19 +52,26 @@ class FaceLivenessDetector:
         
         # Đường dẫn V1SE
         paths_v1 = [
+            os.path.join(user_home, ".insightface", "models", "MiniFASNetV1SE.onnx"),
             os.path.join(user_home, ".insightface", "models", "anti_spoofing", "MiniFASNetV1SE.onnx"),
-            os.path.join(user_home, ".insightface", "models", "anti_spoofing", "4_0_0_80x80_MiniFASNetV1SE.onnx"),
+            os.path.join(user_home, ".insightface", "models", "4_0_0_80x80_MiniFASNetV1SE.onnx"),
+            "models/MiniFASNetV1SE.onnx",
             "models/anti_spoofing/MiniFASNetV1SE.onnx",
             "/app/models/MiniFASNetV1SE.onnx",
-            "/app/models/4_0_0_80x80_MiniFASNetV1SE.onnx",
+            "/app/models/anti_spoofing/MiniFASNetV1SE.onnx",
+            "/root/.insightface/models/MiniFASNetV1SE.onnx",
         ]
         
         # Đường dẫn V2
         paths_v2 = [
+            os.path.join(user_home, ".insightface", "models", "2.7_80x80_MiniFASNetV2.onnx"),
             os.path.join(user_home, ".insightface", "models", "anti_spoofing", "2.7_80x80_MiniFASNetV2.onnx"),
-            os.path.join(user_home, ".insightface", "models", "anti_spoofing", "MiniFASNetV2.onnx"),
+            os.path.join(user_home, ".insightface", "models", "MiniFASNetV2.onnx"),
+            "models/2.7_80x80_MiniFASNetV2.onnx",
             "models/anti_spoofing/2.7_80x80_MiniFASNetV2.onnx",
             "/app/models/2.7_80x80_MiniFASNetV2.onnx",
+            "/app/models/anti_spoofing/2.7_80x80_MiniFASNetV2.onnx",
+            "/root/.insightface/models/2.7_80x80_MiniFASNetV2.onnx",
         ]
 
         def get_path(candidates):
@@ -81,6 +88,8 @@ class FaceLivenessDetector:
                 logger.info(f"✅ Loaded V1SE: {v1_path}")
             except Exception as e:
                 logger.error(f"Failed V1SE: {e}")
+        else:
+            logger.error(f"❌ V1SE Model NOT FOUND! Searched in: {paths_v1}")
 
         if v2_path:
             try:
@@ -88,6 +97,8 @@ class FaceLivenessDetector:
                 logger.info(f"✅ Loaded V2: {v2_path}")
             except Exception as e:
                 logger.error(f"Failed V2: {e}")
+        else:
+            logger.error(f"❌ V2 Model NOT FOUND! Searched in: {paths_v2}")
 
     # ------------------------------------------------------------------
     # UTILS
