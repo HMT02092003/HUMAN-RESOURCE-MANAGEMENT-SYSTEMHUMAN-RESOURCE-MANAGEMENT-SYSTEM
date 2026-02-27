@@ -38,7 +38,7 @@ class FaceLivenessDetector:
     """
 
     _instance = None
-    CROP_SCALE = 2.7
+    CROP_SCALE = 4.0
 
     def __new__(cls):
         if cls._instance is None:
