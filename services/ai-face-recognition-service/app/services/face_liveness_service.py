@@ -178,10 +178,12 @@ class FaceLivenessDetector:
     # SCORE CALIBRATION
     # ------------------------------------------------------------------
     def _calibrate_v1(self, raw_score: float) -> float:
-        """Đưa v1_score từ (0 - 0.1) về (0.0 - 1.0)"""
+        """Đưa v1_score từ (0 - 0.1) về (0.0 - 1.0), siết chặt vùng nguy hiểm < 3%"""
+        if raw_score <= 0.03:
+            return 0.0
         if raw_score >= 0.1:
             return 1.0
-        return raw_score / 0.1
+        return (raw_score - 0.03) / (0.1 - 0.03)
 
     def _calibrate_v2(self, raw_score: float) -> float:
         """Đưa v2_score từ (0.3 - 0.98) về (0.0 - 1.0)"""
@@ -220,12 +222,6 @@ class FaceLivenessDetector:
             v1_raw = self._infer_model(self.v1_session, crop_v1)
             v1_calibrated = self._calibrate_v1(v1_raw)
 
-            # Cơ chế Veto (Phủ quyết): Nếu raw < 1% -> đánh Fake ngay lập tức
-            if v1_raw < 0.01:
-                msg = f"Nghi ngờ giả mạo bối cảnh (V1_raw={v1_raw:.2%} < 1%)"
-                logger.warning(msg)
-                return LivenessResult(False, 0.0, "FAKE", msg)
-
             # ==========================================
             # STEP B: V2 (Crop 2.7)
             # ==========================================
@@ -236,24 +232,41 @@ class FaceLivenessDetector:
             v2_raw = self._infer_model(self.v2_session, crop_v2)
             v2_calibrated = self._calibrate_v2(v2_raw)
 
-            # ==========================================
-            # STEP C: ENSEMBLE LOGIC
-            # ==========================================
-            # Trọng số: 70% V2 (soi chi tiết) + 30% V1SE (soi bối cảnh)
-            final_score = (0.70 * v2_calibrated) + (0.30 * v1_calibrated)
-
-            is_real = final_score >= 0.50
-            label = "REAL" if is_real else "FAKE"
-            
             # Ghi chú Diagnostics
             diagnostics = (
                 f"Diagnostics - "
                 f"V2_raw={v2_raw:.2%} (calib={v2_calibrated:.2%}) | "
                 f"V1_raw={v1_raw:.2%} (calib={v1_calibrated:.2%})"
             )
-            logger.info(f"Liveness Ensemble ({label}, Final={final_score:.2%}) | {diagnostics}")
 
-            message = "Xác thực ảnh thật thành công." if is_real else f"Phát hiện giả mạo. {diagnostics}"
+            # ==========================================
+            # STEP C: ENSEMBLE LOGIC & VETO
+            # ==========================================
+            # Trọng số: 70% V2 (soi chi tiết) + 30% V1SE (soi bối cảnh)
+            final_score = (0.70 * v2_calibrated) + (0.30 * v1_calibrated)
+
+            # Cơ chế Veto cứng (Hard Threshold)
+            if v2_raw < 0.85 and v1_raw < 0.04:
+                reason = "V2 & V1 both too low for high confidence"
+                logger.warning(f"Liveness Veto: {reason} | {diagnostics}")
+                return LivenessResult(False, final_score, "FAKE", f"Phát hiện giả mạo. ({reason}) {diagnostics}")
+
+            # Logic 'Double Check'
+            if v2_raw > 0.90:
+                is_real = True
+                reason = "V2 strictly highly confident"
+            elif v2_raw > 0.70 and v1_raw > 0.05:
+                is_real = True
+                reason = "V2 and V1 both agree"
+            else:
+                is_real = False
+                reason = "Models do not agree strongly enough"
+
+            label = "REAL" if is_real else "FAKE"
+            
+            logger.info(f"Liveness Ensemble ({label}, Final={final_score:.2%}) | Reason: {reason} | {diagnostics}")
+
+            message = "Xác thực ảnh thật thành công." if is_real else f"Phát hiện giả mạo. ({reason}) {diagnostics}"
 
             return LivenessResult(
                 is_real=is_real,
