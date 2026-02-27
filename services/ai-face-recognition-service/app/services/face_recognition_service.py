@@ -74,67 +74,63 @@ class FaceRecognizer:
             cls._instance = super(FaceRecognizer, cls).__new__(cls)
         return cls._instance
     
-    def __init__(
-        self,
-        model_name: str = 'buffalo_l',
-        det_size: Tuple[int, int] = (640, 640),
-        enable_quality_check: bool = True,
-        enable_liveness_check: bool = True
-    ):
+    def __init__(self):
         """
-        Khởi tạo Face Recognizer
-        
-        Args:
-            model_name: Model InsightFace (buffalo_l, buffalo_s, ...)
-            det_size: Kích thước detection (width, height)
-            enable_quality_check: Bật kiểm tra chất lượng
-            enable_liveness_check: Bật kiểm tra liveness
+        Khởi tạo Face Recognizer (Lazy mode)
+        Dùng để chia sẻ instance trên toàn bộ ứng dụng.
+        Model thực tế được load qua method initialize() để tránh block import.
         """
         if not hasattr(self, '_initialized'):
             self._initialized = True
-            self.model_name = model_name
-            self.det_size = det_size
-            self.enable_quality_check = enable_quality_check
-            self.enable_liveness_check = enable_liveness_check
-            self.app = None
+            self.app = None  # Lazy init
             
-            logger.info("🚀 Initializing FaceRecognizer...")
-            self._initialize_insightface()
-    
-    def _initialize_insightface(self):
-        """Khởi tạo InsightFace model"""
+            # Use thresholds from central config
+            from app.config.rate_config import MIN_THRESHOLD, SAFE_THRESHOLD
+            self.min_threshold = float(MIN_THRESHOLD)
+            self.safe_threshold = float(SAFE_THRESHOLD)
+            
+            # Legacy fields (kept for compatibility with old routes)
+            self.enable_quality_check = True
+            self.enable_liveness_check = True
+            self.model_name = 'buffalo_l'
+            
+            logger.info("✅ [AI] FaceRecognizer instance created (Lazy mode)")
+
+    def initialize(self):
+        """Khởi tạo model InsightFace (Buffalo_L) một cách rõ ràng"""
+        if self.app is not None:
+            return self.app
+            
+        logger.info(f"⏳ [AI] Initializing InsightFace ({self.model_name})...")
         try:
-            # Khởi tạo FaceAnalysis (CPU-only)
-            logger.info(f"📦 Loading InsightFace model (CPU-only): {self.model_name}")
-            # Force CPU context
+            # Root directory for models (matches Docker COPY)
+            root_path = os.path.expanduser("~/.insightface")
+            
             self.app = FaceAnalysis(
                 name=self.model_name,
-                root=os.path.expanduser("~/.insightface")
+                root=root_path
             )
 
             # Use det_size=(640, 640) to balance accuracy and memory.
+            # ctx_id=-1 forces CPU execution
             self.app.prepare(ctx_id=-1, det_thresh=0.05, det_size=(640, 640))
             
-            logger.info("✅ FaceRecognizer initialized successfully!")
-            logger.info(f"   Detection size: {self.det_size}")
-            logger.info(f"   Quality check: {'ON' if self.enable_quality_check else 'OFF'}")
-            logger.info(f"   Liveness check: {'ON' if self.enable_liveness_check else 'OFF'}")
+            logger.info("✅ [AI] InsightFace initialized successfully!")
+            return self.app
             
         except Exception as e:
-            logger.error(f"❌ Failed to initialize InsightFace: {e}")
-            raise RuntimeError(f"Cannot initialize FaceRecognizer: {e}")
+            logger.error(f"❌ [AI] Failed to initialize InsightFace: {e}")
+            return None
+
+    def _ensure_initialized(self):
+        """Tự động init nếu router gọi tới trước khi lifespan hoàn tất"""
+        if self.app is None:
+            return self.initialize()
+        return self.app
     
     def _get_providers(self) -> List[str]:
         """Xác định execution providers"""
-        try:
-            import onnxruntime as ort
-            # Force CPU-only to avoid GPU/CUDA usage in this deployment
-            available = ort.get_available_providers()
-            logger.info(f"ONNX available providers: {available}")
-            logger.info("💻 Forcing CPUExecutionProvider only")
-            return ['CPUExecutionProvider']
-        except:
-            return ['CPUExecutionProvider']
+        return ['CPUExecutionProvider']
     
     def process_face(
         self,

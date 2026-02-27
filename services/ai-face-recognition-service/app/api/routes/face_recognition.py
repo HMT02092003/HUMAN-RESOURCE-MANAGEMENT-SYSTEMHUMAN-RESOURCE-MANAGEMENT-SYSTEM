@@ -685,11 +685,9 @@ async def detect_face_realtime(
                 }
             )
         
-        # STAGE 1: Quality Check
-        quality_checker = ImageQualityChecker()
-        
+        # STAGE 1: Quality Check using centralized singleton
         # Blur check
-        blur_score, is_sharp = quality_checker.check_blur(img)
+        blur_score, is_sharp = face_quality_checker.check_blur(img)
         if not is_sharp:
             return JSONResponse(
                 status_code=status.HTTP_200_OK,
@@ -700,13 +698,13 @@ async def detect_face_realtime(
                     "validation": {
                         "isValid": False,
                         "message": "GIỮ CAMERA THẬT ỔN ĐỊNH",
-                        "details": {"blur_score": blur_score}
+                        "details": {"blur_score": float(blur_score)}
                     }
                 }
             )
         
         # Brightness check
-        brightness, bright_ok, bright_msg = quality_checker.check_brightness(img)
+        brightness, bright_ok, bright_msg = face_quality_checker.check_brightness(img)
         if not bright_ok:
             msg = "CẢI THIỆN ÁNH SÁNG" if bright_msg == "TOO_DARK" else "GIẢM ÁNH SÁNG"
             return JSONResponse(
@@ -718,7 +716,7 @@ async def detect_face_realtime(
                     "validation": {
                         "isValid": False,
                         "message": msg,
-                        "details": {"brightness": brightness, "status": bright_msg}
+                        "details": {"brightness": float(brightness), "status": bright_msg}
                     }
                 }
             )

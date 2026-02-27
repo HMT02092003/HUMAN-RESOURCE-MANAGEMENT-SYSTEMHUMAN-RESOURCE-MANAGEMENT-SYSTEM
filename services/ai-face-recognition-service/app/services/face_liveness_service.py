@@ -43,9 +43,14 @@ class FaceLivenessDetector:
             self._initialized = True
             self.v1_session = None
             self.v2_session = None
-            self._load_models()
+            logger.info("✅ [AI] FaceLivenessDetector instance created (Lazy mode)")
 
-    def _load_models(self):
+    def initialize(self):
+        """Khởi tạo các session ONNX cho liveness detection"""
+        if self.v1_session is not None and self.v2_session is not None:
+            return True
+            
+        logger.info("⏳ [AI] Initializing Liveness Detection models...")
         user_home = os.path.expanduser("~")
 
         paths_v1 = [
@@ -80,20 +85,27 @@ class FaceLivenessDetector:
         if v1_path:
             try:
                 self.v1_session = ort.InferenceSession(v1_path, providers=['CPUExecutionProvider'])
-                logger.info(f"✅ Loaded V1SE: {v1_path}")
+                logger.info(f"✅ [AI] Loaded V1SE: {v1_path}")
             except Exception as e:
-                logger.error(f"Failed V1SE: {e}")
+                logger.error(f"❌ [AI] Failed V1SE: {e}")
         else:
-            logger.error(f"❌ V1SE NOT FOUND! Searched: {paths_v1}")
+            logger.warning(f"⚠️ [AI] V1SE NOT FOUND! Searched: {paths_v1}")
 
         if v2_path:
             try:
                 self.v2_session = ort.InferenceSession(v2_path, providers=['CPUExecutionProvider'])
-                logger.info(f"✅ Loaded V2: {v2_path}")
+                logger.info(f"✅ [AI] Loaded V2: {v2_path}")
             except Exception as e:
-                logger.error(f"Failed V2: {e}")
+                logger.error(f"❌ [AI] Failed V2: {e}")
         else:
-            logger.error(f"❌ V2 NOT FOUND! Searched: {paths_v2}")
+            logger.warning(f"⚠️ [AI] V2 NOT FOUND! Searched: {paths_v2}")
+            
+        return self.is_available()
+
+    def _ensure_initialized(self):
+        """Tự động gọi init nếu cần"""
+        if not self.is_available():
+            self.initialize()
 
     # ------------------------------------------------------------------
     # CROP

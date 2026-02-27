@@ -68,31 +68,32 @@ class EnhancedInsightFaceService:
         
     def initialize_models(self):
         """
-        Khởi tạo các model AI bằng cách tham chiếu tới các singleton đã có.
-        Điều này giúp tiết kiệm tài nguyên RAM đáng kể (tránh load buffalo_l 2 lần).
+        Khởi tạo bằng cách tham chiếu tới các singleton đã có.
+        Chúng ta chỉ link reference, việc load thực tế nằm ở initialize() của từng service.
         """
-        logger.info("⏳ [AI] Linking Enhanced Models to existing singletons...")
+        logger.info("⏳ [AI] Linking Enhanced Models to shared singletons...")
         try:
             # Re-use existing FaceRecognizer.app instance
             from .face_recognition_service import face_recognizer
-            self.app = face_recognizer.app
             
-            if self.app is None:
-                logger.warning("⚠️ FaceRecognizer.app is not initialized yet. Calling its init...")
-                face_recognizer._initialize_insightface()
-                self.app = face_recognizer.app
+            # Ensure the shared recognizer is initialized
+            recognizer_app = face_recognizer.initialize()
+            self.app = recognizer_app
             
-            logger.info("✅ [AI] Enhanced service linked to shared FaceAnalysis instance")
-            
-            # Re-use existing face_liveness_detector
+            # Link to liveness detector (just for consistency)
             from .face_liveness_service import face_liveness_detector
-            # We don't need to load a separate session here anymore
-            # we will just call face_liveness_detector in _check_liveness
-            logger.info("✅ [AI] Enhanced service linked to shared FaceLivenessDetector")
+            face_liveness_detector.initialize()
+            
+            if self.app is not None:
+                logger.info("✅ [AI] Enhanced service linked and core models ready")
+            else:
+                logger.warning("⚠️ [AI] core FaceAnalysis app is still None after init")
+                
+            return self.app is not None
                 
         except Exception as e:
-            logger.error(f"❌ [AI] Init Error: {e}")
-            raise e
+            logger.error(f"❌ [AI] Enhanced Init Error: {e}")
+            return False
 
     # ========================================================================
     # KIỂM TRA CHẤT LƯỢNG ẢNH (QUALITY CHECKS)

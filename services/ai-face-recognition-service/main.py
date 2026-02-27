@@ -60,30 +60,38 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"❌ Failed to setup database: {e}")
     
-    # 1. Initialize Global Face Recognizer first (Centralized FaceAnalysis)
+    # 1. Initialize Global Face Recognizer first
     try:
         from app.services.face_recognition_service import face_recognizer
-        # Initialization already happens on singleton creation, but we can be explicit
-        logger.info("✅ Core FaceRecognizer initialized")
+        # explicit call to load models (Lazy before, NOW loading)
+        face_recognizer.initialize()
+        logger.info("✅ Core FaceRecognizer models loaded")
     except Exception as e:
-        logger.error(f"❌ Failed to initialize Core FaceRecognizer: {e}")
+        logger.error(f"❌ Failed to load Core FaceRecognizer models: {e}")
 
-    # 2. Initialize Enhanced Face Recognition Service (Now shares models with #1)
+    # 2. Initialize Liveness Detector
+    try:
+        from app.services.face_liveness_service import face_liveness_detector
+        face_liveness_detector.initialize()
+        logger.info("✅ Core Liveness models loaded")
+    except Exception as e:
+        logger.error(f"❌ Failed to load Liveness models: {e}")
+
+    # 3. Initialize Enhanced Face Recognition Service (Links to others)
     try:
         from app.services.enhanced_insightface_service import enhanced_face_service
         enhanced_face_service.initialize_models()
-        logger.info("✅ Enhanced Face Recognition Service initialized (Shared Memory)")
+        logger.info("✅ Enhanced Face Recognition Service ready (Shared Memory)")
     except Exception as e:
         logger.warning(f"⚠️ Enhanced service initialization warning: {e}")
     
-    # 3. Initialize Batch Image Processor
+    # 4. Initialize Batch Image Processor
     try:
         initialize_batch_processor(enhanced_face_service)
-        logger.info("✅ Batch Image Processor initialized")
     except Exception as e:
         logger.error(f"❌ Failed to initialize Batch Processor: {e}")
     
-    logger.info("🎉 AI Face Recognition Service started successfully!")
+    logger.info("🎉 AI Face Recognition Service ready to serve!")
     
     yield
     
