@@ -25,8 +25,13 @@ HORIZONTAL_MARGIN_LEFT_PERCENT = 0.12
 HORIZONTAL_MARGIN_RIGHT_PERCENT = 0.20
 VERTICAL_MARGIN_PERCENT = 0.15
 
-# Liveness threshold: 0.65 (nằm giữa: fake ~50-60%, real ~70-84%)
-LIVENESS_THRESHOLD = 0.65
+# ===== LIVENESS THRESHOLDS (Anti-Spoofing) =====
+# Dựa trên dữ liệu thực tế:
+#   Ảnh GIẢ: V1_raw < 2.50%, V2_raw dao động 26%-71%
+#   Ảnh THẬT: V1_raw > 2.60%, V2_raw dao động 64%-72%
+# → V1 là chỉ số phân tách chính, V2 hỗ trợ lọc thêm
+LIVENESS_V1_THRESHOLD = 0.025   # 2.5% — dưới mức này = FAKE
+LIVENESS_V2_THRESHOLD = 0.60    # 60%  — dưới mức này = FAKE
 
 # Recognition thresholds
 MIN_THRESHOLD = 0.35
