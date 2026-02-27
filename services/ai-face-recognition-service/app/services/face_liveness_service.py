@@ -3,12 +3,13 @@ Face Liveness Detection Service
 Kiểm tra ảnh thật/giả bằng Silent-Face-Anti-Spoofing model (ONNX)
 Chống giả mạo: ảnh in, màn hình, mặt nạ
 
-Multi-Model Ensemble — Per-Model Aggregation
+Multi-Model Ensemble + Image Enhancement
 - 2 models: MiniFASNetV2 + MiniFASNetV1SE
 - Scale 2.7 (chuẩn Silent-Face-Anti-Spoofing)
-- Mỗi model: avg(original, CLAHE)
+- Image enhancement: bilateral filter + unsharp mask (cứu ảnh camera kém)
+- 3 variants per model: original, enhanced, CLAHE
 - Final: MAX of per-model averages
-- Threshold: 0.50 (phù hợp camera chất lượng kém)
+- Threshold: 0.65
 """
 
 import cv2
@@ -246,6 +247,44 @@ class FaceLivenessDetector:
         return crop
 
     # ------------------------------------------------------------------
+    # IMAGE ENHANCEMENT (cho camera chất lượng kém)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _enhance_image(face_crop: np.ndarray) -> np.ndarray:
+        """
+        Tăng chất lượng ảnh cho camera kém.
+        
+        Pipeline:
+        1. Bilateral filter: Khử noise nhưng giữ cạnh (edge-preserving)
+           → Làm sạch sensor noise của camera rẻ, giữ chi tiết khuôn mặt
+        2. Unsharp mask: Làm nét chi tiết
+           → Phục hồi các chi tiết bị mờ do camera kém
+        3. CLAHE trên L channel: Cân bằng ánh sáng cục bộ
+           → Cải thiện ảnh trong điều kiện thiếu sáng
+        
+        Kết quả: ảnh thật sẽ rõ hơn → model cho điểm cao hơn
+        """
+        try:
+            # 1. Bilateral filter: denoise giữ cạnh
+            denoised = cv2.bilateralFilter(face_crop, d=9, sigmaColor=75, sigmaSpace=75)
+            
+            # 2. Unsharp mask: sharpen
+            gaussian = cv2.GaussianBlur(denoised, (0, 0), 3)
+            sharpened = cv2.addWeighted(denoised, 1.5, gaussian, -0.5, 0)
+            
+            # 3. CLAHE trên L channel: cân bằng ánh sáng
+            lab = cv2.cvtColor(sharpened, cv2.COLOR_BGR2LAB)
+            l_ch, a_ch, b_ch = cv2.split(lab)
+            clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(4, 4))
+            l_enhanced = clahe.apply(l_ch)
+            enhanced = cv2.cvtColor(cv2.merge((l_enhanced, a_ch, b_ch)), cv2.COLOR_LAB2BGR)
+            
+            return enhanced
+        except Exception as e:
+            logger.warning(f"Image enhancement error: {e}")
+            return face_crop
+
+    # ------------------------------------------------------------------
     # MAIN LIVENESS CHECK
     # ------------------------------------------------------------------
     def check_liveness(
@@ -257,11 +296,12 @@ class FaceLivenessDetector:
         Kiểm tra ảnh có phải thật không.
         
         Chiến lược:
-          1. Crop face ở scale 2.7 (chuẩn Silent-Face-Anti-Spoofing)
-          2. Mỗi model chạy 2 pass: original + CLAHE
-          3. Per-model confidence = trung bình 2 pass
-          4. Final = MAX of per-model confidences
-          5. So sánh với threshold 0.50
+          1. Crop face ở scale 2.7
+          2. Tạo 3 variants: original, enhanced (denoise+sharpen), CLAHE
+          3. Mỗi model chạy cả 3 variants
+          4. Per-model confidence = MAX của 3 results
+          5. Final = MAX of per-model confidences
+          6. So sánh với threshold 0.65
         """
         if not self.models:
             return LivenessResult(is_real=True, confidence=1.0, label="UNKNOWN", message="Liveness disabled")
@@ -283,45 +323,48 @@ class FaceLivenessDetector:
             if face_crop is None or face_crop.size == 0:
                 return LivenessResult(False, 0.0, "FAKE", "Empty crop")
 
-            # 2. CLAHE variant
-            face_crop_clahe = None
+            # 2. Tạo 3 variants
+            face_enhanced = self._enhance_image(face_crop)
+            
+            face_clahe = None
             try:
                 lab = cv2.cvtColor(face_crop, cv2.COLOR_BGR2LAB)
                 l_ch, a_ch, b_ch = cv2.split(lab)
                 clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
                 l_clahe = clahe.apply(l_ch)
-                face_crop_clahe = cv2.cvtColor(cv2.merge((l_clahe, a_ch, b_ch)), cv2.COLOR_LAB2BGR)
+                face_clahe = cv2.cvtColor(cv2.merge((l_clahe, a_ch, b_ch)), cv2.COLOR_LAB2BGR)
             except Exception as e:
                 logger.warning(f"CLAHE preparation error: {e}")
 
-            # 3. Per-model inference
+            # 3. Per-model: chạy 3 variants, lấy MAX
+            variants = [("orig", face_crop), ("enhanced", face_enhanced)]
+            if face_clahe is not None:
+                variants.append(("clahe", face_clahe))
+
             per_model_scores: Dict[str, float] = {}
             all_confs: List[float] = []
+            details: Dict[str, Dict[str, float]] = {}
 
             for model in self.models:
-                model_confs = []
-                try:
-                    conf = model.run(face_crop)
-                    model_confs.append(conf)
-                    all_confs.append(conf)
-                except Exception as e:
-                    logger.warning(f"Inference error [{model.name}]: {e}")
-
-                if face_crop_clahe is not None:
+                model_confs = {}
+                for var_name, var_img in variants:
                     try:
-                        conf_clahe = model.run(face_crop_clahe)
-                        model_confs.append(conf_clahe)
-                        all_confs.append(conf_clahe)
+                        conf = model.run(var_img)
+                        model_confs[var_name] = conf
+                        all_confs.append(conf)
                     except Exception as e:
-                        logger.warning(f"CLAHE inference error [{model.name}]: {e}")
+                        logger.warning(f"Inference error [{model.name}/{var_name}]: {e}")
 
                 if model_confs:
-                    per_model_scores[model.name] = float(np.mean(model_confs))
+                    # Per-model = MAX của tất cả variants
+                    # (variant nào cho kết quả tốt nhất cho model đó)
+                    per_model_scores[model.name] = max(model_confs.values())
+                    details[model.name] = model_confs
 
             if not per_model_scores:
                 return LivenessResult(False, 0.0, "FAKE", "No valid inference results")
 
-            # 4. Final = MAX of per-model averages
+            # 4. Final = MAX of per-model scores
             confidence = max(per_model_scores.values())
 
             is_real = confidence >= self.REAL_THRESHOLD
@@ -336,11 +379,15 @@ class FaceLivenessDetector:
                     message = "CẢNH BÁO GIAN LẬN: Hệ thống nghi ngờ ảnh không phải thực thể sống."
 
             # Log chi tiết
+            detail_str = "; ".join(
+                f"{m}: {{{', '.join(f'{v}={s:.3f}' for v,s in vs.items())}}}"
+                for m, vs in details.items()
+            )
             logger.info(
                 f"Liveness check: {label} (confidence={confidence:.2%}) | "
                 f"models={len(self.models)}, scale={self.CROP_SCALE}, "
                 f"per_model={{{', '.join(f'{k}={v:.3f}' for k,v in per_model_scores.items())}}}, "
-                f"all_raw={[f'{c:.3f}' for c in all_confs]}"
+                f"details=[{detail_str}]"
             )
 
             return LivenessResult(
