@@ -223,8 +223,26 @@ class FaceLivenessDetector:
             if face_crop_orig is None or face_crop_orig.size == 0:
                 return LivenessResult(False, 0.0, "FAKE", "Empty crop")
 
-            # Thực hiện inference (Chỉ dùng ảnh gốc)
-            confidence = self._run_inference(face_crop_orig)
+            # --- CHIẾN LƯỢC CHỈ CHẠY CLAHE MỨC NHẸ (clipLimit = 1.5) ---
+            try:
+                # Chuyển đổi sang không gian màu LAB
+                lab = cv2.cvtColor(face_crop_orig, cv2.COLOR_BGR2LAB)
+                l, a, b = cv2.split(lab)
+                
+                # Áp dụng CLAHE vào kênh L (Lightness) với clipLimit=1.5 
+                # (Nhẹ hơn 3.0, mạnh hơn 1.0, để không làm hỏng đặc điểm da thật)
+                clahe = cv2.createCLAHE(clipLimit=1.5, tileGridSize=(8, 8))
+                l_clahe = clahe.apply(l)
+                
+                # Ghép lại và chuyển về BGR
+                face_crop_clahe = cv2.cvtColor(cv2.merge((l_clahe, a, b)), cv2.COLOR_LAB2BGR)
+                
+                # Thực hiện inference (Chỉ dùng ảnh qua CLAHE)
+                confidence = self._run_inference(face_crop_clahe)
+                
+            except Exception as e:
+                logger.warning(f"Lỗi khi chạy CLAHE: {e}. Dự phòng dùng lại ảnh gốc.")
+                confidence = self._run_inference(face_crop_orig)
             
             is_real = confidence >= self.REAL_THRESHOLD
             label = "REAL" if is_real else "FAKE"
