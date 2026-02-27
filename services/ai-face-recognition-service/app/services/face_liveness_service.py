@@ -223,38 +223,28 @@ class FaceLivenessDetector:
             if face_crop_orig is None or face_crop_orig.size == 0:
                 return LivenessResult(False, 0.0, "FAKE", "Empty crop")
 
-            # --- CHIẾN LƯỢC MULTI-PASS ---
+            # Thực hiện inference (Chỉ dùng ảnh gốc)
+            confidence = self._run_inference(face_crop_orig)
             
-            # Pass 1: Ảnh gốc (Original)
-            conf_orig = self._run_inference(face_crop_orig)
-            
-            # Pass 2: Ảnh qua CLAHE (Tăng chi tiết khối)
-            conf_clahe = 0.0
-            try:
-                lab = cv2.cvtColor(face_crop_orig, cv2.COLOR_BGR2LAB)
-                l, a, b = cv2.split(lab)
-                clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)) # Nâng nhẹ clipLimit lên 3.0
-                l_clahe = clahe.apply(l)
-                face_crop_clahe = cv2.cvtColor(cv2.merge((l_clahe, a, b)), cv2.COLOR_LAB2BGR)
-                conf_clahe = self._run_inference(face_crop_clahe)
-            except Exception as e:
-                logger.warning(f"CLAHE pass failed: {e}")
-
-            # Lấy confidence cao nhất từ các lần quét
-            # Điều này giúp nếu ảnh gốc bị lóa hắt sáng làm AI nhầm là 2D, 
-            # thì bản CLAHE sẽ cứu lại bằng cách làm rõ khối 3D.
-            confidence = max(conf_orig, conf_clahe)
-            
-            # Nếu background có đường thẳng gây nhiễu, việc lấy max giúp tăng cơ hội 
-            # vượt qua nếu một trong hai bản xử lý giảm bớt được sự nhầm lẫn của model.
             is_real = confidence >= self.REAL_THRESHOLD
             label = "REAL" if is_real else "FAKE"
-            message = "Xác thực ảnh thật thành công" if is_real else \
-                      ("PHÁT HIỆN GIAN LẬN: Sử dụng ảnh in hoặc màn hình." if confidence < 0.7 else "CẢNH BÁO: Nghi ngờ thực thể không sống.")
-
-            logger.info(f"Multi-pass Liveness: {label} (Orig: {conf_orig:.2%}, CLAHE: {conf_clahe:.2%}) -> Best: {confidence:.2%}")
             
-            return LivenessResult(is_real, confidence, label, message)
+            if is_real:
+                message = "Xác thực ảnh thật thành công"
+            else:
+                if confidence < 0.70:
+                    message = "PHÁT HIỆN GIAN LẬN: Sử dụng ảnh in hoặc màn hình điện thoại."
+                else:
+                    message = "CẢNH BÁO GIAN LẬN: Hệ thống nghi ngờ ảnh không phải thực thể sống."
+            
+            logger.info(f"Liveness check: {label} (confidence={confidence:.2%})")
+            
+            return LivenessResult(
+                is_real=is_real,
+                confidence=confidence,
+                label=label,
+                message=message
+            )
 
         except Exception as e:
             logger.error(f"Liveness error: {e}")
