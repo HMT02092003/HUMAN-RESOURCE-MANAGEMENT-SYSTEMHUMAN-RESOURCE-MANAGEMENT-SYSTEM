@@ -3,11 +3,11 @@ Face Liveness Detection Service
 Kiểm tra ảnh thật/giả bằng Silent-Face-Anti-Spoofing model (ONNX)
 Chống giả mạo: ảnh in, màn hình, mặt nạ
 
-Phase 1: Multi-Model Ensemble + Multi-Scale Crop + TTA
+Phase 1 v2: Multi-Model Ensemble + Multi-Scale Crop
 - 2 models: MiniFASNetV2 + MiniFASNetV1SE
-- 3 scales: 1.0 (tight), 2.7 (medium), 4.0 (wide)
-- TTA: original + horizontal flip
-→ Tối đa 12 lần inference, lấy MAX → giảm false positive mạnh
+- 2 scales: 2.7 (medium), 4.0 (wide) — Bỏ scale 1.0 vì tight crop mất viền màn hình
+- Aggregation: AVERAGE (consensus) thay vì MAX
+→ Ảnh giả KHÔNG thể qua nếu đa số inferences đều cho điểm thấp
 """
 
 import cv2
@@ -120,7 +120,13 @@ class _OnnxModel:
 class FaceLivenessDetector:
     """
     Service kiểm tra liveness (Anti-spoofing)
-    Phase 1: Multi-Model Ensemble + Multi-Scale Crop + TTA
+    Phase 1 v2: Multi-Model Ensemble + Multi-Scale Crop
+    
+    Chiến lược aggregation TRUNG BÌNH (AVERAGE):
+    - Ảnh thật: đa số inferences cho điểm cao → average cao → PASS
+    - Ảnh giả: tight crop có thể cho điểm cao, nhưng wide crop
+      (thấy viền màn hình/giấy) cho điểm thấp → average bị kéo xuống → FAIL
+    
     Singleton pattern
     """
 
@@ -130,7 +136,9 @@ class FaceLivenessDetector:
     REAL_THRESHOLD = float(LIVENESS_THRESHOLD)
 
     # Multi-scale crop scales
-    CROP_SCALES = [1.0, 2.7, 4.0]
+    # BỎ scale 1.0 — tight crop mất hết contextual cues (viền màn hình, phản chiếu)
+    # Giữ scale 2.7 (chuẩn Silent-Face-Anti-Spoofing) và 4.0 (wide, bắt viền)
+    CROP_SCALES = [2.7, 4.0]
 
     def __new__(cls):
         if cls._instance is None:
@@ -249,11 +257,16 @@ class FaceLivenessDetector:
     ) -> LivenessResult:
         """
         Kiểm tra ảnh có phải thật không.
-        Chiến lược Phase 1:
-          - Multi-Scale Crop (3 scales)
-          - Multi-Model Ensemble (2 models)
-          - TTA: original + horizontal flip
-        Lấy MAX confidence trong tất cả kết quả → giảm false positive.
+        
+        Chiến lược Phase 1 v2:
+          - Multi-Scale Crop (2 scales: 2.7, 4.0) — bỏ tight crop 1.0
+          - Multi-Model Ensemble (lên tới 2 models)
+          - CLAHE augmentation
+          - Aggregation: TRUNG BÌNH (average) — consensus voting
+          
+        Tại sao dùng AVERAGE thay vì MAX?
+          - MAX: chỉ cần 1 inference cho cao → pass → ảnh giả dễ qua
+          - AVERAGE: đa số phải đồng ý → ảnh giả bị kéo average xuống
         """
         if not self.models:
             return LivenessResult(is_real=True, confidence=1.0, label="UNKNOWN", message="Liveness disabled")
@@ -270,7 +283,7 @@ class FaceLivenessDetector:
                     message="Ảnh quá mờ, vui lòng giữ yên điện thoại khi chụp."
                 )
 
-            # 1. Multi-Scale Crop
+            # 1. Multi-Scale Crop + Multi-Model Ensemble
             all_confidences: List[float] = []
             details: Dict[str, List[float]] = {}
 
@@ -279,20 +292,18 @@ class FaceLivenessDetector:
                 if face_crop is None or face_crop.size == 0:
                     continue
 
-                # TTA: original + horizontal flip
-                augmented = [face_crop, cv2.flip(face_crop, 1)]
-
                 for model in self.models:
                     model_confs = []
-                    for aug in augmented:
-                        try:
-                            conf = model.run(aug)
-                            model_confs.append(conf)
-                            all_confidences.append(conf)
-                        except Exception as e:
-                            logger.warning(f"Inference error [{model.name}] scale={scale}: {e}")
 
-                    # Thêm CLAHE pass cho mỗi model (giữ tương thích với phiên bản cũ)
+                    # Pass 1: Ảnh gốc (Original)
+                    try:
+                        conf = model.run(face_crop)
+                        model_confs.append(conf)
+                        all_confidences.append(conf)
+                    except Exception as e:
+                        logger.warning(f"Inference error [{model.name}] scale={scale}: {e}")
+
+                    # Pass 2: CLAHE (tăng chi tiết texture — phát hiện pattern pixel màn hình)
                     try:
                         lab = cv2.cvtColor(face_crop, cv2.COLOR_BGR2LAB)
                         l_ch, a_ch, b_ch = cv2.split(lab)
@@ -311,8 +322,15 @@ class FaceLivenessDetector:
             if not all_confidences:
                 return LivenessResult(False, 0.0, "FAKE", "No valid inference results")
 
-            # 2. Lấy MAX confidence (giảm false positive cho ảnh thật)
-            confidence = max(all_confidences)
+            # 2. AGGREGATION: Dùng TRUNG BÌNH (AVERAGE) thay vì MAX
+            # 
+            # Giải thích:
+            # - Ảnh THẬT: tất cả scales/models đều cho điểm cao → average cao
+            # - Ảnh GIẢ (màn hình): scale 2.7 và 4.0 bắt được viền/pattern 
+            #   → cho điểm thấp → kéo average xuống dưới ngưỡng
+            #
+            # Trước đây dùng MAX: ảnh giả chỉ cần 1 inference cao → qua luôn (SAI!)
+            confidence = float(np.mean(all_confidences))
 
             is_real = confidence >= self.REAL_THRESHOLD
             label = "REAL" if is_real else "FAKE"
@@ -320,17 +338,21 @@ class FaceLivenessDetector:
             if is_real:
                 message = "Xác thực ảnh thật thành công"
             else:
-                if confidence < 0.70:
+                if confidence < 0.50:
                     message = "PHÁT HIỆN GIAN LẬN: Sử dụng ảnh in hoặc màn hình điện thoại."
-                else:
+                elif confidence < 0.70:
                     message = "CẢNH BÁO GIAN LẬN: Hệ thống nghi ngờ ảnh không phải thực thể sống."
+                else:
+                    message = "CẢNH BÁO: Độ tin cậy không đủ cao để xác thực."
 
             # Log chi tiết để debug
+            sorted_confs = sorted(all_confidences, reverse=True)
             logger.info(
-                f"Liveness check: {label} (confidence={confidence:.2%}) | "
+                f"Liveness check: {label} (avg_confidence={confidence:.2%}) | "
                 f"models={len(self.models)}, scales={self.CROP_SCALES}, "
                 f"total_inferences={len(all_confidences)}, "
-                f"all_confs={[f'{c:.3f}' for c in sorted(all_confidences, reverse=True)[:6]]}"
+                f"max={max(all_confidences):.3f}, min={min(all_confidences):.3f}, "
+                f"all_confs={[f'{c:.3f}' for c in sorted_confs]}"
             )
 
             return LivenessResult(
@@ -354,20 +376,23 @@ face_liveness_detector = FaceLivenessDetector()
 
 
 # ============================================================================
-# HƯỚNG DẪN SỬ DỤNG (Phase 1 — Multi-Model Ensemble)
+# HƯỚNG DẪN SỬ DỤNG (Phase 1 v2 — Multi-Model Ensemble)
 # ============================================================================
 """
 ## Models cần có (đặt trong thư mục models/):
   1. 2.7_80x80_MiniFASNetV2.onnx     (~1.3 MB) — Nhẹ, nhanh
   2. MiniFASNetV1SE.onnx              (~1.7 MB) — SE-Attention, chính xác hơn
 
-## Chiến lược:
-  - 3 crop scales (1.0, 2.7, 4.0) × 2 models × 2 TTA (original+flip) + CLAHE
-  - Tổng tối đa 18 inferences
-  - Lấy MAX confidence → giảm mạnh false positive cho ảnh thật
-
-## Cài đặt:
-   pip install onnxruntime
+## Chiến lược (v2 — sửa lỗi MAX):
+  - 2 scales (2.7, 4.0) × 2 models × 2 passes (original + CLAHE)
+  - Tổng tối đa 8 inferences
+  - Aggregation: AVERAGE (trung bình) — consensus voting
+  
+## Tại sao bỏ scale 1.0 và MAX?
+  - Scale 1.0 (tight crop) mất hết viền màn hình → model chỉ thấy khuôn mặt
+    → cho điểm rất cao (99%) kể cả ảnh giả → sai hoàn toàn
+  - MAX: chỉ cần 1 inference cao → pass → ảnh giả dễ qua
+  - AVERAGE: đa số phải đồng ý → ảnh giả bị kéo xuống
 
 ## Sử dụng:
    from app.services.face_liveness_service import face_liveness_detector
