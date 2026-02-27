@@ -180,19 +180,32 @@ class FaceLivenessDetector:
         outputs = self.session.run([self.output_name], {self.input_name: tensor})
         raw = np.array(outputs[0][0], dtype=np.float32)
 
+        # DEBUG: Log raw output để xác định thứ tự class
+        logger.info(f"🔍 MODEL DEBUG: raw_output={raw}, size={raw.size}, shape={raw.shape}")
+
         # Model output → softmax → argmax (model tự quyết định)
         if raw.size >= 2:
             # Softmax
             ex = np.exp(raw - np.max(raw))
             probs = ex / ex.sum()
+
+            # DEBUG: Log tất cả probabilities
+            logger.info(f"🔍 MODEL DEBUG: probs={[f'{p:.4f}' for p in probs]}")
+
+            if raw.size == 3:
+                # 3-class model: [real, 2D-fake, 3D-fake] hoặc thứ tự khác
+                logger.info(f"🔍 3-class model: class0={probs[0]:.4f}, class1={probs[1]:.4f}, class2={probs[2]:.4f}")
+                # Thử cả 2 cách: index 0 = real, hoặc index 1 = real
+                real_prob_v1 = float(probs[0])  # nếu index 0 = real
+                real_prob_v2 = float(probs[1])  # nếu index 1 = real
+                logger.info(f"🔍 Nếu index0=real: {real_prob_v1:.2%} | Nếu index1=real: {real_prob_v2:.2%}")
+
             fake_prob = float(probs[0])
             real_prob = float(probs[1])
 
-            # Model quyết định: class nào có probability cao hơn thì là class đó
             is_real = real_prob > fake_prob
             return is_real, real_prob
         else:
-            # Single output → sigmoid
             val = float(raw[0])
             prob = float(1.0 / (1.0 + np.exp(-val))) if (val < 0.0 or val > 1.0) else val
             return prob > 0.5, prob
