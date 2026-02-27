@@ -26,16 +26,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Khởi tạo model khi startup
-@router.on_event("startup")
-async def startup_event():
-    """Khởi tạo model AI khi service khởi động"""
-    try:
-        enhanced_face_service.initialize_models()
-        logger.info("✅ Enhanced Face Recognition Service initialized")
-    except Exception as e:
-        logger.error(f"❌ Failed to initialize models: {e}")
-        raise
+# Note: Model initialization is centrally managed in main.py lifespan
 
 
 @router.post("/enhanced/register-face")

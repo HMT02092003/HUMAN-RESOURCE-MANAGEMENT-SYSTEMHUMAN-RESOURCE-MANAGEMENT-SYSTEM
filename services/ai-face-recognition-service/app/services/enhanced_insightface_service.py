@@ -67,42 +67,28 @@ class EnhancedInsightFaceService:
         )
         
     def initialize_models(self):
-        """Khởi tạo các model AI"""
-        logger.info("⏳ [AI] Loading Enhanced Models...")
+        """
+        Khởi tạo các model AI bằng cách tham chiếu tới các singleton đã có.
+        Điều này giúp tiết kiệm tài nguyên RAM đáng kể (tránh load buffalo_l 2 lần).
+        """
+        logger.info("⏳ [AI] Linking Enhanced Models to existing singletons...")
         try:
-            # 1. InsightFace (Buffalo_L - Model tốt nhất)
-            self.app = FaceAnalysis(
-                name='buffalo_l', 
-                root=self.USER_HOME + '/.insightface'
-            )
-            # Force CPU execution (ctx_id=-1)
-            self.app.prepare(ctx_id=-1, det_size=(640, 640))
-            logger.info("✅ [AI] InsightFace Model Loaded (buffalo_l)")
+            # Re-use existing FaceRecognizer.app instance
+            from .face_recognition_service import face_recognizer
+            self.app = face_recognizer.app
             
-            # 2. MiniFASNet (Anti-Spoofing)
-            # Accept multiple possible locations: anti_spoofing subfolder or directly under ~/.insightface/models
-            anti_spoof_candidates = [
-                self.ANTI_SPOOF_PATH,
-                os.path.join(self.MODELS_ROOT, "2.7_80x80_MiniFASNetV2.onnx")
-            ]
-
-            model_found = None
-            for p in anti_spoof_candidates:
-                if os.path.exists(p):
-                    model_found = p
-                    break
-
-            if model_found:
-                # Use CPU-only ONNX provider to avoid GPU/CUDA usage
-                self.anti_spoof_sess = onnxruntime.InferenceSession(
-                    model_found,
-                    providers=['CPUExecutionProvider']
-                )
-                logger.info(f"✅ [AI] Anti-Spoofing Model Loaded (MiniFASNet) from {model_found}")
-            else:
-                logger.warning(f"⚠️ [AI] Missing Anti-Spoofing Model at {self.ANTI_SPOOF_PATH} and {os.path.join(self.MODELS_ROOT, '2.7_80x80_MiniFASNetV2.onnx')}")
-                logger.warning("⚠️ [AI] Chạy lệnh: pip install onnxruntime-gpu scikit-learn")
-                self.anti_spoof_sess = None
+            if self.app is None:
+                logger.warning("⚠️ FaceRecognizer.app is not initialized yet. Calling its init...")
+                face_recognizer._initialize_insightface()
+                self.app = face_recognizer.app
+            
+            logger.info("✅ [AI] Enhanced service linked to shared FaceAnalysis instance")
+            
+            # Re-use existing face_liveness_detector
+            from .face_liveness_service import face_liveness_detector
+            # We don't need to load a separate session here anymore
+            # we will just call face_liveness_detector in _check_liveness
+            logger.info("✅ [AI] Enhanced service linked to shared FaceLivenessDetector")
                 
         except Exception as e:
             logger.error(f"❌ [AI] Init Error: {e}")
@@ -296,58 +282,25 @@ class EnhancedInsightFaceService:
     
     def _check_liveness(self, img: np.ndarray, bbox: List[float]) -> Tuple[bool, str]:
         """
-        Kiểm tra liveness bằng MiniFASNet
+        Kiểm tra liveness bằng centralized FaceLivenessDetector
         Returns: (passed, message)
         """
-        if self.anti_spoof_sess is None:
-            logger.warning("⚠️ Anti-spoofing model not loaded - skipping liveness check")
-            return True, "Pass (No Model)"
-
         try:
-            # Crop face với scale 2.7 (theo MiniFASNet requirement)
-            x1, y1, x2, y2 = map(int, bbox)
-            w, h = x2 - x1, y2 - y1
-            scale = 2.7
-            cx, cy = x1 + w / 2, y1 + h / 2
-            nw, nh = w * scale, h * scale
-            nx1, ny1 = int(cx - nw / 2), int(cy - nh / 2)
-            nx2, ny2 = int(cx + nw / 2), int(cy + nh / 2)
+            from .face_liveness_service import face_liveness_detector
             
-            h_img, w_img, _ = img.shape
-            nx1, ny1 = max(0, nx1), max(0, ny1)
-            nx2, ny2 = min(w_img, nx2), min(h_img, ny2)
-            
-            crop = img[ny1:ny2, nx1:nx2]
-            if crop.size == 0:
-                return False, "Lỗi cắt ảnh."
+            if not face_liveness_detector.is_available():
+                logger.warning("⚠️ FaceLivenessDetector models not loaded - skipping")
+                return True, "Pass (No Model)"
 
-            # Resize và chuẩn hóa
-            blob = cv2.resize(crop, (80, 80))
-            blob = cv2.cvtColor(blob, cv2.COLOR_BGR2RGB)  # MiniFASNet cần RGB
-            blob = np.transpose(blob, (2, 0, 1)).astype(np.float32)
-            blob = np.expand_dims(blob, axis=0)
+            result = face_liveness_detector.check_liveness(img, bbox)
             
-            # Inference
-            input_name = self.anti_spoof_sess.get_inputs()[0].name
-            outs = self.anti_spoof_sess.run(None, {input_name: blob})
+            if not result.is_real:
+                return False, result.message
             
-            # Softmax
-            logits = outs[0][0]
-            probs = np.exp(logits) / np.sum(np.exp(logits))
-            real_score = probs[1] if len(probs) > 1 else probs[0]
-            
-            logger.info(f"🔍 Liveness score: {real_score:.4f} (threshold: {self.LIVENESS_THRESHOLD})")
-            
-            if real_score < self.LIVENESS_THRESHOLD:
-                logger.warning(f"❌ Liveness failed - Score: {real_score:.4f}")
-                return False, f"Nghi vấn giả mạo/Camera qua màn hình (Độ tin cậy: {real_score:.2%})."
-            
-            logger.info("✅ Liveness check passed")
             return True, "OK"
             
         except Exception as e:
-            logger.error(f"Error in liveness check: {e}")
-            # Trong môi trường dev, cho pass nếu có lỗi
+            logger.error(f"Error in liveness transition: {e}")
             return True, "Pass (Error)"
 
     # ========================================================================

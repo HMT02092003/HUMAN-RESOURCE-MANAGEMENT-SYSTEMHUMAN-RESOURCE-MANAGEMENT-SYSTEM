@@ -60,22 +60,23 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"❌ Failed to setup database: {e}")
     
-    # Initialize AI models (InsightFace Manual ONNX: Detection + Alignment + Recognition)
+    # 1. Initialize Global Face Recognizer first (Centralized FaceAnalysis)
     try:
-        await InsightFaceRecognitionService.initialize_models()
-        logger.info("✅ InsightFace (Manual ONNX) initialized successfully")
+        from app.services.face_recognition_service import face_recognizer
+        # Initialization already happens on singleton creation, but we can be explicit
+        logger.info("✅ Core FaceRecognizer initialized")
     except Exception as e:
-        logger.error(f"❌ Failed to initialize InsightFace: {e}")
-    
-    # Initialize Enhanced Face Recognition Service (with Anti-Spoofing)
+        logger.error(f"❌ Failed to initialize Core FaceRecognizer: {e}")
+
+    # 2. Initialize Enhanced Face Recognition Service (Now shares models with #1)
     try:
+        from app.services.enhanced_insightface_service import enhanced_face_service
         enhanced_face_service.initialize_models()
-        logger.info("✅ Enhanced Face Recognition Service (with Anti-Spoofing) initialized")
+        logger.info("✅ Enhanced Face Recognition Service initialized (Shared Memory)")
     except Exception as e:
-        logger.warning(f"⚠️  Enhanced service initialization warning: {e}")
-        logger.info("ℹ️  Enhanced service will run without anti-spoofing model")
+        logger.warning(f"⚠️ Enhanced service initialization warning: {e}")
     
-    # Initialize Batch Image Processor
+    # 3. Initialize Batch Image Processor
     try:
         initialize_batch_processor(enhanced_face_service)
         logger.info("✅ Batch Image Processor initialized")
