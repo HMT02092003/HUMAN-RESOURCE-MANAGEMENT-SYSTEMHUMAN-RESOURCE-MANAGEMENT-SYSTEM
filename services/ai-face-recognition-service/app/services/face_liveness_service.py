@@ -3,10 +3,9 @@ Face Liveness Detection Service
 Phát hiện giả mạo: ảnh chụp từ màn hình, điện thoại, ảnh in
 
 Luồng xử lý:
-1. Xử lý ánh sáng (enhance) 
-2. Feed vào MiniFASNetV2
+1. Crop face (scale 2.7)
+2. Feed ảnh gốc vào MiniFASNetV2
 3. Model tự quyết định: real_score > fake_score → REAL, ngược lại → FAKE
-   Không can thiệp threshold — hoàn toàn tin tưởng model.
 """
 
 import cv2
@@ -97,26 +96,7 @@ class FaceLivenessDetector:
             logger.error(f"Failed to load model: {e}")
             self.session = None
 
-    # ------------------------------------------------------------------
-    # IMAGE ENHANCEMENT
-    # ------------------------------------------------------------------
-    @staticmethod
-    def _enhance_image(image: np.ndarray) -> np.ndarray:
-        """Xử lý ánh sáng: denoise → CLAHE → sharpen."""
-        try:
-            denoised = cv2.bilateralFilter(image, d=9, sigmaColor=75, sigmaSpace=75)
 
-            lab = cv2.cvtColor(denoised, cv2.COLOR_BGR2LAB)
-            l_ch, a_ch, b_ch = cv2.split(lab)
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-            l_enhanced = clahe.apply(l_ch)
-            enhanced = cv2.cvtColor(cv2.merge((l_enhanced, a_ch, b_ch)), cv2.COLOR_LAB2BGR)
-
-            gaussian = cv2.GaussianBlur(enhanced, (0, 0), 3)
-            sharpened = cv2.addWeighted(enhanced, 1.5, gaussian, -0.5, 0)
-            return sharpened
-        except Exception:
-            return image
 
     # ------------------------------------------------------------------
     # CROP
@@ -197,8 +177,7 @@ class FaceLivenessDetector:
         Kiểm tra giả mạo.
         1. Kiểm tra blur
         2. Crop face (scale 2.7)
-        3. Enhance (xử lý ánh sáng)
-        4. Model tự quyết định thật/giả
+        3. Feed ảnh gốc vào model → model tự quyết định
         """
         if self.session is None:
             return LivenessResult(True, 1.0, "UNKNOWN", "Anti-spoofing disabled")
@@ -213,11 +192,8 @@ class FaceLivenessDetector:
             if face_crop is None:
                 return LivenessResult(False, 0.0, "FAKE", "Không crop được khuôn mặt")
 
-            # Xử lý ánh sáng
-            enhanced = self._enhance_image(face_crop)
-
-            # Model tự quyết định
-            is_real, confidence = self._infer(enhanced)
+            # Model tự quyết định (ảnh gốc, không enhance)
+            is_real, confidence = self._infer(face_crop)
             label = "REAL" if is_real else "FAKE"
 
             if is_real:
