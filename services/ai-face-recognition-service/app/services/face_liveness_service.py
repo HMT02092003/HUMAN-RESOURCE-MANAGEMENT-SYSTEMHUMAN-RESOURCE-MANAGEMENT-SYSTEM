@@ -122,14 +122,16 @@ class _OnnxModel:
 class FaceLivenessDetector:
     """
     Service kiểm tra liveness (Anti-spoofing)
-    Multi-Model Ensemble + Per-Model Aggregation
+    Multi-Model Ensemble + Image Enhancement + Lighting Analysis
     
     Chiến lược:
     - Scale 2.7 (chuẩn Silent-Face-Anti-Spoofing)
-    - Mỗi model chạy 2 pass: original + CLAHE
-    - Per-model confidence = trung bình 2 pass
-    - Final = MAX of per-model confidences
-    - Threshold 0.50 (phù hợp camera chất lượng kém)
+    - Image enhancement: bilateral filter + sharpen (cứu camera kém)
+    - Lighting analysis: điều chỉnh threshold theo điều kiện ánh sáng
+      + Tối → hạ threshold (model cho điểm thấp là bình thường)
+      + Sáng đều (screen) → giữ/tăng threshold
+    - 3 variants per model: original, enhanced, CLAHE
+    - Final: MAX of per-model MAX
     
     Singleton pattern
     """
@@ -285,6 +287,80 @@ class FaceLivenessDetector:
             return face_crop
 
     # ------------------------------------------------------------------
+    # LIGHTING ANALYSIS (điều chỉnh threshold theo ánh sáng)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _analyze_lighting(face_crop: np.ndarray) -> Dict[str, float]:
+        """
+        Phân tích điều kiện ánh sáng của ảnh.
+        
+        Trả về:
+        - brightness: độ sáng trung bình (0-255)
+        - contrast: độ tương phản (std deviation)
+        - uniformity: mức độ đồng đều (0-1, 1 = rất đồng đều = nghi ngờ screen)
+        - threshold_adjustment: điều chỉnh threshold (-0.15 đến +0.05)
+        
+        Logic:
+        - Ảnh tối (brightness < 100): model cho điểm thấp là bình thường → hạ threshold
+        - Ảnh sáng đều (screen): ánh sáng màn hình rất đồng đều → thêm penalty
+        - Ảnh sáng tự nhiên: có shadow, gradient → không điều chỉnh
+        """
+        try:
+            gray = cv2.cvtColor(face_crop, cv2.COLOR_BGR2GRAY)
+            
+            brightness = float(np.mean(gray))
+            contrast = float(np.std(gray))
+            
+            # Uniformity: chia ảnh thành 4x4 blocks, tính std của các block means
+            h, w = gray.shape
+            bh, bw = h // 4, w // 4
+            block_means = []
+            for i in range(4):
+                for j in range(4):
+                    block = gray[i*bh:(i+1)*bh, j*bw:(j+1)*bw]
+                    block_means.append(np.mean(block))
+            
+            # Uniformity = 1 - normalized_std (càng đồng đều càng gần 1)
+            block_std = np.std(block_means)
+            uniformity = max(0.0, 1.0 - block_std / 50.0)  # normalize: std=50 → uniformity=0
+            
+            # Tính threshold adjustment
+            adjustment = 0.0
+            
+            # 1. Ảnh tối → hạ threshold (tối đa -0.15)
+            if brightness < 120:
+                # Càng tối càng hạ nhiều
+                dark_factor = (120 - brightness) / 120.0  # 0→1 khi brightness 120→0
+                adjustment -= dark_factor * 0.15  # tối đa giảm 0.15
+            
+            # 2. Ảnh contrast thấp → hạ thêm một chút
+            if contrast < 35:
+                low_contrast_factor = (35 - contrast) / 35.0
+                adjustment -= low_contrast_factor * 0.05  # tối đa giảm thêm 0.05
+            
+            # 3. Ảnh sáng quá đồng đều (nghi screen) → tăng threshold
+            if uniformity > 0.85 and brightness > 120:
+                adjustment += 0.05  # Screen penalty
+            
+            # Giới hạn adjustment
+            adjustment = max(-0.15, min(0.05, adjustment))
+            
+            return {
+                "brightness": brightness,
+                "contrast": contrast,
+                "uniformity": uniformity,
+                "threshold_adjustment": adjustment
+            }
+        except Exception as e:
+            logger.warning(f"Lighting analysis error: {e}")
+            return {
+                "brightness": 128.0,
+                "contrast": 50.0,
+                "uniformity": 0.5,
+                "threshold_adjustment": 0.0
+            }
+
+    # ------------------------------------------------------------------
     # MAIN LIVENESS CHECK
     # ------------------------------------------------------------------
     def check_liveness(
@@ -297,11 +373,12 @@ class FaceLivenessDetector:
         
         Chiến lược:
           1. Crop face ở scale 2.7
-          2. Tạo 3 variants: original, enhanced (denoise+sharpen), CLAHE
-          3. Mỗi model chạy cả 3 variants
-          4. Per-model confidence = MAX của 3 results
-          5. Final = MAX of per-model confidences
-          6. So sánh với threshold 0.65
+          2. Phân tích ánh sáng → điều chỉnh threshold
+          3. Tạo 3 variants: original, enhanced, CLAHE
+          4. Mỗi model chạy cả 3 variants
+          5. Per-model confidence = MAX của 3 results
+          6. Final = MAX of per-model confidences
+          7. So sánh với adaptive threshold
         """
         if not self.models:
             return LivenessResult(is_real=True, confidence=1.0, label="UNKNOWN", message="Liveness disabled")
@@ -323,7 +400,12 @@ class FaceLivenessDetector:
             if face_crop is None or face_crop.size == 0:
                 return LivenessResult(False, 0.0, "FAKE", "Empty crop")
 
-            # 2. Tạo 3 variants
+            # 2. Phân tích ánh sáng → adaptive threshold
+            lighting = self._analyze_lighting(face_crop)
+            adaptive_threshold = self.REAL_THRESHOLD + lighting["threshold_adjustment"]
+            adaptive_threshold = max(0.45, min(0.70, adaptive_threshold))  # Giới hạn
+
+            # 3. Tạo 3 variants
             face_enhanced = self._enhance_image(face_crop)
             
             face_clahe = None
@@ -336,13 +418,12 @@ class FaceLivenessDetector:
             except Exception as e:
                 logger.warning(f"CLAHE preparation error: {e}")
 
-            # 3. Per-model: chạy 3 variants, lấy MAX
+            # 4. Per-model: chạy 3 variants, lấy MAX
             variants = [("orig", face_crop), ("enhanced", face_enhanced)]
             if face_clahe is not None:
                 variants.append(("clahe", face_clahe))
 
             per_model_scores: Dict[str, float] = {}
-            all_confs: List[float] = []
             details: Dict[str, Dict[str, float]] = {}
 
             for model in self.models:
@@ -351,23 +432,21 @@ class FaceLivenessDetector:
                     try:
                         conf = model.run(var_img)
                         model_confs[var_name] = conf
-                        all_confs.append(conf)
                     except Exception as e:
                         logger.warning(f"Inference error [{model.name}/{var_name}]: {e}")
 
                 if model_confs:
-                    # Per-model = MAX của tất cả variants
-                    # (variant nào cho kết quả tốt nhất cho model đó)
                     per_model_scores[model.name] = max(model_confs.values())
                     details[model.name] = model_confs
 
             if not per_model_scores:
                 return LivenessResult(False, 0.0, "FAKE", "No valid inference results")
 
-            # 4. Final = MAX of per-model scores
+            # 5. Final = MAX of per-model scores
             confidence = max(per_model_scores.values())
 
-            is_real = confidence >= self.REAL_THRESHOLD
+            # 6. So sánh với adaptive threshold
+            is_real = confidence >= adaptive_threshold
             label = "REAL" if is_real else "FAKE"
 
             if is_real:
@@ -384,8 +463,10 @@ class FaceLivenessDetector:
                 for m, vs in details.items()
             )
             logger.info(
-                f"Liveness check: {label} (confidence={confidence:.2%}) | "
-                f"models={len(self.models)}, scale={self.CROP_SCALE}, "
+                f"Liveness check: {label} (confidence={confidence:.2%}, threshold={adaptive_threshold:.2%}) | "
+                f"models={len(self.models)}, "
+                f"lighting={{bright={lighting['brightness']:.0f}, contrast={lighting['contrast']:.0f}, "
+                f"uniform={lighting['uniformity']:.2f}, adj={lighting['threshold_adjustment']:+.3f}}}, "
                 f"per_model={{{', '.join(f'{k}={v:.3f}' for k,v in per_model_scores.items())}}}, "
                 f"details=[{detail_str}]"
             )
