@@ -16,17 +16,6 @@ import uvicorn
 from app.core.config import settings
 from app.core.database import engine, Base, SessionLocal
 from sqlalchemy import text
-from app.api.routes import face_recognition
-# Enhanced Face Recognition with Anti-Spoofing
-from app.api.routes import enhanced_face_recognition
-# Multi-Angle Face Recognition (eKYC Standard)
-from app.api.routes import multi_angle_recognition
-# Batch Registration (Multi-Template)
-from app.api.routes import batch_registration
-# Updated: Using InsightFace with Manual ONNX (no library needed, works with buffalo_l models)
-from app.services.insightface_recognition_service import InsightFaceRecognitionService
-from app.services.enhanced_insightface_service import enhanced_face_service
-from app.services.batch_image_processor import initialize_batch_processor
 
 # Configure logging
 logging.basicConfig(
@@ -41,55 +30,57 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("🚀 Starting AI Face Recognition Service...")
     
-    # Create database tables
-    # Create database tables
+    # ── DATABASE SETUP ──
     try:
-        # Enable pgvector extension
         db = SessionLocal()
         try:
             db.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
             db.commit()
-            logger.info("✅ pgvector extension enabled successfully")
+            logger.info("✅ pgvector extension enabled")
         except Exception as e:
-            logger.warning(f"⚠️ Failed to enable pgvector extension: {e}")
+            logger.warning(f"⚠️ pgvector extension: {e}")
         finally:
             db.close()
 
         Base.metadata.create_all(bind=engine)
-        logger.info("✅ Database tables created successfully")
+        logger.info("✅ Database tables ready")
     except Exception as e:
-        logger.error(f"❌ Failed to setup database: {e}")
+        logger.error(f"❌ Database setup failed: {e}")
     
-    # 1. Initialize Global Face Recognizer first
+    # ── MODEL LOADING (sequential, controlled) ──
+    
+    # 1. Core FaceRecognizer  (buffalo_l — ~340 MB RAM)
     try:
         from app.services.face_recognition_service import face_recognizer
-        # explicit call to load models (Lazy before, NOW loading)
         face_recognizer.initialize()
-        logger.info("✅ Core FaceRecognizer models loaded")
+        logger.info("✅ [1/4] FaceRecognizer loaded")
     except Exception as e:
-        logger.error(f"❌ Failed to load Core FaceRecognizer models: {e}")
+        logger.error(f"❌ [1/4] FaceRecognizer FAILED: {e}")
 
-    # 2. Initialize Liveness Detector
+    # 2. Liveness Detector  (MiniFASNet V1SE + V2 — ~3 MB RAM)
     try:
         from app.services.face_liveness_service import face_liveness_detector
         face_liveness_detector.initialize()
-        logger.info("✅ Core Liveness models loaded")
+        logger.info("✅ [2/4] LivenessDetector loaded")
     except Exception as e:
-        logger.error(f"❌ Failed to load Liveness models: {e}")
+        logger.error(f"❌ [2/4] LivenessDetector FAILED: {e}")
 
-    # 3. Initialize Enhanced Face Recognition Service (Links to others)
+    # 3. Enhanced service (reuses face_recognizer.app — 0 extra RAM)
     try:
         from app.services.enhanced_insightface_service import enhanced_face_service
         enhanced_face_service.initialize_models()
-        logger.info("✅ Enhanced Face Recognition Service ready (Shared Memory)")
+        logger.info("✅ [3/4] Enhanced service linked")
     except Exception as e:
-        logger.warning(f"⚠️ Enhanced service initialization warning: {e}")
+        logger.warning(f"⚠️ [3/4] Enhanced service: {e}")
     
-    # 4. Initialize Batch Image Processor
+    # 4. Batch Image Processor
     try:
+        from app.services.enhanced_insightface_service import enhanced_face_service
+        from app.services.batch_image_processor import initialize_batch_processor
         initialize_batch_processor(enhanced_face_service)
+        logger.info("✅ [4/4] BatchImageProcessor ready")
     except Exception as e:
-        logger.error(f"❌ Failed to initialize Batch Processor: {e}")
+        logger.error(f"❌ [4/4] BatchImageProcessor FAILED: {e}")
     
     logger.info("🎉 AI Face Recognition Service ready to serve!")
     
@@ -109,17 +100,16 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Mount static files for uploads
-if os.path.exists("uploads"):
-    app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
-    # Support Gateway routing: /api/ai/uploads -> /api/uploads
-    app.mount("/api/uploads", StaticFiles(directory="uploads"), name="api_uploads")
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/api/uploads", StaticFiles(directory="uploads"), name="api_uploads")
 
 # Health check endpoint
 @app.get("/health")
@@ -129,47 +119,40 @@ async def health_check():
         "status": "OK",
         "service": "AI Face Recognition Service",
         "version": "1.0.0",
-        "python_version": "3.8+"
     }
 
-# Include API routes
+# ── ROUTES (lazy imports — these must succeed at module load time) ──
+from app.api.routes import face_recognition
+from app.api.routes import enhanced_face_recognition
+from app.api.routes import multi_angle_recognition
+from app.api.routes import batch_registration
+from app.api.routes import logs
+
 app.include_router(
     face_recognition.router,
     prefix="/api/face-recognition",
     tags=["face-recognition"]
 )
-
-# Include Enhanced API routes (with Anti-Spoofing & Strict Validation)
 app.include_router(
     enhanced_face_recognition.router,
     prefix="/api/v1/face",
     tags=["Enhanced Face Recognition"]
 )
-
-# Include Multi-Angle API routes (eKYC Standard: 1 User - 3 Vectors)
 app.include_router(
     multi_angle_recognition.router,
     prefix="/api/v1/multi-angle",
     tags=["Multi-Angle Face Recognition"]
 )
-
-# Include Batch Registration API routes (Multi-Template: Quality Filtering + Averaging)
 app.include_router(
     batch_registration.router,
     prefix="/api/v1/batch",
     tags=["Batch Registration"]
 )
-
-# Include Logs API
-from app.api.routes import logs
-# Mount at /api/logs (Standard)
 app.include_router(
     logs.router,
     prefix="/api/logs",
     tags=["Logs"]
 )
-
-# Mount at /ai/api/logs (For Gateway Pass-through)
 app.include_router(
     logs.router,
     prefix="/ai/api/logs",

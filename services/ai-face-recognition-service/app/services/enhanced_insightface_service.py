@@ -10,14 +10,10 @@ Tính năng:
 
 import cv2
 import numpy as np
-import insightface
-from insightface.app import FaceAnalysis
-import onnxruntime
 import os
 import math
 import logging
 from typing import Dict, List, Tuple, Optional
-from sklearn.metrics.pairwise import cosine_similarity
 
 logger = logging.getLogger(__name__)
 
@@ -34,24 +30,31 @@ class EnhancedInsightFaceService:
         
         # --- CẤU HÌNH NGHIÊM NGẶT (STRICT CONFIG) ---
         # Load tunable thresholds from central config
-        from app.config.rate_config import (
-            BLUR_THRESHOLD,
-            BRIGHTNESS_MIN,
-            BRIGHTNESS_MAX,
-            MAX_YAW,
-            MAX_PITCH,
-            MAX_ROLL,
-            LIVENESS_THRESHOLD,
-            FACE_SIZE_THRESHOLD_PX
-        )
-
-        self.BLUR_THRESHOLD = float(BLUR_THRESHOLD)
-        self.DARK_THRESHOLD = int(BRIGHTNESS_MIN)
-        self.BRIGHT_THRESHOLD = int(BRIGHTNESS_MAX)
-        # For pose checks we use per-axis limits from config
-        self.POSE_THRESHOLD = float(MAX_YAW)
-        self.FACE_SIZE_THRESHOLD = int(FACE_SIZE_THRESHOLD_PX)
-        self.LIVENESS_THRESHOLD = float(LIVENESS_THRESHOLD)
+        try:
+            from app.config.rate_config import (
+                BLUR_THRESHOLD,
+                BRIGHTNESS_MIN,
+                BRIGHTNESS_MAX,
+                MAX_YAW,
+                MAX_PITCH,
+                MAX_ROLL,
+                LIVENESS_THRESHOLD,
+                FACE_SIZE_THRESHOLD_PX,
+            )
+            self.BLUR_THRESHOLD = float(BLUR_THRESHOLD)
+            self.DARK_THRESHOLD = int(BRIGHTNESS_MIN)
+            self.BRIGHT_THRESHOLD = int(BRIGHTNESS_MAX)
+            self.POSE_THRESHOLD = float(MAX_YAW)
+            self.FACE_SIZE_THRESHOLD = int(FACE_SIZE_THRESHOLD_PX)
+            self.LIVENESS_THRESHOLD = float(LIVENESS_THRESHOLD)
+        except ImportError as e:
+            logger.warning(f"⚠️ Could not import rate_config, using defaults: {e}")
+            self.BLUR_THRESHOLD = 8.0
+            self.DARK_THRESHOLD = 35
+            self.BRIGHT_THRESHOLD = 230
+            self.POSE_THRESHOLD = 35.0
+            self.FACE_SIZE_THRESHOLD = 80
+            self.LIVENESS_THRESHOLD = 0.50
         
         # Ngưỡng nhận diện (Thấp hơn cho 1-shot learning)
         self.MIN_THRESHOLD = 0.35       # Ngưỡng sàn thấp nhất chấp nhận được
@@ -69,31 +72,21 @@ class EnhancedInsightFaceService:
     def initialize_models(self):
         """
         Khởi tạo bằng cách tham chiếu tới các singleton đã có.
-        Chúng ta chỉ link reference, việc load thực tế nằm ở initialize() của từng service.
+        Phải gọi SAU KHI face_recognizer.initialize() đã chạy xong.
         """
-        logger.info("⏳ [AI] Linking Enhanced Models to shared singletons...")
+        logger.info("⏳ [AI] Linking Enhanced service to shared singletons...")
         try:
             # Re-use existing FaceRecognizer.app instance
-            from .face_recognition_service import face_recognizer
+            from app.services.face_recognition_service import face_recognizer
+            self.app = face_recognizer.app
             
-            # Ensure the shared recognizer is initialized
-            recognizer_app = face_recognizer.initialize()
-            self.app = recognizer_app
-            
-            # Link to liveness detector (just for consistency)
-            from .face_liveness_service import face_liveness_detector
-            face_liveness_detector.initialize()
-            
-            if self.app is not None:
-                logger.info("✅ [AI] Enhanced service linked and core models ready")
+            if self.app is None:
+                logger.warning("⚠️ [AI] FaceRecognizer.app is None — will try lazy init on first request")
             else:
-                logger.warning("⚠️ [AI] core FaceAnalysis app is still None after init")
-                
-            return self.app is not None
+                logger.info("✅ [AI] Enhanced service linked to shared FaceAnalysis instance")
                 
         except Exception as e:
             logger.error(f"❌ [AI] Enhanced Init Error: {e}")
-            return False
 
     # ========================================================================
     # KIỂM TRA CHẤT LƯỢNG ẢNH (QUALITY CHECKS)
@@ -134,12 +127,9 @@ class EnhancedInsightFaceService:
     def _check_glare(self, img: np.ndarray) -> bool:
         """Kiểm tra phản quang (glare) trên khuôn mặt"""
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        # Tìm vùng quá sáng (> 240)
         glare_pixels = np.sum(gray > 240)
         total_pixels = gray.shape[0] * gray.shape[1]
         glare_ratio = glare_pixels / total_pixels
-        
-        # Nếu > 10% ảnh quá sáng => có glare
         return glare_ratio > 0.10
 
     # ========================================================================
@@ -163,9 +153,7 @@ class EnhancedInsightFaceService:
             if total_eye_dist == 0:
                 return False, "Không xác định được vị trí mắt."
             
-            # Tỉ lệ lệch tâm (0.5 là chính giữa)
             yaw_ratio = dist_left / total_eye_dist
-            # Quy đổi ra độ (Heuristic): 0.5 -> 0 độ
             yaw_deg = (yaw_ratio - 0.5) * 100
             
             if abs(yaw_deg) > self.POSE_THRESHOLD:
@@ -183,7 +171,6 @@ class EnhancedInsightFaceService:
                 return False, "Khuôn mặt bất thường."
             
             pitch_ratio = nose_to_eye / total_face_h
-            # Bình thường mũi nằm khoảng 0.35 - 0.45 chiều dài từ mắt đến miệng
             
             pitch_deg = 0
             if pitch_ratio < 0.30:
@@ -197,7 +184,6 @@ class EnhancedInsightFaceService:
                 return False, f"Bạn đang cúi/ngước {direction}. Vui lòng NHÌN THẲNG vào camera."
 
             # --- ROLL (Nghiêng tả/phải) ---
-            # Tính góc nghiêng dựa vào đường nối 2 mắt
             eye_angle = math.degrees(math.atan2(re[1] - le[1], re[0] - le[0]))
             
             if abs(eye_angle) > self.POSE_THRESHOLD:
@@ -222,24 +208,20 @@ class EnhancedInsightFaceService:
         Returns: (passed, message)
         """
         try:
-            # 1. Kiểm tra kính râm - Vùng mắt có màu đen tuyền không
             le, re = kps[0], kps[1]
             
-            # Kiểm tra vùng quanh mắt trái
             x_left, y_left = int(le[0]), int(le[1])
             eye_roi_left = img[
                 max(0, y_left - 10):y_left + 10,
                 max(0, x_left - 10):x_left + 10
             ]
             
-            # Kiểm tra vùng quanh mắt phải
             x_right, y_right = int(re[0]), int(re[1])
             eye_roi_right = img[
                 max(0, y_right - 10):y_right + 10,
                 max(0, x_right - 10):x_right + 10
             ]
             
-            # Nếu cả 2 vùng mắt đều rất tối => Kính râm
             if eye_roi_left.size > 0 and eye_roi_right.size > 0:
                 avg_left = np.mean(eye_roi_left)
                 avg_right = np.mean(eye_roi_right)
@@ -248,9 +230,6 @@ class EnhancedInsightFaceService:
                     logger.warning(f"❌ Sunglasses detected - Eye brightness: L={avg_left:.1f}, R={avg_right:.1f}")
                     return False, "Phát hiện đeo kính râm. Vui lòng tháo kính."
             
-            # 2. Kiểm tra khẩu trang - Vùng mũi/miệng
-            # (InsightFace thường detect kém nếu đeo khẩu trang)
-            # Nếu detect được nhưng vùng miệng bị che => warning
             nose, lm, rm = kps[2], kps[3], kps[4]
             mouth_center = ((lm[0] + rm[0]) / 2, (lm[1] + rm[1]) / 2)
             
@@ -261,11 +240,10 @@ class EnhancedInsightFaceService:
             ]
             
             if mouth_roi.size > 0:
-                # Nếu vùng miệng quá đồng nhất (variance thấp) => Có thể đeo khẩu trang
                 gray_mouth = cv2.cvtColor(mouth_roi, cv2.COLOR_BGR2GRAY)
                 variance = np.var(gray_mouth)
                 
-                if variance < 50:  # Quá đồng nhất
+                if variance < 50:
                     logger.warning(f"❌ Possible mask detected - Mouth variance: {variance:.1f}")
                     return False, "Nghi vấn đeo khẩu trang. Vui lòng bỏ khẩu trang."
             
@@ -274,7 +252,6 @@ class EnhancedInsightFaceService:
             
         except Exception as e:
             logger.error(f"Error in accessories check: {e}")
-            # Không block nếu có lỗi
             return True, "OK"
 
     # ========================================================================
@@ -287,7 +264,7 @@ class EnhancedInsightFaceService:
         Returns: (passed, message)
         """
         try:
-            from .face_liveness_service import face_liveness_detector
+            from app.services.face_liveness_service import face_liveness_detector
             
             if not face_liveness_detector.is_available():
                 logger.warning("⚠️ FaceLivenessDetector models not loaded - skipping")
@@ -305,6 +282,20 @@ class EnhancedInsightFaceService:
             return True, "Pass (Error)"
 
     # ========================================================================
+    # ENSURE APP IS READY (lazy fallback)
+    # ========================================================================
+    def _ensure_app(self):
+        """Tự động link lại nếu app chưa sẵn sàng"""
+        if self.app is None:
+            try:
+                from app.services.face_recognition_service import face_recognizer
+                if face_recognizer.app is None:
+                    face_recognizer.initialize()
+                self.app = face_recognizer.app
+            except Exception as e:
+                logger.error(f"❌ Cannot lazy-init app: {e}")
+
+    # ========================================================================
     # MAIN PROCESSING PIPELINE
     # ========================================================================
     
@@ -315,15 +306,13 @@ class EnhancedInsightFaceService:
     ) -> Dict:
         """
         Pipeline xử lý ảnh chính với tất cả validation
-        
-        Args:
-            image_bytes: Binary image data
-            validation_mode: 'strict' (full checks) or 'normal' (skip some checks)
-            
-        Returns:
-            Dict with success, message, embedding, bbox, gender, age
         """
         try:
+            # Ensure models are loaded
+            self._ensure_app()
+            if self.app is None:
+                return {"success": False, "message": "Hệ thống AI chưa sẵn sàng. Vui lòng thử lại sau.", "error_code": "AI_NOT_READY"}
+
             # 1. Decode ảnh
             nparr = np.frombuffer(image_bytes, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
@@ -384,7 +373,7 @@ class EnhancedInsightFaceService:
                 "success": True,
                 "embedding": norm_embedding.tolist(),
                 "bbox": main_face.bbox.tolist(),
-                "gender": main_face.sex,
+                "gender": main_face.sex if hasattr(main_face, 'sex') else None,
                 "age": int(main_face.age) if hasattr(main_face, 'age') else None
             }
             
@@ -403,13 +392,6 @@ class EnhancedInsightFaceService:
     ) -> float:
         """
         So sánh 2 embedding sử dụng cosine similarity
-        
-        Args:
-            emb1: Embedding vector 1
-            emb2: Embedding vector 2
-            
-        Returns:
-            Similarity score (0-1)
         """
         return float(np.dot(emb1, emb2))
 

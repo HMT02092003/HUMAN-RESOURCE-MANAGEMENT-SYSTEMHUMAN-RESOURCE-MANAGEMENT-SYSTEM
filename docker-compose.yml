@@ -331,13 +331,12 @@ services:
     env_file:
       - ./services/ai-face-recognition-service/.env.docker
     volumes:
-      # Model cache and uploads
-      - ai-models:/app/models
+      # Persistent uploads (attendance snapshots, etc.)
       - ai-uploads:/app/uploads
       # Shared volume for identification photos
       - ./services/auth-service/public/identificationPhoto:/app/public/identificationPhoto
-      # Hot reload for Python (optional, but helpful for dev)
-      - ./services/ai-face-recognition-service/app:/app/app
+      # NOTE: Do NOT mount ai-models:/app/models - models are baked into image at /root/.insightface/models
+      # NOTE: Do NOT mount app:/app/app for hot-reload — it overrides built code and causes stale imports
     depends_on:
       postgres:
         condition: service_healthy
@@ -346,7 +345,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 3G
         reservations:
           memory: 1G
 

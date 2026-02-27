@@ -33,6 +33,10 @@ VERTICAL_MARGIN_PERCENT = 0.15
 LIVENESS_V1_THRESHOLD = 0.025   # 2.5% — dưới mức này = FAKE
 LIVENESS_V2_THRESHOLD = 0.60    # 60%  — dưới mức này = FAKE
 
+# Legacy alias — used by EnhancedInsightFaceService._check_liveness (old code path)
+# Giá trị này đại diện cho ngưỡng anti-spoof chung khi chỉ dùng V2
+LIVENESS_THRESHOLD = 0.50
+
 # Recognition thresholds
 MIN_THRESHOLD = 0.35
 SAFE_THRESHOLD = 0.55

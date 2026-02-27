@@ -76,61 +76,67 @@ class FaceRecognizer:
     
     def __init__(self):
         """
-        Khởi tạo Face Recognizer (Lazy mode)
-        Dùng để chia sẻ instance trên toàn bộ ứng dụng.
-        Model thực tế được load qua method initialize() để tránh block import.
+        Khởi tạo Face Recognizer.
+        Model KHÔNG được load ở đây — gọi initialize() để load.
         """
         if not hasattr(self, '_initialized'):
             self._initialized = True
-            self.app = None  # Lazy init
+            self.app = None
             
             # Use thresholds from central config
             from app.config.rate_config import MIN_THRESHOLD, SAFE_THRESHOLD
             self.min_threshold = float(MIN_THRESHOLD)
             self.safe_threshold = float(SAFE_THRESHOLD)
             
-            # Legacy fields (kept for compatibility with old routes)
+            # Legacy fields (kept for compatibility with other services)
             self.enable_quality_check = True
             self.enable_liveness_check = True
             self.model_name = 'buffalo_l'
             
-            logger.info("✅ [AI] FaceRecognizer instance created (Lazy mode)")
+            logger.info("✅ [AI] FaceRecognizer singleton created (models not loaded yet)")
 
     def initialize(self):
-        """Khởi tạo model InsightFace (Buffalo_L) một cách rõ ràng"""
+        """
+        Load InsightFace models vào RAM.
+        Gọi từ main.py lifespan, KHÔNG gọi lúc import.
+        """
         if self.app is not None:
+            logger.info("ℹ️ [AI] InsightFace already loaded, skipping")
             return self.app
             
-        logger.info(f"⏳ [AI] Initializing InsightFace ({self.model_name})...")
+        logger.info(f"⏳ [AI] Loading InsightFace model: {self.model_name} ...")
         try:
-            # Root directory for models (matches Docker COPY)
             root_path = os.path.expanduser("~/.insightface")
+            model_dir = os.path.join(root_path, "models", self.model_name)
+            
+            # Kiểm tra model tồn tại
+            if not os.path.isdir(model_dir):
+                logger.error(f"❌ [AI] Model directory NOT FOUND: {model_dir}")
+                logger.error(f"   Listing {os.path.join(root_path, 'models')}: "
+                             f"{os.listdir(os.path.join(root_path, 'models')) if os.path.isdir(os.path.join(root_path, 'models')) else 'DIR NOT EXIST'}")
+                return None
             
             self.app = FaceAnalysis(
                 name=self.model_name,
                 root=root_path
             )
-
-            # Use det_size=(640, 640) to balance accuracy and memory.
-            # ctx_id=-1 forces CPU execution
+            
+            # ctx_id=-1 = CPU only, det_size=(640,640) cho cân bằng RAM/accuracy
             self.app.prepare(ctx_id=-1, det_thresh=0.05, det_size=(640, 640))
             
-            logger.info("✅ [AI] InsightFace initialized successfully!")
+            logger.info("✅ [AI] InsightFace loaded successfully!")
             return self.app
             
         except Exception as e:
-            logger.error(f"❌ [AI] Failed to initialize InsightFace: {e}")
+            logger.error(f"❌ [AI] Failed to load InsightFace: {e}", exc_info=True)
+            self.app = None
             return None
 
-    def _ensure_initialized(self):
-        """Tự động init nếu router gọi tới trước khi lifespan hoàn tất"""
+    def _ensure_ready(self):
+        """Fallback: nếu app chưa load thì tự load"""
         if self.app is None:
-            return self.initialize()
-        return self.app
-    
-    def _get_providers(self) -> List[str]:
-        """Xác định execution providers"""
-        return ['CPUExecutionProvider']
+            self.initialize()
+        return self.app is not None
     
     def process_face(
         self,
@@ -146,16 +152,15 @@ class FaceRecognizer:
         2. Quality check (blur, brightness, head pose)
         3. Liveness check (anti-spoofing)
         4. Extract embedding nếu qua hết
-        
-        Args:
-            image: Ảnh đầu vào (BGR format)
-            skip_quality_check: Bỏ qua kiểm tra chất lượng
-            skip_liveness_check: Bỏ qua kiểm tra liveness
-        
-        Returns:
-            RecognitionResult với đầy đủ thông tin
         """
         try:
+            # Ensure models are loaded
+            if not self._ensure_ready():
+                return RecognitionResult(
+                    success=False,
+                    message="Hệ thống AI chưa sẵn sàng. Vui lòng thử lại."
+                )
+
             # === STEP 1: DETECT FACE ===
             logger.info("🔍 Step 1: Detecting face...")
             faces = self.app.get(image)
@@ -166,40 +171,21 @@ class FaceRecognizer:
                     success=False,
                     message="Không phát hiện khuôn mặt trong ảnh"
                 )
-            # Nếu có nhiều face, log thông tin và chọn face LỚN NHẤT (gần camera nhất)
+            # Nếu có nhiều face, chọn face LỚN NHẤT
             if len(faces) > 1:
                 logger.info(f"Multiple faces detected: {len(faces)}")
-                # Log each bbox and its computed area for debugging
-                try:
-                    face_areas = []
-                    for i, f in enumerate(faces):
-                        x1, y1, x2, y2 = f.bbox.astype(int).tolist()
-                        area = (x2 - x1) * (y2 - y1)
-                        face_areas.append((i, x1, y1, x2, y2, area, float(getattr(f, 'det_score', 0.0))))
-                        logger.debug(f"  Face[{i}] bbox={(x1,y1,x2,y2)} area={area} score={getattr(f,'det_score',0.0):.3f}")
-                    # Sort faces by area desc to be explicit
-                    faces = sorted(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]), reverse=True)
-                except Exception:
-                    logger.exception("Failed to compute face areas; falling back to max selection")
+                faces = sorted(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]), reverse=True)
 
-            # Chọn mặt có diện tích lớn nhất (deterministic after sort)
-            target_face = faces[0]
-
-            face = target_face
+            face = faces[0]
             bbox = face.bbox.astype(int).tolist()
             landmarks = face.kps.astype(int).tolist()
 
-            logger.info(f"✅ Face detected (selected largest): bbox={bbox}, confidence={face.det_score:.3f}")
+            logger.info(f"✅ Face detected: bbox={bbox}, confidence={face.det_score:.3f}")
             
             # === STEP 2: LIVENESS CHECK ===
             liveness_result = None
             if self.enable_liveness_check and not skip_liveness_check:
                 logger.info("🔍 Step 2: Liveness check...")
-
-                # IMPORTANT: pass the full image + bbox to liveness detector
-                # so the detector can expand the crop (e.g. 2.7x) and see
-                # contextual cues like screen edges or paper borders.
-                # Previously we cropped tightly here which hid those cues.
                 liveness_result = face_liveness_detector.check_liveness(
                     face_image=image,
                     bbox=bbox
@@ -222,7 +208,7 @@ class FaceRecognizer:
                 logger.info("🔍 Step 3: Quality check...")
                 quality_result = face_quality_checker.check_all(
                     image=image,
-                    landmarks=face.kps  # numpy array (5, 2)
+                    landmarks=face.kps
                 )
                 
                 if not quality_result.is_valid:
@@ -238,9 +224,8 @@ class FaceRecognizer:
             
             # === STEP 4: EXTRACT EMBEDDING ===
             logger.info("🔍 Step 4: Extracting embedding...")
-            embedding = face.embedding.tolist()  # 512-dim vector
+            embedding = face.embedding.tolist()
             
-            # Tạo face data
             face_data = FaceData(
                 bbox=bbox,
                 confidence=float(face.det_score),
@@ -268,17 +253,10 @@ class FaceRecognizer:
             )
     
     def get_embedding(self, image: np.ndarray) -> Optional[np.ndarray]:
-        """
-        Trích xuất embedding trực tiếp (không check quality/liveness)
-        Sử dụng cho các trường hợp đã có ảnh sạch
-        
-        Args:
-            image: Ảnh đầu vào (BGR)
-        
-        Returns:
-            Embedding vector (512-dim) hoặc None
-        """
+        """Trích xuất embedding trực tiếp (không check quality/liveness)"""
         try:
+            if not self._ensure_ready():
+                return None
             faces = self.app.get(image)
             if len(faces) == 0:
                 return None
@@ -293,33 +271,17 @@ class FaceRecognizer:
         embedding2: np.ndarray,
         threshold: float = 0.4
     ) -> Dict:
-        """
-        So sánh 2 embedding (Cosine Similarity)
-        
-        Args:
-            embedding1: Embedding thứ nhất
-            embedding2: Embedding thứ hai
-            threshold: Ngưỡng để coi là cùng người (0.4-0.6 tùy use case)
-        
-        Returns:
-            Dict với similarity và is_same_person
-        """
+        """So sánh 2 embedding (Cosine Similarity)"""
         try:
-            # Normalize embeddings
             emb1 = embedding1 / np.linalg.norm(embedding1)
             emb2 = embedding2 / np.linalg.norm(embedding2)
-            
-            # Cosine similarity
             similarity = float(np.dot(emb1, emb2))
-            
-            is_same = similarity >= threshold
             
             return {
                 'similarity': similarity,
-                'is_same_person': is_same,
+                'is_same_person': similarity >= threshold,
                 'threshold': threshold
             }
-            
         except Exception as e:
             logger.error(f"Error comparing faces: {e}")
             return {
@@ -329,16 +291,10 @@ class FaceRecognizer:
             }
     
     def detect_multiple_faces(self, image: np.ndarray) -> List[FaceData]:
-        """
-        Phát hiện nhiều khuôn mặt trong 1 ảnh
-        
-        Args:
-            image: Ảnh đầu vào
-        
-        Returns:
-            List các FaceData
-        """
+        """Phát hiện nhiều khuôn mặt trong 1 ảnh"""
         try:
+            if not self._ensure_ready():
+                return []
             faces = self.app.get(image)
             
             results = []
@@ -354,7 +310,6 @@ class FaceRecognizer:
                 results.append(face_data)
             
             return results
-            
         except Exception as e:
             logger.error(f"Error detecting multiple faces: {e}")
             return []
@@ -366,40 +321,22 @@ class FaceRecognizer:
         skip_liveness_check: bool = False,
         draw_guide: bool = True
     ) -> Tuple[RecognitionResult, np.ndarray]:
-        """
-        Xử lý nhận diện KÈM VẼ UI (khung màu xanh/đỏ + text hướng dẫn)
-        
-        Args:
-            image: Ảnh đầu vào
-            skip_quality_check: Bỏ qua quality check
-            skip_liveness_check: Bỏ qua liveness check
-            draw_guide: Vẽ khung hướng dẫn oval ở giữa
-        
-        Returns:
-            (result, annotated_image) - Kết quả + ảnh đã vẽ UI
-        """
+        """Xử lý nhận diện KÈM VẼ UI"""
         from app.utils.face_ui_helper import face_ui
         
-        # Process nhận diện
         result = self.process_face(image, skip_quality_check, skip_liveness_check)
-        
-        # Vẽ UI
         annotated = image.copy()
         
-        # Vẽ khung oval hướng dẫn (nếu bật)
         if draw_guide:
             annotated = face_ui.draw_center_guide(annotated)
         
-        # Nếu có face data
         if result.face_data:
             bbox = result.face_data.bbox
             
-            # Xác định status và message
             if result.success:
                 status = "good"
                 message = "✓ Vị trí tốt! Đang nhận diện..."
             else:
-                # Có face nhưng không pass quality/liveness
                 if result.quality_result:
                     message, status = face_ui.generate_instruction_message(
                         result.quality_result.details
@@ -408,7 +345,6 @@ class FaceRecognizer:
                     status = "bad"
                     message = result.message
             
-            # Vẽ khung face với status
             quality_info = result.quality_result.details if result.quality_result else None
             annotated = face_ui.draw_face_box_with_status(
                 annotated,
@@ -418,7 +354,6 @@ class FaceRecognizer:
                 quality_info
             )
         else:
-            # Không detect được face
             annotated = face_ui.draw_instruction_message(
                 annotated,
                 "⚠ Không tìm thấy khuôn mặt",
@@ -430,54 +365,6 @@ class FaceRecognizer:
 
 
 # ============================================================================
-# SINGLETON INSTANCE - Khởi tạo 1 lần duy nhất khi import
+# SINGLETON INSTANCE — tạo object nhưng KHÔNG load model
 # ============================================================================
 face_recognizer = FaceRecognizer()
-
-
-# ============================================================================
-# USAGE EXAMPLES
-# ============================================================================
-"""
-## Sử dụng trong FastAPI route:
-
-from app.services.face_recognition_service import face_recognizer
-
-@router.post("/recognize")
-async def recognize_face(file: UploadFile):
-    # Đọc ảnh
-    image_bytes = await file.read()
-    nparr = np.frombuffer(image_bytes, np.uint8)
-    image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    
-    # Xử lý nhận diện
-    result = face_recognizer.process_face(image)
-    
-    if result.success:
-        return {
-            "success": True,
-            "embedding": result.face_data.embedding,
-            "quality": result.quality_result.details,
-            "liveness": result.liveness_result.label
-        }
-    else:
-        return {
-            "success": False,
-            "error": result.message
-        }
-
-## So sánh 2 ảnh:
-
-result1 = face_recognizer.process_face(image1)
-result2 = face_recognizer.process_face(image2)
-
-if result1.success and result2.success:
-    comparison = face_recognizer.compare_faces(
-        np.array(result1.face_data.embedding),
-        np.array(result2.face_data.embedding),
-        threshold=0.5
-    )
-    
-    if comparison['is_same_person']:
-        print(f"Cùng 1 người! Similarity: {comparison['similarity']:.2%}")
-"""
