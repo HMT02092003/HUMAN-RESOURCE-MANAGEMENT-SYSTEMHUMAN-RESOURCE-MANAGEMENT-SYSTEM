@@ -4,8 +4,9 @@ Phát hiện giả mạo: ảnh chụp từ màn hình, điện thoại, ảnh i
 
 Luồng xử lý:
 1. Crop face (scale 2.7)
-2. Feed ảnh gốc vào MiniFASNetV2
-3. Model tự quyết định: real_score > fake_score → REAL, ngược lại → FAKE
+2. Chỉnh độ sáng + sắc nét
+3. Feed vào MiniFASNetV1SE
+4. Model tự quyết định: real_score > fake_score → REAL, ngược lại → FAKE
 """
 
 import cv2
@@ -56,12 +57,18 @@ class FaceLivenessDetector:
     def _load_model(self):
         user_home = os.path.expanduser("~")
         candidates = [
-            os.path.join(user_home, ".insightface", "models", "anti_spoofing", "2.7_80x80_MiniFASNetV2.onnx"),
-            os.path.join(user_home, ".insightface", "models", "2.7_80x80_MiniFASNetV2.onnx"),
-            "models/anti_spoofing/2.7_80x80_MiniFASNetV2.onnx",
-            "models/2.7_80x80_MiniFASNetV2.onnx",
-            "/app/models/2.7_80x80_MiniFASNetV2.onnx",
-            "/root/.insightface/models/2.7_80x80_MiniFASNetV2.onnx",
+            os.path.join(user_home, ".insightface", "models", "anti_spoofing", "MiniFASNetV1SE.onnx"),
+            os.path.join(user_home, ".insightface", "models", "MiniFASNetV1SE.onnx"),
+            os.path.join(user_home, ".insightface", "models", "anti_spoofing", "4_0_0_80x80_MiniFASNetV1SE.onnx"),
+            os.path.join(user_home, ".insightface", "models", "4_0_0_80x80_MiniFASNetV1SE.onnx"),
+            "models/anti_spoofing/MiniFASNetV1SE.onnx",
+            "models/MiniFASNetV1SE.onnx",
+            "models/anti_spoofing/4_0_0_80x80_MiniFASNetV1SE.onnx",
+            "models/4_0_0_80x80_MiniFASNetV1SE.onnx",
+            "/app/models/MiniFASNetV1SE.onnx",
+            "/app/models/4_0_0_80x80_MiniFASNetV1SE.onnx",
+            "/root/.insightface/models/MiniFASNetV1SE.onnx",
+            "/root/.insightface/models/4_0_0_80x80_MiniFASNetV1SE.onnx",
         ]
 
         model_path = None
@@ -71,11 +78,11 @@ class FaceLivenessDetector:
                 break
 
         if not model_path:
-            logger.warning("⚠️ MiniFASNetV2 not found — anti-spoofing disabled")
+            logger.warning("⚠️ MiniFASNetV1SE not found — anti-spoofing disabled")
             return
 
         try:
-            logger.info(f"Loading MiniFASNetV2 from: {model_path}")
+            logger.info(f"Loading MiniFASNetV1SE from: {model_path}")
             self.session = ort.InferenceSession(model_path, providers=['CPUExecutionProvider'])
             inputs = self.session.get_inputs()
             outputs = self.session.get_outputs()
@@ -91,10 +98,35 @@ class FaceLivenessDetector:
             except Exception:
                 pass
 
-            logger.info(f"✅ MiniFASNetV2 loaded — input size: {self.input_size}")
+            logger.info(f"✅ MiniFASNetV1SE loaded — input size: {self.input_size}")
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
             self.session = None
+
+    # ------------------------------------------------------------------
+    # CHỈNH ĐỘ SÁNG + SẬc NÉT
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _enhance_image(image: np.ndarray) -> np.ndarray:
+        """
+        Chỉnh độ sáng và sắc nét trước khi detect.
+        1. CLAHE trên L channel: cân bằng độ sáng cục bộ
+        2. Unsharp mask: làm nét chi tiết
+        """
+        try:
+            # 1. Cân bằng độ sáng (CLAHE trên L channel)
+            lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+            l_ch, a_ch, b_ch = cv2.split(lab)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            l_enhanced = clahe.apply(l_ch)
+            bright = cv2.cvtColor(cv2.merge((l_enhanced, a_ch, b_ch)), cv2.COLOR_LAB2BGR)
+
+            # 2. Làm nét (Unsharp mask)
+            gaussian = cv2.GaussianBlur(bright, (0, 0), 3)
+            sharp = cv2.addWeighted(bright, 1.5, gaussian, -0.5, 0)
+            return sharp
+        except Exception:
+            return image
 
 
 
@@ -192,8 +224,11 @@ class FaceLivenessDetector:
             if face_crop is None:
                 return LivenessResult(False, 0.0, "FAKE", "Không crop được khuôn mặt")
 
-            # Model tự quyết định (ảnh gốc, không enhance)
-            is_real, confidence = self._infer(face_crop)
+            # Chỉnh độ sáng + sắc nét
+            enhanced = self._enhance_image(face_crop)
+
+            # Model tự quyết định
+            is_real, confidence = self._infer(enhanced)
             label = "REAL" if is_real else "FAKE"
 
             if is_real:
