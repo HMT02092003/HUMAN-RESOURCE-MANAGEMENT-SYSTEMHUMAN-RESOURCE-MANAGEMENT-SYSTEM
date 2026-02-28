@@ -388,7 +388,7 @@ const CardListWithInfiniteScroll = forwardRef(({
 
       {/* Filter Dialog */}
       <Portal>
-        <Dialog visible={filterDialogVisible} onDismiss={cancelFilters}>
+        <Dialog visible={filterDialogVisible} onDismiss={cancelFilters} style={styles.filterDialog}>
           <Dialog.Title>Bộ lọc</Dialog.Title>
           <Dialog.ScrollArea>
             <ScrollView>
@@ -512,6 +512,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5'
+  },
+  filterDialog: {
+    borderRadius: 8,
   },
   searchContainer: {
     flexDirection: 'row',

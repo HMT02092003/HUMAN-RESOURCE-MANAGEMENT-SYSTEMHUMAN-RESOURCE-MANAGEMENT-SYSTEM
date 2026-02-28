@@ -130,20 +130,40 @@ const ProjectDetailScreen = () => {
   const loadProjectData = async () => {
     setLoading(true);
     try {
-      const [overviewRes, membersRes, tasksRes, statsRes] = await Promise.all([
+      const [overviewRes, detailRes, membersRes, tasksRes, statsRes] = await Promise.all([
         JobService.getProjectOverview(projectId),
+        JobService.getProjectById(projectId).catch(() => null),
         JobService.getProjectMembers(projectId).catch(() => ({ members: [] })),
         JobService.getProjectTasks(projectId).catch(() => ({ data: [] })),
         JobService.getProjectTaskStatistics(projectId).catch(() => null),
       ]);
 
-  // DEBUG: print raw responses to help diagnose 'fake' data issues
   console.log('🔍 [ProjectDetail] overviewRes:', overviewRes);
-  console.log('🔍 [ProjectDetail] membersRes:', membersRes);
-  console.log('🔍 [ProjectDetail] tasksRes:', tasksRes);
-  console.log('🔍 [ProjectDetail] statsRes:', statsRes);
+  console.log('🔍 [ProjectDetail] detailRes:', detailRes);
 
   const projectData = overviewRes?.project ?? overviewRes?.data?.project ?? overviewRes;
+
+      // Enrich manager info: overview returns manager_id as integer,
+      // detailRes (getProjectById) enriches it with user object
+      const detailProject = detailRes?.data ?? detailRes;
+      if (detailProject && typeof detailProject.manager_id === 'object' && detailProject.manager_id !== null) {
+        projectData.manager = detailProject.manager_id;
+      } else if (typeof projectData.manager_id === 'number') {
+        // Fallback: resolve from members list
+        const normalizedMembersTemp = Array.isArray(membersRes?.members)
+          ? membersRes.members
+          : Array.isArray(membersRes?.data) ? membersRes.data
+          : Array.isArray(membersRes) ? membersRes : [];
+        const managerMember = normalizedMembersTemp.find(m => {
+          const uid = typeof m.user_id === 'object' ? m.user_id?.id : m.user_id;
+          return uid === projectData.manager_id;
+        });
+        if (managerMember) {
+          const user = typeof managerMember.user_id === 'object' ? managerMember.user_id : managerMember;
+          projectData.manager = { id: user.id, fullName: user.fullName || user.name || user.username };
+        }
+      }
+
       setProject(projectData);
       // Normalize members: API may return array directly, or under members or data
       const normalizedMembers = Array.isArray(membersRes?.members)
@@ -579,12 +599,17 @@ const ProjectDetailScreen = () => {
           <View style={styles.managerInfo}>
             <Avatar.Text 
               size={48} 
-              label={getInitials(project.manager_id?.fullName || project.manager?.name || '')}
+              label={getInitials(
+                project.manager?.fullName || project.manager?.name ||
+                (typeof project.manager_id === 'object' ? project.manager_id?.fullName : '') || ''
+              )}
               style={styles.managerAvatar}
             />
             <View style={styles.managerDetails}>
               <Text style={styles.managerName}>
-                {project.manager_id?.fullName || project.manager?.name || 'Chưa có quản lý'}
+                {project.manager?.fullName || project.manager?.name ||
+                 (typeof project.manager_id === 'object' ? project.manager_id?.fullName : null) ||
+                 'Chưa có quản lý'}
               </Text>
               <Text style={styles.managerRole}>Project Manager</Text>
             </View>
@@ -1697,10 +1722,12 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   priorityChip: {
-    height: 24,
+    height: 'auto',
+    paddingVertical: 0,
   },
   statusChipSmall: {
-    height: 24,
+    height: 'auto',
+    paddingVertical: 0,
   },
   taskDueDate: {
     flexDirection: 'row',

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { 
   Card, 
   Avatar, 
@@ -19,6 +20,15 @@ import UserService from '../../services/UserService';
 const UserManagementScreen = ({ navigation }) => {
   const theme = useTheme();
   const [visibleMenuId, setVisibleMenuId] = React.useState(null);
+  const listRef = React.useRef(null);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (listRef.current?.refresh) {
+        listRef.current.refresh();
+      }
+    }, [])
+  );
 
   // Fetch data function for CardList
   const fetchUsers = async (params) => {
@@ -58,8 +68,7 @@ const UserManagementScreen = ({ navigation }) => {
             try {
               await UserService.deleteMultipleUsers([userId]);
               Alert.alert('✅ Thành công', 'Đã xóa người dùng');
-              // Reload list - trigger refresh in CardList
-              // (you can pass a ref or use event emitter)
+              if (listRef.current?.refresh) listRef.current.refresh();
             } catch (error) {
               console.error('❌ [UserManagement] Delete failed:', error);
               Alert.alert('Lỗi', error.response?.data?.message || 'Không thể xóa người dùng');
@@ -86,7 +95,7 @@ const UserManagementScreen = ({ navigation }) => {
             try {
               await UserService.changeUserStatus(userId, newStatus);
               Alert.alert('✅ Thành công', `Đã ${statusText} người dùng`);
-              // Reload list
+              if (listRef.current?.refresh) listRef.current.refresh();
             } catch (error) {
               console.error('❌ [UserManagement] Status change failed:', error);
               Alert.alert('Lỗi', error.response?.data?.message || `Không thể ${statusText} người dùng`);
@@ -276,6 +285,7 @@ const UserManagementScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <CardListWithInfiniteScroll
+        ref={listRef}
         fetchData={fetchUsers}
         renderCard={renderUserCard}
         searchPlaceholder="Tìm theo tên, email, số điện thoại..."

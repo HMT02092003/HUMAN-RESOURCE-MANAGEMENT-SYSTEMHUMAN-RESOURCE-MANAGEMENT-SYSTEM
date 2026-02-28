@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   Card,
   Avatar,
@@ -19,6 +20,15 @@ import CheckPermission from '../../components/CheckPermission';
 const DepartmentListScreen = ({ navigation }) => {
   const theme = useTheme();
   const [visibleMenuId, setVisibleMenuId] = React.useState(null);
+  const listRef = React.useRef(null);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (listRef.current?.refresh) {
+        listRef.current.refresh();
+      }
+    }, [])
+  );
 
   // Fetch data function for CardList
   const fetchDepartments = async (params) => {
@@ -56,6 +66,7 @@ const DepartmentListScreen = ({ navigation }) => {
             try {
               await DepartmentService.deleteDepartment(deptId);
               Alert.alert('✅ Thành công', 'Đã xóa phòng ban');
+              if (listRef.current?.refresh) listRef.current.refresh();
             } catch (error) {
               console.error('❌ [DepartmentList] Delete failed:', error);
               Alert.alert('Lỗi', error.response?.data?.message || 'Không thể xóa phòng ban');
@@ -195,6 +206,7 @@ const DepartmentListScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <CardListWithInfiniteScroll
+        ref={listRef}
         fetchData={fetchDepartments}
         renderCard={renderDepartmentCard}
         searchPlaceholder="Tìm theo tên, mô tả..."

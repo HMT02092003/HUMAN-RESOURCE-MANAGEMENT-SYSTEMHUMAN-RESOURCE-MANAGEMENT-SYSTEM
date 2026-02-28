@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   Card,
   Avatar,
@@ -19,6 +20,16 @@ import CheckPermission from '../../components/CheckPermission';
 const ChevronListScreen = ({ navigation }) => {
   const theme = useTheme();
   const [visibleMenuId, setVisibleMenuId] = React.useState(null);
+  const listRef = React.useRef(null);
+
+  // Refresh list when screen gains focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (listRef.current?.refresh) {
+        listRef.current.refresh();
+      }
+    }, [])
+  );
 
   // Fetch data function for CardList
   const fetchChevrons = async (params) => {
@@ -56,6 +67,7 @@ const ChevronListScreen = ({ navigation }) => {
             try {
               await ChevronService.deleteChevron(chevronId);
               Alert.alert('✅ Thành công', 'Đã xóa chức vụ');
+              if (listRef.current?.refresh) listRef.current.refresh();
             } catch (error) {
               console.error('❌ [ChevronList] Delete failed:', error);
               Alert.alert('Lỗi', error.response?.data?.message || 'Không thể xóa chức vụ');
@@ -207,6 +219,7 @@ const ChevronListScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <CardListWithInfiniteScroll
+        ref={listRef}
         fetchData={fetchChevrons}
         renderCard={renderChevronCard}
         searchPlaceholder="Tìm theo tên chức vụ, mô tả..."

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { 
   Card, 
   Avatar, 
@@ -24,6 +25,14 @@ const MyApplicationListScreen = ({ navigation }) => {
   const theme = useTheme();
   const [visibleMenuId, setVisibleMenuId] = React.useState(null);
   const listRef = React.useRef(null);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (listRef.current?.refresh) {
+        listRef.current.refresh();
+      }
+    }, [])
+  );
 
   // Fetch data
   const fetchApplications = async (params) => {

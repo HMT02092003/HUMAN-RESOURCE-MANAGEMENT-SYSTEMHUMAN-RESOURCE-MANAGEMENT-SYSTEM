@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   Surface,
   Text,
@@ -38,6 +39,13 @@ const AllowanceListScreen = ({ navigation }) => {
   const [data, setData] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedItems, setSelectedItems] = useState([]);
+
+  // Refresh when screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [])
+  );
 
   // ==================== FETCH DATA ====================
   const fetchData = useCallback(async () => {

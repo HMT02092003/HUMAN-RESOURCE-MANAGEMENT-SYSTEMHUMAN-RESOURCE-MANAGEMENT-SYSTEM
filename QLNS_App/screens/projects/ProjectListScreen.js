@@ -14,7 +14,7 @@ import {
   ProgressBar,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import JobService from '../../services/JobService';
 import CardListWithInfiniteScroll from '../../components/CardListWithInfiniteScroll';
 
@@ -36,6 +36,15 @@ const statusLabels = {
 
 const ProjectListScreen = () => {
   const navigation = useNavigation();
+  const listRef = React.useRef(null);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (listRef.current?.refresh) {
+        listRef.current.refresh();
+      }
+    }, [])
+  );
 
   // Adapter for CardListWithInfiniteScroll.fetchData
   const fetchData = async (params = {}) => {
@@ -236,6 +245,7 @@ const ProjectListScreen = () => {
   return (
     <View style={styles.container}>
       <CardListWithInfiniteScroll
+        ref={listRef}
         fetchData={fetchData}
         renderCard={renderCard}
         searchPlaceholder="Tìm kiếm dự án..."
