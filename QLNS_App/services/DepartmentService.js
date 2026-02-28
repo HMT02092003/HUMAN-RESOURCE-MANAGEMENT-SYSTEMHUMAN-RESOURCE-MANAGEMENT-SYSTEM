@@ -78,6 +78,19 @@ class DepartmentService {
       throw error;
     }
   }
+
+  // Get all departments filtered by role (for user form dropdowns)
+  static async getAllDepartmentsForSelect(roleId) {
+    try {
+      const params = roleId ? { role_id: roleId } : undefined;
+      const response = await apiService.get('/employee/all/departments', { params });
+      const data = response.data;
+      return Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+    } catch (error) {
+      console.error('❌ [DepartmentService] Error fetching for select:', error);
+      throw error;
+    }
+  }
 }
 
 export { DepartmentService };

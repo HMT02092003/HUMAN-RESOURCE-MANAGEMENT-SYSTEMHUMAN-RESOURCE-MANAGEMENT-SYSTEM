@@ -6,6 +6,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { ContractTypeService } from '../services/ContractTypeService';
+import { ChevronService } from '../services/ChevronService';
+import DepartmentService from '../services/DepartmentService';
 
 /**
  * Props:
@@ -50,6 +52,9 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
   const [localContractTypes, setLocalContractTypes] = useState(contractTypes || []);
   const [showGenderModal, setShowGenderModal] = useState(false);
   const [contractTypesLoading, setContractTypesLoading] = useState(false);
+  const [localDepartments, setLocalDepartments] = useState([]);
+  const [localChevrons, setLocalChevrons] = useState([]);
+  const [roleLoading, setRoleLoading] = useState(false);
 
   const genderOptions = [
     { key: 1, value: 'Nam' },
@@ -100,6 +105,14 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
       });
     }
     setErrors({});
+    // For edit mode: load filtered dept/chevron for the existing role
+    if (initialValues?.role?.id) {
+      loadFilteredForRole(initialValues.role.id);
+    } else if (!initialValues || Object.keys(initialValues).length === 0) {
+      // Reset for create mode
+      setLocalDepartments([]);
+      setLocalChevrons([]);
+    }
   }, [initialValues]);
 
   useEffect(() => {
@@ -140,6 +153,33 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
     } finally {
       setContractTypesLoading(false);
     }
+  };
+
+  const loadFilteredForRole = async (roleId) => {
+    if (!roleId) return;
+    setRoleLoading(true);
+    try {
+      const [depts, chevs] = await Promise.all([
+        DepartmentService.getAllDepartmentsForSelect(roleId),
+        ChevronService.getAllChevronsForSelect(roleId),
+      ]);
+      setLocalDepartments(Array.isArray(depts) ? depts : []);
+      setLocalChevrons(Array.isArray(chevs) ? chevs : []);
+    } catch (err) {
+      console.error('[UserFormComponent] loadFilteredForRole error:', err);
+      setLocalDepartments([]);
+      setLocalChevrons([]);
+    } finally {
+      setRoleLoading(false);
+    }
+  };
+
+  const handleRoleChange = async (roleId) => {
+    setForm(f => ({ ...f, roleId, departmentId: null, chevronId: null }));
+    setErrors(e => ({ ...e, roleId: null, departmentId: null, chevronId: null }));
+    setLocalDepartments([]);
+    setLocalChevrons([]);
+    await loadFilteredForRole(roleId);
   };
 
   const formatDateToYYYYMMDD = (date) => {
@@ -334,8 +374,15 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
             <TextInput label="Vai trò *" value={getLabelById(roles, form.roleId, 'Chọn vai trò')} editable={false} style={styles.input} pointerEvents="none" right={<TextInput.Icon icon="chevron-down" />} />
           </TouchableOpacity>
           {errors.roleId && <HelperText type="error">{errors.roleId}</HelperText>}
-          <TouchableOpacity onPress={() => setShowDepartmentModal(true)}>
-            <TextInput label="Phòng ban *" value={getLabelById(departments, form.departmentId, 'Chọn phòng ban')} editable={false} style={styles.input} pointerEvents="none" right={<TextInput.Icon icon="chevron-down" />} />
+          <TouchableOpacity onPress={() => !roleLoading && form.roleId && setShowDepartmentModal(true)}>
+            <TextInput
+              label="Phòng ban *"
+              value={!form.roleId ? 'Chọn vai trò trước' : roleLoading ? 'Đang tải...' : getLabelById(localDepartments, form.departmentId, 'Chọn phòng ban')}
+              editable={false}
+              style={[styles.input, { opacity: !form.roleId ? 0.6 : 1 }]}
+              pointerEvents="none"
+              right={<TextInput.Icon icon="chevron-down" />}
+            />
           </TouchableOpacity>
           {errors.departmentId && <HelperText type="error">{errors.departmentId}</HelperText>}
           <View>
@@ -359,8 +406,15 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
             <TextInput label="Thời hạn hợp đồng (tháng)" value={form.contractTerm !== null && form.contractTerm !== undefined ? String(form.contractTerm) : ''} editable={false} style={styles.input} />
             <TextInput label="Bảo hiểm (VND)" value={form.contractInsurance !== null && form.contractInsurance !== undefined ? String(form.contractInsurance) : ''} editable={false} style={styles.input} />
           </View>
-          <TouchableOpacity onPress={() => setShowChevronModal(true)}>
-            <TextInput label="Chức vụ *" value={getLabelById(chevrons, form.chevronId, 'Chọn chức vụ')} editable={false} style={styles.input} pointerEvents="none" right={<TextInput.Icon icon="chevron-down" />} />
+          <TouchableOpacity onPress={() => !roleLoading && form.roleId && setShowChevronModal(true)}>
+            <TextInput
+              label="Chức vụ *"
+              value={!form.roleId ? 'Chọn vai trò trước' : roleLoading ? 'Đang tải...' : getLabelById(localChevrons, form.chevronId, 'Chọn chức vụ')}
+              editable={false}
+              style={[styles.input, { opacity: !form.roleId ? 0.6 : 1 }]}
+              pointerEvents="none"
+              right={<TextInput.Icon icon="chevron-down" />}
+            />
           </TouchableOpacity>
           {errors.chevronId && <HelperText type="error">{errors.chevronId}</HelperText>}
           <TouchableOpacity onPress={() => setShowStartDatePicker(true)}>
@@ -385,16 +439,15 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
 
       {/* Selection Modals */}
       {renderSelectionModal(showRoleModal, setShowRoleModal, roles, (item) => {
-        setForm({ ...form, roleId: item.id });
-        setErrors({ ...errors, roleId: null });
+        handleRoleChange(item.id);
       }, 'Chọn vai trò')}
 
-      {renderSelectionModal(showDepartmentModal, setShowDepartmentModal, departments, (item) => {
+      {renderSelectionModal(showDepartmentModal, setShowDepartmentModal, localDepartments, (item) => {
         setForm({ ...form, departmentId: item.id });
         setErrors({ ...errors, departmentId: null });
       }, 'Chọn phòng ban')}
 
-      {renderSelectionModal(showChevronModal, setShowChevronModal, chevrons, (item) => {
+      {renderSelectionModal(showChevronModal, setShowChevronModal, localChevrons, (item) => {
         setForm({ ...form, chevronId: item.id });
         setErrors({ ...errors, chevronId: null });
       }, 'Chọn chức vụ')}

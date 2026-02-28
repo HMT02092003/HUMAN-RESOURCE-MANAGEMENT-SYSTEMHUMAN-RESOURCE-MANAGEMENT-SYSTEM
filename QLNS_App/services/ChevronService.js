@@ -68,5 +68,18 @@ export const ChevronService = {
             console.error('❌ [ChevronService] Error deleting multiple chevrons:', error);
             throw error;
         }
-    }
+    },
+
+    // Get all chevrons filtered by role (for user form dropdowns)
+    getAllChevronsForSelect: async (roleId) => {
+        try {
+            const params = roleId ? { role_id: roleId } : undefined;
+            const response = await apiService.get('/employee/all/chevrons', { params });
+            const data = response.data;
+            return Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+        } catch (error) {
+            console.error('❌ [ChevronService] Error fetching for select:', error);
+            throw error;
+        }
+    },
 };

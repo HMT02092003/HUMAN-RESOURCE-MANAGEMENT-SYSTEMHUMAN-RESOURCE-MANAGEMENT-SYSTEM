@@ -94,16 +94,11 @@ const UserFormScreen = ({ route, navigation }) => {
     try {
       setDataLoading(true);
 
-      // Load dropdown options
-      const [rolesData, departmentsData, chevronsData] = await Promise.all([
-        RoleService.getAllRoles(),
-        DepartmentService.getAllDepartments(),
-        ChevronService.getAllChevrons(),
-      ]);
-
+      // Load dropdown options - only roles initially; dept/chevron loaded after role selection
+      const rolesData = await RoleService.getAllRoles();
       setRoles(rolesData || []);
-      setDepartments(departmentsData || []);
-      setChevrons(chevronsData || []);
+      setDepartments([]);
+      setChevrons([]);
 
       // If edit mode, load user data
       if (isEdit && userId) {
@@ -135,12 +130,40 @@ const UserFormScreen = ({ route, navigation }) => {
         console.log('📝 [UserForm] Form data to set:', JSON.stringify(formData, null, 2));
         setForm(formData);
         console.log('✅ [UserForm] Form state updated');
+
+        // Load filtered departments/chevrons for the user's current role
+        if (formData.roleId) {
+          const [depts, chevs] = await Promise.all([
+            DepartmentService.getAllDepartmentsForSelect(formData.roleId),
+            ChevronService.getAllChevronsForSelect(formData.roleId),
+          ]);
+          setDepartments(Array.isArray(depts) ? depts : []);
+          setChevrons(Array.isArray(chevs) ? chevs : []);
+        }
       }
     } catch (error) {
       console.error('❌ [UserForm] Error loading data:', error);
       Alert.alert('Lỗi', 'Không thể tải dữ liệu form');
     } finally {
       setDataLoading(false);
+    }
+  };
+
+  const handleRoleChange = async (roleId) => {
+    setForm(f => ({ ...f, roleId, departmentId: null, chevronId: null }));
+    setErrors(e => ({ ...e, roleId: null, departmentId: null, chevronId: null }));
+    setDepartments([]);
+    setChevrons([]);
+    if (!roleId) return;
+    try {
+      const [depts, chevs] = await Promise.all([
+        DepartmentService.getAllDepartmentsForSelect(roleId),
+        ChevronService.getAllChevronsForSelect(roleId),
+      ]);
+      setDepartments(Array.isArray(depts) ? depts : []);
+      setChevrons(Array.isArray(chevs) ? chevs : []);
+    } catch (err) {
+      console.error('[UserFormScreen] handleRoleChange error:', err);
     }
   };
 
@@ -672,9 +695,8 @@ const UserFormScreen = ({ route, navigation }) => {
                     <Menu.Item
                       key={role.id}
                       onPress={() => {
-                        setForm({ ...form, roleId: role.id });
-                        setErrors({ ...errors, roleId: null });
                         setRoleMenuVisible(false);
+                        handleRoleChange(role.id);
                       }}
                       title={role.name}
                     />
@@ -709,16 +731,16 @@ const UserFormScreen = ({ route, navigation }) => {
                 visible={departmentMenuVisible}
                 onDismiss={() => setDepartmentMenuVisible(false)}
                 anchor={
-                  <TouchableOpacity onPress={() => setDepartmentMenuVisible(true)}>
+                  <TouchableOpacity onPress={() => form.roleId && setDepartmentMenuVisible(true)}>
                     <TextInput
                       label="Phòng ban *"
-                      value={getDepartmentLabel()}
+                      value={!form.roleId ? 'Chọn vai trò trước' : getDepartmentLabel()}
                       mode="outlined"
                       editable={false}
                       error={!!errors.departmentId}
                       left={<TextInput.Icon icon="office-building" />}
                       right={<TextInput.Icon icon="chevron-down" />}
-                      style={styles.input}
+                      style={[styles.input, !form.roleId && { opacity: 0.6 }]}
                     />
                   </TouchableOpacity>
                 }
@@ -747,16 +769,16 @@ const UserFormScreen = ({ route, navigation }) => {
                 visible={chevronMenuVisible}
                 onDismiss={() => setChevronMenuVisible(false)}
                 anchor={
-                  <TouchableOpacity onPress={() => setChevronMenuVisible(true)}>
+                  <TouchableOpacity onPress={() => form.roleId && setChevronMenuVisible(true)}>
                     <TextInput
                       label="Chức vụ *"
-                      value={getChevronLabel()}
+                      value={!form.roleId ? 'Chọn vai trò trước' : getChevronLabel()}
                       mode="outlined"
                       editable={false}
                       error={!!errors.chevronId}
                       left={<TextInput.Icon icon="badge-account" />}
                       right={<TextInput.Icon icon="chevron-down" />}
-                      style={styles.input}
+                      style={[styles.input, !form.roleId && { opacity: 0.6 }]}
                     />
                   </TouchableOpacity>
                 }
