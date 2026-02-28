@@ -38,11 +38,11 @@ LIVENESS_V2_MODEL = "2.7_80x80_MiniFASNetV2.onnx"
 # → V1 là chỉ số phân tách chính, V2 hỗ trợ lọc thêm
 # NOTE: Hạ V2 xuống 50% để giảm false-reject khi ánh sáng yếu / camera tầm trung
 LIVENESS_V1_THRESHOLD = 0.025   # 2.5% — dưới mức này = FAKE
-LIVENESS_V2_THRESHOLD = 0.50    # 50%  — hạ từ 60% để tăng tỉ lệ pass đăng ký
+LIVENESS_V2_THRESHOLD = 0.60    # 60%
 
 # Legacy alias — used by EnhancedInsightFaceService._check_liveness (old code path)
 # Giá trị này đại diện cho ngưỡng anti-spoof chung khi chỉ dùng V2
-LIVENESS_THRESHOLD = 0.50
+LIVENESS_THRESHOLD = 0.60
 
 # Recognition thresholds (cosine similarity của embedding — KHÔNG phải liveness)
 # ─── Phân biệt rõ ───────────────────────────────────────────────────────────────
