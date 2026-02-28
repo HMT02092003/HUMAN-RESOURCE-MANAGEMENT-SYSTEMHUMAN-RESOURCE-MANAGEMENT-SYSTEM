@@ -89,6 +89,20 @@ const ProjectDetailScreen = () => {
   const [selectedTask, setSelectedTask] = useState(null);
   const [taskModalVisible, setTaskModalVisible] = useState(false);
   
+  // Expenses state
+  const [expenses, setExpenses] = useState([]);
+  const [expensesLoading, setExpensesLoading] = useState(false);
+  const [expenseModalVisible, setExpenseModalVisible] = useState(false);
+  const [expenseSubmitting, setExpenseSubmitting] = useState(false);
+  const [newExpense, setNewExpense] = useState({
+    title: '',
+    amount: '',
+    category: 'other',
+    description: '',
+    expense_date: new Date(),
+  });
+  const [showExpenseDatePicker, setShowExpenseDatePicker] = useState(false);
+  
   // AI Create task states
   const [createTaskModalVisible, setCreateTaskModalVisible] = useState(false);
   const [aiStep, setAiStep] = useState(0); // 0: Input, 1: AI Analysis, 2: Select Candidate
@@ -158,7 +172,74 @@ const ProjectDetailScreen = () => {
   const handleRefresh = () => {
     setRefreshing(true);
     loadProjectData();
+    if (activeTab === 'expenses') loadExpenses();
   };
+
+  const loadExpenses = async () => {
+    setExpensesLoading(true);
+    try {
+      const response = await JobService.getProjectExpenses(projectId);
+      const data = response?.data ?? response ?? [];
+      setExpenses(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Error loading expenses:', error);
+    } finally {
+      setExpensesLoading(false);
+    }
+  };
+
+  const handleCreateExpense = async () => {
+    if (!newExpense.title.trim()) {
+      Alert.alert('Thông báo', 'Vui lòng nhập tiêu đề chi phí');
+      return;
+    }
+    if (!newExpense.amount || isNaN(parseFloat(newExpense.amount))) {
+      Alert.alert('Thông báo', 'Vui lòng nhập số tiền hợp lệ');
+      return;
+    }
+    setExpenseSubmitting(true);
+    try {
+      await JobService.createProjectExpense(projectId, {
+        title: newExpense.title.trim(),
+        amount: parseFloat(newExpense.amount),
+        category: newExpense.category,
+        description: newExpense.description.trim(),
+        expense_date: newExpense.expense_date.toISOString().split('T')[0],
+      });
+      Alert.alert('Thành công', 'Đã thêm chi phí');
+      setExpenseModalVisible(false);
+      setNewExpense({ title: '', amount: '', category: 'other', description: '', expense_date: new Date() });
+      loadExpenses();
+    } catch (error) {
+      Alert.alert('Lỗi', error?.response?.data?.message || 'Không thể thêm chi phí');
+    } finally {
+      setExpenseSubmitting(false);
+    }
+  };
+
+  const handleApproveExpense = async (expenseId) => {
+    try {
+      await JobService.approveProjectExpense(expenseId);
+      loadExpenses();
+    } catch (error) {
+      Alert.alert('Lỗi', 'Không thể duyệt chi phí');
+    }
+  };
+
+  const handleRejectExpense = async (expenseId) => {
+    try {
+      await JobService.rejectProjectExpense(expenseId);
+      loadExpenses();
+    } catch (error) {
+      Alert.alert('Lỗi', 'Không thể từ chối chi phí');
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'expenses' && projectId) {
+      loadExpenses();
+    }
+  }, [activeTab]);
 
   const handleEditProject = () => {
     navigation.navigate('Sửa dự án', { projectId, project });
@@ -374,8 +455,8 @@ const ProjectDetailScreen = () => {
   };
 
   const renderTabs = () => (
-    <View style={styles.tabContainer}>
-      {['overview', 'tasks', 'members', 'statistics'].map((tab) => (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabContainer} contentContainerStyle={styles.tabContentContainer}>
+      {['overview', 'tasks', 'members', 'statistics', 'expenses'].map((tab) => (
         <TouchableOpacity
           key={tab}
           style={[styles.tab, activeTab === tab && styles.tabActive]}
@@ -386,10 +467,11 @@ const ProjectDetailScreen = () => {
             {tab === 'tasks' && 'Công việc'}
             {tab === 'members' && 'Thành viên'}
             {tab === 'statistics' && 'Thống kê'}
+            {tab === 'expenses' && 'Chi phí'}
           </Text>
         </TouchableOpacity>
       ))}
-    </View>
+    </ScrollView>
   );
 
   const renderOverview = () => {
@@ -733,6 +815,189 @@ const ProjectDetailScreen = () => {
             });
           })()}
         </Surface>
+      </View>
+    );
+  };
+
+  const renderExpenses = () => {
+    const EXPENSE_CATEGORIES = {
+      personnel: { label: 'Nhân sự', icon: 'account-group', color: '#1890ff' },
+      equipment: { label: 'Thiết bị', icon: 'wrench', color: '#faad14' },
+      software: { label: 'Phần mềm', icon: 'laptop', color: '#722ed1' },
+      office: { label: 'Văn phòng', icon: 'office-building', color: '#13c2c2' },
+      travel: { label: 'Di chuyển', icon: 'car', color: '#52c41a' },
+      other: { label: 'Khác', icon: 'dots-horizontal', color: '#8c8c8c' },
+    };
+    const EXPENSE_STATUS = {
+      pending: { label: 'Chờ duyệt', color: '#faad14', bg: '#fffbe6' },
+      approved: { label: 'Đã duyệt', color: '#52c41a', bg: '#f6ffed' },
+      rejected: { label: 'Từ chối', color: '#ff4d4f', bg: '#fff2f0' },
+    };
+
+    return (
+      <View style={{ flex: 1 }}>
+        {expensesLoading ? (
+          <ActivityIndicator style={{ marginTop: 40 }} color="#1890ff" />
+        ) : expenses.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <MaterialCommunityIcons name="cash-remove" size={48} color="#bfbfbf" />
+            <Text style={styles.emptyText}>Chưa có chi phí nào</Text>
+          </View>
+        ) : (
+          expenses.map((expense) => {
+            const cat = EXPENSE_CATEGORIES[expense.category] || EXPENSE_CATEGORIES.other;
+            const st = EXPENSE_STATUS[expense.status] || EXPENSE_STATUS.pending;
+            return (
+              <Surface key={expense.id} style={styles.expenseCard}>
+                <View style={styles.expenseHeader}>
+                  <View style={[styles.expenseCatIcon, { backgroundColor: cat.color + '20' }]}>
+                    <MaterialCommunityIcons name={cat.icon} size={18} color={cat.color} />
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={styles.expenseTitle}>{expense.title}</Text>
+                    <Text style={styles.expenseCatLabel}>{cat.label}</Text>
+                  </View>
+                  <View>
+                    <Text style={styles.expenseAmount}>{formatCurrency(expense.amount)}</Text>
+                    <View style={[styles.expenseStatusBadge, { backgroundColor: st.bg }]}>
+                      <Text style={[styles.expenseStatusText, { color: st.color }]}>{st.label}</Text>
+                    </View>
+                  </View>
+                </View>
+                {expense.description ? (
+                  <Text style={styles.expenseDesc}>{expense.description}</Text>
+                ) : null}
+                <View style={styles.expenseFooter}>
+                  <MaterialCommunityIcons name="calendar" size={12} color="#8c8c8c" />
+                  <Text style={styles.expenseDate}>{formatDate(expense.expense_date)}</Text>
+                </View>
+                {expense.status === 'pending' && (
+                  <View style={styles.expenseActions}>
+                    <TouchableOpacity
+                      style={[styles.expenseActionBtn, { backgroundColor: '#f6ffed', borderColor: '#52c41a' }]}
+                      onPress={() => handleApproveExpense(expense.id)}
+                    >
+                      <MaterialCommunityIcons name="check" size={14} color="#52c41a" />
+                      <Text style={[styles.expenseActionText, { color: '#52c41a' }]}>Duyệt</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.expenseActionBtn, { backgroundColor: '#fff2f0', borderColor: '#ff4d4f' }]}
+                      onPress={() => handleRejectExpense(expense.id)}
+                    >
+                      <MaterialCommunityIcons name="close" size={14} color="#ff4d4f" />
+                      <Text style={[styles.expenseActionText, { color: '#ff4d4f' }]}>Từ chối</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </Surface>
+            );
+          })
+        )}
+
+        {/* Expense Modal */}
+        <Portal>
+          <Modal
+            visible={expenseModalVisible}
+            onDismiss={() => setExpenseModalVisible(false)}
+            contentContainerStyle={styles.modalContainer}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Thêm chi phí</Text>
+              <TouchableOpacity onPress={() => setExpenseModalVisible(false)}>
+                <MaterialCommunityIcons name="close" size={24} color="#8c8c8c" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalContent}>
+              <Text style={styles.fieldLabel}>Tiêu đề *</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="Nhập tiêu đề chi phí"
+                value={newExpense.title}
+                onChangeText={(v) => setNewExpense(p => ({ ...p, title: v }))}
+              />
+              <Text style={styles.fieldLabel}>Số tiền (VND) *</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="0"
+                keyboardType="numeric"
+                value={newExpense.amount}
+                onChangeText={(v) => setNewExpense(p => ({ ...p, amount: v }))}
+              />
+              <Text style={styles.fieldLabel}>Danh mục</Text>
+              <View style={styles.categoryGrid}>
+                {Object.entries(EXPENSE_CATEGORIES).map(([key, val]) => (
+                  <TouchableOpacity
+                    key={key}
+                    style={[
+                      styles.categoryBtn,
+                      newExpense.category === key && { backgroundColor: val.color, borderColor: val.color },
+                    ]}
+                    onPress={() => setNewExpense(p => ({ ...p, category: key }))}
+                  >
+                    <MaterialCommunityIcons
+                      name={val.icon}
+                      size={14}
+                      color={newExpense.category === key ? '#fff' : val.color}
+                    />
+                    <Text style={[
+                      styles.categoryBtnText,
+                      newExpense.category === key && { color: '#fff' },
+                    ]}>{val.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.fieldLabel}>Ngày chi</Text>
+              <TouchableOpacity
+                style={styles.datePickerBtn}
+                onPress={() => setShowExpenseDatePicker(true)}
+              >
+                <MaterialCommunityIcons name="calendar" size={16} color="#1890ff" />
+                <Text style={styles.datePickerText}>{formatDate(newExpense.expense_date)}</Text>
+              </TouchableOpacity>
+              {showExpenseDatePicker && (
+                <DateTimePicker
+                  value={newExpense.expense_date}
+                  mode="date"
+                  onChange={(e, date) => {
+                    setShowExpenseDatePicker(false);
+                    if (date) setNewExpense(p => ({ ...p, expense_date: date }));
+                  }}
+                />
+              )}
+              <Text style={styles.fieldLabel}>Mô tả</Text>
+              <TextInput
+                style={[styles.textInput, { height: 80, textAlignVertical: 'top' }]}
+                placeholder="Mô tả chi tiết..."
+                multiline
+                value={newExpense.description}
+                onChangeText={(v) => setNewExpense(p => ({ ...p, description: v }))}
+              />
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => setExpenseModalVisible(false)}
+              >
+                <Text style={styles.cancelBtnText}>Hủy</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.submitBtn, expenseSubmitting && { opacity: 0.6 }]}
+                onPress={handleCreateExpense}
+                disabled={expenseSubmitting}
+              >
+                <Text style={styles.submitBtnText}>{expenseSubmitting ? 'Đang lưu...' : 'Thêm'}</Text>
+              </TouchableOpacity>
+            </View>
+          </Modal>
+        </Portal>
+
+        <FAB
+          style={styles.fab}
+          icon="plus"
+          onPress={() => setExpenseModalVisible(true)}
+          label="Thêm chi phí"
+          color="#fff"
+        />
       </View>
     );
   };
@@ -1212,17 +1477,20 @@ const ProjectDetailScreen = () => {
         {activeTab === 'tasks' && renderTasks()}
         {activeTab === 'members' && renderMembers()}
         {activeTab === 'statistics' && renderStatistics()}
+        {activeTab === 'expenses' && renderExpenses()}
         
         <View style={{ height: 80 }} />
       </ScrollView>
 
-      {/* FAB - Add task only */}
-      <FAB
-        icon="plus"
-        style={styles.fab}
-        onPress={() => setCreateTaskModalVisible(true)}
-        color="#fff"
-      />
+      {/* FAB - Add task only (hidden on expenses tab, expenses has its own FAB) */}
+      {activeTab !== 'expenses' && (
+        <FAB
+          icon="plus"
+          style={styles.fab}
+          onPress={() => setCreateTaskModalVisible(true)}
+          color="#fff"
+        />
+      )}
 
       {renderTaskModal()}
       {renderCreateTaskModal()}
@@ -1247,15 +1515,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   tabContainer: {
-    flexDirection: 'row',
     backgroundColor: '#fff',
-    paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#e8e8e8',
   },
+  tabContentContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+  },
   tab: {
-    flex: 1,
     paddingVertical: 12,
+    paddingHorizontal: 16,
     alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
@@ -1914,6 +2184,110 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#1890ff',
     fontWeight: '500',
+  },
+  // Expense styles
+  expenseCard: {
+    margin: 12,
+    marginBottom: 4,
+    borderRadius: 10,
+    padding: 14,
+    backgroundColor: '#fff',
+    elevation: 1,
+  },
+  expenseHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  expenseCatIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  expenseTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#262626',
+  },
+  expenseCatLabel: {
+    fontSize: 11,
+    color: '#8c8c8c',
+    marginTop: 2,
+  },
+  expenseAmount: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1890ff',
+    textAlign: 'right',
+  },
+  expenseStatusBadge: {
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginTop: 4,
+    alignSelf: 'flex-end',
+  },
+  expenseStatusText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  expenseDesc: {
+    fontSize: 12,
+    color: '#595959',
+    marginTop: 8,
+  },
+  expenseFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8,
+  },
+  expenseDate: {
+    fontSize: 11,
+    color: '#8c8c8c',
+  },
+  expenseActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    paddingTop: 10,
+  },
+  expenseActionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  expenseActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  categoryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#d9d9d9',
+    backgroundColor: '#fafafa',
+  },
+  categoryBtnText: {
+    fontSize: 11,
+    color: '#595959',
   },
 });
 

@@ -5,6 +5,8 @@ import UserCreateScreen from '../../screens/users/UserCreateScreen';
 import UserEditScreen from '../../screens/users/UserEditScreen';
 import UserDetailScreen from '../../screens/users/UserDetailScreen';
 import UserFormScreen from '../../screens/users/UserFormScreen';
+import CreateContractScreen from '../../screens/users/CreateContractScreen';
+import EditSalaryScreen from '../../screens/users/EditSalaryScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -30,6 +32,14 @@ const UserNavigator = () => {
             <Stack.Screen
                 name="UserForm"
                 component={UserFormScreen}
+            />
+            <Stack.Screen
+                name="CreateContract"
+                component={CreateContractScreen}
+            />
+            <Stack.Screen
+                name="EditSalary"
+                component={EditSalaryScreen}
             />
         </Stack.Navigator>
     );

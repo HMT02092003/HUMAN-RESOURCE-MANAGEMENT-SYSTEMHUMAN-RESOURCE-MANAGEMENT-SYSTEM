@@ -281,6 +281,24 @@ const UserDetailScreen = ({ route, navigation }) => {
 
   const renderContractTab = () => (
     <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
+      {/* Action buttons */}
+      <View style={styles.contractActionRow}>
+        <TouchableOpacity
+          style={styles.contractActionBtn}
+          onPress={() => navigation.navigate('CreateContract', { userId })}
+        >
+          <MaterialCommunityIcons name="file-plus" size={18} color="#1890ff" />
+          <Text style={styles.contractActionBtnText}>Tạo hợp đồng</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.contractActionBtn, styles.salaryActionBtn]}
+          onPress={() => navigation.navigate('EditSalary', { userId })}
+        >
+          <MaterialCommunityIcons name="cash-edit" size={18} color="#52c41a" />
+          <Text style={[styles.contractActionBtnText, { color: '#52c41a' }]}>Chỉnh sửa lương</Text>
+        </TouchableOpacity>
+      </View>
+
       {user.contracts && user.contracts.length > 0 ? (
         user.contracts.map((contract, index) => (
           <Card key={index} style={styles.card}>
@@ -575,6 +593,32 @@ const styles = StyleSheet.create({
   emptyCardText: {
     fontSize: 14,
     color: '#8c8c8c',
+  },
+  contractActionRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  contractActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#e6f4ff',
+    borderWidth: 1,
+    borderColor: '#91caff',
+  },
+  salaryActionBtn: {
+    backgroundColor: '#f6ffed',
+    borderColor: '#b7eb8f',
+  },
+  contractActionBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1890ff',
   },
 });
 

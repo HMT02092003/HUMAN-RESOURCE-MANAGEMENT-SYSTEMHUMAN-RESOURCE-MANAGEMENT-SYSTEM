@@ -55,6 +55,15 @@ const APPLICATION_TYPES = [
         color: '#f5222d',
         screen: 'ResignationApplicationCreate',
     },
+    {
+        type: 'shift-registration',
+        label: 'Đăng ký ca làm việc',
+        description: 'Đăng ký lịch ca sáng/chiều/tối/tăng ca',
+        icon: 'time-outline',
+        emoji: '📅',
+        color: '#13c2c2',
+        screen: 'ShiftApplicationCreate',
+    },
 ];
 
 const SelectApplicationTypeScreen = ({ navigation }) => {

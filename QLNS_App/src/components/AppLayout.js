@@ -37,7 +37,7 @@ import AllowanceListScreen from '../../screens/salary/AllowanceListScreen';
 import AllowanceFormScreen from '../../screens/salary/AllowanceFormScreen';
 import SalaryManagementScreen from '../../screens/salary/SalaryManagementScreen';
 import MyPayslipScreen from '../../screens/salary/MyPayslipScreen';
-import CVListScreen from '../../screens/cvs/CVListScreen';
+import CVNavigator from '../navigation/CVNavigator';
 import ProjectListScreen from '../../screens/projects/ProjectListScreen';
 import ProjectDetailScreen from '../../screens/projects/ProjectDetailScreen';
 import ProjectFormScreen from '../../screens/projects/ProjectFormScreen';
@@ -719,7 +719,7 @@ const AppLayout = () => {
           <Drawer.Screen name="Quản lý bảng lương" component={SalaryManagementScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
           <Drawer.Screen name="Bảng lương cá nhân" component={MyPayslipScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
 
-          <Drawer.Screen name="Hồ sơ/CV" component={CVListScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
+          <Drawer.Screen name="Hồ sơ/CV" component={CVNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
           <Drawer.Screen name="Dự án" component={ProjectListScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
           <Drawer.Screen name="Quản lý KPI" component={KpiListScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
 

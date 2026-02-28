@@ -73,6 +73,30 @@ class RoleService {
       throw error;
     }
   }
+
+  // Get role permissions (returns categories with permissions array)
+  static async getRolePermissions(roleId) {
+    try {
+      console.log('🛡️ [RoleService] Fetching permissions for role:', roleId);
+      const response = await apiService.get(`/auth/rolePermission/${roleId}`);
+      return response.data;
+    } catch (error) {
+      console.error('❌ [RoleService] Error fetching permissions:', error);
+      throw error;
+    }
+  }
+
+  // Update role permissions
+  static async updateRolePermissions(roleId, permissions, scopes) {
+    try {
+      console.log('🛡️ [RoleService] Updating permissions for role:', roleId);
+      const response = await apiService.put('/auth/rolePermission', { roleId, permissions, scopes });
+      return response.data;
+    } catch (error) {
+      console.error('❌ [RoleService] Error updating permissions:', error);
+      throw error;
+    }
+  }
 }
 
 export default RoleService;

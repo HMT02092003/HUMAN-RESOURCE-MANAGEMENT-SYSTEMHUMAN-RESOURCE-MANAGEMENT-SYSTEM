@@ -5,6 +5,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AppLayout from './src/components/AppLayout';
 import LoginScreen from './screens/auth/LoginScreen';
+import ForgotPasswordScreen from './screens/auth/ForgotPasswordScreen';
 import { AuthProvider, useAuth } from './services/AuthContext';
 
 const Stack = createNativeStackNavigator();
@@ -29,7 +30,10 @@ function AppNavigator() {
           <Stack.Screen name="AppLayout" component={AppLayout} />
         ) : (
           // Chưa đăng nhập -> hiển thị LoginScreen
-          <Stack.Screen name="Login" component={LoginScreen} />
+          <>
+            <Stack.Screen name="Login" component={LoginScreen} />
+            <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

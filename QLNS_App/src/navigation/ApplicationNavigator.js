@@ -14,6 +14,7 @@ import BusinessTripApplicationScreen from '../../screens/applications/BusinessTr
 import BusinessTripApplicationCreateScreen from '../../screens/applications/BusinessTripApplicationCreateScreen';
 import ResignationApplicationScreen from '../../screens/applications/ResignationApplicationScreen';
 import ResignationApplicationCreateScreen from '../../screens/applications/ResignationApplicationCreateScreen';
+import ShiftApplicationScreen from '../../screens/applications/ShiftApplicationScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -72,6 +73,10 @@ export const MyApplicationNavigator = () => {
             <Stack.Screen
                 name="ResignationApplicationCreate"
                 component={ResignationApplicationCreateScreen}
+            />
+            <Stack.Screen
+                name="ShiftApplicationCreate"
+                component={ShiftApplicationScreen}
             />
         </Stack.Navigator>
     );

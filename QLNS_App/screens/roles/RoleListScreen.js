@@ -139,6 +139,13 @@ const RoleListScreen = ({ navigation }) => {
           </View>
           {!isSelectionMode && (
             <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => navigation.navigate('RoleDecentralization', { roleId: item.id, roleName: item.name })}
+              >
+                <Ionicons name="shield-checkmark-outline" size={20} color="#722ed1" />
+              </TouchableOpacity>
+
               <CheckPermission permissionKey="roles" requiredType="update">
                 <TouchableOpacity
                   style={styles.actionButton}

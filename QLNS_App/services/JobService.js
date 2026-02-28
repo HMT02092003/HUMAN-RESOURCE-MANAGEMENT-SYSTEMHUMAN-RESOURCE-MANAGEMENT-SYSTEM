@@ -344,6 +344,27 @@ export const getInitials = (name) => {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 };
 
+// Expense APIs
+export const getProjectExpenses = async (projectId) => {
+  const response = await jobApi.get(`/jobs/projects/${projectId}/expenses`);
+  return response.data;
+};
+
+export const createProjectExpense = async (projectId, payload) => {
+  const response = await jobApi.post(`/jobs/projects/${projectId}/expenses`, payload);
+  return response.data;
+};
+
+export const approveProjectExpense = async (expenseId) => {
+  const response = await jobApi.put(`/jobs/expenses/${expenseId}/status`, { status: 'approved' });
+  return response.data;
+};
+
+export const rejectProjectExpense = async (expenseId) => {
+  const response = await jobApi.put(`/jobs/expenses/${expenseId}/status`, { status: 'rejected' });
+  return response.data;
+};
+
 export default {
   // Projects
   getAllProjectByScope,
@@ -371,6 +392,11 @@ export default {
   analyzeJob,
   findCandidates,
   createJobWithAnalysis,
+  // Expenses
+  getProjectExpenses,
+  createProjectExpense,
+  approveProjectExpense,
+  rejectProjectExpense,
   // Helpers
   getStatusColor,
   getStatusLabel,
