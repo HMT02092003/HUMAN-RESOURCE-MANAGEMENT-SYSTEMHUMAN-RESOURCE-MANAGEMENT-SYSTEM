@@ -28,7 +28,12 @@ class AttendanceService {
 
       return fullData;
     } catch (error) {
-      console.error('❌ [App] Error fetching user monthly attendance full:', error);
+      // 404 is expected when no monthly attendance record exists (e.g. start of month)
+      if (error?.response?.status === 404) {
+        console.log('ℹ️ [App] No monthly attendance data found (404) - this is normal for new months');
+      } else {
+        console.warn('⚠️ [App] Error fetching user monthly attendance full:', error?.message || error);
+      }
       return null;
     }
   }

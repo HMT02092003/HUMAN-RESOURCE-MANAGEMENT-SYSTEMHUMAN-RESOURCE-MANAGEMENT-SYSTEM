@@ -359,7 +359,7 @@ const BASE_MENU_ITEMS = [
     label: 'Quản lý công việc',
     icon: 'briefcase-outline',
     children: [
-      { key: 'CV', label: 'Quản lý hồ sơ/CV', icon: 'file-account-details-outline', route: 'Hồ sơ/CV', permission: 'CV' },
+      { key: 'CV', label: 'Quản lý hồ sơ/CV', icon: 'file-account-outline', route: 'Hồ sơ/CV', permission: 'CV' },
       { key: 'projects', label: 'Danh sách dự án', icon: 'folder-outline', route: 'Dự án', permission: 'projects' },
       { key: 'kpiManagement', label: 'Quản lý KPI', icon: 'chart-line', route: 'Quản lý KPI', permission: 'kpiManagement' },
     ],

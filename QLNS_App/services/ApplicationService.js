@@ -119,13 +119,19 @@ const ApplicationService = {
         }
     },
 
-    // Từ chối application - DEPRECATED: Use bulkRejectApplications([id]) instead
-    // Giờ gọi bulk API với mảng 1 phần tử để đảm bảo logic nhất quán
+    // Từ chối application - sử dụng single reject endpoint giống web
     rejectApplication: async (id, rejectionData = {}) => {
         try {
-            const response = await apiService.post('/applications/bulk-reject', { ids: [id] });
+            const reason = rejectionData.reason || rejectionData.note || '';
+            const response = await apiService.post(`/applications/${id}/reject`, { reason });
             return response.data;
         } catch (error) {
+            // Fallback to bulk-reject if single reject endpoint not available
+            if (error?.response?.status === 404) {
+                console.warn('Single reject endpoint not found, falling back to bulk-reject');
+                const response = await apiService.post('/applications/bulk-reject', { ids: [id] });
+                return response.data;
+            }
             console.error('ApplicationService - rejectApplication error:', error);
             throw error;
         }

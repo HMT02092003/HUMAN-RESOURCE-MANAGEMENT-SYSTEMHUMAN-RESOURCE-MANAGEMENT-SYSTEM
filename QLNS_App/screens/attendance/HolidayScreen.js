@@ -15,7 +15,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
-import api from '../../services/api';
+import api from '../../services/apiService';
 import { ActivityIndicator, FAB } from 'react-native-paper';
 import CheckPermission from '../../components/CheckPermission';
 

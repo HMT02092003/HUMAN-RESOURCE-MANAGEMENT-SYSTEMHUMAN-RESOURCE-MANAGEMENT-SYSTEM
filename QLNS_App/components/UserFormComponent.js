@@ -34,6 +34,8 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
     contractTypeId: null,
     departmentId: null,
     identificationPhoto: null,
+    // Contract fields
+    salary: '',
   });
 
   const [errors, setErrors] = useState({});
@@ -77,10 +79,11 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
         startDate: initialValues.startDate ? new Date(initialValues.startDate) : new Date(),
         chevronId: initialValues.chevron?.id || null,
         departmentId: initialValues.department?.id || null,
-  contractTypeId: initialValues.contractTypeId || initialValues.contractType?.id || null,
-  contractTerm: initialValues.contractTerm || initialValues.contractType?.contractTerm || null,
-  contractInsurance: initialValues.insurance || initialValues.contractType?.insurance || null,
+        contractTypeId: initialValues.contractTypeId || initialValues.contractType?.id || null,
+        contractTerm: initialValues.contractTerm || initialValues.contractType?.contractTerm || null,
+        contractInsurance: initialValues.insurance || initialValues.contractType?.insurance || null,
         identificationPhoto: initialValues.identificationPhoto || null,
+        salary: initialValues.salary || initialValues.contract?.salary || '',
       }));
     } else {
       // Reset for create to avoid stale values
@@ -98,10 +101,11 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
         startDate: new Date(),
         chevronId: null,
         departmentId: null,
-  contractTypeId: null,
-  contractTerm: null,
-  contractInsurance: null,
+        contractTypeId: null,
+        contractTerm: null,
+        contractInsurance: null,
         identificationPhoto: null,
+        salary: '',
       });
     }
     setErrors({});
@@ -242,8 +246,13 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
       roleId: form.roleId,
       startDate: formatDateToYYYYMMDD(form.startDate),
       chevronId: form.chevronId,
-      contractTypeId: form.contractTypeId,
       departmentId: form.departmentId,
+      // Nest contract data like web frontend
+      contract: {
+        contractTypeId: form.contractTypeId,
+        salary: form.salary ? Number(form.salary) : 0,
+        activeDay: formatDateToYYYYMMDD(form.startDate),
+      },
     };
     if (!isEdit) payload.password = form.password;
 
@@ -367,9 +376,11 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
         </Card.Content>
       </Card>
 
-      {/* Work */}
+      {/* Work Info */}
       <Card style={styles.card}>
         <Card.Content>
+          <Text style={styles.sectionTitle}>Thông tin công việc</Text>
+          <Divider style={styles.divider} />
           <TouchableOpacity onPress={() => setShowRoleModal(true)}>
             <TextInput label="Vai trò *" value={getLabelById(roles, form.roleId, 'Chọn vai trò')} editable={false} style={styles.input} pointerEvents="none" right={<TextInput.Icon icon="chevron-down" />} />
           </TouchableOpacity>
@@ -385,6 +396,29 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
             />
           </TouchableOpacity>
           {errors.departmentId && <HelperText type="error">{errors.departmentId}</HelperText>}
+          <TouchableOpacity onPress={() => !roleLoading && form.roleId && setShowChevronModal(true)}>
+            <TextInput
+              label="Chức vụ *"
+              value={!form.roleId ? 'Chọn vai trò trước' : roleLoading ? 'Đang tải...' : getLabelById(localChevrons, form.chevronId, 'Chọn chức vụ')}
+              editable={false}
+              style={[styles.input, { opacity: !form.roleId ? 0.6 : 1 }]}
+              pointerEvents="none"
+              right={<TextInput.Icon icon="chevron-down" />}
+            />
+          </TouchableOpacity>
+          {errors.chevronId && <HelperText type="error">{errors.chevronId}</HelperText>}
+          <TouchableOpacity onPress={() => setShowStartDatePicker(true)}>
+            <TextInput label="Ngày bắt đầu *" value={formatDateDisplay(form.startDate)} editable={false} style={styles.input} pointerEvents="none" right={<TextInput.Icon icon="chevron-down" />} />
+          </TouchableOpacity>
+          {errors.startDate && <HelperText type="error">{errors.startDate}</HelperText>}
+        </Card.Content>
+      </Card>
+
+      {/* Contract Info */}
+      <Card style={styles.card}>
+        <Card.Content>
+          <Text style={styles.sectionTitle}>Thông tin hợp đồng</Text>
+          <Divider style={styles.divider} />
           <View>
             <TouchableOpacity onPress={() => setShowContractTypeModal(true)}>
               <TextInput label="Loại hợp đồng" value={getLabelById(localContractTypes, form.contractTypeId, 'Chọn loại hợp đồng')} editable={false} style={styles.input} pointerEvents="none" right={<TextInput.Icon icon="chevron-down" />} />
@@ -406,29 +440,22 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
             <TextInput label="Thời hạn hợp đồng (tháng)" value={form.contractTerm !== null && form.contractTerm !== undefined ? String(form.contractTerm) : ''} editable={false} style={styles.input} />
             <TextInput label="Bảo hiểm (VND)" value={form.contractInsurance !== null && form.contractInsurance !== undefined ? String(form.contractInsurance) : ''} editable={false} style={styles.input} />
           </View>
-          <TouchableOpacity onPress={() => !roleLoading && form.roleId && setShowChevronModal(true)}>
-            <TextInput
-              label="Chức vụ *"
-              value={!form.roleId ? 'Chọn vai trò trước' : roleLoading ? 'Đang tải...' : getLabelById(localChevrons, form.chevronId, 'Chọn chức vụ')}
-              editable={false}
-              style={[styles.input, { opacity: !form.roleId ? 0.6 : 1 }]}
-              pointerEvents="none"
-              right={<TextInput.Icon icon="chevron-down" />}
-            />
-          </TouchableOpacity>
-          {errors.chevronId && <HelperText type="error">{errors.chevronId}</HelperText>}
-          <TouchableOpacity onPress={() => setShowStartDatePicker(true)}>
-            <TextInput label="Ngày bắt đầu *" value={formatDateDisplay(form.startDate)} editable={false} style={styles.input} pointerEvents="none" right={<TextInput.Icon icon="chevron-down" />} />
-          </TouchableOpacity>
-          {errors.startDate && <HelperText type="error">{errors.startDate}</HelperText>}
-
-
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
-            <Button mode="outlined" onPress={onCancel}>Hủy</Button>
-            <Button mode="contained" loading={loading} onPress={onPressSubmit}>{isEdit ? 'Cập nhật' : 'Tạo mới'}</Button>
-          </View>
+          <TextInput
+            label="Lương cơ bản (VND)"
+            value={form.salary?.toString() || ''}
+            onChangeText={(t) => setForm({ ...form, salary: t })}
+            style={styles.input}
+            keyboardType="numeric"
+            placeholder="Nhập lương cơ bản..."
+          />
         </Card.Content>
       </Card>
+
+      {/* Action Buttons */}
+      <View style={styles.actionButtons}>
+        <Button mode="outlined" onPress={onCancel} style={styles.cancelBtn}>Hủy</Button>
+        <Button mode="contained" loading={loading} onPress={onPressSubmit} style={styles.submitBtn}>{isEdit ? 'Cập nhật' : 'Tạo mới'}</Button>
+      </View>
 
       {showBirthdayPicker && (
         <DateTimePicker value={form.birthday || new Date()} mode="date" display="default" onChange={(e, d) => { setShowBirthdayPicker(false); if (d) setForm({ ...form, birthday: d }); }} />
@@ -476,6 +503,21 @@ const styles = StyleSheet.create({
   input: { marginBottom: 8, backgroundColor: '#fff' },
   photo: { width: 140, height: 140, borderRadius: 70, alignSelf: 'center' },
   photoPlaceholder: { width: 140, height: 140, borderRadius: 70, backgroundColor: '#f5f5f5', alignItems: 'center', justifyContent: 'center' },
+  actionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+    marginTop: 4,
+    paddingHorizontal: 4,
+  },
+  cancelBtn: {
+    flex: 1,
+    marginRight: 8,
+  },
+  submitBtn: {
+    flex: 1,
+    marginLeft: 8,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

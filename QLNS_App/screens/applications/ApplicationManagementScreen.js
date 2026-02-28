@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert, TextInput } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { 
   Card, 
@@ -11,7 +11,10 @@ import {
   Divider,
   FAB,
   Chip,
-  Badge
+  Badge,
+  Portal,
+  Dialog,
+  Button
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import CardListWithInfiniteScroll from '../../components/CardListWithInfiniteScroll';
@@ -25,6 +28,11 @@ const ApplicationManagementScreen = ({ navigation }) => {
   const theme = useTheme();
   const [visibleMenuId, setVisibleMenuId] = React.useState(null);
   const listRef = React.useRef(null);
+  
+  // Reject dialog state
+  const [rejectDialogVisible, setRejectDialogVisible] = React.useState(false);
+  const [rejectReason, setRejectReason] = React.useState('');
+  const [rejectTarget, setRejectTarget] = React.useState(null); // { id, type, userName }
 
   useFocusEffect(
     React.useCallback(() => {
@@ -79,32 +87,30 @@ const ApplicationManagementScreen = ({ navigation }) => {
     );
   };
 
-  // Reject handler
+  // Reject handler — use custom Dialog (Alert.prompt is iOS-only)
   const handleReject = (id, type, userName) => {
-    Alert.prompt(
-      '❌ Từ chối đơn',
-      `Lý do từ chối đơn "${APPLICATION_TYPE_LABELS[type]}" của ${userName}:`,
-      [
-        { text: 'Hủy', style: 'cancel' },
-        {
-          text: 'Từ chối',
-          style: 'destructive',
-          onPress: async (reason) => {
-            try {
-              await ApplicationService.rejectApplication(id, { reason: reason || 'Không đạt yêu cầu' });
-              Alert.alert('✅ Thành công', 'Đã từ chối đơn từ');
-              if (listRef.current?.refresh) {
-                listRef.current.refresh();
-              }
-            } catch (error) {
-              console.error('❌ Reject failed:', error);
-              Alert.alert('Lỗi', 'Không thể từ chối đơn từ');
-            }
-          }
-        }
-      ],
-      'plain-text'
-    );
+    setRejectTarget({ id, type, userName });
+    setRejectReason('');
+    setRejectDialogVisible(true);
+  };
+
+  const confirmReject = async () => {
+    if (!rejectTarget) return;
+    const reason = rejectReason.trim() || 'Không đạt yêu cầu';
+    setRejectDialogVisible(false);
+    try {
+      await ApplicationService.rejectApplication(rejectTarget.id, { reason });
+      Alert.alert('✅ Thành công', 'Đã từ chối đơn từ');
+      if (listRef.current?.refresh) {
+        listRef.current.refresh();
+      }
+    } catch (error) {
+      console.error('❌ Reject failed:', error);
+      Alert.alert('Lỗi', 'Không thể từ chối đơn từ');
+    } finally {
+      setRejectTarget(null);
+      setRejectReason('');
+    }
   };
 
   // Delete handler
@@ -426,6 +432,31 @@ const ApplicationManagementScreen = ({ navigation }) => {
           }
         ]}
       />
+      
+      {/* Reject Dialog */}
+      <Portal>
+        <Dialog visible={rejectDialogVisible} onDismiss={() => setRejectDialogVisible(false)}>
+          <Dialog.Title>❌ Từ chối đơn</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ marginBottom: 12 }}>
+              Lý do từ chối đơn "{rejectTarget ? APPLICATION_TYPE_LABELS[rejectTarget.type] : ''}" của {rejectTarget?.userName || ''}:
+            </Text>
+            <TextInput
+              style={styles.rejectInput}
+              placeholder="Nhập lý do từ chối..."
+              value={rejectReason}
+              onChangeText={setRejectReason}
+              multiline
+              numberOfLines={3}
+              textAlignVertical="top"
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setRejectDialogVisible(false)}>Hủy</Button>
+            <Button onPress={confirmReject} textColor="#ff4d4f">Từ chối</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 };
@@ -526,6 +557,16 @@ const styles = StyleSheet.create({
     color: '#8c8c8c',
     marginLeft: 6,
     flex: 1
+  },
+  rejectInput: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d9d9d9',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    minHeight: 80,
   }
 });
 

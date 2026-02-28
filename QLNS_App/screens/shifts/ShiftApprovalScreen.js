@@ -105,7 +105,13 @@ const ShiftApprovalScreen = ({ navigation }) => {
   const handleViewDetail = async (item) => {
     try {
       const response = await ShiftService.getShiftRegistrationById(item.id);
-      setSelectedSchedule(response?.data || item);
+      // Merge enriched user data from list item with raw detail data
+      const detailData = response?.data || {};
+      setSelectedSchedule({
+        ...item,
+        ...detailData,
+        user_fullname: detailData.user_fullname || item.user_fullname || item.user_fullName || item.username || '-',
+      });
       setDetailModalVisible(true);
     } catch (error) {
       console.error('Error fetching detail:', error);

@@ -10,8 +10,10 @@ import {
   Platform,
   Modal,
   FlatList,
+  TextInput as RNTextInput,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Portal, Dialog, Button } from 'react-native-paper';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 import { ContractTypeService } from '../../services/ContractTypeService';
@@ -28,6 +30,11 @@ const CreateContractScreen = ({ route, navigation }) => {
   // Form
   const [selectedContractType, setSelectedContractType] = useState(null);
   const [activeDay, setActiveDay] = useState(new Date());
+
+  // Amount input dialog (replaces Alert.prompt which is iOS-only)
+  const [amountDialogVisible, setAmountDialogVisible] = useState(false);
+  const [amountDialogTarget, setAmountDialogTarget] = useState(null); // { id, name }
+  const [amountDialogValue, setAmountDialogValue] = useState('');
   const [showActivePicker, setShowActivePicker] = useState(false);
   const [selectedAllowances, setSelectedAllowances] = useState([]); // [{id, name, amount}]
   const [submitting, setSubmitting] = useState(false);
@@ -233,16 +240,9 @@ const CreateContractScreen = ({ route, navigation }) => {
                         <Text
                           style={styles.amountText}
                           onPress={() => {
-                            Alert.prompt
-                              ? Alert.prompt(
-                                  'Nhập số tiền',
-                                  `Phụ cấp: ${at.name}`,
-                                  (value) => updateAllowanceAmount(at.id, value),
-                                  'plain-text',
-                                  String(selected.amount),
-                                  'numeric'
-                                )
-                              : null;
+                            setAmountDialogTarget({ id: at.id, name: at.name });
+                            setAmountDialogValue(String(selected.amount || '0'));
+                            setAmountDialogVisible(true);
                           }}
                         >
                           {selected.amount
@@ -260,6 +260,32 @@ const CreateContractScreen = ({ route, navigation }) => {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Amount Input Dialog */}
+      <Portal>
+        <Dialog visible={amountDialogVisible} onDismiss={() => setAmountDialogVisible(false)}>
+          <Dialog.Title>Nhập số tiền</Dialog.Title>
+          <Dialog.Content>
+            <Text style={{ marginBottom: 12 }}>Phụ cấp: {amountDialogTarget?.name || ''}</Text>
+            <RNTextInput
+              style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#d9d9d9', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 }}
+              placeholder="Nhập số tiền..."
+              value={amountDialogValue}
+              onChangeText={setAmountDialogValue}
+              keyboardType="numeric"
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setAmountDialogVisible(false)}>Hủy</Button>
+            <Button onPress={() => {
+              if (amountDialogTarget) {
+                updateAllowanceAmount(amountDialogTarget.id, amountDialogValue);
+              }
+              setAmountDialogVisible(false);
+            }}>Xác nhận</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
 
       {/* Submit */}
       <View style={styles.footer}>
