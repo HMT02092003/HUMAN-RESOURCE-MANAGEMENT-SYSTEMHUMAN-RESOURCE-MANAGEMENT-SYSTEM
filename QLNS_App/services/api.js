@@ -83,11 +83,13 @@ api.interceptors.response.use(
                     originalRequest.headers.Authorization = `Bearer ${newToken}`;
                     return api(originalRequest);
                 }
-            } catch (refreshError) {
-                await AuthTokenManager.clearTokens();
+        } catch (refreshError) {
+                // refreshAccessToken() đã xử lý clearTokens khi có lỗi 401/403
+                // KHÔNG gọi clearTokens() lại để tránh xóa token nhầm khi lỗi mạng
                 if (onUnauthorizedCallback) {
                     onUnauthorizedCallback();
                 } else {
+                    AuthTokenManager.notifyUnauthorized();
                     Alert.alert('Phiên đăng nhập hết hạn', 'Vui lòng đăng nhập lại');
                 }
                 return Promise.reject({ ...error, needsReauth: true });

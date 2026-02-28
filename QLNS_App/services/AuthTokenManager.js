@@ -72,6 +72,14 @@ if (Platform.OS === 'web') {
 // Tự động lấy API URL (auto-detect từ Expo hoặc fallback theo platform)
 const API_BASE_URL = getApiBaseUrl();
 
+// ============================================
+// MODULE-LEVEL STATE (shared across all calls)
+// ============================================
+// Singleton refresh promise — prevents concurrent refresh requests
+let _refreshingPromise = null;
+// Callback invoked when session is definitively terminated (401/403 on refresh)
+let _onUnauthorizedCallback = null;
+
 class AuthTokenManager {
   static get ACCESS_TOKEN_KEY() {
     return 'token';
@@ -145,29 +153,45 @@ class AuthTokenManager {
     }
   }
 
-  // Lấy access token
+  // Lấy access token — tự động refresh nếu đã hết hạn
   static async getAccessToken() {
     try {
       const token = await storageHandler.getItem(this.ACCESS_TOKEN_KEY);
-      if (token) {
-        console.log('🔑 [AUTH] Access token retrieved, length:', token.length);
-        // Try to decode token payload (JWT) to inspect exp claim for debugging
-        try {
-          const payload = this.decodeJwt(token);
-          if (payload && payload.exp) {
-            const expMs = payload.exp * 1000;
-            const nowMs = Date.now();
-            const secsLeft = Math.max(0, Math.floor((expMs - nowMs) / 1000));
-            console.log(`⏳ [AUTH] Access token exp (unix): ${payload.exp}, expires in ${secsLeft} seconds`);
-          } else {
-            console.log('⏳ [AUTH] Could not find exp in token payload');
-          }
-        } catch (e) {
-          console.warn('⚠️ [AUTH] Could not decode JWT payload for token inspection', e);
-        }
-      } else {
+      if (!token) {
         console.warn('⚠️ [AUTH] No access token found');
+        return null;
       }
+
+      console.log('🔑 [AUTH] Access token retrieved, length:', token.length);
+
+      // Kiểm tra hạn và refresh chủ động nếu token đã hết hạn
+      try {
+        const payload = this.decodeJwt(token);
+        if (payload && payload.exp) {
+          const secsLeft = Math.floor((payload.exp * 1000 - Date.now()) / 1000);
+          console.log(`⏳ [AUTH] Access token expires in ${secsLeft} seconds`);
+
+          if (secsLeft <= 0) {
+            // Token đã hết hạn — thử refresh chủ động trước khi gửi request
+            console.log('🔄 [AUTH] Token expired, refreshing proactively...');
+            const savedRefresh = await storageHandler.getItem(this.REFRESH_TOKEN_KEY);
+            if (savedRefresh) {
+              try {
+                return await this.refreshAccessToken();
+              } catch (refreshErr) {
+                console.warn('⚠️ [AUTH] Proactive refresh failed:', refreshErr.message);
+                // Trả về null — 401 response interceptor sẽ xử lý
+                return null;
+              }
+            }
+            console.warn('⚠️ [AUTH] No refresh token for proactive refresh');
+            return null;
+          }
+        }
+      } catch (e) {
+        // Bỏ qua lỗi decode JWT — trả về token gốc
+      }
+
       return token;
     } catch (error) {
       console.error('❌ [AUTH] Error getting access token:', error);
@@ -253,48 +277,81 @@ class AuthTokenManager {
     }
   }
 
-  // Refresh access token
+  // Refresh access token — concurrent-safe (chỉ 1 request tại một thời điểm)
   static async refreshAccessToken() {
-    try {
-      console.log('🔄 [AUTH] Attempting to refresh access token...');
-      const refreshToken = await this.getRefreshToken();
-      if (!refreshToken) {
-        console.error('❌ [AUTH] No refresh token available for refresh');
-        throw new Error('No refresh token available');
-      }
+    // Nếu đang refresh rồi, chờ promise đó thay vì tạo request mới
+    if (_refreshingPromise) {
+      console.log('🔄 [AUTH] Refresh already in progress, waiting for existing refresh...');
+      return _refreshingPromise;
+    }
 
-      console.log('🔄 [AUTH] Calling refresh endpoint with token length:', refreshToken.length);
-      const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, {
-        refreshToken,
-      });
+    _refreshingPromise = (async () => {
+      try {
+        console.log('🔄 [AUTH] Attempting to refresh access token...');
+        const refreshToken = await storageHandler.getItem(this.REFRESH_TOKEN_KEY);
+        if (!refreshToken) {
+          console.error('❌ [AUTH] No refresh token available for refresh');
+          throw new Error('No refresh token available');
+        }
 
-      console.log('🔄 [AUTH] Refresh response status:', response.status);
-      console.log('🔄 [AUTH] Refresh response data:', JSON.stringify(response.data, null, 2));
+        console.log('🔄 [AUTH] Calling refresh endpoint...');
+        const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, {
+          refreshToken,
+        });
 
-      // Backend có thể trả về "token" hoặc "accessToken" - handle cả hai
-      const newToken = response.data.token || response.data.accessToken;
-      if (newToken) {
+        console.log('🔄 [AUTH] Refresh response status:', response.status);
+
+        const newToken = response.data?.token || response.data?.accessToken;
+        if (!newToken) {
+          console.error('❌ [AUTH] No token in refresh response');
+          throw new Error('No token in refresh response');
+        }
+
+        // Lưu access token mới
         await storageHandler.setItem(this.ACCESS_TOKEN_KEY, newToken);
         console.log('✅ [AUTH] New access token saved after refresh');
-        
-        // Also update refresh token if server returns a new one (sliding refresh)
+
+        // Cập nhật refresh token nếu server trả về mới (sliding refresh)
         if (response.data.refreshToken && response.data.refreshToken !== refreshToken) {
           await storageHandler.setItem(this.REFRESH_TOKEN_KEY, response.data.refreshToken);
           console.log('✅ [AUTH] New refresh token saved (sliding refresh)');
         }
-        
+
+        // Cập nhật user data nếu có
+        if (response.data.user) {
+          await storageHandler.setItem(this.USER_KEY, JSON.stringify(response.data.user));
+        }
+
         return newToken;
-      } else {
-        console.error('❌ [AUTH] No token in refresh response');
-        throw new Error('No token in refresh response');
+      } catch (error) {
+        console.error('❌ [AUTH] Error refreshing token:', error.response?.data || error.message);
+        console.error('❌ [AUTH] Error status:', error.response?.status);
+
+        // CHỈ xóa tokens khi lỗi auth thực sự (401/403), KHÔNG xóa khi lỗi mạng
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          console.log('🗑️ [AUTH] Auth failure during refresh, clearing tokens...');
+          await this.clearTokens();
+          this.notifyUnauthorized();
+        }
+        throw error;
+      } finally {
+        _refreshingPromise = null;
       }
-    } catch (error) {
-      console.error('❌ [AUTH] Error refreshing token:', error.response?.data || error.message);
-      console.error('❌ [AUTH] Error status:', error.response?.status);
-      
-      // If refresh fails (e.g. refresh token expired), clear all tokens
-      await this.clearTokens();
-      throw error;
+    })();
+
+    return _refreshingPromise;
+  }
+
+  // Đăng ký callback khi session hết hạn (dùng bởi AuthContext)
+  static setOnUnauthorizedCallback(callback) {
+    _onUnauthorizedCallback = callback;
+  }
+
+  // Thông báo session hết hạn
+  static notifyUnauthorized() {
+    if (_onUnauthorizedCallback) {
+      console.log('🚪 [AUTH] Notifying unauthorized callback...');
+      _onUnauthorizedCallback();
     }
   }
 }

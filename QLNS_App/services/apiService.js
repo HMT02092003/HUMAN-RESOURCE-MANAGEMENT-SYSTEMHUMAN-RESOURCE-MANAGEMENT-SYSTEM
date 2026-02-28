@@ -163,51 +163,20 @@ const createApiInstance = () => {
         console.log('🔄 [API] Token expired, attempting refresh...');
 
         try {
-          // Lấy refresh token
-          const refreshToken = await AuthTokenManager.getRefreshToken();
-
-          if (!refreshToken) {
-            console.error('❌ [API] No refresh token found');
-            throw new Error('No refresh token');
-          }
-
-          // GỌI API REFRESH TOKEN
-          console.log('🔄 [API] Calling refresh token endpoint...');
-          const refreshResponse = await axios.post(`${API_BASE_URL}/auth/refresh-token`, {
-            refreshToken,
-          });
-
-          console.log('🔄 [API] Refresh response:', JSON.stringify(refreshResponse.data, null, 2));
-
-          // Handle cả 2 format response: { token: ... } hoặc { accessToken: ... }
-          const newToken = refreshResponse.data?.token || refreshResponse.data?.accessToken;
-          
+          // Dùng AuthTokenManager.refreshAccessToken() — concurrent-safe, xử lý lưu token
+          const newToken = await AuthTokenManager.refreshAccessToken();
           if (newToken) {
-            console.log('✅ [API] Token refreshed successfully');
-
-            // LƯU TOKEN MỚI
-            await AuthTokenManager.saveAccessToken(newToken);
-
-            // CẬP NHẬT HEADER VÀ GỌI LẠI REQUEST CŨ
+            console.log('✅ [API] Token refreshed, retrying original request...');
             originalRequest.headers.Authorization = `Bearer ${newToken}`;
             return instance(originalRequest);
           } else {
-            console.error('❌ [API] No token in refresh response');
-            throw new Error('Invalid refresh response - no token');
+            throw new Error('No token returned from refresh');
           }
         } catch (refreshError) {
-          console.error('❌ [API] Refresh token failed:', refreshError);
-
-          // XÓA TOKENS VÀ LOGOUT
-          await AuthTokenManager.clearTokens();
-
-          // THÔNG BÁO NGƯỜI DÙNG
-          Alert.alert(
-            'Phiên đăng nhập hết hạn',
-            'Vui lòng đăng nhập lại',
-            [{ text: 'OK' }]
-          );
-
+          console.error('❌ [API] Refresh failed:', refreshError.message);
+          // refreshAccessToken() đã xử lý clearTokens + notifyUnauthorized khi lỗi 401/403
+          // Đảm bảo thông báo logout trong mọi trường hợp
+          AuthTokenManager.notifyUnauthorized();
           return Promise.reject(refreshError);
         }
       }

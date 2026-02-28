@@ -12,14 +12,20 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     checkAuthStatus();
 
-    // Đăng ký callback xử lý 401 từ API
-    setOnUnauthorizedCallback(() => {
-      console.log('🚪 [AuthContext] Unauthorized access detected, logging out...');
+    // Đăng ký callback xử lý 401 từ cả api.js và apiService.js (qua AuthTokenManager)
+    const unauthorizedHandler = () => {
+      console.log('🚪 [AuthContext] Unauthorized event received, logging out...');
       setIsAuthenticated(false);
       setUser(null);
-    });
+    };
 
-    return () => setOnUnauthorizedCallback(null);
+    setOnUnauthorizedCallback(unauthorizedHandler);
+    AuthTokenManager.setOnUnauthorizedCallback(unauthorizedHandler);
+
+    return () => {
+      setOnUnauthorizedCallback(null);
+      AuthTokenManager.setOnUnauthorizedCallback(null);
+    };
   }, []);
 
   const checkAuthStatus = async () => {
