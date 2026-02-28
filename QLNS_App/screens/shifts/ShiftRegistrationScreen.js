@@ -75,8 +75,14 @@ const ShiftRegistrationScreen = ({ navigation }) => {
   // Fetch data for CardListWithInfiniteScroll
   const fetchRegistrations = async (params) => {
     try {
-      console.log('📋 [ShiftRegistrations] Fetching with params:', params);
-      const response = await ShiftService.getMyShiftRegistrations(params);
+      // Convert pageSize to limit for backend compatibility
+      const apiParams = { ...params };
+      if (apiParams.pageSize) {
+        apiParams.limit = apiParams.pageSize;
+        delete apiParams.pageSize;
+      }
+      console.log('📋 [ShiftRegistrations] Fetching with params:', apiParams);
+      const response = await ShiftService.getMyShiftRegistrations(apiParams);
 
       return {
         results: response.data || [],

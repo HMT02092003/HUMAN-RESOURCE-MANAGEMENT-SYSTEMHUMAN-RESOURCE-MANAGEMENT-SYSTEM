@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { 
   Card, 
   Avatar, 
@@ -18,6 +19,16 @@ import { ContractTypeService } from '../../services/ContractTypeService';
 const ContractTypeListScreen = ({ navigation }) => {
   const theme = useTheme();
   const [visibleMenuId, setVisibleMenuId] = React.useState(null);
+  const listRef = React.useRef(null);
+
+  // Refresh list when screen gains focus (e.g., after create/edit)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (listRef.current?.refresh) {
+        listRef.current.refresh();
+      }
+    }, [])
+  );
 
   // Fetch data function for CardList
   const fetchContractTypes = async (params) => {
@@ -55,6 +66,7 @@ const ContractTypeListScreen = ({ navigation }) => {
             try {
               await ContractTypeService.deleteContractType(id);
               Alert.alert('✅ Thành công', 'Đã xóa loại hợp đồng');
+              if (listRef.current?.refresh) listRef.current.refresh();
             } catch (error) {
               console.error('❌ Delete failed:', error);
               Alert.alert('Lỗi', 'Không thể xóa loại hợp đồng');
@@ -225,6 +237,7 @@ const ContractTypeListScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <CardListWithInfiniteScroll
+        ref={listRef}
         fetchData={fetchContractTypes}
         renderCard={renderCard}
         searchPlaceholder="Tìm loại hợp đồng..."

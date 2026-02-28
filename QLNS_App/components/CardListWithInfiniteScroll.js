@@ -18,7 +18,7 @@
  * - pageSize: number (default 10)
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import {
   View,
   StyleSheet,
@@ -47,7 +47,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
-const CardListWithInfiniteScroll = ({
+const CardListWithInfiniteScroll = forwardRef(({
   fetchData,
   renderCard,
   searchPlaceholder = 'Tìm kiếm...',
@@ -56,7 +56,7 @@ const CardListWithInfiniteScroll = ({
   pageSize = 10,
   emptyMessage = 'Không có dữ liệu',
   keyExtractor = (item) => item.id?.toString(),
-}) => {
+}, ref) => {
   const theme = useTheme();
   
   // State
@@ -74,6 +74,14 @@ const CardListWithInfiniteScroll = ({
   const [tempFilters, setTempFilters] = useState({}); // Temporary filters before OK
   const [searchFields, setSearchFields] = useState([]); // selected searchable fields
   const [serverFieldSearchSupported, setServerFieldSearchSupported] = useState(true);
+
+  // Expose refresh method to parent via ref
+  useImperativeHandle(ref, () => ({
+    refresh: () => {
+      setHasMore(true);
+      loadData(1, true);
+    }
+  }));
 
   // Initial load
   useEffect(() => {
@@ -498,7 +506,7 @@ const CardListWithInfiniteScroll = ({
       />
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -596,4 +604,4 @@ const styles = StyleSheet.create({
   }
 });
 
-export default CardListWithInfiniteScroll;
+export default React.memo(CardListWithInfiniteScroll);

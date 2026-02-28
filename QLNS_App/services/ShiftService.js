@@ -134,7 +134,8 @@ export const approveShiftRegistration = async (id, notes = '') => {
  * Giờ gọi bulk API với mảng 1 phần tử để đảm bảo logic nhất quán
  */
 export const rejectShiftRegistration = async (id, notes) => {
-    return bulkApproveSchedules([id], 'reject');
+    const response = await apiService.post('/schedules/approve', { ids: [id], action: 'reject', notes });
+    return response.data;
 };
 
 /**

@@ -18,8 +18,14 @@ const ShiftApprovalScreen = ({ navigation }) => {
 
   const fetchSchedules = async (params) => {
     try {
-      console.log('📋 [ShiftApproval] Fetching with params:', params);
-      const response = await ShiftService.getSchedulesForApproval(params);
+      // Convert pageSize to limit for backend compatibility
+      const apiParams = { ...params };
+      if (apiParams.pageSize) {
+        apiParams.limit = apiParams.pageSize;
+        delete apiParams.pageSize;
+      }
+      console.log('📋 [ShiftApproval] Fetching with params:', apiParams);
+      const response = await ShiftService.getSchedulesForApproval(apiParams);
       console.log('📋 [ShiftApproval] Raw response:', response);
 
       // Support multiple response shapes from different service wrappers:

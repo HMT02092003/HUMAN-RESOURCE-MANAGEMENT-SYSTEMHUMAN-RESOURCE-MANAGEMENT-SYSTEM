@@ -290,13 +290,6 @@ const UserDetailScreen = ({ route, navigation }) => {
           <MaterialCommunityIcons name="file-plus" size={18} color="#1890ff" />
           <Text style={styles.contractActionBtnText}>Tạo hợp đồng</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.contractActionBtn, styles.salaryActionBtn]}
-          onPress={() => navigation.navigate('EditSalary', { userId })}
-        >
-          <MaterialCommunityIcons name="cash-edit" size={18} color="#52c41a" />
-          <Text style={[styles.contractActionBtnText, { color: '#52c41a' }]}>Chỉnh sửa lương</Text>
-        </TouchableOpacity>
       </View>
 
       {user.contracts && user.contracts.length > 0 ? (

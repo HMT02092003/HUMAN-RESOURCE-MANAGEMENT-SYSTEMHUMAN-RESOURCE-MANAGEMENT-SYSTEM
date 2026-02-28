@@ -308,10 +308,6 @@ const BASE_MENU_ITEMS = [
   { key: 'departments', label: 'Quản lý phòng ban', icon: 'office-building-outline', route: 'Quản lý phòng ban', permission: 'departments' },
   { key: 'positions', label: 'Quản lý chức vụ', icon: 'badge-account-horizontal-outline', route: 'Quản lý chức vụ', permission: 'chevrons' },
   { key: 'contractTypes', label: 'Quản lý loại hợp đồng', icon: 'file-document-edit-outline', route: 'Quản lý loại hợp đồng', permission: 'contractTypes' },
-  { key: 'contracts', label: 'Quản lý hợp đồng', icon: 'file-document-outline', route: 'Quản lý hợp đồng', permission: 'contracts' }, // Web might not have 'contracts' explicit permission on menu item? Web: 'contractTypes' is there. 'contracts' is... wait. Web: getItem('Quản lí hợp đồng', 'contractTypes', ...). Note: Web only has 'contractTypes' menu item which leads to managing TYPES?
-  // User check: Web menu item 'Quản lí hợp đồng' (contractTypes) maps to 'contractTypes' permission.
-  // App has SEPARATE 'contracts' (Quản lý hợp đồng) and 'contractTypes' (Quản lý loại hợp đồng).
-  // I will keep App structure but fix permissions.
 
   {
     key: 'applications_parent',
@@ -701,7 +697,6 @@ const AppLayout = () => {
           <Drawer.Screen name="Quản lý phòng ban" component={DepartmentNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
           <Drawer.Screen name="Quản lý chức vụ" component={ChevronNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
           <Drawer.Screen name="Quản lý loại hợp đồng" component={ContractTypeNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
-          <Drawer.Screen name="Quản lý hợp đồng" component={ContractListScreen} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
 
           <Drawer.Screen name="Đơn từ cá nhân" component={MyApplicationNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />
           <Drawer.Screen name="Quản lý đơn từ" component={ApplicationManagementNavigator} options={({ navigation }) => ({ headerLeft: () => <HeaderMenuButton navigation={navigation} />, headerRight: () => <NotificationBellButton /> })} />

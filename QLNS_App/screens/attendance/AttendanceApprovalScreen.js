@@ -125,7 +125,7 @@ const AttendanceApprovalScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               await api.post('/attendance/approve-monthly', {
-                monthlyAttendanceIds: [record.id]
+                ids: [record.id]
               });
               Alert.alert('Thành công', 'Đã duyệt bảng chấm công');
               fetchData();

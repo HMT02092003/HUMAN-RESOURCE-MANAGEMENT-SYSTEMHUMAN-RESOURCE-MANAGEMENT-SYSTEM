@@ -10,7 +10,8 @@ const ChevronFormScreen = ({ navigation, route }) => {
   const [loading, setLoading] = useState(false);
   const [initialValues, setInitialValues] = useState({
     name: '',
-    description: ''
+    description: '',
+    chevronCoefficient: '1'
   });
 
   useEffect(() => {
@@ -26,7 +27,8 @@ const ChevronFormScreen = ({ navigation, route }) => {
       const chevron = response?.data || response;
       setInitialValues({
         name: chevron.name || '',
-        description: chevron.description || ''
+        description: chevron.description || '',
+        chevronCoefficient: chevron.chevronCoefficient?.toString() || '1'
       });
     } catch (error) {
       console.error('Error loading chevron:', error);
@@ -50,6 +52,15 @@ const ChevronFormScreen = ({ navigation, route }) => {
           errorMessage: 'Vui lòng nhập tên chức vụ'
         },
         {
+          name: 'chevronCoefficient',
+          label: 'Hệ số chức vụ',
+          type: 'number',
+          icon: 'numeric',
+          required: true,
+          placeholder: 'Nhập hệ số (VD: 1.5)',
+          errorMessage: 'Vui lòng nhập hệ số chức vụ'
+        },
+        {
           name: 'description',
           label: 'Mô tả',
           type: 'textarea',
@@ -63,14 +74,15 @@ const ChevronFormScreen = ({ navigation, route }) => {
   ];
 
   const handleSubmit = async (values) => {
+    const payload = { ...values, chevronCoefficient: Number(values.chevronCoefficient) || 1 };
     try {
       if (isEditMode) {
-        await ChevronService.updateChevron(chevronId, values);
+        await ChevronService.updateChevron(chevronId, payload);
         Alert.alert('✅ Thành công', 'Đã cập nhật chức vụ', [
           { text: 'OK', onPress: () => navigation.goBack() }
         ]);
       } else {
-        await ChevronService.createChevron(values);
+        await ChevronService.createChevron(payload);
         Alert.alert('✅ Thành công', 'Đã tạo chức vụ mới', [
           { text: 'OK', onPress: () => navigation.goBack() }
         ]);

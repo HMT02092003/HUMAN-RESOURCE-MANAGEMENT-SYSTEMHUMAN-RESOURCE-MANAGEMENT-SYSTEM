@@ -579,12 +579,12 @@ const ProjectDetailScreen = () => {
           <View style={styles.managerInfo}>
             <Avatar.Text 
               size={48} 
-              label={getInitials(project.manager?.name || project.manager_id?.fullName || '')}
+              label={getInitials(project.manager_id?.fullName || project.manager?.name || '')}
               style={styles.managerAvatar}
             />
             <View style={styles.managerDetails}>
               <Text style={styles.managerName}>
-                {project.manager?.name || project.manager_id?.fullName || 'Chưa có quản lý'}
+                {project.manager_id?.fullName || project.manager?.name || 'Chưa có quản lý'}
               </Text>
               <Text style={styles.managerRole}>Project Manager</Text>
             </View>
@@ -624,13 +624,15 @@ const ProjectDetailScreen = () => {
                 <View style={styles.taskChipsRow}>
                   <Chip
                     style={[styles.statusChipSmall, { backgroundColor: statusColor + '20' }]}
-                    textStyle={{ color: statusColor, fontSize: 10 }}
+                    textStyle={{ color: statusColor, fontSize: 11 }}
+                    compact
                   >
                     {statusLabel}
                   </Chip>
                   <Chip
                     style={[styles.priorityChip, { backgroundColor: priorityColor + '20' }]}
-                    textStyle={{ color: priorityColor, fontSize: 10 }}
+                    textStyle={{ color: priorityColor, fontSize: 11 }}
+                    compact
                   >
                     {priorityLabel}
                   </Chip>
@@ -991,13 +993,6 @@ const ProjectDetailScreen = () => {
           </Modal>
         </Portal>
 
-        <FAB
-          style={styles.fab}
-          icon="plus"
-          onPress={() => setExpenseModalVisible(true)}
-          label="Thêm chi phí"
-          color="#fff"
-        />
       </View>
     );
   };
@@ -1482,8 +1477,16 @@ const ProjectDetailScreen = () => {
         <View style={{ height: 80 }} />
       </ScrollView>
 
-      {/* FAB - Add task only (hidden on expenses tab, expenses has its own FAB) */}
-      {activeTab !== 'expenses' && (
+      {/* FAB - context-dependent */}
+      {activeTab === 'expenses' ? (
+        <FAB
+          icon="plus"
+          style={styles.fab}
+          onPress={() => setExpenseModalVisible(true)}
+          label="Thêm chi phí"
+          color="#fff"
+        />
+      ) : (
         <FAB
           icon="plus"
           style={styles.fab}

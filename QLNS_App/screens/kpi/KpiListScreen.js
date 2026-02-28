@@ -304,6 +304,87 @@ const KpiListScreen = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f7fa' },
+  filterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e8e8e8',
+    gap: 8,
+  },
+  filterLabel: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
+  },
+  pickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#f0f5ff',
+    borderWidth: 1,
+    borderColor: '#d6e4ff',
+  },
+  pickerButtonText: {
+    fontSize: 14,
+    color: '#1890ff',
+    fontWeight: '500',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    width: '80%',
+    maxHeight: '60%',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#262626',
+  },
+  pickerScroll: {
+    maxHeight: 300,
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f5f5f5',
+  },
+  pickerItemActive: {
+    backgroundColor: '#e6f7ff',
+  },
+  pickerItemText: {
+    fontSize: 15,
+    color: '#262626',
+  },
+  pickerItemTextActive: {
+    color: '#1890ff',
+    fontWeight: '600',
+  },
   kpiCard: { 
     marginHorizontal: 16, 
     marginBottom: 12, 
