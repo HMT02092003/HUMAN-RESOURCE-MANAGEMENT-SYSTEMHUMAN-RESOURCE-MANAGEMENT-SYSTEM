@@ -186,9 +186,9 @@ class BatchImageProcessor:
             )
 
             if not liveness_result.is_real:
-                logger.debug(
-                    f"❌ Image {img_index}: Liveness check failed - "
-                    f"{liveness_result.label} (confidence: {liveness_result.confidence:.3f})"
+                logger.info(
+                    f"❌ [FAKE] Image {img_index}: Liveness FAKE — "
+                    f"V1={liveness_result.confidence:.4%} | label={liveness_result.label}"
                 )
                 return False, None, "fake_detected"
             
@@ -290,8 +290,17 @@ class BatchImageProcessor:
             elif rejection_reason:
                 rejection_stats[rejection_reason] = rejection_stats.get(rejection_reason, 0) + 1
         
-        logger.info(f"📊 Filtering results: {len(valid_faces)}/{len(images_bytes)} images passed")
-        
+        logger.info(
+            f"📊 Filtering results: {len(valid_faces)}/{len(images_bytes)} passed | "
+            f"no_face={rejection_stats['no_face']} "
+            f"too_small={rejection_stats['too_small']} "
+            f"low_det={rejection_stats['low_detection']} "
+            f"blurry={rejection_stats['too_blurry']} "
+            f"FAKE={rejection_stats['fake_detected']} "
+            f"multi={rejection_stats['multiple_faces']} "
+            f"prep_fail={rejection_stats['preprocessing_failed']}"
+        )
+
         # ===== STEP 2.3: Selection (Safety Net) =====
         if len(valid_faces) < MIN_IMAGES_AFTER_FILTER:
             # Build detailed error message
@@ -473,10 +482,18 @@ class BatchImageProcessor:
             valid_faces.append(face_data)
         
         logger.info(
-            f"📊 Filtering results: {len(valid_faces)}/{len(images_bytes)} images passed "
-            f"(angle filtered: {angle_filtered_count})"
+            f"📊 Filtering results: {len(valid_faces)}/{len(images_bytes)} passed "
+            f"(angle_filtered={angle_filtered_count}) | "
+            f"no_face={rejection_stats['no_face']} "
+            f"too_small={rejection_stats['too_small']} "
+            f"low_det={rejection_stats['low_detection']} "
+            f"blurry={rejection_stats['too_blurry']} "
+            f"FAKE={rejection_stats['fake_detected']} "
+            f"wrong_angle={rejection_stats.get('wrong_angle', 0)} "
+            f"multi={rejection_stats['multiple_faces']} "
+            f"prep_fail={rejection_stats['preprocessing_failed']}"
         )
-        
+
         # ===== STEP 2: Selection (Safety Net) =====
         if len(valid_faces) < MIN_IMAGES_AFTER_FILTER:
             # Build detailed error message
