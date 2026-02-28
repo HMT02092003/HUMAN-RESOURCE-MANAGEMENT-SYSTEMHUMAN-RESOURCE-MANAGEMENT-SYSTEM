@@ -1,6 +1,6 @@
 import axios from 'axios';
 import AuthTokenManager from './AuthTokenManager';
-import { Alert } from 'react-native';
+
 import { getApiBaseUrl, logApiConfig } from './apiConfig';
 
 // Tự động lấy API URL (auto-detect từ Expo hoặc fallback theo platform)
@@ -84,14 +84,11 @@ api.interceptors.response.use(
                     return api(originalRequest);
                 }
         } catch (refreshError) {
-                // refreshAccessToken() đã xử lý clearTokens khi có lỗi 401/403
-                // KHÔNG gọi clearTokens() lại để tránh xóa token nhầm khi lỗi mạng
-                if (onUnauthorizedCallback) {
-                    onUnauthorizedCallback();
-                } else {
-                    AuthTokenManager.notifyUnauthorized();
-                    Alert.alert('Phiên đăng nhập hết hạn', 'Vui lòng đăng nhập lại');
-                }
+                // refreshAccessToken() đã tự xử lý notifyUnauthorized() khi cần:
+                //   - Lỗi 401/403 từ server → clearTokens + notifyUnauthorized
+                //   - Không có refresh token → notifyUnauthorized
+                //   - Lỗi mạng → KHÔNG notifyUnauthorized (token vẫn còn hạn)
+                // KHÔNG gọi callback ở đây để tránh đăng xuất nhầm khi lỗi mạng tạm thời
                 return Promise.reject({ ...error, needsReauth: true });
             }
         }

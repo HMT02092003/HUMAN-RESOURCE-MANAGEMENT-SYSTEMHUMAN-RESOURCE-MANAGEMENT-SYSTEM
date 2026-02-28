@@ -31,20 +31,20 @@ export const AuthProvider = ({ children }) => {
   const checkAuthStatus = async () => {
     console.log('🔍 [AuthContext] Checking authentication status...');
     try {
-      const token = await AuthTokenManager.getAccessToken();
-      const refreshToken = await AuthTokenManager.getRefreshToken();
+      // Dùng hasStoredSession() — đọc thẳng storage, không gây warning toast khi app mới khởi động
+      const { accessToken, refreshToken } = await AuthTokenManager.hasStoredSession();
       const userData = await AuthTokenManager.getUser();
 
-      console.log('🔑 [AuthContext] Token:', token ? 'EXISTS' : 'NULL');
+      console.log('🔑 [AuthContext] Access token:', accessToken ? 'EXISTS' : 'NULL');
       console.log('🔄 [AuthContext] Refresh token:', refreshToken ? 'EXISTS' : 'NULL');
       console.log('👤 [AuthContext] User:', userData ? userData.username : 'NULL');
 
-      if (token || refreshToken) {
-        console.log('✅ [AuthContext] User is authenticated');
+      if (accessToken || refreshToken) {
+        console.log('✅ [AuthContext] Session found — user is authenticated');
         setIsAuthenticated(true);
         setUser(userData);
       } else {
-        console.log('❌ [AuthContext] No tokens - User needs to login');
+        console.log('❌ [AuthContext] No session — user needs to login');
         setIsAuthenticated(false);
         setUser(null);
       }

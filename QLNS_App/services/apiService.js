@@ -174,9 +174,8 @@ const createApiInstance = () => {
           }
         } catch (refreshError) {
           console.error('❌ [API] Refresh failed:', refreshError.message);
-          // refreshAccessToken() đã xử lý clearTokens + notifyUnauthorized khi lỗi 401/403
-          // Đảm bảo thông báo logout trong mọi trường hợp
-          AuthTokenManager.notifyUnauthorized();
+          // refreshAccessToken() đã tự xử lý notifyUnauthorized() khi cần (lỗi 401/403 hoặc không có refresh token)
+          // KHÔNG gọi notifyUnauthorized() ở đây vì sẽ đăng xuất nhầm khi lỗi mạng tạm thời
           return Promise.reject(refreshError);
         }
       }

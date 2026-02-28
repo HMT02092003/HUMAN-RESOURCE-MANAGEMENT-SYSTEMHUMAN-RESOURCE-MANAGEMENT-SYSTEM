@@ -153,45 +153,16 @@ class AuthTokenManager {
     }
   }
 
-  // Lấy access token — tự động refresh nếu đã hết hạn
+  // Lấy access token từ storage — trả về nguyên bản (kể cả khi đã hết hạn)
+  // Việc refresh khi token hết hạn được xử lý bởi 401 response interceptor
   static async getAccessToken() {
     try {
       const token = await storageHandler.getItem(this.ACCESS_TOKEN_KEY);
       if (!token) {
-        console.warn('⚠️ [AUTH] No access token found');
+        console.warn('⚠️ [AUTH] No access token in storage');
         return null;
       }
-
       console.log('🔑 [AUTH] Access token retrieved, length:', token.length);
-
-      // Kiểm tra hạn và refresh chủ động nếu token đã hết hạn
-      try {
-        const payload = this.decodeJwt(token);
-        if (payload && payload.exp) {
-          const secsLeft = Math.floor((payload.exp * 1000 - Date.now()) / 1000);
-          console.log(`⏳ [AUTH] Access token expires in ${secsLeft} seconds`);
-
-          if (secsLeft <= 0) {
-            // Token đã hết hạn — thử refresh chủ động trước khi gửi request
-            console.log('🔄 [AUTH] Token expired, refreshing proactively...');
-            const savedRefresh = await storageHandler.getItem(this.REFRESH_TOKEN_KEY);
-            if (savedRefresh) {
-              try {
-                return await this.refreshAccessToken();
-              } catch (refreshErr) {
-                console.warn('⚠️ [AUTH] Proactive refresh failed:', refreshErr.message);
-                // Trả về null — 401 response interceptor sẽ xử lý
-                return null;
-              }
-            }
-            console.warn('⚠️ [AUTH] No refresh token for proactive refresh');
-            return null;
-          }
-        }
-      } catch (e) {
-        // Bỏ qua lỗi decode JWT — trả về token gốc
-      }
-
       return token;
     } catch (error) {
       console.error('❌ [AUTH] Error getting access token:', error);
@@ -248,6 +219,21 @@ class AuthTokenManager {
     }
   }
 
+  // Kiểm tra nhanh xem có phiên đăng nhập nào trong storage không (không gây warning)
+  // Dùng bởi checkAuthStatus khi khởi động app
+  static async hasStoredSession() {
+    try {
+      const [accessToken, refreshToken] = await Promise.all([
+        storageHandler.getItem(this.ACCESS_TOKEN_KEY),
+        storageHandler.getItem(this.REFRESH_TOKEN_KEY),
+      ]);
+      return { accessToken: accessToken || null, refreshToken: refreshToken || null };
+    } catch (error) {
+      console.error('❌ [AUTH] Error reading stored session:', error);
+      return { accessToken: null, refreshToken: null };
+    }
+  }
+
   // Lấy refresh token
   static async getRefreshToken() {
     try {
@@ -255,7 +241,7 @@ class AuthTokenManager {
       if (token) {
         console.log('🔄 [AUTH] Refresh token retrieved');
       } else {
-        console.warn('⚠️ [AUTH] No refresh token found');
+        console.log('🔄 [AUTH] No refresh token in storage');
       }
       return token;
     } catch (error) {
@@ -290,7 +276,9 @@ class AuthTokenManager {
         console.log('🔄 [AUTH] Attempting to refresh access token...');
         const refreshToken = await storageHandler.getItem(this.REFRESH_TOKEN_KEY);
         if (!refreshToken) {
-          console.error('❌ [AUTH] No refresh token available for refresh');
+          console.error('❌ [AUTH] No refresh token in storage — session ended');
+          // Không có refresh token → phiên đã hết, thông báo đăng xuất
+          this.notifyUnauthorized();
           throw new Error('No refresh token available');
         }
 
