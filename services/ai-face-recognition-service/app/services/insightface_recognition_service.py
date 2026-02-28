@@ -10,6 +10,7 @@ import requests
 from .face_recognition_service import face_recognizer
 from app.core.config import settings
 from app.core.database import FaceEmbedding, AttendanceLog
+from app.config.rate_config import FACE_MATCH_THRESHOLD
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,9 @@ class InsightFaceRecognitionService:
             snapshot_url = self._save_snapshot(image_bytes)
             
             if threshold is None:
-                threshold = 0.6  # Default threshold
+                # Lấy từ rate_config.py — KHÔNG hardcode ở đây
+                # Đây là cosine similarity của embedding (khớp mặt), KHÔNG phải liveness V2
+                threshold = FACE_MATCH_THRESHOLD
             
             # Decode image for recognition processing
             nparr = np.frombuffer(image_bytes, np.uint8)

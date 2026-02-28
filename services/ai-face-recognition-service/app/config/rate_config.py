@@ -44,9 +44,15 @@ LIVENESS_V2_THRESHOLD = 0.50    # 50%  — hạ từ 60% để tăng tỉ lệ p
 # Giá trị này đại diện cho ngưỡng anti-spoof chung khi chỉ dùng V2
 LIVENESS_THRESHOLD = 0.50
 
-# Recognition thresholds
+# Recognition thresholds (cosine similarity của embedding — KHÔNG phải liveness)
+# ─── Phân biệt rõ ───────────────────────────────────────────────────────────────
+# MIN_THRESHOLD      : tối thiểu để log ra (chưa đủ tự tin)  →  0.35
+# SAFE_THRESHOLD     : ngưỡng "đủ chắc" trả về matched        →  0.55
+# FACE_MATCH_THRESHOLD: default dùng khi caller không truyền   →  0.60
+# ────────────────────────────────────────────────────────────────────────────────
 MIN_THRESHOLD = 0.35
 SAFE_THRESHOLD = 0.55
+FACE_MATCH_THRESHOLD = 0.60   # cosine similarity mặc định cho nhận diện điểm danh
 
 # Face size px threshold (fallback)
 FACE_SIZE_THRESHOLD_PX = 80
