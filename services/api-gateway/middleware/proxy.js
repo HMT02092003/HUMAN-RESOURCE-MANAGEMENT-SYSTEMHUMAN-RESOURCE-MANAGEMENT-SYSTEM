@@ -17,8 +17,9 @@ const createOptimizedProxy = (target, fallbackTarget = null, pathRewrite = false
     ws: ws || false,
 
     // ⏱️ TIMEOUT CONFIGURATION
-    timeout: 60000,
-    proxyTimeout: 60000,
+    // AI service video processing: 20 frames × ~1.3s ≈ 26s, set 120s for safety
+    timeout: 120000,
+    proxyTimeout: 120000,
 
     router: (req) => {
       // If the request was already marked as failing by the error handler, use fallback

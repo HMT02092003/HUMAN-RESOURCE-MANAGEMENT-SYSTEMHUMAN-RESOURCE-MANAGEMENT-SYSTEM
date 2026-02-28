@@ -271,7 +271,7 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
         formData.append('user_id', userInfo?.id?.toString() || '0');
         formData.append('username', finalUsername);
         formData.append('angle_type', step.key);
-        formData.append('target_frames', '60');
+        formData.append('target_frames', '20'); // 20 frame ~26s/angle, đủ chất lượng và nằm trong timeout
 
         const fileUri = Platform.OS === 'ios' ? videoUri.replace('file://', '') : videoUri;
         formData.append('video_file', {
@@ -287,7 +287,7 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
             body: formData
-          }, 30000); // 30s timeout per video
+          }, 90000); // 90s timeout: 20 frames × ~1.3s ≈ 26s expected, 90s = 3x safety margin
 
           if (!res || !res.ok) {
             const status = res && res.status ? res.status : 'NO_RESPONSE';
