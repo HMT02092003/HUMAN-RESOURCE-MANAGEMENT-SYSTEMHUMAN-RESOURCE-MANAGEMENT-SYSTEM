@@ -25,13 +25,20 @@ HORIZONTAL_MARGIN_LEFT_PERCENT = 0.12
 HORIZONTAL_MARGIN_RIGHT_PERCENT = 0.20
 VERTICAL_MARGIN_PERCENT = 0.15
 
+# ===== ANTI-SPOOFING MODEL FILENAMES =====
+# Tên file model ONNX — dùng trong face_liveness_service.py để build đường dẫn tìm kiếm
+# Chỉ cần đổi ở đây nếu rename file model
+LIVENESS_V1_MODEL = "MiniFASNetV1SE.onnx"
+LIVENESS_V2_MODEL = "2.7_80x80_MiniFASNetV2.onnx"
+
 # ===== LIVENESS THRESHOLDS (Anti-Spoofing) =====
 # Dựa trên dữ liệu thực tế:
 #   Ảnh GIẢ: V1_raw < 2.50%, V2_raw dao động 26%-71%
 #   Ảnh THẬT: V1_raw > 2.60%, V2_raw dao động 64%-72%
 # → V1 là chỉ số phân tách chính, V2 hỗ trợ lọc thêm
+# NOTE: Hạ V2 xuống 50% để giảm false-reject khi ánh sáng yếu / camera tầm trung
 LIVENESS_V1_THRESHOLD = 0.025   # 2.5% — dưới mức này = FAKE
-LIVENESS_V2_THRESHOLD = 0.60    # 60%  — dưới mức này = FAKE
+LIVENESS_V2_THRESHOLD = 0.50    # 50%  — hạ từ 60% để tăng tỉ lệ pass đăng ký
 
 # Legacy alias — used by EnhancedInsightFaceService._check_liveness (old code path)
 # Giá trị này đại diện cho ngưỡng anti-spoof chung khi chỉ dùng V2

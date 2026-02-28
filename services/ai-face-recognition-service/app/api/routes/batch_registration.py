@@ -4,11 +4,13 @@ Batch Registration Routes
 API endpoints cho đăng ký khuôn mặt bằng batch images hoặc video
 """
 
+import asyncio
 import logging
 import os
 import json
 import cv2
 import shutil
+from functools import partial
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.responses import JSONResponse
@@ -135,8 +137,12 @@ async def register_face_batch(
         
         logger.info(f"✅ Received {len(images_bytes)} images, total size: {sum(len(b) for b in images_bytes) / 1024 / 1024:.2f} MB")
         
-        # Process batch
-        result = batch_image_processor.batch_processor.process_batch(images_bytes)
+        # Process batch — chạy trong thread pool để không block event loop
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            partial(batch_image_processor.batch_processor.process_batch, images_bytes)
+        )
         
         if not result["success"]:
             return JSONResponse(
@@ -332,8 +338,12 @@ async def register_face_video(
         
         logger.info(f"📦 Processing {len(images_bytes)} frames through batch processor...")
         
-        # Process batch (reuse existing batch processor)
-        result = batch_image_processor.batch_processor.process_batch(images_bytes)
+        # Process batch (reuse existing batch processor) — chạy trong thread pool
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            partial(batch_image_processor.batch_processor.process_batch, images_bytes)
+        )
         
         if not result["success"]:
             return JSONResponse(
@@ -504,11 +514,16 @@ async def register_face_video_multi(
         # Convert frames to bytes
         images_bytes = video_extractor.frames_to_bytes_list(frames)
         
-        # ✅ KEY CHANGE: Process with angle-specific filtering
+        # ✅ KEY CHANGE: Process with angle-specific filtering — chạy trong thread pool
         logger.info(f"📦 Processing {len(images_bytes)} frames with {angle_type} angle filter...")
-        result = batch_image_processor.batch_processor.process_batch_with_angle_filter(
-            images_bytes,
-            angle_type=angle_type
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None,
+            partial(
+                batch_image_processor.batch_processor.process_batch_with_angle_filter,
+                images_bytes,
+                angle_type
+            )
         )
         
         if not result["success"]:

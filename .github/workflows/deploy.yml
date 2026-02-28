@@ -67,14 +67,8 @@ jobs:
       run: |
         [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
         Write-Host "--- INJECTING AI MODELS ---"
-        $sourceModelPath = "C:\Users\Toan\.insightface\models"
-        $destParentPath = "./services/ai-face-recognition-service"
-        if (Test-Path $sourceModelPath) {
-             Copy-Item -Path $sourceModelPath -Destination $destParentPath -Recurse -Force
-             Write-Host "   Models copied successfully"
-        } else {
-             Write-Host "   Warning: Models not found at $sourceModelPath"
-        }
+        Copy-Item -Path "C:\Users\Toan\.insightface\models" -Destination "./services/ai-face-recognition-service" -Recurse -Force
+        Write-Host "--- ALL MODELS READY ---"
 
     # 4. Build and Deploy
     - name: Build and Deploy

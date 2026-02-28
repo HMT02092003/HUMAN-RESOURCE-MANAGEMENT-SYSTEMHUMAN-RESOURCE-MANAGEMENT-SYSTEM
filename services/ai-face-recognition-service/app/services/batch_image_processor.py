@@ -20,8 +20,8 @@ MIN_FACE_SIZE = 50  # Kích thước mặt tối thiểu (pixel) - Giảm nhẹ 
 MIN_DETECTION_SCORE = 0.60  # Ngưỡng detection chặt chẽ hơn cho các trường hợp bình thường
 MIN_DETECTION_SCORE_MASK = 0.05  # Ngưỡng nới lỏng riêng cho trường hợp đeo khẩu trang
 MIN_BLUR_SCORE = 30.0  # Laplacian variance tối thiểu - Giảm nhẹ để chống rung video
-# Ngưỡng liveness check thắt chặt theo yêu cầu
-MIN_LIVENESS_CONFIDENCE = 0.80 
+# Liveness sử dụng check_liveness() trực tiếp → ngưỡng đặt trong rate_config.py (V1SE=2.5%, V2=50%)
+# Không dùng MIN_LIVENESS_CONFIDENCE nữa để tránh double-filtering với recognition path
 TOP_K_IMAGES = 7  # Lấy top 7 ảnh tốt nhất (default cho single video)
 TOP_K_IMAGES_MULTI = 15  # Lấy top 15 cho multi-angle (có nhiều frames hơn)
 MIN_IMAGES_AFTER_FILTER = 1  # Số ảnh tối thiểu sau khi lọc - Cho phép qua dù chỉ có 1 vài frame tốt
@@ -177,16 +177,15 @@ class BatchImageProcessor:
                 blur_score = self.calculate_blur_score(img_array)
                 bbox = face.bbox
             
-            # Step 5: Liveness Check (Anti-spoofing) - Nới lỏng cho góc nghiêng
-            # Important: pass a copy of img_array to avoid any caching issues
+            # Step 5: Liveness Check (Anti-spoofing) — dùng ĐÚNG cùng ngưỡng với recognition path
+            # check_liveness() đã áp dụng V1SE>=2.5% và V2>=50% bên trong rồi.
+            # Chỉ cần kiểm tra is_real, KHÔNG cần check lại confidence để tránh double-filtering.
             liveness_result = face_liveness_detector.check_liveness(
-                img_array.copy(), 
+                img_array.copy(),
                 bbox.astype(int).tolist()
             )
-            
-            # Chỉ check liveness gắt gao nếu đang xử lý ảnh chính diện tĩnh,
-            # Tuy nhiên batch processing chủ yếu dùng cho video quay ngang/mặt nạ nên ta dùng ngưỡng thấp
-            if liveness_result.confidence < MIN_LIVENESS_CONFIDENCE:
+
+            if not liveness_result.is_real:
                 logger.debug(
                     f"❌ Image {img_index}: Liveness check failed - "
                     f"{liveness_result.label} (confidence: {liveness_result.confidence:.3f})"

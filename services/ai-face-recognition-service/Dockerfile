@@ -29,9 +29,9 @@ COPY . .
 
 EXPOSE 4106
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-  CMD python -c "import requests; requests.get('http://localhost:4106/health', timeout=3)"
+# Health check — start-period 120s để đủ thời gian load buffalo_l (~340MB) + ONNX models
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+  CMD python -c "import requests; requests.get('http://localhost:4106/health', timeout=5)"
 
 # Run with uvicorn
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "4106", "--workers", "1"]

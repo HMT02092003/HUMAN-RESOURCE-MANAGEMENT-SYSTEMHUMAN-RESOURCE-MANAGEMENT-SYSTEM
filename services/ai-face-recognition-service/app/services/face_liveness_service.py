@@ -16,7 +16,12 @@ from typing import Optional
 from dataclasses import dataclass
 import os
 from app.services.face_quality_service import face_quality_checker
-from app.config.rate_config import LIVENESS_V1_THRESHOLD, LIVENESS_V2_THRESHOLD
+from app.config.rate_config import (
+    LIVENESS_V1_THRESHOLD,
+    LIVENESS_V2_THRESHOLD,
+    LIVENESS_V1_MODEL,
+    LIVENESS_V2_MODEL,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,24 +58,28 @@ class FaceLivenessDetector:
         logger.info("⏳ [AI] Initializing Liveness Detection models...")
         user_home = os.path.expanduser("~")
 
+        # Tên file lấy từ rate_config.py — nguồn duy nhất, không hardcode ở đây
+        v1_name = LIVENESS_V1_MODEL   # MiniFASNetV1SE.onnx
+        v2_name = LIVENESS_V2_MODEL   # 2.7_80x80_MiniFASNetV2.onnx
+
         paths_v1 = [
-            os.path.join(user_home, ".insightface", "models", "MiniFASNetV1SE.onnx"),
-            os.path.join(user_home, ".insightface", "models", "anti_spoofing", "MiniFASNetV1SE.onnx"),
-            "models/MiniFASNetV1SE.onnx",
-            "models/anti_spoofing/MiniFASNetV1SE.onnx",
-            "/app/models/MiniFASNetV1SE.onnx",
-            "/app/models/anti_spoofing/MiniFASNetV1SE.onnx",
-            "/root/.insightface/models/MiniFASNetV1SE.onnx",
+            os.path.join(user_home, ".insightface", "models", v1_name),
+            os.path.join(user_home, ".insightface", "models", "anti_spoofing", v1_name),
+            f"models/{v1_name}",
+            f"models/anti_spoofing/{v1_name}",
+            f"/app/models/{v1_name}",
+            f"/app/models/anti_spoofing/{v1_name}",
+            f"/root/.insightface/models/{v1_name}",
         ]
 
         paths_v2 = [
-            os.path.join(user_home, ".insightface", "models", "2.7_80x80_MiniFASNetV2.onnx"),
-            os.path.join(user_home, ".insightface", "models", "anti_spoofing", "2.7_80x80_MiniFASNetV2.onnx"),
-            "models/2.7_80x80_MiniFASNetV2.onnx",
-            "models/anti_spoofing/2.7_80x80_MiniFASNetV2.onnx",
-            "/app/models/2.7_80x80_MiniFASNetV2.onnx",
-            "/app/models/anti_spoofing/2.7_80x80_MiniFASNetV2.onnx",
-            "/root/.insightface/models/2.7_80x80_MiniFASNetV2.onnx",
+            os.path.join(user_home, ".insightface", "models", v2_name),
+            os.path.join(user_home, ".insightface", "models", "anti_spoofing", v2_name),
+            f"models/{v2_name}",
+            f"models/anti_spoofing/{v2_name}",
+            f"/app/models/{v2_name}",
+            f"/app/models/anti_spoofing/{v2_name}",
+            f"/root/.insightface/models/{v2_name}",
         ]
 
         def find(paths):
