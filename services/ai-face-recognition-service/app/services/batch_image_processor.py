@@ -140,42 +140,48 @@ class BatchImageProcessor:
             faces = self.face_service.app.get(img_array)
             
             if not faces or len(faces) == 0:
-                logger.debug(f"❌ Image {img_index}: No face detected")
+                logger.info(f"[#{img_index:02d}] ❌ NO_FACE")
                 return False, None, "no_face"
             
+            # ✅ Đồng nhất với recognition path: nếu nhiều mặt → chọn mặt LỚN NHẤT
+            # (không reject — dữ liệu mặt phản chiếu/bóng tối cũng bị detect khi det_thresh thấp)
             if len(faces) > 1:
-                logger.debug(f"❌ Image {img_index}: Multiple faces detected ({len(faces)})")
-                return False, None, "multiple_faces"
+                faces = sorted(
+                    faces,
+                    key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]),
+                    reverse=True
+                )
+                logger.info(f"[#{img_index:02d}] ⚠️ {len(faces)} faces detected → picking largest")
             
             face = faces[0]
             
+            # Luôn lấy bbox ở đây để dùng cả 2 nhánh MASK và non-MASK
+            bbox = face.bbox
+            face_width  = bbox[2] - bbox[0]
+            face_height = bbox[3] - bbox[1]
+
             # Nếu là MASK thì bỏ qua hầu hết các bước kiểm tra (chỉ bắt buộc phải tìm thấy 1 cái mặt để nhúng vector + check liveness)
             if angle_type != 'MASK':
                 # Step 2: Check face size
-                bbox = face.bbox
-                face_width = bbox[2] - bbox[0]
-                face_height = bbox[3] - bbox[1]
-                
                 if face_width < MIN_FACE_SIZE or face_height < MIN_FACE_SIZE:
-                    logger.debug(f"❌ Image {img_index}: Face too small ({face_width}x{face_height})")
+                    logger.info(f"[#{img_index:02d}] ❌ TOO_SMALL ({face_width:.0f}x{face_height:.0f}px)")
                     return False, None, "too_small"
                 
                 # Step 3: Check detection score
                 detection_score = face.det_score
                 if detection_score < MIN_DETECTION_SCORE:
-                    logger.debug(f"❌ Image {img_index}: Low detection score ({detection_score:.3f} < {MIN_DETECTION_SCORE})")
+                    logger.info(f"[#{img_index:02d}] ❌ LOW_DET score={detection_score:.3f} < {MIN_DETECTION_SCORE}")
                     return False, None, "low_detection"
                 
                 # Step 4: Calculate blur score
                 blur_score = self.calculate_blur_score(img_array)
                 if blur_score < MIN_BLUR_SCORE:
-                    logger.debug(f"❌ Image {img_index}: Too blurry ({blur_score:.2f})")
+                    logger.info(f"[#{img_index:02d}] ❌ BLURRY score={blur_score:.2f} < {MIN_BLUR_SCORE}")
                     return False, None, "too_blurry"
             else:
                 # Vẫn phải lấy điểm score nhưng không bị block
                 detection_score = getattr(face, 'det_score', 0.5)
                 blur_score = self.calculate_blur_score(img_array)
-                bbox = face.bbox
             
             # Step 5: Liveness Check (Anti-spoofing) — dùng ĐÚNG cùng ngưỡng với recognition path
             # check_liveness() đã áp dụng V1SE>=2.5% và V2>=50% bên trong rồi.
@@ -187,8 +193,8 @@ class BatchImageProcessor:
 
             if not liveness_result.is_real:
                 logger.info(
-                    f"❌ [FAKE] Image {img_index}: Liveness FAKE — "
-                    f"V1={liveness_result.confidence:.4%} | label={liveness_result.label}"
+                    f"[#{img_index:02d}] ❌ FAKE | "
+                    f"V1={liveness_result.confidence:.4%} label={liveness_result.label}"
                 )
                 return False, None, "fake_detected"
             
@@ -232,10 +238,11 @@ class BatchImageProcessor:
                 "cropped_face": cropped_face
             }
             
-            logger.debug(
-                f"✅ Image {img_index}: Valid face - "
-                f"Quality={quality_score:.3f}, Det={detection_score:.3f}, "
-                f"Blur={blur_score:.2f}, Liveness={liveness_result.confidence:.3f}, Yaw={yaw_angle:.1f}°"
+            logger.info(
+                f"[#{img_index:02d}] ✅ PASS | "
+                f"det={detection_score:.3f} blur={blur_score:.1f} "
+                f"quality={quality_score:.3f} yaw={yaw_angle:.1f}° "
+                f"liveness={liveness_result.confidence:.2%}"
             )
             
             return True, face_data, None

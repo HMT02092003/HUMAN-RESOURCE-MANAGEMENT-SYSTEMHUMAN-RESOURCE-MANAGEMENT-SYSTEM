@@ -271,7 +271,7 @@ export default function RegisterFaceScreenVideo({ user, onCancel }) {
         formData.append('user_id', userInfo?.id?.toString() || '0');
         formData.append('username', finalUsername);
         formData.append('angle_type', step.key);
-        formData.append('target_frames', '20'); // 20 frame ~26s/angle, đủ chất lượng và nằm trong timeout
+        formData.append('target_frames', '30'); // 30 frame cho video 3s (10fps), đủ đa dạng góc
 
         const fileUri = Platform.OS === 'ios' ? videoUri.replace('file://', '') : videoUri;
         formData.append('video_file', {
