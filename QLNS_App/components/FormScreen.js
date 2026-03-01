@@ -307,7 +307,7 @@ const FormScreen = ({
               <DateTimePicker
                 value={value ? new Date(value) : new Date()}
                 mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                display="spinner"
                 onChange={(event, selectedDate) => {
                   setShowDatePicker(null);
                   if (selectedDate) {

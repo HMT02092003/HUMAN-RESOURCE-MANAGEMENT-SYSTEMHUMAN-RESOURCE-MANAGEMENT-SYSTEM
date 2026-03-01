@@ -313,7 +313,7 @@ const HolidayScreen = ({ navigation }) => {
                                 <DateTimePicker
                                     value={form.start_date}
                                     mode="date"
-                                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                                    display="spinner"
                                     onChange={(event, selectedDate) => {
                                         setShowStartPicker(Platform.OS === 'ios');
                                         if (selectedDate) {
@@ -338,7 +338,7 @@ const HolidayScreen = ({ navigation }) => {
                                 <DateTimePicker
                                     value={form.end_date}
                                     mode="date"
-                                    display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                                    display="spinner"
                                     onChange={(event, selectedDate) => {
                                         setShowEndPicker(Platform.OS === 'ios');
                                         if (selectedDate) {

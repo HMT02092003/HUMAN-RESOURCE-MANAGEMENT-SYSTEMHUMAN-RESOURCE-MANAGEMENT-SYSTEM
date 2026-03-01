@@ -198,8 +198,8 @@ const ShiftConfigurationScreen = ({ navigation }) => {
           </View>
         </View>
       </View>
-      {showStartTimePicker && <DateTimePicker value={formData.start_time} mode="time" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={(e, date) => { setShowStartTimePicker(false); if (date) setFormData({ ...formData, start_time: date }); }} />}
-      {showEndTimePicker && <DateTimePicker value={formData.end_time} mode="time" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={(e, date) => { setShowEndTimePicker(false); if (date) setFormData({ ...formData, end_time: date }); }} />}
+      {showStartTimePicker && <DateTimePicker value={formData.start_time} mode="time" display="spinner" onChange={(e, date) => { setShowStartTimePicker(false); if (date) setFormData({ ...formData, start_time: date }); }} />}
+      {showEndTimePicker && <DateTimePicker value={formData.end_time} mode="time" display="spinner" onChange={(e, date) => { setShowEndTimePicker(false); if (date) setFormData({ ...formData, end_time: date }); }} />}
     </Modal>
   );
 

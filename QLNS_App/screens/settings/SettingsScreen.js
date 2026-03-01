@@ -629,7 +629,7 @@ const SettingsScreen = ({ navigation }) => {
                         value={tempTime}
                         mode="time"
                         is24Hour={true}
-                        display="default"
+                        display="spinner"
                         onChange={handleTimeChange}
                     />
                 )

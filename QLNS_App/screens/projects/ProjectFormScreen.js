@@ -411,7 +411,7 @@ const ProjectFormScreen = () => {
         <DateTimePicker
           value={startDate}
           mode="date"
-          display="default"
+          display="spinner"
           onChange={(event, date) => {
             setShowStartDatePicker(false);
             if (date) setStartDate(date);
@@ -423,7 +423,7 @@ const ProjectFormScreen = () => {
         <DateTimePicker
           value={endDate}
           mode="date"
-          display="default"
+          display="spinner"
           onChange={(event, date) => {
             setShowEndDatePicker(false);
             if (date) setEndDate(date);

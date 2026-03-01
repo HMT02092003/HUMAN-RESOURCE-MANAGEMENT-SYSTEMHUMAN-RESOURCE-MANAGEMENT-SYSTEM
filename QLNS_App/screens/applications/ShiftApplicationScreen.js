@@ -135,7 +135,7 @@ const ShiftApplicationScreen = ({ navigation }) => {
         <DateTimePicker
           value={item.date}
           mode="date"
-          display={Platform.OS === 'ios' ? 'inline' : 'default'}
+          display="spinner"
           minimumDate={new Date()}
           onChange={(event, selectedDate) =>
             handleDateChange(item.id, event, selectedDate)

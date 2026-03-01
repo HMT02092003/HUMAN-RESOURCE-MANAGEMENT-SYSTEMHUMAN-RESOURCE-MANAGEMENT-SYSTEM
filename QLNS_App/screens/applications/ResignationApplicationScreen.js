@@ -405,7 +405,7 @@ const ResignationApplicationScreen = ({ navigation, route }) => {
                 <DateTimePicker
                     value={lastWorkingDate}
                     mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    display="spinner"
                     onChange={handleDateChange}
                     minimumDate={new Date()}
                 />

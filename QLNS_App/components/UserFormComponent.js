@@ -514,16 +514,16 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
       </View>
 
       {showBirthdayPicker && (
-        <DateTimePicker value={form.birthday || new Date()} mode="date" display="default" onChange={(e, d) => { setShowBirthdayPicker(false); if (d) setForm({ ...form, birthday: d }); }} />
+        <DateTimePicker value={form.birthday || new Date()} mode="date" display="spinner" onChange={(e, d) => { setShowBirthdayPicker(false); if (d) setForm({ ...form, birthday: d }); }} />
       )}
       {showStartDatePicker && (
-        <DateTimePicker value={form.startDate || new Date()} mode="date" display="default" onChange={(e, d) => { setShowStartDatePicker(false); if (d) setForm({ ...form, startDate: d }); }} />
+        <DateTimePicker value={form.startDate || new Date()} mode="date" display="spinner" onChange={(e, d) => { setShowStartDatePicker(false); if (d) setForm({ ...form, startDate: d }); }} />
       )}
       {showContractSignDatePicker && (
-        <DateTimePicker value={form.contractSignDate || new Date()} mode="date" display="default" onChange={(e, d) => { setShowContractSignDatePicker(false); if (d) setForm({ ...form, contractSignDate: d }); }} />
+        <DateTimePicker value={form.contractSignDate || new Date()} mode="date" display="spinner" onChange={(e, d) => { setShowContractSignDatePicker(false); if (d) setForm({ ...form, contractSignDate: d }); }} />
       )}
       {showContractActiveDayPicker && (
-        <DateTimePicker value={form.contractActiveDay || new Date()} mode="date" display="default" onChange={(e, d) => { setShowContractActiveDayPicker(false); if (d) setForm({ ...form, contractActiveDay: d }); }} />
+        <DateTimePicker value={form.contractActiveDay || new Date()} mode="date" display="spinner" onChange={(e, d) => { setShowContractActiveDayPicker(false); if (d) setForm({ ...form, contractActiveDay: d }); }} />
       )}
 
       {/* Selection Modals */}

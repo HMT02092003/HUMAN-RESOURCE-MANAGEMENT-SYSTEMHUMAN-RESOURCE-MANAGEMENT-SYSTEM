@@ -253,7 +253,7 @@ const EditSalaryScreen = ({ route, navigation }) => {
                 <DateTimePicker
                   value={effectiveFrom}
                   mode="date"
-                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  display="spinner"
                   onChange={(event, selectedDate) => {
                     setShowDatePicker(Platform.OS === 'ios');
                     if (selectedDate) setEffectiveFrom(selectedDate);

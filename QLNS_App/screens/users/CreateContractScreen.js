@@ -196,7 +196,7 @@ const CreateContractScreen = ({ route, navigation }) => {
             <DateTimePicker
               value={activeDay}
               mode="date"
-              display={Platform.OS === 'ios' ? 'inline' : 'default'}
+              display="spinner"
               onChange={(event, selectedDate) => {
                 setShowActivePicker(Platform.OS === 'ios');
                 if (selectedDate) setActiveDay(selectedDate);

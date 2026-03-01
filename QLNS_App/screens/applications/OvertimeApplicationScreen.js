@@ -351,7 +351,7 @@ const OvertimeApplicationScreen = ({ navigation, route }) => {
                 <DateTimePicker
                     value={overtimeDate}
                     mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    display="spinner"
                     onChange={handleDateChange}
                     minimumDate={new Date()}
                 />
@@ -362,7 +362,7 @@ const OvertimeApplicationScreen = ({ navigation, route }) => {
                 <DateTimePicker
                     value={startTime}
                     mode="time"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    display="spinner"
                     onChange={handleTimeChange}
                 />
             )}

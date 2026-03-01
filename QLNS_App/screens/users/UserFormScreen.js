@@ -810,7 +810,7 @@ const UserFormScreen = ({ route, navigation }) => {
             <DateTimePicker
               value={form.birthday || new Date()}
               mode="date"
-              display="default"
+              display="spinner"
               onChange={(event, selectedDate) => {
                 setShowBirthdayPicker(false);
                 if (selectedDate) {
@@ -825,7 +825,7 @@ const UserFormScreen = ({ route, navigation }) => {
             <DateTimePicker
               value={form.startDate || new Date()}
               mode="date"
-              display="default"
+              display="spinner"
               onChange={(event, selectedDate) => {
                 setShowStartDatePicker(false);
                 if (selectedDate) {

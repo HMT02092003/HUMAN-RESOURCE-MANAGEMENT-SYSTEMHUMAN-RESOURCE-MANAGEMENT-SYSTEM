@@ -178,7 +178,7 @@ const DailyAttendanceScreen = () => {
                 <DateTimePicker
                     value={showStartPicker ? startDate : endDate}
                     mode="date"
-                    display="default"
+                    display="spinner"
                     onChange={(event, selectedDate) => {
                         if (showStartPicker) {
                             setShowStartPicker(false);

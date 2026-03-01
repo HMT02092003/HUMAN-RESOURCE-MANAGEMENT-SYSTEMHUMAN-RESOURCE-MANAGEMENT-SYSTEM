@@ -337,7 +337,7 @@ const ForgotCheckApplicationScreen = ({ navigation, route }) => {
                 <DateTimePicker
                     value={forgotDate}
                     mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    display="spinner"
                     onChange={handleDateChange}
                     maximumDate={new Date()}
                     minimumDate={new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)}
@@ -349,7 +349,7 @@ const ForgotCheckApplicationScreen = ({ navigation, route }) => {
                 <DateTimePicker
                     value={forgotTime}
                     mode="time"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    display="spinner"
                     onChange={handleTimeChange}
                 />
             )}

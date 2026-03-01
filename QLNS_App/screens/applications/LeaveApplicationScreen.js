@@ -388,7 +388,7 @@ const LeaveApplicationScreen = ({ navigation, route }) => {
                 <DateTimePicker
                     value={startDate}
                     mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    display="spinner"
                     onChange={handleStartDateChange}
                     minimumDate={new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)} // 3 ngày trước
                 />
@@ -397,7 +397,7 @@ const LeaveApplicationScreen = ({ navigation, route }) => {
                 <DateTimePicker
                     value={endDate}
                     mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    display="spinner"
                     onChange={handleEndDateChange}
                     minimumDate={startDate}
                 />

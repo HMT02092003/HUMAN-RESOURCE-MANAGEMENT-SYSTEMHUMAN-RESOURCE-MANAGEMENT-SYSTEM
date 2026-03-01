@@ -363,7 +363,7 @@ const BusinessTripApplicationScreen = ({ navigation, route }) => {
                 <DateTimePicker
                     value={startDate}
                     mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    display="spinner"
                     onChange={handleStartDateChange}
                     minimumDate={new Date()}
                 />
@@ -372,7 +372,7 @@ const BusinessTripApplicationScreen = ({ navigation, route }) => {
                 <DateTimePicker
                     value={endDate}
                     mode="date"
-                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    display="spinner"
                     onChange={handleEndDateChange}
                     minimumDate={startDate}
                 />

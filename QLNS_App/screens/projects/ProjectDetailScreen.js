@@ -982,7 +982,7 @@ const ProjectDetailScreen = () => {
                 <Text style={styles.datePickerText}>{formatDate(newExpense.expense_date)}</Text>
               </TouchableOpacity>
               {showExpenseDatePicker && (
-                <DateTimePicker
+                <DateTimePicker display="spinner"
                   value={newExpense.expense_date}
                   mode="date"
                   onChange={(e, date) => {
@@ -1431,7 +1431,7 @@ const ProjectDetailScreen = () => {
           <DateTimePicker
             value={newTask.startDate || new Date()}
             mode="date"
-            display="default"
+            display="spinner"
             onChange={(event, selectedDate) => {
               setShowStartDatePicker(false);
               if (selectedDate) {
@@ -1445,7 +1445,7 @@ const ProjectDetailScreen = () => {
           <DateTimePicker
             value={newTask.dueDate || new Date()}
             mode="date"
-            display="default"
+            display="spinner"
             onChange={(event, selectedDate) => {
               setShowDueDatePicker(false);
               if (selectedDate) {

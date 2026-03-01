@@ -35,7 +35,7 @@ const DateRangePicker = ({ startDate = null, endDate = null, onChange }) => {
         <DateTimePicker
           value={startDate || new Date()}
           mode="date"
-          display="default"
+          display="spinner"
           onChange={(e, d) => {
             setShowStart(false);
             if (d) onChange({ startDate: d, endDate });
@@ -47,7 +47,7 @@ const DateRangePicker = ({ startDate = null, endDate = null, onChange }) => {
         <DateTimePicker
           value={endDate || new Date()}
           mode="date"
-          display="default"
+          display="spinner"
           onChange={(e, d) => {
             setShowEnd(false);
             if (d) onChange({ startDate, endDate: d });
