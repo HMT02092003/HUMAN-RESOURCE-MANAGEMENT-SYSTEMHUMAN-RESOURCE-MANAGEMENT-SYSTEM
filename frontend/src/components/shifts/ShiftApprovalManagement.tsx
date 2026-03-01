@@ -310,7 +310,7 @@ const ShiftApprovalManagement: React.FC = () => {
             searchable: false,
             render: (_: any, record: any) => (
                 <Space size="small">
-                    {record.status === 'pending' && (
+                    {record.status === 'pending' ? (
                         <>
                             <Popconfirm
                                 title="Xác nhận duyệt đơn đăng ký?"
@@ -343,6 +343,24 @@ const ShiftApprovalManagement: React.FC = () => {
                                 </Tooltip>
                             </Popconfirm>
                         </>
+                    ) : record.status === 'approved' ? (
+                        <Tooltip title="Đã duyệt">
+                            <Button
+                                type="text"
+                                size="small"
+                                icon={<CheckCircleOutlined style={{ color: 'gray' }} />}
+                                disabled
+                            />
+                        </Tooltip>
+                    ) : (
+                        <Tooltip title="Đã từ chối">
+                            <Button
+                                type="text"
+                                size="small"
+                                icon={<CloseCircleOutlined style={{ color: 'gray' }} />}
+                                disabled
+                            />
+                        </Tooltip>
                     )}
                 </Space>
             )
