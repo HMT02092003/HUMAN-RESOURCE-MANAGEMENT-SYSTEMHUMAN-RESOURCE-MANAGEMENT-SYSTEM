@@ -23,6 +23,7 @@ const OvertimeForm: React.FC<OvertimeFormProps> = ({ onCancel }) => {
   const [overtimeHours, setOvertimeHours] = useState<number>(2);
   const [workingDays, setWorkingDays] = useState<any>(null);
   const [workingHours, setWorkingHours] = useState<any>(null);
+  const [lunchBreak, setLunchBreak] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -30,8 +31,10 @@ const OvertimeForm: React.FC<OvertimeFormProps> = ({ onCancel }) => {
       try {
         const workingDays = await SettingsService.getWorkingDays("WorkingDays");
         const workingHours = await SettingsService.getWorkingDays("WorkingHours");
-        setWorkingDays(workingDays.value);
-        setWorkingHours(workingHours.value);
+        const lunchBreakResp = await SettingsService.getWorkingDays("LunchBreak");
+        setWorkingDays(workingDays?.value);
+        setWorkingHours(workingHours?.value);
+        setLunchBreak(lunchBreakResp?.value);
       } catch (error) {
         console.error('Error fetching working days:', error);
       }
@@ -63,8 +66,27 @@ const OvertimeForm: React.FC<OvertimeFormProps> = ({ onCancel }) => {
         }
       }
 
-      // Tính endTime dựa trên startTime + overtimeHours
-      const endTime = values.startTime.add(values.overtimeHours, 'hour');
+      // Tính endTime dựa trên startTime + overtimeHours và tính cả giờ nghỉ trưa nếu có
+      let endTime = values.startTime.clone();
+
+      if (!lunchBreak || !lunchBreak.start || !lunchBreak.end) {
+        endTime = values.startTime.add(values.overtimeHours, 'hour');
+      } else {
+        let remainingMinutes = values.overtimeHours * 60;
+        const [lStartH, lStartM] = lunchBreak.start.split(':').map(Number);
+        const [lEndH, lEndM] = lunchBreak.end.split(':').map(Number);
+
+        const lunchStart = values.startTime.clone().hour(lStartH).minute(lStartM).second(0);
+        const lunchEnd = values.startTime.clone().hour(lEndH).minute(lEndM).second(0);
+
+        while (remainingMinutes > 0) {
+          endTime = endTime.add(1, 'minute');
+          const isInsideLunch = endTime.isAfter(lunchStart) && (endTime.isBefore(lunchEnd) || endTime.isSame(lunchEnd));
+          if (!isInsideLunch) {
+            remainingMinutes--;
+          }
+        }
+      }
 
       await ApplicationService.createApplication({
         type: 'overtime',
@@ -83,7 +105,29 @@ const OvertimeForm: React.FC<OvertimeFormProps> = ({ onCancel }) => {
 
   const calculateEndTime = (start: dayjs.Dayjs | null, hours: number) => {
     if (!start) return '';
-    return start.add(hours, 'hour').format('HH:mm');
+
+    if (!lunchBreak || !lunchBreak.start || !lunchBreak.end) {
+      return start.add(hours, 'hour').format('HH:mm');
+    }
+
+    let current = start.clone();
+    let remainingMinutes = hours * 60;
+
+    const [lStartH, lStartM] = lunchBreak.start.split(':').map(Number);
+    const [lEndH, lEndM] = lunchBreak.end.split(':').map(Number);
+
+    const lunchStart = start.clone().hour(lStartH).minute(lStartM).second(0);
+    const lunchEnd = start.clone().hour(lEndH).minute(lEndM).second(0);
+
+    while (remainingMinutes > 0) {
+      current = current.add(1, 'minute');
+      const isInsideLunch = current.isAfter(lunchStart) && (current.isBefore(lunchEnd) || current.isSame(lunchEnd));
+      if (!isInsideLunch) {
+        remainingMinutes--;
+      }
+    }
+
+    return current.format('HH:mm');
   };
 
   const watchStartTime = Form.useWatch('startTime', form);

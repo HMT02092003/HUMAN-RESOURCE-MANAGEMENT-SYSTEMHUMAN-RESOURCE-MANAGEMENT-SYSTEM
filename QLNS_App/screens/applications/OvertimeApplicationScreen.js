@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 import ApplicationService from '../../services/ApplicationService';
+import SettingsService from '../../services/SettingsService';
 import DetailViewScreen from '../../components/DetailViewScreen';
 
 const OVERTIME_HOURS_OPTIONS = [
@@ -32,16 +33,17 @@ const OvertimeApplicationScreen = ({ navigation, route }) => {
     const [startTime, setStartTime] = useState(new Date());
     const [overtimeHours, setOvertimeHours] = useState(2);
     const [reason, setReason] = useState('');
-    
+
     // Picker state
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showTimePicker, setShowTimePicker] = useState(false);
     const [showHoursModal, setShowHoursModal] = useState(false);
-    
+
     // UI state
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [applicationFullData, setApplicationFullData] = useState(null);
+    const [settings, setSettings] = useState({ workingDays: null, workingHours: null, lunchBreak: null });
 
     useEffect(() => {
         console.log('🔄 [OvertimeApp] Mode:', mode, 'ApplicationId:', applicationId);
@@ -57,7 +59,22 @@ const OvertimeApplicationScreen = ({ navigation, route }) => {
             setOvertimeHours(2);
             setReason('');
         }
+
+        loadSettings();
     }, [isEditMode, isViewMode, applicationId]);
+
+    const loadSettings = async () => {
+        try {
+            const allSettings = await SettingsService.getAllSettings();
+            setSettings({
+                workingDays: allSettings.WorkingDays,
+                workingHours: allSettings.WorkingHours,
+                lunchBreak: allSettings.LunchBreak
+            });
+        } catch (error) {
+            console.error('Error loading settings:', error);
+        }
+    };
 
     const loadApplicationData = async () => {
         setLoading(true);
@@ -66,11 +83,11 @@ const OvertimeApplicationScreen = ({ navigation, route }) => {
             const data = response?.data || response;
             setApplicationFullData(data);
             const formData = data?.data || data;
-            
+
             if (formData) {
                 setReason(formData.reason || '');
                 setOvertimeHours(formData.overtimeHours || 2);
-                
+
                 if (formData.overtimeDate) {
                     setOvertimeDate(new Date(formData.overtimeDate));
                 }
@@ -93,8 +110,30 @@ const OvertimeApplicationScreen = ({ navigation, route }) => {
     const formatTime = (date) => dayjs(date).format('HH:mm');
 
     const calculateEndTime = () => {
-        const endTime = dayjs(startTime).add(overtimeHours, 'hour');
-        return endTime.format('HH:mm');
+        const { lunchBreak } = settings;
+        if (!lunchBreak || !lunchBreak.start || !lunchBreak.end) {
+            const endTime = dayjs(startTime).add(overtimeHours, 'hour');
+            return endTime.format('HH:mm');
+        }
+
+        let current = dayjs(startTime);
+        let remainingMinutes = overtimeHours * 60;
+
+        const [lStartH, lStartM] = lunchBreak.start.split(':').map(Number);
+        const [lEndH, lEndM] = lunchBreak.end.split(':').map(Number);
+
+        const lunchStart = dayjs(startTime).hour(lStartH).minute(lStartM).second(0);
+        const lunchEnd = dayjs(startTime).hour(lEndH).minute(lEndM).second(0);
+
+        while (remainingMinutes > 0) {
+            current = current.add(1, 'minute');
+            const isInsideLunch = current.isAfter(lunchStart) && (current.isBefore(lunchEnd) || current.isSame(lunchEnd));
+            if (!isInsideLunch) {
+                remainingMinutes--;
+            }
+        }
+
+        return current.format('HH:mm');
     };
 
     const handleDateChange = (event, selectedDate) => {
@@ -116,23 +155,60 @@ const OvertimeApplicationScreen = ({ navigation, route }) => {
             Alert.alert('Lỗi', 'Vui lòng nhập lý do làm thêm giờ');
             return false;
         }
+
+        const { workingDays, workingHours } = settings;
+        const dayOfWeek = dayjs(overtimeDate).format('dddd').toLowerCase();
+
+        const dayMap = {
+            'monday': 'monday',
+            'tuesday': 'tuesday',
+            'wednesday': 'wednesday',
+            'thursday': 'thursday',
+            'friday': 'friday',
+            'saturday': 'saturday',
+            'sunday': 'sunday'
+        };
+
+        const engDay = dayMap[dayOfWeek];
+        const isWorkingDay = workingDays && workingDays[engDay] === true;
+
+        if (isWorkingDay && workingHours?.start && workingHours?.end) {
+            const startHStr = dayjs(startTime).format('HH:mm');
+            const workStart = workingHours.start;
+            const workEnd = workingHours.end;
+
+            if (startHStr >= workStart && startHStr < workEnd) {
+                Alert.alert('Lỗi', 'Giờ bạn chọn nằm trong giờ hành chính của ngày làm việc. Vui lòng chọn lại giờ ngoài hành chính!');
+                return false;
+            }
+        }
+
         return true;
     };
 
     const handleSubmit = async () => {
         if (!validateForm()) return;
-        
+
         setSubmitting(true);
         try {
             // Tính endTime dựa trên startTime + overtimeHours
-            const endTime = dayjs(startTime).add(overtimeHours, 'hour');
+            const endDateFormatted = calculateEndTime();
+
+            // convert back to date representation
+            const [endH, endM] = endDateFormatted.split(':');
+            let endDate = dayjs(startTime).hour(parseInt(endH)).minute(parseInt(endM)).second(0);
+
+            // If endDate is before startTime (crossed midnight), add 1 day
+            if (endDate.isBefore(dayjs(startTime))) {
+                endDate = endDate.add(1, 'day');
+            }
 
             const payload = {
                 type: 'overtime',
                 data: {
                     overtimeDate: dayjs(overtimeDate).toISOString(),
                     startTime: dayjs(startTime).toISOString(),
-                    endTime: endTime.toISOString(),
+                    endTime: endDate.toISOString(),
                     overtimeHours,
                     reason: reason.trim(),
                 },
@@ -295,7 +371,7 @@ const OvertimeApplicationScreen = ({ navigation, route }) => {
                 <View style={styles.summaryBox}>
                     <Ionicons name="information-circle-outline" size={20} color="#1890ff" />
                     <Text style={styles.summaryText}>
-                        Bạn đăng ký làm thêm {overtimeHours} giờ vào ngày {formatDate(overtimeDate)}, 
+                        Bạn đăng ký làm thêm {overtimeHours} giờ vào ngày {formatDate(overtimeDate)},
                         từ {formatTime(startTime)} đến {calculateEndTime()}.
                     </Text>
                 </View>
