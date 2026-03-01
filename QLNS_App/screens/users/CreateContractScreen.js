@@ -18,7 +18,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import dayjs from 'dayjs';
 import { ContractTypeService } from '../../services/ContractTypeService';
 import SalaryService from '../../services/SalaryService';
-import api from '../../services/api';
+import api from '../../services/apiService';
 
 const CreateContractScreen = ({ route, navigation }) => {
   const { userId } = route.params || {};
@@ -30,6 +30,7 @@ const CreateContractScreen = ({ route, navigation }) => {
   // Form
   const [selectedContractType, setSelectedContractType] = useState(null);
   const [activeDay, setActiveDay] = useState(new Date());
+  const [salary, setSalary] = useState('');
 
   // Amount input dialog (replaces Alert.prompt which is iOS-only)
   const [amountDialogVisible, setAmountDialogVisible] = useState(false);
@@ -99,6 +100,7 @@ const CreateContractScreen = ({ route, navigation }) => {
       contractTypeId: selectedContractType.id,
       activeDay: dayjs(activeDay).format('YYYY-MM-DD'),
       endDate: endDate ? dayjs(endDate).format('YYYY-MM-DD') : null,
+      salary: salary ? Number(salary) : 0,
       allowances: selectedAllowances.map((a) => ({
         allowanceTypeId: a.id,
         amount: parseFloat(a.amount) || 0,
@@ -210,6 +212,30 @@ const CreateContractScreen = ({ route, navigation }) => {
               </Text>
             </View>
           )}
+        </View>
+
+        {/* Salary */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Lương cơ bản <Text style={styles.required}>*</Text></Text>
+          <View style={styles.selectField}>
+            <MaterialCommunityIcons name="currency-usd" size={20} color="#1890ff" />
+            <RNTextInput
+              style={{ flex: 1, fontSize: 14, color: '#262626', marginLeft: 8, padding: 0 }}
+              placeholder="Nhập lương cơ bản (VNĐ)..."
+              placeholderTextColor="#bfbfbf"
+              value={salary}
+              onChangeText={setSalary}
+              keyboardType="numeric"
+            />
+          </View>
+          {salary ? (
+            <View style={styles.autoCalcInfo}>
+              <MaterialCommunityIcons name="information" size={16} color="#1890ff" />
+              <Text style={[styles.autoCalcText, { color: '#1890ff' }]}>
+                {Number(salary).toLocaleString('vi-VN')} VNĐ
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         {/* Allowances */}

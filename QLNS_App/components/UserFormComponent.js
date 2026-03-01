@@ -8,6 +8,7 @@ import { Picker } from '@react-native-picker/picker';
 import { ContractTypeService } from '../services/ContractTypeService';
 import { ChevronService } from '../services/ChevronService';
 import DepartmentService from '../services/DepartmentService';
+import SalaryService from '../services/SalaryService';
 
 /**
  * Props:
@@ -36,6 +37,8 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
     identificationPhoto: null,
     // Contract fields
     salary: '',
+    contractSignDate: null,
+    contractActiveDay: null,
   });
 
   const [errors, setErrors] = useState({});
@@ -57,6 +60,11 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
   const [localDepartments, setLocalDepartments] = useState([]);
   const [localChevrons, setLocalChevrons] = useState([]);
   const [roleLoading, setRoleLoading] = useState(false);
+  const [allowanceTypes, setAllowanceTypes] = useState([]);
+  const [selectedAllowanceTypeIds, setSelectedAllowanceTypeIds] = useState([]);
+  const [showContractSignDatePicker, setShowContractSignDatePicker] = useState(false);
+  const [showContractActiveDayPicker, setShowContractActiveDayPicker] = useState(false);
+  const [showAllowanceModal, setShowAllowanceModal] = useState(false);
 
   const genderOptions = [
     { key: 1, value: 'Nam' },
@@ -84,6 +92,8 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
         contractInsurance: initialValues.insurance || initialValues.contractType?.insurance || null,
         identificationPhoto: initialValues.identificationPhoto || null,
         salary: initialValues.salary || initialValues.contract?.salary || '',
+        contractSignDate: initialValues.contract?.startDate ? new Date(initialValues.contract.startDate) : null,
+        contractActiveDay: initialValues.contract?.activeDay ? new Date(initialValues.contract.activeDay) : null,
       }));
     } else {
       // Reset for create to avoid stale values
@@ -106,6 +116,8 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
         contractInsurance: null,
         identificationPhoto: null,
         salary: '',
+        contractSignDate: null,
+        contractActiveDay: null,
       });
     }
     setErrors({});
@@ -137,6 +149,20 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
       console.log('[UserFormComponent] contractTypes empty, auto-loading...');
       reloadContractTypes();
     }
+  }, []);
+
+  // Load allowance types
+  useEffect(() => {
+    const loadAllowanceTypes = async () => {
+      try {
+        const res = await SalaryService.getAllAllowanceTypes();
+        const data = res?.data ?? res ?? [];
+        setAllowanceTypes(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.warn('[UserFormComponent] loadAllowanceTypes failed:', err.message);
+      }
+    };
+    loadAllowanceTypes();
   }, []);
 
   const reloadContractTypes = async () => {
@@ -195,6 +221,13 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
     return `${year}-${month}-${day}`;
   };
 
+  const getContractEndDate = () => {
+    if (!form.contractActiveDay || !form.contractTerm) return null;
+    const d = new Date(form.contractActiveDay);
+    d.setMonth(d.getMonth() + Number(form.contractTerm));
+    return d;
+  };
+
   const validateForm = () => {
     const newErrors = {};
     if (!form.username?.trim()) newErrors.username = 'Vui lòng nhập tên đăng nhập';
@@ -250,8 +283,12 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
       // Nest contract data like web frontend
       contract: {
         contractTypeId: form.contractTypeId,
+        startDate: formatDateToYYYYMMDD(form.contractSignDate),
+        activeDay: formatDateToYYYYMMDD(form.contractActiveDay || form.startDate),
+        endDate: formatDateToYYYYMMDD(getContractEndDate()),
         salary: form.salary ? Number(form.salary) : 0,
-        activeDay: formatDateToYYYYMMDD(form.startDate),
+        insurance: form.contractInsurance ? Number(form.contractInsurance) : 0,
+        allowance_type_ids: selectedAllowanceTypeIds,
       },
     };
     if (!isEdit) payload.password = form.password;
@@ -448,6 +485,25 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
             keyboardType="numeric"
             placeholder="Nhập lương cơ bản..."
           />
+          <TouchableOpacity onPress={() => setShowContractSignDatePicker(true)}>
+            <TextInput label="Ngày ký hợp đồng" value={formatDateDisplay(form.contractSignDate)} editable={false} style={styles.input} pointerEvents="none" right={<TextInput.Icon icon="calendar" />} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowContractActiveDayPicker(true)}>
+            <TextInput label="Ngày hiệu lực" value={formatDateDisplay(form.contractActiveDay)} editable={false} style={styles.input} pointerEvents="none" right={<TextInput.Icon icon="calendar" />} />
+          </TouchableOpacity>
+          {getContractEndDate() && (
+            <TextInput label="Ngày kết thúc (tự tính)" value={formatDateDisplay(getContractEndDate())} editable={false} style={styles.input} />
+          )}
+          <TouchableOpacity onPress={() => setShowAllowanceModal(true)}>
+            <TextInput
+              label="Phụ cấp"
+              value={selectedAllowanceTypeIds.length > 0 ? `Đã chọn ${selectedAllowanceTypeIds.length} loại phụ cấp` : 'Chọn phụ cấp...'}
+              editable={false}
+              style={styles.input}
+              pointerEvents="none"
+              right={<TextInput.Icon icon="chevron-down" />}
+            />
+          </TouchableOpacity>
         </Card.Content>
       </Card>
 
@@ -462,6 +518,12 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
       )}
       {showStartDatePicker && (
         <DateTimePicker value={form.startDate || new Date()} mode="date" display="default" onChange={(e, d) => { setShowStartDatePicker(false); if (d) setForm({ ...form, startDate: d }); }} />
+      )}
+      {showContractSignDatePicker && (
+        <DateTimePicker value={form.contractSignDate || new Date()} mode="date" display="default" onChange={(e, d) => { setShowContractSignDatePicker(false); if (d) setForm({ ...form, contractSignDate: d }); }} />
+      )}
+      {showContractActiveDayPicker && (
+        <DateTimePicker value={form.contractActiveDay || new Date()} mode="date" display="default" onChange={(e, d) => { setShowContractActiveDayPicker(false); if (d) setForm({ ...form, contractActiveDay: d }); }} />
       )}
 
       {/* Selection Modals */}
@@ -491,6 +553,48 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
       {renderSelectionModal(showGenderModal, setShowGenderModal, genderOptions, (item) => {
         setForm({ ...form, gender: item.key });
       }, 'Chọn giới tính')}
+
+      {/* Allowance Type Multi-Select Modal */}
+      <Modal visible={showAllowanceModal} transparent animationType="slide" onRequestClose={() => setShowAllowanceModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Chọn phụ cấp</Text>
+              <IconButton icon="close" size={24} onPress={() => setShowAllowanceModal(false)} />
+            </View>
+            <Divider />
+            <ScrollView>
+              {(allowanceTypes || []).map((item, index) => {
+                const isSelected = selectedAllowanceTypeIds.includes(item.id);
+                return (
+                  <List.Item
+                    key={String(item.id || index)}
+                    title={item.name}
+                    description={item.description}
+                    left={() => (
+                      <MaterialCommunityIcons
+                        name={isSelected ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                        size={22}
+                        color={isSelected ? '#1890ff' : '#d9d9d9'}
+                        style={{ alignSelf: 'center', marginLeft: 16 }}
+                      />
+                    )}
+                    onPress={() => {
+                      setSelectedAllowanceTypeIds(prev =>
+                        isSelected ? prev.filter(id => id !== item.id) : [...prev, item.id]
+                      );
+                    }}
+                    style={styles.listItem}
+                  />
+                );
+              })}
+            </ScrollView>
+            <View style={{ padding: 16 }}>
+              <Button mode="contained" onPress={() => setShowAllowanceModal(false)}>Xong ({selectedAllowanceTypeIds.length} đã chọn)</Button>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
     </View>
   );
