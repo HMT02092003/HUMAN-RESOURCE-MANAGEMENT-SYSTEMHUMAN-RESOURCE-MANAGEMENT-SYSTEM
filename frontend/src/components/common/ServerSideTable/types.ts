@@ -3,7 +3,7 @@ import { ColumnType } from 'antd/es/table';
 import { ReactNode } from 'react';
 
 // Loại filter cho cột
-export type ColumnFilterType = 'text' | 'select' | 'date' | 'dateRange' | 'number' | 'none';
+export type ColumnFilterType = 'text' | 'select' | 'date' | 'month' | 'dateRange' | 'number' | 'none';
 
 // Cấu hình cột mở rộng
 export interface ServerSideColumnType<T = any> extends Omit<ColumnType<T>, 'filterDropdown' | 'filterIcon'> {

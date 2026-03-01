@@ -278,8 +278,7 @@ export const getAllUsersAll = async (req: any, res: Response) => {
     // Build query
     let query = UserModel.query()
       .select(['users.*'])
-      .whereIn('users.id', userIds)
-      .where('users.status', 1);
+      .whereIn('users.id', userIds);
 
     if (auth && auth.id) {
       query = query.whereNot('users.id', auth.id as any);

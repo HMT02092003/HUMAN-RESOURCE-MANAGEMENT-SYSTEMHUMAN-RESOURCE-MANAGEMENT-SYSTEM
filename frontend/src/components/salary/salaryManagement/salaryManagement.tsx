@@ -131,7 +131,7 @@ const SalaryManagement: React.FC = () => {
       // Use a date range picker for period (month range). Server expects monthFrom/monthTo.
       searchField: 'month',
       sortable: true,
-      filterType: 'dateRange',
+      filterType: 'month',
       width: 180,
       render: (val: any, record: any) => {
         // show as MM/YYYY or month number and year

@@ -71,7 +71,7 @@ const UserInfo: React.FC<UserInfoProps> = ({ userData, setActiveTab }) => {
     },
     {
       key: 'avatar',
-      label: 'Ảnh nhận diện',
+      label: 'Ảnh đại diện',
       children: userData?.identificationPhoto ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img

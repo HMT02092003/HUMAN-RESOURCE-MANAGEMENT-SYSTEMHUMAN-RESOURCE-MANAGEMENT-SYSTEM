@@ -97,6 +97,9 @@ export const validateFields = (
             if (!typeAllowed) {
                 if (typeOfField == "any") {
                     typeAllowed = true;
+                    if (newData) {
+                        _.set(newData, path, data);
+                    }
                 } else if (typeOfField == "number") {
                     typeAllowed = !isNaN(Number(data));
                     if (typeAllowed && newData) {

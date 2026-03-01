@@ -17,12 +17,12 @@ const EditProfilePage = () => {
 
   const breadcrumbItems = [
     { title: <HomeOutlined style={{ fontSize: "20px" }} />, href: '/home' },
-    { title: 'Quản lí phòng ban', href: '/chevrons' },
-    { title: 'Cập nhật thông tin phòng ban', href: `/chevrons/edit/${id}` }
+    { title: 'Quản lí phòng ban', href: '/departments' },
+    { title: 'Cập nhật thông tin phòng ban', href: `/departments/edit/${id}` }
   ];
 
-  const pageName = "Cập nhật thông tin chức vụ";
-  const pageDes = "Cập nhật thông tin chức vụ trong hệ thống"
+  const pageName = "Cập nhật thông tin phòng ban";
+  const pageDes = "Cập nhật thông tin phòng ban trong hệ thống"
 
 
   const requiredPermission = "departments";

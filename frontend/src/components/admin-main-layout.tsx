@@ -877,7 +877,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                     </div>
                 ) : userProfile ? (
                     <Descriptions bordered column={{ xxl: 2, xl: 2, lg: 2, md: 1, sm: 1, xs: 1 }}>
-                        <Descriptions.Item label="Ảnh nhận diện" span={2}>
+                        <Descriptions.Item label="Ảnh đại diện" span={2}>
                             {userProfile.identificationPhoto ? (
                                 <img
                                     src={getPhotoUrl(userProfile.identificationPhoto)}

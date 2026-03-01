@@ -191,7 +191,7 @@ const UserForm: React.FC<UserFormProps> = ({
       <Row gutter={[24, 0]}>
         <Col xs={24} md={24}>
           <Form.Item
-            label="Ảnh nhận diện"
+            label="Ảnh đại diện"
             name="identificationPhoto"
             valuePropName="fileList"
             getValueFromEvent={normFile}
@@ -200,7 +200,7 @@ const UserForm: React.FC<UserFormProps> = ({
                 validator: (_, value) => {
                   if (isEdit) return Promise.resolve();
                   if (Array.isArray(value) && value.length > 0) return Promise.resolve();
-                  return Promise.reject(new Error('Vui lòng tải ảnh nhận diện'));
+                  return Promise.reject(new Error('Vui lòng tải ảnh đại diện'));
                 },
               },
             ]}

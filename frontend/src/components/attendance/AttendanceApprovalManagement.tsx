@@ -333,7 +333,7 @@ const AttendanceApprovalManagement: React.FC = () => {
       key: 'month',
       searchField: 'month',
       sortable: true,
-      filterType: 'dateRange',
+      filterType: 'month',
       width: 120,
       render: (val: string) => {
         if (!val) return '-';

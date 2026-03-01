@@ -195,6 +195,48 @@ function ServerSideTable<T extends Record<string, any> = any>(props: ServerSideT
         };
       }
 
+      case 'month': {
+        return ({ confirm }: any) => {
+          let localDate = currentValue ? dayjs(currentValue) : null;
+
+          return (
+            <div style={{ padding: 8, minWidth: 200 }}>
+              <DatePicker
+                picker="month"
+                style={{ width: '100%', marginBottom: 8 }}
+                format="MM/YYYY"
+                defaultValue={localDate}
+                onChange={(date) => {
+                  localDate = date;
+                }}
+                allowClear
+              />
+              <Space>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    handleSearchChange(searchField, undefined);
+                    confirm();
+                  }}
+                >
+                  Reset
+                </Button>
+                <Button
+                  type="primary"
+                  size="small"
+                  onClick={() => {
+                    handleSearchChange(searchField, localDate?.format('YYYY-MM'));
+                    confirm();
+                  }}
+                >
+                  Tìm
+                </Button>
+              </Space>
+            </div>
+          );
+        };
+      }
+
       case 'dateRange': {
         const rangeKey = `${searchField}_range`;
         const rangeValue = tableState.searchValues[rangeKey];
