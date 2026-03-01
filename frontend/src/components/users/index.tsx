@@ -328,7 +328,7 @@ const UserTable = () => {
       render: (status: string | number) => {
         const statusNum = typeof status === 'string' ? parseInt(status, 10) : status;
         const label = statusOptions.find((s) => s.value === statusNum)?.label || "-";
-        let color = '#f5222d';
+        let color = 'gray'; // Màu dịu lại cho 'Đã nghỉ việc'
         if (statusNum === 1) color = 'green';
         else if (statusNum === 2) color = 'blue';
         return <Tag color={color}>{label}</Tag>;
