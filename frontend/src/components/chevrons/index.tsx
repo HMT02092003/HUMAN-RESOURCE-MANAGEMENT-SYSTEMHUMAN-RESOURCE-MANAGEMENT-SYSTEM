@@ -16,7 +16,6 @@ interface ChevronData {
   id: number;
   name: string;
   description: string;
-  chevronCoefficient: string;
   role_ids: number[];
   created_at: Date;
 }
@@ -42,11 +41,6 @@ const excelColumns: ExcelColumn[] = [
     title: 'Mô tả chức vụ',
     dataIndex: 'description',
     width: 40
-  },
-  {
-    title: 'Hệ số chức vụ',
-    dataIndex: 'chevronCoefficient',
-    width: 15
   },
   {
     title: 'Vai trò liên quan',
@@ -157,15 +151,6 @@ const Index: React.FC = () => {
           </Space>
         );
       }
-    },
-    {
-      title: "Hệ số chức vụ",
-      dataIndex: 'chevronCoefficient',
-      key: 'chevronCoefficient',
-      sortable: true,
-      searchable: false,
-      filterType: 'none',
-      width: 150,
     },
     {
       title: "Ngày tạo",

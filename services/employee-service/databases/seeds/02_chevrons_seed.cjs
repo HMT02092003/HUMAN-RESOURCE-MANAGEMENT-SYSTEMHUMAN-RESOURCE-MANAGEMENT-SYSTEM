@@ -15,7 +15,6 @@ exports.seed = async function(knex) {
       id: 1,
       name: 'CEO',
       description: 'Giám đốc điều hành',
-      chevronCoefficient: 5.0,
       created_at: new Date(),
       updated_at: new Date()
     },
@@ -23,7 +22,6 @@ exports.seed = async function(knex) {
       id: 2,
       name: 'Giám đốc',
       description: 'Giám đốc bộ phận/chi nhánh',
-      chevronCoefficient: 4.0,
       created_at: new Date(),
       updated_at: new Date()
     },
@@ -33,7 +31,6 @@ exports.seed = async function(knex) {
       id: 3,
       name: 'Trưởng phòng',
       description: 'Quản lý/Trưởng phòng',
-      chevronCoefficient: 2.8,
       created_at: new Date(),
       updated_at: new Date()
     },
@@ -41,7 +38,6 @@ exports.seed = async function(knex) {
       id: 4,
       name: 'Phó phòng',
       description: 'Phó phòng/Trợ lý quản lý',
-      chevronCoefficient: 2.3,
       created_at: new Date(),
       updated_at: new Date()
     },
@@ -49,7 +45,6 @@ exports.seed = async function(knex) {
       id: 5,
       name: 'Team Leader',
       description: 'Trưởng nhóm',
-      chevronCoefficient: 2.0,
       created_at: new Date(),
       updated_at: new Date()
     },
@@ -59,7 +54,6 @@ exports.seed = async function(knex) {
       id: 6,
       name: 'Chuyên viên cao cấp',
       description: 'Chuyên viên cấp cao/Senior',
-      chevronCoefficient: 1.8,
       created_at: new Date(),
       updated_at: new Date()
     },
@@ -67,7 +61,6 @@ exports.seed = async function(knex) {
       id: 7,
       name: 'Chuyên viên',
       description: 'Chuyên viên/Specialist',
-      chevronCoefficient: 1.5,
       created_at: new Date(),
       updated_at: new Date()
     },
@@ -77,7 +70,6 @@ exports.seed = async function(knex) {
       id: 8,
       name: 'Nhân viên',
       description: 'Nhân viên thực hiện',
-      chevronCoefficient: 1.2,
       created_at: new Date(),
       updated_at: new Date()
     },
@@ -85,7 +77,6 @@ exports.seed = async function(knex) {
       id: 9,
       name: 'Nhân viên sơ cấp',
       description: 'Nhân viên mới/Junior',
-      chevronCoefficient: 1.0,
       created_at: new Date(),
       updated_at: new Date()
     },
@@ -93,7 +84,6 @@ exports.seed = async function(knex) {
       id: 10,
       name: 'Thực tập sinh',
       description: 'Thực tập sinh',
-      chevronCoefficient: 0.6,
       created_at: new Date(),
       updated_at: new Date()
     }

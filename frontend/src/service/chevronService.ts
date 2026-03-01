@@ -4,7 +4,6 @@ interface ChevronData {
   id: number;
   name: string;
   description: string;
-  chevronCoefficient: string;
   created_at: Date;
 }
 

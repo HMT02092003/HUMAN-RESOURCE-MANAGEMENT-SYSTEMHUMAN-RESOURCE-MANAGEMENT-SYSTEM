@@ -14,7 +14,6 @@ export const getAllChevrons = async (req: Request, res: Response) => {
       "chevrons.id",
       "chevrons.name",
       "chevrons.description",
-      "chevrons.chevronCoefficient",
       "chevrons.role_ids",
       "chevrons.created_at",
       "chevrons.updated_at",
@@ -90,7 +89,7 @@ export const getAllChevrons = async (req: Request, res: Response) => {
 export const getAllChevronsList = async (req: Request, res: Response) => {
   try {
     const { role_id } = req.query;
-    let query = ChevronModel.query().select(['id', 'name', 'chevronCoefficient']);
+    let query = ChevronModel.query().select(['id', 'name']);
 
     if (role_id) {
       // Cast role_id to integer to ensure postgres can compare it with integer[] array
@@ -116,7 +115,6 @@ export const createChevron = async (req: Request, res: Response) => {
     const allowFields = {
       name: "string!",
       description: "string",
-      chevronCoefficient: "number!",
       role_ids: "any",
     };
 
@@ -134,7 +132,6 @@ export const createChevron = async (req: Request, res: Response) => {
     const data = {
       name: params.name,
       description: params.description || null,
-      chevronCoefficient: params.chevronCoefficient,
       role_ids: params.role_ids || null,
       created_at: new Date(),
       updated_at: new Date(),
@@ -204,7 +201,6 @@ export const updateChevron = async (req: Request, res: Response) => {
       id: "number!",
       name: "string!",
       description: "string",
-      chevronCoefficient: "number!",
       role_ids: "any",
     };
 
@@ -215,7 +211,6 @@ export const updateChevron = async (req: Request, res: Response) => {
     const updateData = {
       name: params.name,
       description: params.description || null,
-      chevronCoefficient: params.chevronCoefficient,
       role_ids: params.role_ids,
       updated_at: new Date()
     };

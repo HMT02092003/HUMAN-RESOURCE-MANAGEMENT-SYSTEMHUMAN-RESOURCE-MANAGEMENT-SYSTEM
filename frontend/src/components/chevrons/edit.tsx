@@ -38,13 +38,8 @@ const Edit: React.FC<AdminMainLayoutProps> = ({ id }) => {
 
     try {
       const data = await chevronService.getChevronDetail(id);
-      const formattedChevron = {
-        ...data,
-        chevronCoefficient: Number(data.chevronCoefficient),
-      };
-
-      setChevron(formattedChevron);
-      form.setFieldsValue(formattedChevron);
+      setChevron(data);
+      form.setFieldsValue(data);
     } catch (error: any) {
       message.error(`Lỗi:${error.response?.data?.code || 'Unknown error'}`);
     }

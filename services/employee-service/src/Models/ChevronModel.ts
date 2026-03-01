@@ -10,7 +10,6 @@ class ChevronModel extends Model {
   id!: number;
   name!: string;
   description!: string;
-  chevronCoefficient!: number;
   role_ids!: number[];
 }
 
