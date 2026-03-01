@@ -105,10 +105,10 @@ const UserFormScreen = ({ route, navigation }) => {
         // Convert userId to number if it's a string
         const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
         console.log('📥 [UserForm] Loading user detail with ID:', numericUserId, 'Type:', typeof numericUserId);
-        
+
         const userData = await UserService.getUserDetail(numericUserId);
         console.log('✅ [UserForm] User data loaded:', JSON.stringify(userData, null, 2));
-        
+
         // Parse and set form data
         const formData = {
           username: userData.username || '',
@@ -126,7 +126,7 @@ const UserFormScreen = ({ route, navigation }) => {
           departmentId: userData.department?.id || null,
           identificationPhoto: userData.identificationPhoto || null,
         };
-        
+
         console.log('📝 [UserForm] Form data to set:', JSON.stringify(formData, null, 2));
         setForm(formData);
         console.log('✅ [UserForm] Form state updated');
@@ -134,8 +134,8 @@ const UserFormScreen = ({ route, navigation }) => {
         // Load filtered departments/chevrons for the user's current role
         if (formData.roleId) {
           const [depts, chevs] = await Promise.all([
-            DepartmentService.getAllDepartmentsForSelect(formData.roleId),
-            ChevronService.getAllChevronsForSelect(formData.roleId),
+            DepartmentService.getAllDepartmentsForSelect(), // Fetch all to allow selection for Managers
+            ChevronService.getAllChevronsForSelect(), // Fetch all to allow selection for Managers
           ]);
           setDepartments(Array.isArray(depts) ? depts : []);
           setChevrons(Array.isArray(chevs) ? chevs : []);
@@ -157,8 +157,8 @@ const UserFormScreen = ({ route, navigation }) => {
     if (!roleId) return;
     try {
       const [depts, chevs] = await Promise.all([
-        DepartmentService.getAllDepartmentsForSelect(roleId),
-        ChevronService.getAllChevronsForSelect(roleId),
+        DepartmentService.getAllDepartmentsForSelect(), // Fetch all to allow selection for Managers
+        ChevronService.getAllChevronsForSelect(), // Fetch all to allow selection for Managers
       ]);
       setDepartments(Array.isArray(depts) ? depts : []);
       setChevrons(Array.isArray(chevs) ? chevs : []);
@@ -264,7 +264,7 @@ const UserFormScreen = ({ route, navigation }) => {
         Object.keys(payload).forEach(key => {
           formData.append(key, payload[key]);
         });
-        
+
         const photoFile = {
           uri: form.identificationPhoto.uri,
           type: 'image/jpeg',
@@ -278,7 +278,7 @@ const UserFormScreen = ({ route, navigation }) => {
         // Convert userId to number if it's a string
         const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
         console.log('✏️ [UserForm] Updating user ID:', numericUserId, 'Type:', typeof numericUserId);
-        
+
         await UserService.updateUser(numericUserId, payload);
         Alert.alert('Thành công', 'Cập nhật người dùng thành công', [
           { text: 'OK', onPress: () => navigation.goBack() }
@@ -303,7 +303,7 @@ const UserFormScreen = ({ route, navigation }) => {
   const handlePickImage = async () => {
     try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
+
       if (permissionResult.granted === false) {
         Alert.alert('Thông báo', 'Bạn cần cấp quyền truy cập thư viện ảnh');
         return;
@@ -398,7 +398,7 @@ const UserFormScreen = ({ route, navigation }) => {
             <Card.Content>
               <Text style={styles.sectionTitle}>Ảnh nhận diện</Text>
               <Divider style={styles.divider} />
-              
+
               <View style={styles.photoContainer}>
                 {form.identificationPhoto ? (
                   <View style={styles.photoWrapper}>
@@ -406,8 +406,8 @@ const UserFormScreen = ({ route, navigation }) => {
                       source={{
                         uri: typeof form.identificationPhoto === 'string'
                           ? (form.identificationPhoto.startsWith('/')
-                              ? `${process.env.EXPO_PUBLIC_API_GATEWAY_URL}${form.identificationPhoto}`
-                              : form.identificationPhoto)
+                            ? `${process.env.EXPO_PUBLIC_API_GATEWAY_URL}${form.identificationPhoto}`
+                            : form.identificationPhoto)
                           : form.identificationPhoto.uri
                       }}
                       style={styles.photoPreview}
