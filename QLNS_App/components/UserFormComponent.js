@@ -53,7 +53,7 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
   const [showDepartmentModal, setShowDepartmentModal] = useState(false);
   const [showChevronModal, setShowChevronModal] = useState(false);
   const [showContractTypeModal, setShowContractTypeModal] = useState(false);
-  
+
   const [localContractTypes, setLocalContractTypes] = useState(contractTypes || []);
   const [showGenderModal, setShowGenderModal] = useState(false);
   const [contractTypesLoading, setContractTypesLoading] = useState(false);
@@ -190,8 +190,8 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
     setRoleLoading(true);
     try {
       const [depts, chevs] = await Promise.all([
-        DepartmentService.getAllDepartmentsForSelect(roleId),
-        ChevronService.getAllChevronsForSelect(roleId),
+        DepartmentService.getAllDepartmentsForSelect(), // Omit roleId to fetch all items for all roles
+        ChevronService.getAllChevronsForSelect(), // Omit roleId to fetch all items for all roles
       ]);
       setLocalDepartments(Array.isArray(depts) ? depts : []);
       setLocalChevrons(Array.isArray(chevs) ? chevs : []);
@@ -471,7 +471,7 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
               </View>
             )}
           </View>
-        
+
           {/* Show read-only contract fields populated from selected contract type */}
           <View style={{ marginTop: 8 }}>
             <TextInput label="Thời hạn hợp đồng (tháng)" value={form.contractTerm !== null && form.contractTerm !== undefined ? String(form.contractTerm) : ''} editable={false} style={styles.input} />
