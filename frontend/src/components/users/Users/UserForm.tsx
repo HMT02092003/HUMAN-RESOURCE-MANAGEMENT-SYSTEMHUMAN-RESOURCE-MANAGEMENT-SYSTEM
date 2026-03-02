@@ -62,8 +62,8 @@ const UserForm: React.FC<UserFormProps> = ({
         // If editing, fetch filtered data based on initial roleId
         if (isEdit && initialValues?.roleId) {
           const [depts, chevs] = await Promise.all([
-            departmentService.getAllDepartmentsForSelect(), // Remove roleId to always show all options
-            chevronService.getAllChevronsForSelect() // Remove roleId to always show all options
+            departmentService.getAllDepartmentsForSelect(initialValues.roleId),
+            chevronService.getAllChevronsForSelect(initialValues.roleId)
           ]);
           setDepartments(depts || []);
           setChevrons(chevs || []);
@@ -92,8 +92,8 @@ const UserForm: React.FC<UserFormProps> = ({
       setApiLoading(true);
       try {
         const [depts, chevs] = await Promise.all([
-          departmentService.getAllDepartmentsForSelect(), // Remove roleId so options appear for all roles e.g Quản lí
-          chevronService.getAllChevronsForSelect() // Remove roleId so options appear for all roles
+          departmentService.getAllDepartmentsForSelect(roleId),
+          chevronService.getAllChevronsForSelect(roleId)
         ]);
         setDepartments(depts || []);
         setChevrons(chevs || []);

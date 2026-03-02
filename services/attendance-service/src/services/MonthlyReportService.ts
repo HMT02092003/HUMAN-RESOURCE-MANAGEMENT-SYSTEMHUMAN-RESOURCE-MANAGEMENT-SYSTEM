@@ -75,37 +75,38 @@ export class MonthlyReportService {
     const dailyDataRecalc: any = await AttendanceCalculationService.getUserMonthlyAttendance(userId, month, token, false);
 
     if (!monthlyRecord) {
-      console.log(`⚠️ [attendance] Không tìm thấy dữ liệu thống kê tháng cho userId ${userId} tháng ${month} trong bảng monthly_attendances.`);
-      return null;
+      console.log(`⚠️ [attendance] Không tìm thấy dữ liệu thống kê tháng cho userId ${userId} tháng ${month} trong bảng monthly_attendances. Trả về cấu trúc mặc định.`);
     }
+
+    const mr = monthlyRecord || {};
 
     const [yearStr, monthStr] = (month || '').split('-');
 
     // 3. Map directly to response structure for MonthlyStats
     const monthlyStats = {
-      totalDays: Number(monthlyRecord.totalScheduledDays || 0),
-      presentDays: Number(monthlyRecord.presentDays || 0),
-      absentDays: Number(monthlyRecord.absentDays || 0),
-      lateDays: Number(monthlyRecord.lateDays || 0),
-      earlyLeaveDays: Number(monthlyRecord.earlyLeaveDays || 0),
-      totalHours: Number(monthlyRecord.totalWorkHours || 0),
-      averageHours: Number(monthlyRecord.averageWorkHours || 0),
-      overtimeHours: Number(monthlyRecord.totalOvertimeHours || 0),
-      totalLatePenalty: Number(monthlyRecord.totalLatePenalty || 0),
-      totalEarlyLeavePenalty: Number(monthlyRecord.totalEarlyLeavePenalty || 0),
-      totalPenalty: Number(monthlyRecord.totalPenalty || 0),
-      totalOvertimePay: Number(monthlyRecord.totalOvertimeSalary || 0),
-      totalLateMinutes: Number(monthlyRecord.totalLateMinutes || 0),
-      totalEarlyLeaveMinutes: Number(monthlyRecord.totalEarlyLeaveMinutes || 0),
-      unauthorizedAbsenceDays: Number(monthlyRecord.unauthorizedAbsenceDays || 0),
-      totalUnauthorizedAbsencePenalty: Number(monthlyRecord.totalUnauthorizedAbsencePenalty || 0),
+      totalDays: Number(mr.totalScheduledDays || 0),
+      presentDays: Number(mr.presentDays || 0),
+      absentDays: Number(mr.absentDays || 0),
+      lateDays: Number(mr.lateDays || 0),
+      earlyLeaveDays: Number(mr.earlyLeaveDays || 0),
+      totalHours: Number(mr.totalWorkHours || 0),
+      averageHours: Number(mr.averageWorkHours || 0),
+      overtimeHours: Number(mr.totalOvertimeHours || 0),
+      totalLatePenalty: Number(mr.totalLatePenalty || 0),
+      totalEarlyLeavePenalty: Number(mr.totalEarlyLeavePenalty || 0),
+      totalPenalty: Number(mr.totalPenalty || 0),
+      totalOvertimePay: Number(mr.totalOvertimeSalary || 0),
+      totalLateMinutes: Number(mr.totalLateMinutes || 0),
+      totalEarlyLeaveMinutes: Number(mr.totalEarlyLeaveMinutes || 0),
+      unauthorizedAbsenceDays: Number(mr.unauthorizedAbsenceDays || 0),
+      totalUnauthorizedAbsencePenalty: Number(mr.totalUnauthorizedAbsencePenalty || 0),
       // Derived for display
-      unauthorizedAbsencePenaltyPerDay: Number(monthlyRecord.unauthorizedAbsenceDays > 0 ? Math.round(Number(monthlyRecord.totalUnauthorizedAbsencePenalty || 0) / Number(monthlyRecord.unauthorizedAbsenceDays)) : 0),
-      approvedLeaveDays: Number(monthlyRecord.approvedLeaveDays || 0),
-      businessTripDays: Number(monthlyRecord.businessTripDays || 0),
-      totalWorkingUnits: Number(monthlyRecord.totalWorkingUnits || 0),
-      totalOtWorkingUnits: Number(monthlyRecord.totalOtWorkingUnits || 0),
-      totalEffectiveOtWorkingUnits: Number(monthlyRecord.totalOtWorkingUnits || 0)
+      unauthorizedAbsencePenaltyPerDay: Number(mr.unauthorizedAbsenceDays > 0 ? Math.round(Number(mr.totalUnauthorizedAbsencePenalty || 0) / Number(mr.unauthorizedAbsenceDays)) : 0),
+      approvedLeaveDays: Number(mr.approvedLeaveDays || 0),
+      businessTripDays: Number(mr.businessTripDays || 0),
+      totalWorkingUnits: Number(mr.totalWorkingUnits || 0),
+      totalOtWorkingUnits: Number(mr.totalOtWorkingUnits || 0),
+      totalEffectiveOtWorkingUnits: Number(mr.totalOtWorkingUnits || 0)
     };
 
     // 4. Lấy danh sách record hằng ngày đã format để gán cho Lịch
@@ -155,31 +156,31 @@ export class MonthlyReportService {
       data: {
         monthlyStats,
         dailyData: {
-          userId: monthlyRecord.userId,
+          userId: mr.userId || userId,
           year: parseInt(yearStr || '0'),
           month: parseInt(monthStr || '0'),
-          monthlySalary: monthlyRecord.baseSalary || 0,
+          monthlySalary: mr.baseSalary || 0,
           penaltyRate: 0,
           dailyDetails: mappedDetails,
           summary: {
             totalDays: mappedDetails.length,
             workingDays: mappedDetails.filter((d: any) => d.isWorkingDay !== false).length,
-            attendedDays: monthlyRecord.presentDays || 0,
-            presentDays: monthlyRecord.presentDays || 0,
-            lateDays: monthlyRecord.lateDays || 0,
-            earlyLeaveDays: monthlyRecord.earlyLeaveDays || 0,
-            totalHours: monthlyRecord.totalWorkHours || 0,
-            totalWorkingUnits: monthlyRecord.totalWorkingUnits || 0,
-            totalOtWorkingUnits: monthlyRecord.totalOtWorkingUnits || 0,
-            approvedLeaveDays: monthlyRecord.approvedLeaveDays,
-            unauthorizedAbsenceDays: monthlyRecord.unauthorizedAbsenceDays,
-            totalUnauthorizedAbsencePenalty: Math.round(monthlyRecord.totalUnauthorizedAbsencePenalty || 0),
-            unauthorizedAbsencePenaltyPerDay: Math.round(monthlyRecord.unauthorizedAbsenceDays > 0 ? (monthlyRecord.totalUnauthorizedAbsencePenalty || 0) / monthlyRecord.unauthorizedAbsenceDays : 0),
+            attendedDays: mr.presentDays || 0,
+            presentDays: mr.presentDays || 0,
+            lateDays: mr.lateDays || 0,
+            earlyLeaveDays: mr.earlyLeaveDays || 0,
+            totalHours: mr.totalWorkHours || 0,
+            totalWorkingUnits: mr.totalWorkingUnits || 0,
+            totalOtWorkingUnits: mr.totalOtWorkingUnits || 0,
+            approvedLeaveDays: mr.approvedLeaveDays || 0,
+            unauthorizedAbsenceDays: mr.unauthorizedAbsenceDays || 0,
+            totalUnauthorizedAbsencePenalty: Math.round(mr.totalUnauthorizedAbsencePenalty || 0),
+            unauthorizedAbsencePenaltyPerDay: Math.round(mr.unauthorizedAbsenceDays > 0 ? (mr.totalUnauthorizedAbsencePenalty || 0) / mr.unauthorizedAbsenceDays : 0),
             weekendDays: 0,
-            totalLateMinutes: monthlyRecord.totalLateMinutes,
-            totalEarlyLeaveMinutes: monthlyRecord.totalEarlyLeaveMinutes,
+            totalLateMinutes: mr.totalLateMinutes || 0,
+            totalEarlyLeaveMinutes: mr.totalEarlyLeaveMinutes || 0,
             onTimeDays: 0,
-            totalOvertimeHours: monthlyRecord.totalOvertimeHours
+            totalOvertimeHours: mr.totalOvertimeHours || 0
           }
         }
       }

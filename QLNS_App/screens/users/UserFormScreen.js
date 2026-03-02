@@ -134,8 +134,8 @@ const UserFormScreen = ({ route, navigation }) => {
         // Load filtered departments/chevrons for the user's current role
         if (formData.roleId) {
           const [depts, chevs] = await Promise.all([
-            DepartmentService.getAllDepartmentsForSelect(), // Fetch all to allow selection for Managers
-            ChevronService.getAllChevronsForSelect(), // Fetch all to allow selection for Managers
+            DepartmentService.getAllDepartmentsForSelect(formData.roleId),
+            ChevronService.getAllChevronsForSelect(formData.roleId),
           ]);
           setDepartments(Array.isArray(depts) ? depts : []);
           setChevrons(Array.isArray(chevs) ? chevs : []);
@@ -157,8 +157,8 @@ const UserFormScreen = ({ route, navigation }) => {
     if (!roleId) return;
     try {
       const [depts, chevs] = await Promise.all([
-        DepartmentService.getAllDepartmentsForSelect(), // Fetch all to allow selection for Managers
-        ChevronService.getAllChevronsForSelect(), // Fetch all to allow selection for Managers
+        DepartmentService.getAllDepartmentsForSelect(roleId),
+        ChevronService.getAllChevronsForSelect(roleId),
       ]);
       setDepartments(Array.isArray(depts) ? depts : []);
       setChevrons(Array.isArray(chevs) ? chevs : []);
