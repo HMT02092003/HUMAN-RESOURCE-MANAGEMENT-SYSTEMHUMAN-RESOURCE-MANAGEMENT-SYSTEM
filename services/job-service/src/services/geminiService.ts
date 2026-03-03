@@ -7,14 +7,15 @@ dayjs.extend(isBetween);
 
 // Model cascade from strongest to weakest based on user image
 const MODEL_CASCADE = [
-  'gemini-3-flash',
+  'gemini-2.5-pro',
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
-  'gemini-robotics-er-1.5-preview',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-exp',
+  'gemini-2.0-flash-lite-preview-02-05',
   'gemma-3-27b',
   'gemma-3-12b',
   'gemma-3-4b',
-  'gemma-3-2b',
   'gemma-3-1b'
 ];
 

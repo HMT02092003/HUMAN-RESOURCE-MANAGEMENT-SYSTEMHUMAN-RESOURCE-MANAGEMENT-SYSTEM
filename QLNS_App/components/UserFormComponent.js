@@ -287,7 +287,6 @@ const UserFormComponent = ({ initialValues = {}, isEdit = false, roles = [], dep
         activeDay: formatDateToYYYYMMDD(form.contractActiveDay || form.startDate),
         endDate: formatDateToYYYYMMDD(getContractEndDate()),
         salary: form.salary ? Number(form.salary) : 0,
-        insurance: form.contractInsurance ? Number(form.contractInsurance) : 0,
         allowance_type_ids: selectedAllowanceTypeIds,
       },
     };

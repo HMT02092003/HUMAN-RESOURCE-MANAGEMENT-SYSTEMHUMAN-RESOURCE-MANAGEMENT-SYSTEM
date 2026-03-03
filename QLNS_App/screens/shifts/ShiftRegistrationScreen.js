@@ -9,12 +9,12 @@ import {
   TextInput,
   Platform,
 } from 'react-native';
-import { 
-  Card, 
-  Avatar, 
-  Text, 
-  IconButton, 
-  useTheme, 
+import {
+  Card,
+  Avatar,
+  Text,
+  IconButton,
+  useTheme,
   Menu,
   Divider,
   FAB,
@@ -47,6 +47,7 @@ const ShiftRegistrationScreen = ({ navigation }) => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showShiftPicker, setShowShiftPicker] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
   // Detail modal
   const [detailModalVisible, setDetailModalVisible] = useState(false);
@@ -111,7 +112,6 @@ const ShiftRegistrationScreen = ({ navigation }) => {
     return `${hours}:${minutes}`;
   };
 
-  // Create registration
   const handleCreateRegistration = async () => {
     if (!selectedShift) {
       Alert.alert('Lỗi', 'Vui lòng chọn ca làm việc');
@@ -120,23 +120,30 @@ const ShiftRegistrationScreen = ({ navigation }) => {
 
     try {
       setCreating(true);
-      await ShiftService.createShiftRegistration({
+      const payload = {
         shift_id: selectedShift.id,
         date: dayjs(selectedDate).format('YYYY-MM-DD'),
         notes: notes.trim()
-      });
+      };
 
-      Alert.alert('Thành công', 'Đã đăng ký ca làm việc');
+      if (editingId) {
+        await ShiftService.updateShiftRegistration(editingId, payload);
+        Alert.alert('Thành công', 'Đã cập nhật đăng ký ca');
+      } else {
+        await ShiftService.createShiftRegistration(payload);
+        Alert.alert('Thành công', 'Đã đăng ký ca làm việc');
+      }
+
       setCreateModalVisible(false);
       resetForm();
-      
+
       // Refresh list
       if (listRef.current?.refresh) {
         listRef.current.refresh();
       }
     } catch (error) {
-      console.error('Error creating registration:', error);
-      Alert.alert('Lỗi', error.response?.data?.message || 'Không thể đăng ký ca');
+      console.error('Error saving registration:', error);
+      Alert.alert('Lỗi', error.response?.data?.message || (editingId ? 'Không thể cập nhật ca' : 'Không thể đăng ký ca'));
     } finally {
       setCreating(false);
     }
@@ -146,6 +153,7 @@ const ShiftRegistrationScreen = ({ navigation }) => {
     setSelectedShift(null);
     setSelectedDate(new Date());
     setNotes('');
+    setEditingId(null);
   };
 
   // View detail
@@ -178,7 +186,7 @@ const ShiftRegistrationScreen = ({ navigation }) => {
     try {
       await ShiftService.cancelShiftRegistration(deleteTarget.id);
       Alert.alert('Thành công', 'Đã hủy đăng ký ca');
-      
+
       // Refresh list
       if (listRef.current?.refresh) {
         listRef.current.refresh();
@@ -244,10 +252,10 @@ const ShiftRegistrationScreen = ({ navigation }) => {
               </View>
 
               <View style={styles.infoRow}>
-                <MaterialCommunityIcons 
-                  name={item.status === 'approved' ? 'check-circle' : item.status === 'rejected' ? 'close-circle' : 'clock'} 
-                  size={14} 
-                  color={statusColor} 
+                <MaterialCommunityIcons
+                  name={item.status === 'approved' ? 'check-circle' : item.status === 'rejected' ? 'close-circle' : 'clock'}
+                  size={14}
+                  color={statusColor}
                 />
                 <Text style={[styles.infoText, { color: statusColor }]}>
                   {getShiftStatusLabel(item.status)}
@@ -275,7 +283,7 @@ const ShiftRegistrationScreen = ({ navigation }) => {
                 </TouchableOpacity>
                 {isPending && (
                   <>
-                    <TouchableOpacity style={styles.menuItemRow} onPress={() => { setVisibleMenuId(null); setSelectedShift({ id: item.shift_id, name: item.shift_name }); setSelectedDate(item.date ? new Date(item.date) : new Date()); setNotes(item.notes || ''); setCreateModalVisible(true); }}>
+                    <TouchableOpacity style={styles.menuItemRow} onPress={() => { setVisibleMenuId(null); setEditingId(item.id); setSelectedShift({ id: item.shift_id, name: item.shift_name, start_time: item.start_time, end_time: item.end_time }); setSelectedDate(item.date ? new Date(item.date) : new Date()); setNotes(item.notes || ''); setCreateModalVisible(true); }}>
                       <MaterialCommunityIcons name="pencil" size={18} color="#1890ff" />
                       <Text style={styles.menuItemText}>Chỉnh sửa</Text>
                     </TouchableOpacity>
@@ -317,7 +325,7 @@ const ShiftRegistrationScreen = ({ navigation }) => {
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Đăng ký ca làm việc</Text>
+            <Text style={styles.modalTitle}>{editingId ? 'Chỉnh sửa đăng ký ca' : 'Đăng ký ca làm việc'}</Text>
             <IconButton
               icon="close"
               size={24}
@@ -389,8 +397,8 @@ const ShiftRegistrationScreen = ({ navigation }) => {
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <>
-                  <Ionicons name="add" size={18} color="#fff" />
-                  <Text style={styles.submitButtonText}>Đăng ký</Text>
+                  <Ionicons name={editingId ? "save" : "add"} size={18} color="#fff" />
+                  <Text style={styles.submitButtonText}>{editingId ? 'Cập nhật' : 'Đăng ký'}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -551,8 +559,8 @@ const ShiftRegistrationScreen = ({ navigation }) => {
         emptyMessage="Chưa có đăng ký ca nào"
         keyExtractor={(item) => item.id?.toString()}
         filters={[
-          { 
-            key: 'status', 
+          {
+            key: 'status',
             label: 'Trạng thái',
             options: [
               { value: 'pending', label: 'Chờ duyệt' },

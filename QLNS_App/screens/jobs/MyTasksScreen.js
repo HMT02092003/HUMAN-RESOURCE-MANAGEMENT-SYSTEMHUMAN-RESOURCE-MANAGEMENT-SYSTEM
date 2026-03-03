@@ -26,14 +26,14 @@ import JobService from '../../services/JobService';
 const taskStatusColors = {
   todo: '#1890ff',
   in_progress: '#faad14',
-  review: '#722ed1',
+  pending_approval: '#722ed1',
   done: '#52c41a'
 };
 
 const taskStatusLabels = {
   todo: 'Chưa làm',
   in_progress: 'Đang làm',
-  review: 'Review',
+  pending_approval: 'Chờ phê duyệt',
   done: 'Hoàn thành'
 };
 
@@ -78,7 +78,7 @@ const MyTasksScreen = () => {
 
       const response = await JobService.getMyTasks(params);
       const data = response?.data ?? response?.tasks ?? response ?? [];
-      
+
       // Map tasks
       const mappedTasks = (Array.isArray(data) ? data : []).map((task) => ({
         id: task.id || task.task_id,
@@ -191,10 +191,10 @@ const MyTasksScreen = () => {
 
             {item.dueDate && (
               <View style={[styles.dueDate, overdue && styles.dueDateOverdue]}>
-                <MaterialCommunityIcons 
-                  name="calendar-clock" 
-                  size={14} 
-                  color={overdue ? '#ff4d4f' : '#8c8c8c'} 
+                <MaterialCommunityIcons
+                  name="calendar-clock"
+                  size={14}
+                  color={overdue ? '#ff4d4f' : '#8c8c8c'}
                 />
                 <Text style={[styles.dueDateText, overdue && styles.dueDateTextOverdue]}>
                   {formatDate(item.dueDate)}
@@ -222,7 +222,7 @@ const MyTasksScreen = () => {
   const renderHeader = () => {
     const todoCount = getTasksByStatus('todo').length;
     const inProgressCount = getTasksByStatus('in_progress').length;
-    const reviewCount = getTasksByStatus('review').length;
+    const reviewCount = getTasksByStatus('pending_approval').length;
     const doneCount = getTasksByStatus('done').length;
 
     return (
@@ -237,7 +237,7 @@ const MyTasksScreen = () => {
             <Text style={styles.statValue}>{inProgressCount}</Text>
             <Text style={styles.statLabel}>Đang làm</Text>
           </Surface>
-          <Surface style={[styles.statCard, { borderLeftColor: taskStatusColors.review }]} elevation={1}>
+          <Surface style={[styles.statCard, { borderLeftColor: taskStatusColors.pending_approval }]} elevation={1}>
             <Text style={styles.statValue}>{reviewCount}</Text>
             <Text style={styles.statLabel}>Review</Text>
           </Surface>
@@ -262,9 +262,9 @@ const MyTasksScreen = () => {
               </Chip>
             }
           >
-            <Menu.Item 
-              onPress={() => { setFilterStatus(null); setShowStatusMenu(false); }} 
-              title="Tất cả" 
+            <Menu.Item
+              onPress={() => { setFilterStatus(null); setShowStatusMenu(false); }}
+              title="Tất cả"
             />
             <Divider />
             {Object.entries(taskStatusLabels).map(([key, label]) => (
@@ -292,9 +292,9 @@ const MyTasksScreen = () => {
               </Chip>
             }
           >
-            <Menu.Item 
-              onPress={() => { setFilterPriority(null); setShowPriorityMenu(false); }} 
-              title="Tất cả" 
+            <Menu.Item
+              onPress={() => { setFilterPriority(null); setShowPriorityMenu(false); }}
+              title="Tất cả"
             />
             <Divider />
             {Object.entries(taskPriorityLabels).map(([key, label]) => (
@@ -320,8 +320,8 @@ const MyTasksScreen = () => {
       <MaterialCommunityIcons name="clipboard-check-outline" size={64} color="#d9d9d9" />
       <Text style={styles.emptyText}>Không có công việc nào</Text>
       <Text style={styles.emptySubtext}>
-        {filterStatus || filterPriority 
-          ? 'Thử thay đổi bộ lọc để xem thêm' 
+        {filterStatus || filterPriority
+          ? 'Thử thay đổi bộ lọc để xem thêm'
           : 'Bạn chưa được giao công việc nào'}
       </Text>
     </View>
@@ -329,7 +329,7 @@ const MyTasksScreen = () => {
 
   const renderTaskModal = () => {
     if (!selectedTask) return null;
-    
+
     const statusColor = taskStatusColors[selectedTask.status] || '#1890ff';
     const statusLabel = taskStatusLabels[selectedTask.status] || selectedTask.status;
     const priorityColor = taskPriorityColors[selectedTask.priority] || '#1890ff';
@@ -353,7 +353,7 @@ const MyTasksScreen = () => {
 
           <View style={styles.modalContent}>
             <Text style={styles.taskDetailTitle}>{selectedTask.title}</Text>
-            
+
             {selectedTask.projectName && (
               <View style={styles.modalProjectTag}>
                 <MaterialCommunityIcons name="folder" size={16} color="#1890ff" />

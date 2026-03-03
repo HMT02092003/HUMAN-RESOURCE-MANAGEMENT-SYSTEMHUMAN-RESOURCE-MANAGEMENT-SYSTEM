@@ -90,6 +90,26 @@ export const ApplicationManagementNavigator = () => {
                 name="ApplicationManagementList"
                 component={ApplicationManagementScreen}
             />
+            <Stack.Screen
+                name="LeaveApplication"
+                component={LeaveApplicationScreen}
+            />
+            <Stack.Screen
+                name="OvertimeApplication"
+                component={OvertimeApplicationScreen}
+            />
+            <Stack.Screen
+                name="ForgotCheckApplication"
+                component={ForgotCheckApplicationScreen}
+            />
+            <Stack.Screen
+                name="BusinessTripApplication"
+                component={BusinessTripApplicationScreen}
+            />
+            <Stack.Screen
+                name="ResignationApplication"
+                component={ResignationApplicationScreen}
+            />
         </Stack.Navigator>
     );
 };

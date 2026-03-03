@@ -168,15 +168,15 @@ const ContractTypeEditScreen = ({ route, navigation }) => {
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>Loại hợp đồng <Text style={styles.required}>*</Text></Text>
                         <TouchableOpacity onPress={() => setShowTypeModal(true)}>
-                            <View style={[styles.input, styles.pickerContainer]}> 
+                            <View style={[styles.input, styles.pickerContainer]}>
                                 <Text>{
                                     formData.type === 1 ? 'Hợp đồng Thực tập' :
-                                    formData.type === 2 ? 'Hợp đồng Thử việc' :
-                                    formData.type === 3 ? 'Hợp đồng Lao động (Có thời hạn)' :
-                                    formData.type === 4 ? 'Hợp đồng Lao động (Không thời hạn)' :
-                                    formData.type === 5 ? 'Hợp đồng Đào tạo nghề' :
-                                    formData.type === 6 ? 'Hợp đồng Cộng tác viên (CTV)' :
-                                    formData.type === 7 ? 'Hợp đồng Khoán việc' : 'Chọn loại hợp đồng'
+                                        formData.type === 2 ? 'Hợp đồng Thử việc' :
+                                            formData.type === 3 ? 'Hợp đồng Lao động (Có thời hạn)' :
+                                                formData.type === 4 ? 'Hợp đồng Lao động (Không thời hạn)' :
+                                                    formData.type === 5 ? 'Hợp đồng Đào tạo nghề' :
+                                                        formData.type === 6 ? 'Hợp đồng Cộng tác viên (CTV)' :
+                                                            formData.type === 7 ? 'Hợp đồng Khoán việc' : 'Chọn loại hợp đồng'
                                 }</Text>
                             </View>
                         </TouchableOpacity>
@@ -337,29 +337,33 @@ const styles = StyleSheet.create({
     textArea: { height: 100 },
     errorText: { color: '#ff4d4f', fontSize: 12, marginTop: 4 },
     submitButton: {
-        backgroundColor: '#1890ff',
-        paddingVertical: 12,
-        borderRadius: 4,
+        flexDirection: 'row',
         alignItems: 'center',
-        marginTop: 16,
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 4,
+        backgroundColor: '#1890ff',
+        marginLeft: 8,
     },
     disabledButton: { backgroundColor: '#bae7ff' },
     submitButtonText: {
+        marginLeft: 8,
         color: '#fff',
         fontSize: 16,
         fontWeight: '600',
     },
     deleteButton: {
-        backgroundColor: '#fff',
-        borderWidth: 1,
-        borderColor: '#ff4d4f',
-        paddingVertical: 12,
-        borderRadius: 4,
+        flexDirection: 'row',
         alignItems: 'center',
-        marginTop: 12,
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 4,
+        backgroundColor: '#ff4d4f',
+        marginLeft: 8,
     },
     deleteButtonText: {
-        color: '#ff4d4f',
+        marginLeft: 8,
+        color: '#fff',
         fontSize: 16,
         fontWeight: '600',
     },
@@ -367,8 +371,6 @@ const styles = StyleSheet.create({
     backButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 4, borderWidth: 1, borderColor: '#d9d9d9', backgroundColor: '#fff' },
     backButtonText: { marginLeft: 8, fontSize: 16, color: '#666' },
     rightButtons: { flexDirection: 'row' },
-    deleteButton: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 4, backgroundColor: '#ff4d4f', marginLeft: 8 },
-    deleteButtonText: { marginLeft: 8, fontSize: 16, color: '#fff', fontWeight: '600' },
 });
 
 export default ContractTypeEditScreen;

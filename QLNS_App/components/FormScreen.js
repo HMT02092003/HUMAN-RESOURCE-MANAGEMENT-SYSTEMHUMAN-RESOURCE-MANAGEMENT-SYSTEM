@@ -98,7 +98,7 @@ const FormScreen = ({
 
   const handleSubmit = async () => {
     if (!validate()) return;
-    
+
     setSubmitting(true);
     try {
       await onSubmit(values);
@@ -139,8 +139,8 @@ const FormScreen = ({
                 onChangeText={(text) => handleChange(field.name, text)}
                 keyboardType={
                   field.type === 'number' ? 'numeric' :
-                  field.type === 'phone' ? 'phone-pad' :
-                  field.type === 'email' ? 'email-address' : 'default'
+                    field.type === 'phone' ? 'phone-pad' :
+                      field.type === 'email' ? 'email-address' : 'default'
                 }
                 editable={!field.disabled}
                 maxLength={field.maxLength}
@@ -269,6 +269,104 @@ const FormScreen = ({
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
+                </View>
+              </TouchableOpacity>
+            </Modal>
+          </View>
+        );
+
+      case 'multiselect':
+        const selectedValues = Array.isArray(value) ? value : [];
+        return (
+          <View style={styles.fieldContainer} key={field.name}>
+            <Text style={styles.label}>
+              {field.label} {field.required && <Text style={styles.required}>*</Text>}
+            </Text>
+            <TouchableOpacity
+              style={[styles.dropdownButton, error && styles.inputError]}
+              onPress={() => setShowDropdown(field.name)}
+              disabled={field.disabled}
+            >
+              {field.icon && (
+                <MaterialCommunityIcons
+                  name={field.icon}
+                  size={20}
+                  color="#8c8c8c"
+                  style={styles.inputIcon}
+                />
+              )}
+              <Text style={[styles.dropdownText, selectedValues.length === 0 && styles.placeholderText]}>
+                {selectedValues.length > 0
+                  ? selectedValues.map(v => field.options?.find(opt => opt.value === v)?.label || v).join(', ')
+                  : field.placeholder || `Chọn ${field.label.toLowerCase()}...`}
+              </Text>
+              <MaterialCommunityIcons name="chevron-down" size={20} color="#8c8c8c" />
+            </TouchableOpacity>
+            {error && (
+              <View style={styles.errorContainer}>
+                <MaterialCommunityIcons name="alert-circle" size={14} color="#ff4d4f" />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            )}
+
+            {/* Multiselect Modal */}
+            <Modal
+              visible={showDropdown === field.name}
+              transparent
+              animationType="fade"
+              onRequestClose={() => setShowDropdown(null)}
+            >
+              <TouchableOpacity
+                style={styles.modalOverlay}
+                activeOpacity={1}
+                onPress={() => setShowDropdown(null)}
+              >
+                <View style={[styles.modalContent, { paddingBottom: 16 }]}>
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>{field.label}</Text>
+                    <TouchableOpacity onPress={() => setShowDropdown(null)}>
+                      <MaterialCommunityIcons name="close" size={24} color="#262626" />
+                    </TouchableOpacity>
+                  </View>
+                  <ScrollView style={styles.optionsList}>
+                    {field.options?.map((option) => {
+                      const isSelected = selectedValues.includes(option.value);
+                      return (
+                        <TouchableOpacity
+                          key={option.value}
+                          style={[
+                            styles.optionItem,
+                            isSelected && styles.optionItemActive
+                          ]}
+                          onPress={() => {
+                            let newValues = [...selectedValues];
+                            if (isSelected) {
+                              newValues = newValues.filter(v => v !== option.value);
+                            } else {
+                              newValues.push(option.value);
+                            }
+                            handleChange(field.name, newValues);
+                          }}
+                        >
+                          <Text style={[
+                            styles.optionText,
+                            isSelected && styles.optionTextActive
+                          ]}>
+                            {option.label}
+                          </Text>
+                          {isSelected && (
+                            <MaterialCommunityIcons name="check-box-outline" size={20} color="#1890ff" />
+                          )}
+                          {!isSelected && (
+                            <MaterialCommunityIcons name="checkbox-blank-outline" size={20} color="#8c8c8c" />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                  <Button mode="contained" onPress={() => setShowDropdown(null)} style={{ marginHorizontal: 16, marginTop: 16 }}>
+                    Xong
+                  </Button>
                 </View>
               </TouchableOpacity>
             </Modal>

@@ -6,7 +6,7 @@ import api from './api';
  */
 class SalaryService {
   // ==================== ALLOWANCE TYPES ====================
-  
+
   /**
    * Lấy danh sách loại phụ cấp (có phân trang)
    */
@@ -113,7 +113,7 @@ class SalaryService {
       const qs = {};
       if (params.month) qs.month = params.month;
       if (params.year) qs.year = params.year;
-      
+
       const response = await api.get('/salary/payslips/me', { params: qs });
       return {
         success: response.data?.success ?? true,
@@ -134,7 +134,7 @@ class SalaryService {
       const qs = {};
       if (params.month) qs.month = params.month;
       if (params.year) qs.year = params.year;
-      
+
       const response = await api.get(`/salary/users/${userId}/payslips`, { params: qs });
       return {
         success: response.data?.success ?? true,
@@ -188,6 +188,42 @@ class SalaryService {
         usersWithoutApprovedAttendance: error?.response?.data?.usersWithoutApprovedAttendance || [],
         usersWithoutSalaryProfile: error?.response?.data?.usersWithoutSalaryProfile || []
       };
+    }
+  }
+
+  // ==================== ASYNC SALARY (QUEUE) ====================
+
+  /**
+   * Tính lương bulk async cho nhiều user
+   */
+  static async calculateBulkAsync(payload) {
+    try {
+      const response = await api.post('/salary/payslips/calculate-bulk-async', payload);
+      return {
+        success: response.data?.success ?? true,
+        data: response.data?.data,
+        message: response.data?.message
+      };
+    } catch (error) {
+      console.error('Error calculating bulk async:', error);
+      return { success: false, data: null, message: error?.response?.data?.message || error.message };
+    }
+  }
+
+  /**
+   * Kiểm tra trạng thái tính lương bulk
+   */
+  static async getPayslipStatus(payslipId) {
+    try {
+      const response = await api.get(`/salary/payslips/status/${payslipId}`);
+      return {
+        success: response.data?.success ?? true,
+        data: response.data?.data,
+        message: response.data?.message
+      };
+    } catch (error) {
+      console.error('Error getting payslip status:', error);
+      return { success: false, data: null, message: error?.response?.data?.message || error.message };
     }
   }
 

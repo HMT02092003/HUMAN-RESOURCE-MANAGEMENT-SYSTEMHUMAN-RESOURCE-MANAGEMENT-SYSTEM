@@ -259,19 +259,11 @@ const UserFormScreen = ({ route, navigation }) => {
 
       // Handle photo upload if changed
       if (form.identificationPhoto && typeof form.identificationPhoto === 'object' && form.identificationPhoto.uri) {
-        // Photo is a new upload, need to send as multipart
-        const formData = new FormData();
-        Object.keys(payload).forEach(key => {
-          formData.append(key, payload[key]);
-        });
-
-        const photoFile = {
+        payload.identificationPhoto = {
           uri: form.identificationPhoto.uri,
           type: 'image/jpeg',
           name: 'identificationPhoto.jpg',
         };
-        formData.append('identificationPhoto', photoFile);
-        payload._formData = formData;
       }
 
       if (isEdit) {

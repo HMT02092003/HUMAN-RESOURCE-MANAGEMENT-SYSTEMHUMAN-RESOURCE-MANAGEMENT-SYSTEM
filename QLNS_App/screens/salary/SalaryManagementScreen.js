@@ -134,9 +134,13 @@ const SalaryManagementScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               setCalculating(true);
-              const res = await SalaryService.calculateFromAttendance(selectedMonth.value);
+              const res = await SalaryService.calculateBulkAsync({
+                year: selectedMonth.year,
+                month: selectedMonth.month,
+                userIds: []
+              });
 
-              // Kiểm tra người dùng không hợp lệ
+              // Backend có thể trả về thông tin người dùng không hợp lệ ngay từ queue dispatch
               const hasInvalidUsers =
                 (res.usersWithoutContracts?.length > 0) ||
                 (res.usersWithoutApprovedAttendance?.length > 0) ||
@@ -152,7 +156,7 @@ const SalaryManagementScreen = ({ navigation }) => {
               }
 
               if (res.success) {
-                Alert.alert('Thành công', 'Đã tính bảng lương cho tháng');
+                Alert.alert('Thành công', `🚀 Đang tính lương cho ${selectedMonth.label} ở background. Bạn sẽ nhận thông báo khi hoàn tất!`);
                 fetchData();
               } else {
                 Alert.alert('Lỗi', res.message || 'Không thể tính bảng lương');

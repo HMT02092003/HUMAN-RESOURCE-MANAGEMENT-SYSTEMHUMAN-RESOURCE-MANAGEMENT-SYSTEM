@@ -49,14 +49,14 @@ const statusLabels = {
 const taskStatusColors = {
   todo: '#1890ff',
   in_progress: '#faad14',
-  review: '#722ed1',
+  pending_approval: '#722ed1',
   done: '#52c41a'
 };
 
 const taskStatusLabels = {
   todo: 'Chưa làm',
   in_progress: 'Đang làm',
-  review: 'Review',
+  pending_approval: 'Chờ phê duyệt',
   done: 'Hoàn thành'
 };
 
@@ -78,7 +78,7 @@ const ProjectDetailScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { projectId } = route.params || {};
-  
+
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [project, setProject] = useState(null);
@@ -88,7 +88,7 @@ const ProjectDetailScreen = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedTask, setSelectedTask] = useState(null);
   const [taskModalVisible, setTaskModalVisible] = useState(false);
-  
+
   // Expenses state
   const [expenses, setExpenses] = useState([]);
   const [expensesLoading, setExpensesLoading] = useState(false);
@@ -102,7 +102,7 @@ const ProjectDetailScreen = () => {
     expense_date: new Date(),
   });
   const [showExpenseDatePicker, setShowExpenseDatePicker] = useState(false);
-  
+
   // AI Create task states
   const [createTaskModalVisible, setCreateTaskModalVisible] = useState(false);
   const [aiStep, setAiStep] = useState(0); // 0: Input, 1: AI Analysis, 2: Select Candidate
@@ -138,10 +138,10 @@ const ProjectDetailScreen = () => {
         JobService.getProjectTaskStatistics(projectId).catch(() => null),
       ]);
 
-  console.log('🔍 [ProjectDetail] overviewRes:', overviewRes);
-  console.log('🔍 [ProjectDetail] detailRes:', detailRes);
+      console.log('🔍 [ProjectDetail] overviewRes:', overviewRes);
+      console.log('🔍 [ProjectDetail] detailRes:', detailRes);
 
-  const projectData = overviewRes?.project ?? overviewRes?.data?.project ?? overviewRes;
+      const projectData = overviewRes?.project ?? overviewRes?.data?.project ?? overviewRes;
 
       // Enrich manager info: overview returns manager_id as integer,
       // detailRes (getProjectById) enriches it with user object
@@ -153,7 +153,7 @@ const ProjectDetailScreen = () => {
         const normalizedMembersTemp = Array.isArray(membersRes?.members)
           ? membersRes.members
           : Array.isArray(membersRes?.data) ? membersRes.data
-          : Array.isArray(membersRes) ? membersRes : [];
+            : Array.isArray(membersRes) ? membersRes : [];
         const managerMember = normalizedMembersTemp.find(m => {
           const uid = typeof m.user_id === 'object' ? m.user_id?.id : m.user_id;
           return uid === projectData.manager_id;
@@ -169,10 +169,10 @@ const ProjectDetailScreen = () => {
       const normalizedMembers = Array.isArray(membersRes?.members)
         ? membersRes.members
         : Array.isArray(membersRes?.data)
-        ? membersRes.data
-        : Array.isArray(membersRes)
-        ? membersRes
-        : membersRes?.data?.members ?? [];
+          ? membersRes.data
+          : Array.isArray(membersRes)
+            ? membersRes
+            : membersRes?.data?.members ?? [];
 
       setMembers(normalizedMembers);
       setTasks(tasksRes?.data ?? tasksRes?.tasks ?? tasksRes ?? []);
@@ -302,7 +302,7 @@ const ProjectDetailScreen = () => {
       }
     } catch (error) {
       console.error('AI Analysis error:', error);
-      Alert.alert('Lỗi', error.message || 'Không thể phân tích công việc');
+      Alert.alert('Lỗi', error?.response?.data?.message || error?.response?.data?.error || error.message || 'Không thể phân tích công việc');
     } finally {
       setAiLoading(false);
     }
@@ -318,7 +318,7 @@ const ProjectDetailScreen = () => {
       const startDate = newTask.startDate;
       const dueDate = newTask.dueDate;
       let computedDays = 1;
-      
+
       if (startDate && dueDate) {
         const diffTime = dueDate.getTime() - startDate.getTime();
         computedDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
@@ -353,7 +353,7 @@ const ProjectDetailScreen = () => {
       }
     } catch (error) {
       console.error('Find candidates error:', error);
-      Alert.alert('Lỗi', error.message || 'Không thể tìm ứng viên');
+      Alert.alert('Lỗi', error?.response?.data?.message || error?.response?.data?.error || error.message || 'Không thể tìm ứng viên');
     } finally {
       setAiLoading(false);
     }
@@ -367,7 +367,7 @@ const ProjectDetailScreen = () => {
       const startDate = newTask.startDate;
       const dueDate = newTask.dueDate;
       let computedDays = 1;
-      
+
       if (startDate && dueDate) {
         const diffTime = dueDate.getTime() - startDate.getTime();
         computedDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
@@ -390,7 +390,7 @@ const ProjectDetailScreen = () => {
       };
 
       const response = await JobService.createJobWithAnalysis(payload);
-      
+
       if (response.success || response.data?.success) {
         Alert.alert('Thành công', 'Đã tạo công việc với AI');
         closeAndResetModal();
@@ -398,7 +398,7 @@ const ProjectDetailScreen = () => {
       }
     } catch (error) {
       console.error('Error creating task:', error);
-      Alert.alert('Lỗi', error.message || 'Không thể tạo công việc');
+      Alert.alert('Lỗi', error?.response?.data?.message || error?.response?.data?.error || error.message || 'Không thể tạo công việc');
     } finally {
       setAiLoading(false);
     }
@@ -515,7 +515,7 @@ const ProjectDetailScreen = () => {
               {statusLabel}
             </Chip>
           </View>
-          
+
           {project.description && (
             <Text style={styles.description}>{project.description}</Text>
           )}
@@ -527,9 +527,9 @@ const ProjectDetailScreen = () => {
                 {project.progress || 0}%
               </Text>
             </View>
-            <ProgressBar 
-              progress={(project.progress || 0) / 100} 
-              color={statusColor} 
+            <ProgressBar
+              progress={(project.progress || 0) / 100}
+              color={statusColor}
               style={styles.progressBar}
             />
           </View>
@@ -538,7 +538,7 @@ const ProjectDetailScreen = () => {
         {/* Details Card */}
         <Surface style={styles.detailsCard} elevation={2}>
           <Text style={styles.sectionTitle}>Thông tin chi tiết</Text>
-          
+
           <View style={styles.detailRow}>
             <View style={styles.detailItem}>
               <MaterialCommunityIcons name="calendar-start" size={18} color="#1890ff" />
@@ -570,8 +570,8 @@ const ProjectDetailScreen = () => {
               <MaterialCommunityIcons name="cash-minus" size={18} color="#faad14" />
               <View style={styles.detailContent}>
                 <Text style={styles.detailLabel}>Đã chi</Text>
-                <Text style={[styles.detailValue, { 
-                  color: (project.spent || 0) > (project.budget || 0) ? '#ff4d4f' : '#52c41a' 
+                <Text style={[styles.detailValue, {
+                  color: (project.spent || 0) > (project.budget || 0) ? '#ff4d4f' : '#52c41a'
                 }]}>
                   {formatCurrency(project.spent)}
                 </Text>
@@ -597,8 +597,8 @@ const ProjectDetailScreen = () => {
         <Surface style={styles.managerCard} elevation={2}>
           <Text style={styles.sectionTitle}>Quản lý dự án</Text>
           <View style={styles.managerInfo}>
-            <Avatar.Text 
-              size={48} 
+            <Avatar.Text
+              size={48}
               label={getInitials(
                 project.manager?.fullName || project.manager?.name ||
                 (typeof project.manager_id === 'object' ? project.manager_id?.fullName : '') || ''
@@ -608,8 +608,8 @@ const ProjectDetailScreen = () => {
             <View style={styles.managerDetails}>
               <Text style={styles.managerName}>
                 {project.manager?.fullName || project.manager?.name ||
-                 (typeof project.manager_id === 'object' ? project.manager_id?.fullName : null) ||
-                 'Chưa có quản lý'}
+                  (typeof project.manager_id === 'object' ? project.manager_id?.fullName : null) ||
+                  'Chưa có quản lý'}
               </Text>
               <Text style={styles.managerRole}>Project Manager</Text>
             </View>
@@ -644,7 +644,7 @@ const ProjectDetailScreen = () => {
               <Surface style={styles.taskCard} elevation={1}>
                 {/* Title row */}
                 <Text style={styles.taskTitle} numberOfLines={2}>{task.title}</Text>
-                
+
                 {/* Status and Priority chips */}
                 <View style={styles.taskChipsRow}>
                   <Chip
@@ -673,8 +673,8 @@ const ProjectDetailScreen = () => {
 
                 {task.assignee && (
                   <View style={styles.taskAssignee}>
-                    <Avatar.Text 
-                      size={20} 
+                    <Avatar.Text
+                      size={20}
                       label={getInitials(task.assignee?.name || task.assignee?.fullName || '')}
                       style={styles.assigneeAvatar}
                     />
@@ -708,8 +708,8 @@ const ProjectDetailScreen = () => {
 
           return (
             <Surface key={user?.id || index} style={styles.memberCard} elevation={1}>
-              <Avatar.Text 
-                size={48} 
+              <Avatar.Text
+                size={48}
                 label={getInitials(name)}
                 style={styles.memberAvatar}
               />
@@ -725,9 +725,9 @@ const ProjectDetailScreen = () => {
             </Surface>
           );
         })
-  )}
+      )}
 
-      
+
     </View>
   );
 
@@ -1024,7 +1024,7 @@ const ProjectDetailScreen = () => {
 
   const renderTaskModal = () => {
     if (!selectedTask) return null;
-    
+
     const statusColor = taskStatusColors[selectedTask.status] || '#1890ff';
     const statusLabel = taskStatusLabels[selectedTask.status] || selectedTask.status;
 
@@ -1044,7 +1044,7 @@ const ProjectDetailScreen = () => {
 
           <ScrollView style={styles.modalContent}>
             <Text style={styles.taskDetailTitle}>{selectedTask.title}</Text>
-            
+
             {selectedTask.description && (
               <Text style={styles.taskDetailDesc}>{selectedTask.description}</Text>
             )}
@@ -1214,10 +1214,10 @@ const ProjectDetailScreen = () => {
                     <MaterialCommunityIcons name="robot" size={24} color="#1890ff" />
                     <Text style={styles.aiResultTitle}>Kết quả phân tích AI</Text>
                   </View>
-                  
+
                   <View style={styles.aiResultRow}>
                     <Text style={styles.aiResultLabel}>Độ khó:</Text>
-                    <Chip 
+                    <Chip
                       style={{ backgroundColor: (difficultyColors[aiAnalysis.difficulty_level - 1] || '#1890ff') + '20' }}
                       textStyle={{ color: difficultyColors[aiAnalysis.difficulty_level - 1] || '#1890ff' }}
                     >
@@ -1242,8 +1242,8 @@ const ProjectDetailScreen = () => {
                       <Text style={styles.skillsTitle}>Kỹ năng yêu cầu</Text>
                       <View style={styles.skillsContainer}>
                         {aiAnalysis.required_skills.map((skill, index) => (
-                          <Chip 
-                            key={index} 
+                          <Chip
+                            key={index}
                             style={styles.skillChip}
                             textStyle={styles.skillChipText}
                           >
@@ -1292,17 +1292,17 @@ const ProjectDetailScreen = () => {
                         key={candidate.user_id}
                         onPress={() => setSelectedCandidate(candidate.user_id)}
                       >
-                        <Surface 
+                        <Surface
                           style={[
                             styles.candidateCard,
                             isSelected && styles.candidateCardSelected
-                          ]} 
+                          ]}
                           elevation={isSelected ? 2 : 1}
                         >
                           <View style={styles.candidateHeader}>
                             <View style={styles.candidateInfo}>
-                              <Avatar.Text 
-                                size={40} 
+                              <Avatar.Text
+                                size={40}
                                 label={getInitials(candidate.fullName || '')}
                                 style={styles.candidateAvatar}
                               />
@@ -1323,14 +1323,14 @@ const ProjectDetailScreen = () => {
                           {candidate.matched_skills?.length > 0 && (
                             <View style={styles.matchedSkillsRow}>
                               {candidate.matched_skills.slice(0, 3).map((skill, idx) => (
-                                <Chip 
-                                  key={idx} 
-                                  style={[styles.matchedSkillChip, { 
-                                    backgroundColor: skill.is_match ? '#52c41a20' : '#ff4d4f20' 
+                                <Chip
+                                  key={idx}
+                                  style={[styles.matchedSkillChip, {
+                                    backgroundColor: skill.is_match ? '#52c41a20' : '#ff4d4f20'
                                   }]}
-                                  textStyle={{ 
-                                    fontSize: 10, 
-                                    color: skill.is_match ? '#52c41a' : '#ff4d4f' 
+                                  textStyle={{
+                                    fontSize: 10,
+                                    color: skill.is_match ? '#52c41a' : '#ff4d4f'
                                   }}
                                 >
                                   {skill.skill_name}
@@ -1492,13 +1492,13 @@ const ProjectDetailScreen = () => {
         showsVerticalScrollIndicator={false}
       >
         {renderTabs()}
-        
+
         {activeTab === 'overview' && renderOverview()}
         {activeTab === 'tasks' && renderTasks()}
         {activeTab === 'members' && renderMembers()}
         {activeTab === 'statistics' && renderStatistics()}
         {activeTab === 'expenses' && renderExpenses()}
-        
+
         <View style={{ height: 80 }} />
       </ScrollView>
 

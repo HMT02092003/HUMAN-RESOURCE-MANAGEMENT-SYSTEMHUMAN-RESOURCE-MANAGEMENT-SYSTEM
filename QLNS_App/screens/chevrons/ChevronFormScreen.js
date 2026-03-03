@@ -2,23 +2,35 @@ import React, { useState, useEffect } from 'react';
 import { Alert } from 'react-native';
 import FormScreen from '../../components/FormScreen';
 import { ChevronService } from '../../services/ChevronService';
+import RoleService from '../../services/RoleService';
 
 const ChevronFormScreen = ({ navigation, route }) => {
   const { mode = 'create', chevronId } = route.params || {};
   const isEditMode = mode === 'edit';
-  
+
   const [loading, setLoading] = useState(false);
   const [initialValues, setInitialValues] = useState({
     name: '',
     description: '',
-    chevronCoefficient: '1'
+    role_ids: []
   });
+  const [roles, setRoles] = useState([]);
 
   useEffect(() => {
+    loadRoles();
     if (isEditMode && chevronId) {
       loadChevronData();
     }
   }, [isEditMode, chevronId]);
+
+  const loadRoles = async () => {
+    try {
+      const rolesData = await RoleService.getAllRoles();
+      setRoles(rolesData || []);
+    } catch (error) {
+      console.error('Error fetching roles:', error);
+    }
+  };
 
   const loadChevronData = async () => {
     setLoading(true);
@@ -28,7 +40,7 @@ const ChevronFormScreen = ({ navigation, route }) => {
       setInitialValues({
         name: chevron.name || '',
         description: chevron.description || '',
-        chevronCoefficient: chevron.chevronCoefficient?.toString() || '1'
+        role_ids: chevron.role_ids || []
       });
     } catch (error) {
       console.error('Error loading chevron:', error);
@@ -52,13 +64,12 @@ const ChevronFormScreen = ({ navigation, route }) => {
           errorMessage: 'Vui lòng nhập tên chức vụ'
         },
         {
-          name: 'chevronCoefficient',
-          label: 'Hệ số chức vụ',
-          type: 'number',
-          icon: 'numeric',
-          required: true,
-          placeholder: 'Nhập hệ số (VD: 1.5)',
-          errorMessage: 'Vui lòng nhập hệ số chức vụ'
+          name: 'role_ids',
+          label: 'Vai trò liên quan',
+          type: 'multiselect',
+          icon: 'shield-account',
+          options: roles.map(r => ({ label: r.name, value: r.id })),
+          placeholder: 'Chọn vai trò...',
         },
         {
           name: 'description',
@@ -74,7 +85,7 @@ const ChevronFormScreen = ({ navigation, route }) => {
   ];
 
   const handleSubmit = async (values) => {
-    const payload = { ...values, chevronCoefficient: Number(values.chevronCoefficient) || 1 };
+    const payload = { ...values };
     try {
       if (isEditMode) {
         await ChevronService.updateChevron(chevronId, payload);

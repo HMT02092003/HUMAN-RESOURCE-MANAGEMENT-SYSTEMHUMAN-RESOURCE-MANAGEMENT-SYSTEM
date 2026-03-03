@@ -15,12 +15,27 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import CardListWithInfiniteScroll from '../../components/CardListWithInfiniteScroll';
 import { ChevronService } from '../../services/ChevronService';
+import RoleService from '../../services/RoleService';
 import CheckPermission from '../../components/CheckPermission';
 
 const ChevronListScreen = ({ navigation }) => {
   const theme = useTheme();
   const [visibleMenuId, setVisibleMenuId] = React.useState(null);
+  const [roles, setRoles] = React.useState([]);
   const listRef = React.useRef(null);
+
+  React.useEffect(() => {
+    loadRoles();
+  }, []);
+
+  const loadRoles = async () => {
+    try {
+      const rolesData = await RoleService.getAllRoles();
+      setRoles(rolesData || []);
+    } catch (error) {
+      console.error('Error fetching roles:', error);
+    }
+  };
 
   // Refresh list when screen gains focus
   useFocusEffect(
@@ -183,28 +198,22 @@ const ChevronListScreen = ({ navigation }) => {
         </View>
 
         {/* ROW 2: ADDITIONAL INFO */}
-        {(item.level || item.salary_coefficient) && (
+        {item.role_ids && item.role_ids.length > 0 && (
           <View style={styles.statsRow}>
-            {item.level && (
-              <Chip
-                icon="chevron-triple-up"
-                mode="outlined"
-                style={styles.statChip}
-                textStyle={styles.statChipText}
-              >
-                Cấp bậc: {item.level}
-              </Chip>
-            )}
-            {item.salary_coefficient && (
-              <Chip
-                icon="currency-usd"
-                mode="outlined"
-                style={styles.statChip}
-                textStyle={styles.statChipText}
-              >
-                Hệ số: {item.salary_coefficient}
-              </Chip>
-            )}
+            {item.role_ids.map(roleId => {
+              const role = roles.find(r => r.id === roleId);
+              if (!role) return null;
+              return (
+                <Chip
+                  key={roleId}
+                  mode="outlined"
+                  style={[styles.statChip, { borderColor: '#1890ff' }]}
+                  textStyle={[styles.statChipText, { color: '#1890ff' }]}
+                >
+                  {role.name}
+                </Chip>
+              );
+            })}
           </View>
         )}
       </Card.Content>

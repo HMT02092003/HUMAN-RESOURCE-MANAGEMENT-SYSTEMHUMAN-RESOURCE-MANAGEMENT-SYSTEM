@@ -8,6 +8,7 @@ import {
   Alert,
   ScrollView,
   Dimensions,
+  TextInput,
 } from 'react-native';
 import {
   Surface,
@@ -56,16 +57,22 @@ const AttendanceApprovalScreen = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMenu, setFilterMenu] = useState(false);
   const [filterStatus, setFilterStatus] = useState('all'); // all, approved, pending
-  
+
   // Modal state
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState(null);
+
+  // Bulk Approve state
+  const curDate = new Date();
+  const [showApproveMonthModal, setShowApproveMonthModal] = useState(false);
+  const [exportYearSelection, setExportYearSelection] = useState(curDate.getFullYear().toString());
+  const [exportMonthSelection, setExportMonthSelection] = useState((curDate.getMonth() + 1).toString());
 
   // ==================== FETCH DATA ====================
   const fetchData = useCallback(async () => {
     try {
       console.log('📊 [App] Fetching monthly summaries for approval...');
-      
+
       const response = await api.get('/attendance/monthly-summaries-by-scope', {
         params: {
           permissionKey: 'users',
@@ -138,6 +145,46 @@ const AttendanceApprovalScreen = ({ navigation }) => {
     );
   };
 
+  const handleApproveAllMonth = async () => {
+    setShowApproveMonthModal(false);
+
+    // validate
+    if (!exportMonthSelection || isNaN(exportMonthSelection) || Number(exportMonthSelection) < 1 || Number(exportMonthSelection) > 12) {
+      Alert.alert('Lỗi', 'Tháng không hợp lệ'); return;
+    }
+    if (!exportYearSelection || isNaN(exportYearSelection) || Number(exportYearSelection) < 2000) {
+      Alert.alert('Lỗi', 'Năm không hợp lệ'); return;
+    }
+
+    const m = Number(exportMonthSelection);
+    const monthStr = `${exportYearSelection}-${String(m).padStart(2, '0')}`;
+    const monthDisplay = `${String(m).padStart(2, '0')}/${exportYearSelection}`;
+
+    Alert.alert(
+      'Xác nhận duyệt tất cả',
+      `Bạn có chắc chắn muốn duyệt TẤT CẢ bảng chấm công (chưa duyệt) của tháng ${monthDisplay}?`,
+      [
+        { text: 'Hủy', style: 'cancel' },
+        {
+          text: 'Duyệt tất cả',
+          onPress: async () => {
+            try {
+              const response = await api.post('/attendance/approve-month', { month: monthStr });
+              if (response.data?.success) {
+                Alert.alert('Thành công', `Đã duyệt ${response.data.data.approved || 0} bảng chấm công cho tháng ${monthDisplay}`);
+              } else {
+                Alert.alert('Thành công', `Đã duyệt bảng chấm công cho tháng ${monthDisplay}`);
+              }
+              fetchData();
+            } catch (error) {
+              Alert.alert('Lỗi', error.response?.data?.message || 'Lỗi khi duyệt tất cả bảng chấm công');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   // ==================== VIEW DETAIL HANDLER ====================
   const handleViewDetail = (record) => {
     setSelectedRecord(record);
@@ -156,14 +203,14 @@ const AttendanceApprovalScreen = ({ navigation }) => {
     const userName = `${item.user?.firstName || ''} ${item.user?.lastName || ''}`.toLowerCase();
     const username = (item.user?.username || '').toLowerCase();
     const department = (item.user?.department?.name || '').toLowerCase();
-    
-    const matchesSearch = !searchQuery || 
-      userName.includes(searchLower) || 
-      username.includes(searchLower) || 
+
+    const matchesSearch = !searchQuery ||
+      userName.includes(searchLower) ||
+      username.includes(searchLower) ||
       department.includes(searchLower);
 
     // Status filter
-    const matchesStatus = filterStatus === 'all' || 
+    const matchesStatus = filterStatus === 'all' ||
       (filterStatus === 'approved' && item.isApproved) ||
       (filterStatus === 'pending' && !item.isApproved);
 
@@ -328,10 +375,20 @@ const AttendanceApprovalScreen = ({ navigation }) => {
       </Surface>
 
       {/* Summary */}
-      <View style={styles.summaryRow}>
+      <View style={[styles.summaryRow, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
         <Text style={styles.summaryText}>
           Hiển thị {filteredData.length}/{data.length} bản ghi
         </Text>
+        <Button
+          mode="contained"
+          icon="calendar-check"
+          onPress={() => setShowApproveMonthModal(true)}
+          buttonColor="#52c41a"
+          style={{ height: 36, justifyContent: 'center' }}
+          labelStyle={{ fontSize: 13, marginVertical: 0 }}
+        >
+          Duyệt theo tháng
+        </Button>
       </View>
 
       {/* List */}
@@ -525,6 +582,46 @@ const AttendanceApprovalScreen = ({ navigation }) => {
               </View>
             </ScrollView>
           )}
+        </Modal>
+      </Portal>
+
+      {/* Bulk Approve Modal */}
+      <Portal>
+        <Modal visible={showApproveMonthModal} onDismiss={() => setShowApproveMonthModal(false)} contentContainerStyle={[styles.modalContainer, { maxHeight: 'auto' }]}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Duyệt chấm công theo tháng</Text>
+            <IconButton icon="close" size={24} onPress={() => setShowApproveMonthModal(false)} style={styles.closeButton} />
+          </View>
+          <Divider style={{ marginBottom: 16 }} />
+          <Text style={{ fontSize: 14, color: '#595959', marginBottom: 16 }}>Sẽ duyệt TẤT CẢ các bảng chấm công (chưa duyệt) của tháng đã chọn:</Text>
+          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 24 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: '#262626' }}>Tháng (1-12):</Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: '#d9d9d9', borderRadius: 6, paddingVertical: 10, paddingHorizontal: 12, fontSize: 15, backgroundColor: '#fff' }}
+                keyboardType="numeric"
+                value={exportMonthSelection}
+                onChangeText={setExportMonthSelection}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '600', marginBottom: 6, color: '#262626' }}>Năm:</Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: '#d9d9d9', borderRadius: 6, paddingVertical: 10, paddingHorizontal: 12, fontSize: 15, backgroundColor: '#fff' }}
+                keyboardType="numeric"
+                value={exportYearSelection}
+                onChangeText={setExportYearSelection}
+              />
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
+            <Button mode="contained" onPress={handleApproveAllMonth} buttonColor="#52c41a" style={{ flex: 1, borderRadius: 6 }}>
+              Duyệt tất cả
+            </Button>
+            <Button mode="outlined" onPress={() => setShowApproveMonthModal(false)} style={{ flex: 1, borderRadius: 6 }}>
+              Hủy
+            </Button>
+          </View>
         </Modal>
       </Portal>
     </View>

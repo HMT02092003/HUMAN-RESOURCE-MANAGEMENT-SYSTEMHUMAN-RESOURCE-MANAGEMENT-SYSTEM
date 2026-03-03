@@ -527,9 +527,9 @@ const AttendanceListScreen = ({ route }) => {
                   <View style={[styles.statusBanner, { backgroundColor: '#fffbe6', borderColor: '#ffe58f' }]}>
                     <MaterialCommunityIcons name="calendar-check" size={28} color="#faad14" />
                     <Text style={[styles.statusText, { color: '#faad14' }]}>Nghỉ phép</Text>
-                    {data.leaveData?.leaveType && (
+                    {data.leaveType && (
                       <Chip mode="outlined" style={{ marginTop: 8 }}>
-                        {data.leaveData.leaveType === 'leave' ? 'Nghỉ có lương' : 'Nghỉ không lương'}
+                        {data.isPaidLeave ? 'Nghỉ có lương' : 'Nghỉ không lương'}
                       </Chip>
                     )}
                   </View>

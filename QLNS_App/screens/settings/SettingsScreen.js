@@ -32,7 +32,7 @@ const SettingsScreen = ({ navigation }) => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-    const [activeTab, setActiveTab] = useState('time'); // 'time', 'rates', 'days', 'insurance'
+    const [activeTab, setActiveTab] = useState('lunchBreak'); // 'lunchBreak', 'overtimeRate', 'holidayRate', 'penaltyRate', 'unauthorizedAbsencePenaltyRate', 'workingDays', 'BHXH', 'BHYT', 'TNCN'
 
     // Settings data
     const [settings, setSettings] = useState({
@@ -122,7 +122,7 @@ const SettingsScreen = ({ navigation }) => {
         if (Platform.OS === 'android') {
             setShowTimePicker(false);
         }
-        
+
         if (selectedTime && currentTimeField) {
             const timeStr = formatTime(selectedTime);
             setSettings(prev => {
@@ -196,33 +196,41 @@ const SettingsScreen = ({ navigation }) => {
     const renderTabs = () => (
         <View style={styles.tabContainer}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <TouchableOpacity
-                    style={[styles.tab, activeTab === 'time' && styles.activeTab]}
-                    onPress={() => setActiveTab('time')}
-                >
-                    <Ionicons name="cafe-outline" size={18} color={activeTab === 'time' ? '#fff' : '#666'} />
-                    <Text style={[styles.tabText, activeTab === 'time' && styles.activeTabText]}>Giờ nghỉ trưa</Text>
+                <TouchableOpacity style={[styles.tab, activeTab === 'lunchBreak' && styles.activeTab]} onPress={() => setActiveTab('lunchBreak')}>
+                    <Ionicons name="cafe-outline" size={18} color={activeTab === 'lunchBreak' ? '#fff' : '#666'} />
+                    <Text style={[styles.tabText, activeTab === 'lunchBreak' && styles.activeTabText]}>Giờ nghỉ trưa</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.tab, activeTab === 'rates' && styles.activeTab]}
-                    onPress={() => setActiveTab('rates')}
-                >
-                    <Ionicons name="cash-outline" size={18} color={activeTab === 'rates' ? '#fff' : '#666'} />
-                    <Text style={[styles.tabText, activeTab === 'rates' && styles.activeTabText]}>Tỷ lệ lương</Text>
+                <TouchableOpacity style={[styles.tab, activeTab === 'overtimeRate' && styles.activeTab]} onPress={() => setActiveTab('overtimeRate')}>
+                    <Ionicons name="cash-outline" size={18} color={activeTab === 'overtimeRate' ? '#fff' : '#666'} />
+                    <Text style={[styles.tabText, activeTab === 'overtimeRate' && styles.activeTabText]}>OT ngày thường</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.tab, activeTab === 'days' && styles.activeTab]}
-                    onPress={() => setActiveTab('days')}
-                >
-                    <Ionicons name="calendar-outline" size={18} color={activeTab === 'days' ? '#fff' : '#666'} />
-                    <Text style={[styles.tabText, activeTab === 'days' && styles.activeTabText]}>Ngày làm việc</Text>
+                <TouchableOpacity style={[styles.tab, activeTab === 'holidayRate' && styles.activeTab]} onPress={() => setActiveTab('holidayRate')}>
+                    <Ionicons name="gift-outline" size={18} color={activeTab === 'holidayRate' ? '#fff' : '#666'} />
+                    <Text style={[styles.tabText, activeTab === 'holidayRate' && styles.activeTabText]}>OT ngày lễ</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                    style={[styles.tab, activeTab === 'insurance' && styles.activeTab]}
-                    onPress={() => setActiveTab('insurance')}
-                >
-                    <Ionicons name="shield-checkmark-outline" size={18} color={activeTab === 'insurance' ? '#fff' : '#666'} />
-                    <Text style={[styles.tabText, activeTab === 'insurance' && styles.activeTabText]}>Bảo hiểm</Text>
+                <TouchableOpacity style={[styles.tab, activeTab === 'penaltyRate' && styles.activeTab]} onPress={() => setActiveTab('penaltyRate')}>
+                    <Ionicons name="warning-outline" size={18} color={activeTab === 'penaltyRate' ? '#fff' : '#666'} />
+                    <Text style={[styles.tabText, activeTab === 'penaltyRate' && styles.activeTabText]}>Phạt đi muộn/về sớm</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.tab, activeTab === 'unauthorizedAbsencePenaltyRate' && styles.activeTab]} onPress={() => setActiveTab('unauthorizedAbsencePenaltyRate')}>
+                    <Ionicons name="close-circle-outline" size={18} color={activeTab === 'unauthorizedAbsencePenaltyRate' ? '#fff' : '#666'} />
+                    <Text style={[styles.tabText, activeTab === 'unauthorizedAbsencePenaltyRate' && styles.activeTabText]}>Phạt nghỉ không phép</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.tab, activeTab === 'workingDays' && styles.activeTab]} onPress={() => setActiveTab('workingDays')}>
+                    <Ionicons name="calendar-outline" size={18} color={activeTab === 'workingDays' ? '#fff' : '#666'} />
+                    <Text style={[styles.tabText, activeTab === 'workingDays' && styles.activeTabText]}>Ngày làm việc</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.tab, activeTab === 'BHXH' && styles.activeTab]} onPress={() => setActiveTab('BHXH')}>
+                    <Ionicons name="shield-checkmark-outline" size={18} color={activeTab === 'BHXH' ? '#fff' : '#666'} />
+                    <Text style={[styles.tabText, activeTab === 'BHXH' && styles.activeTabText]}>Bảo hiểm xã hội</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.tab, activeTab === 'BHYT' && styles.activeTab]} onPress={() => setActiveTab('BHYT')}>
+                    <Ionicons name="medkit-outline" size={18} color={activeTab === 'BHYT' ? '#fff' : '#666'} />
+                    <Text style={[styles.tabText, activeTab === 'BHYT' && styles.activeTabText]}>Bảo hiểm y tế</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.tab, activeTab === 'TNCN' && styles.activeTab]} onPress={() => setActiveTab('TNCN')}>
+                    <Ionicons name="document-text-outline" size={18} color={activeTab === 'TNCN' ? '#fff' : '#666'} />
+                    <Text style={[styles.tabText, activeTab === 'TNCN' && styles.activeTabText]}>Thuế TNCN</Text>
                 </TouchableOpacity>
             </ScrollView>
         </View>
@@ -238,7 +246,7 @@ const SettingsScreen = ({ navigation }) => {
                     <Text style={styles.cardTitle}>Giờ nghỉ trưa</Text>
                 </View>
                 <Text style={styles.cardDescription}>Cấu hình thời gian nghỉ trưa</Text>
-                
+
                 <View style={styles.timeRow}>
                     <View style={styles.timeField}>
                         <Text style={styles.timeLabel}>Bắt đầu</Text>
@@ -264,7 +272,7 @@ const SettingsScreen = ({ navigation }) => {
                         </TouchableOpacity>
                     </View>
                 </View>
-                
+
                 <TouchableOpacity
                     style={[styles.saveButton, { backgroundColor: '#52c41a' }]}
                     onPress={saveLunchBreak}
@@ -284,7 +292,7 @@ const SettingsScreen = ({ navigation }) => {
     );
 
     // Render rate settings
-    const renderRateSettings = () => (
+    const renderOvertimeRate = () => (
         <View style={styles.section}>
             {/* Tỷ lệ OT ngày thường */}
             <View style={styles.card}>
@@ -293,7 +301,7 @@ const SettingsScreen = ({ navigation }) => {
                     <Text style={styles.cardTitle}>Tỷ lệ OT ngày thường</Text>
                 </View>
                 <Text style={styles.cardDescription}>Hệ số nhân lương khi làm thêm giờ ngày thường</Text>
-                
+
                 <View style={styles.rateInputContainer}>
                     <TextInput
                         style={styles.rateInput}
@@ -304,7 +312,7 @@ const SettingsScreen = ({ navigation }) => {
                     />
                     <Text style={styles.rateUnit}>x lương cơ bản</Text>
                 </View>
-                
+
                 <TouchableOpacity
                     style={[styles.saveButton, { backgroundColor: '#fa8c16' }]}
                     onPress={() => saveRate('OvertimeRate')}
@@ -314,7 +322,11 @@ const SettingsScreen = ({ navigation }) => {
                     <Text style={styles.saveButtonText}>Lưu</Text>
                 </TouchableOpacity>
             </View>
+        </View>
+    );
 
+    const renderHolidayRate = () => (
+        <View style={styles.section}>
             {/* Tỷ lệ OT ngày lễ */}
             <View style={styles.card}>
                 <View style={styles.cardHeader}>
@@ -322,7 +334,7 @@ const SettingsScreen = ({ navigation }) => {
                     <Text style={styles.cardTitle}>Tỷ lệ OT ngày lễ</Text>
                 </View>
                 <Text style={styles.cardDescription}>Hệ số nhân lương khi làm thêm giờ ngày lễ</Text>
-                
+
                 <View style={styles.rateInputContainer}>
                     <TextInput
                         style={styles.rateInput}
@@ -333,7 +345,7 @@ const SettingsScreen = ({ navigation }) => {
                     />
                     <Text style={styles.rateUnit}>x lương cơ bản</Text>
                 </View>
-                
+
                 <TouchableOpacity
                     style={[styles.saveButton, { backgroundColor: '#eb2f96' }]}
                     onPress={() => saveRate('HolidayRate')}
@@ -343,7 +355,11 @@ const SettingsScreen = ({ navigation }) => {
                     <Text style={styles.saveButtonText}>Lưu</Text>
                 </TouchableOpacity>
             </View>
+        </View>
+    );
 
+    const renderPenaltyRate = () => (
+        <View style={styles.section}>
             {/* Tỷ lệ phạt đi muộn/về sớm */}
             <View style={styles.card}>
                 <View style={styles.cardHeader}>
@@ -351,7 +367,7 @@ const SettingsScreen = ({ navigation }) => {
                     <Text style={styles.cardTitle}>Tỷ lệ phạt đi muộn/về sớm</Text>
                 </View>
                 <Text style={styles.cardDescription}>Tỷ lệ trừ lương khi đi muộn hoặc về sớm</Text>
-                
+
                 <View style={styles.rateInputContainer}>
                     <TextInput
                         style={styles.rateInput}
@@ -362,7 +378,7 @@ const SettingsScreen = ({ navigation }) => {
                     />
                     <Text style={styles.rateUnit}>% / phút</Text>
                 </View>
-                
+
                 <TouchableOpacity
                     style={[styles.saveButton, { backgroundColor: '#ff4d4f' }]}
                     onPress={() => saveRate('PenaltyRate')}
@@ -372,7 +388,11 @@ const SettingsScreen = ({ navigation }) => {
                     <Text style={styles.saveButtonText}>Lưu</Text>
                 </TouchableOpacity>
             </View>
+        </View>
+    );
 
+    const renderUnauthorizedAbsencePenaltyRate = () => (
+        <View style={styles.section}>
             {/* Tỷ lệ phạt vắng không phép */}
             <View style={styles.card}>
                 <View style={styles.cardHeader}>
@@ -380,7 +400,7 @@ const SettingsScreen = ({ navigation }) => {
                     <Text style={styles.cardTitle}>Phạt vắng không phép</Text>
                 </View>
                 <Text style={styles.cardDescription}>Số ngày lương trừ khi vắng không phép</Text>
-                
+
                 <View style={styles.rateInputContainer}>
                     <TextInput
                         style={styles.rateInput}
@@ -391,7 +411,7 @@ const SettingsScreen = ({ navigation }) => {
                     />
                     <Text style={styles.rateUnit}>ngày lương / ngày vắng</Text>
                 </View>
-                
+
                 <TouchableOpacity
                     style={[styles.saveButton, { backgroundColor: '#722ed1' }]}
                     onPress={() => saveRate('UnauthorizedAbsencePenaltyRate')}
@@ -413,7 +433,7 @@ const SettingsScreen = ({ navigation }) => {
                     <Text style={styles.cardTitle}>Ngày làm việc trong tuần</Text>
                 </View>
                 <Text style={styles.cardDescription}>Chọn các ngày làm việc trong tuần</Text>
-                
+
                 <View style={styles.daysContainer}>
                     {Object.entries(DAY_LABELS).map(([key, label]) => (
                         <TouchableOpacity
@@ -441,7 +461,7 @@ const SettingsScreen = ({ navigation }) => {
                         </TouchableOpacity>
                     ))}
                 </View>
-                
+
                 <TouchableOpacity
                     style={styles.saveButton}
                     onPress={saveWorkingDays}
@@ -460,8 +480,7 @@ const SettingsScreen = ({ navigation }) => {
         </View>
     );
 
-    // Render insurance settings
-    const renderInsuranceSettings = () => (
+    const renderBHXH = () => (
         <View style={styles.section}>
             {/* BHXH */}
             <View style={styles.card}>
@@ -470,7 +489,7 @@ const SettingsScreen = ({ navigation }) => {
                     <Text style={styles.cardTitle}>BHXH (Bảo hiểm xã hội)</Text>
                 </View>
                 <Text style={styles.cardDescription}>Tỷ lệ đóng bảo hiểm xã hội của người lao động</Text>
-                
+
                 <View style={styles.rateInputContainer}>
                     <TextInput
                         style={styles.rateInput}
@@ -481,7 +500,7 @@ const SettingsScreen = ({ navigation }) => {
                     />
                     <Text style={styles.rateUnit}>%</Text>
                 </View>
-                
+
                 <TouchableOpacity
                     style={[styles.saveButton, { backgroundColor: '#13c2c2' }]}
                     onPress={() => saveRate('BHXH')}
@@ -491,7 +510,11 @@ const SettingsScreen = ({ navigation }) => {
                     <Text style={styles.saveButtonText}>Lưu</Text>
                 </TouchableOpacity>
             </View>
+        </View>
+    );
 
+    const renderBHYT = () => (
+        <View style={styles.section}>
             {/* BHYT */}
             <View style={styles.card}>
                 <View style={styles.cardHeader}>
@@ -499,7 +522,7 @@ const SettingsScreen = ({ navigation }) => {
                     <Text style={styles.cardTitle}>BHYT (Bảo hiểm y tế)</Text>
                 </View>
                 <Text style={styles.cardDescription}>Tỷ lệ đóng bảo hiểm y tế của người lao động</Text>
-                
+
                 <View style={styles.rateInputContainer}>
                     <TextInput
                         style={styles.rateInput}
@@ -510,7 +533,7 @@ const SettingsScreen = ({ navigation }) => {
                     />
                     <Text style={styles.rateUnit}>%</Text>
                 </View>
-                
+
                 <TouchableOpacity
                     style={[styles.saveButton, { backgroundColor: '#52c41a' }]}
                     onPress={() => saveRate('BHYT')}
@@ -520,7 +543,11 @@ const SettingsScreen = ({ navigation }) => {
                     <Text style={styles.saveButtonText}>Lưu</Text>
                 </TouchableOpacity>
             </View>
+        </View>
+    );
 
+    const renderTNCN = () => (
+        <View style={styles.section}>
             {/* TNCN */}
             <View style={styles.card}>
                 <View style={styles.cardHeader}>
@@ -528,7 +555,7 @@ const SettingsScreen = ({ navigation }) => {
                     <Text style={styles.cardTitle}>TNCN (Thuế thu nhập cá nhân)</Text>
                 </View>
                 <Text style={styles.cardDescription}>Tỷ lệ thuế thu nhập cá nhân mặc định</Text>
-                
+
                 <View style={styles.rateInputContainer}>
                     <TextInput
                         style={styles.rateInput}
@@ -539,7 +566,7 @@ const SettingsScreen = ({ navigation }) => {
                     />
                     <Text style={styles.rateUnit}>%</Text>
                 </View>
-                
+
                 <TouchableOpacity
                     style={[styles.saveButton, { backgroundColor: '#fa8c16' }]}
                     onPress={() => saveRate('TNCN')}
@@ -555,16 +582,16 @@ const SettingsScreen = ({ navigation }) => {
     // Render content based on active tab
     const renderContent = () => {
         switch (activeTab) {
-            case 'time':
-                return renderTimeSettings();
-            case 'rates':
-                return renderRateSettings();
-            case 'days':
-                return renderDaysSettings();
-            case 'insurance':
-                return renderInsuranceSettings();
-            default:
-                return renderTimeSettings();
+            case 'lunchBreak': return renderTimeSettings();
+            case 'overtimeRate': return renderOvertimeRate();
+            case 'holidayRate': return renderHolidayRate();
+            case 'penaltyRate': return renderPenaltyRate();
+            case 'unauthorizedAbsencePenaltyRate': return renderUnauthorizedAbsencePenaltyRate();
+            case 'workingDays': return renderDaysSettings();
+            case 'BHXH': return renderBHXH();
+            case 'BHYT': return renderBHYT();
+            case 'TNCN': return renderTNCN();
+            default: return renderTimeSettings();
         }
     };
 

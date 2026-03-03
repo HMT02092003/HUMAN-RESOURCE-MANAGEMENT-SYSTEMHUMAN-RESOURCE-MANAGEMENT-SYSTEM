@@ -22,14 +22,18 @@ import {
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import UserService from '../../services/UserService';
+import SalaryService from '../../services/SalaryService';
 
 const UserDetailScreen = ({ route, navigation }) => {
   const { userId } = route.params;
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('info'); // 'info' or 'contract'
+  const [contractSalaries, setContractSalaries] = useState({});
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     loadUserDetail();
@@ -41,10 +45,15 @@ const UserDetailScreen = ({ route, navigation }) => {
       // Convert userId to number if it's a string
       const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
       console.log('📥 [UserDetail] Loading user detail with ID:', numericUserId, 'Type:', typeof numericUserId);
-      
+
       const response = await UserService.getUserDetail(numericUserId);
       setUser(response);
       console.log('✅ [UserDetail] Loaded:', response);
+
+      // Fetch salaries for contracts if present
+      if (response && response.contracts && response.contracts.length > 0) {
+        fetchContractSalaries(response.contracts);
+      }
     } catch (error) {
       console.error('❌ [UserDetail] Error loading:', error);
       Alert.alert(
@@ -54,6 +63,23 @@ const UserDetailScreen = ({ route, navigation }) => {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchContractSalaries = async (contracts) => {
+    try {
+      const salaryMap = {};
+      for (const contract of contracts) {
+        if (contract.id) {
+          const profile = await SalaryService.getEmployeeSalaryProfile(contract.userId);
+          if (profile && profile.salary) {
+            salaryMap[contract.id] = profile.salary;
+          }
+        }
+      }
+      setContractSalaries(salaryMap);
+    } catch (err) {
+      console.log('Error fetching contract salaries:', err);
     }
   };
 
@@ -68,7 +94,7 @@ const UserDetailScreen = ({ route, navigation }) => {
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
+    if (!dateString) return 'Không xác định';
     const date = new Date(dateString);
     return date.toLocaleDateString('vi-VN');
   };
@@ -113,6 +139,18 @@ const UserDetailScreen = ({ route, navigation }) => {
     );
   }
 
+  // Parse family members safely
+  let familyMembers = [];
+  if (user && user.profileFamily) {
+    if (typeof user.profileFamily === 'string') {
+      try {
+        familyMembers = JSON.parse(user.profileFamily);
+      } catch (e) { console.error('Error parsing family:', e); }
+    } else {
+      familyMembers = user.profileFamily;
+    }
+  }
+
   const renderInfoTab = () => (
     <ScrollView style={styles.tabContent} showsVerticalScrollIndicator={false}>
       {/* Avatar & Basic Info */}
@@ -153,7 +191,7 @@ const UserDetailScreen = ({ route, navigation }) => {
         <Card.Content>
           <Text style={styles.sectionTitle}>Thông tin liên hệ</Text>
           <Divider style={styles.divider} />
-          
+
           <View style={styles.infoRow}>
             <MaterialCommunityIcons name="email" size={20} color="#1890ff" />
             <View style={styles.infoContent}>
@@ -249,16 +287,16 @@ const UserDetailScreen = ({ route, navigation }) => {
       </Card>
 
       {/* Family Information */}
-      {user.profileFamily && user.profileFamily.length > 0 && (
+      {familyMembers && familyMembers.length > 0 && (
         <Card style={styles.card}>
           <Card.Content>
             <Text style={styles.sectionTitle}>Thông tin gia đình</Text>
             <Divider style={styles.divider} />
-            {user.profileFamily.map((member, index) => (
+            {familyMembers.map((member, index) => (
               <View key={index} style={styles.familyMember}>
                 <View style={styles.familyHeader}>
                   <MaterialCommunityIcons name="account-circle" size={24} color="#1890ff" />
-                  <Text style={styles.familyName}>{member.name}</Text>
+                  <Text style={styles.familyName}>{member.name || member.fullName || `Người thân ${index + 1}`}</Text>
                 </View>
                 <View style={styles.familyDetails}>
                   <Text style={styles.familyInfo}>
@@ -268,7 +306,7 @@ const UserDetailScreen = ({ route, navigation }) => {
                     Ngày sinh: <Text style={styles.familyValue}>{formatDate(member.birthday)}</Text>
                   </Text>
                 </View>
-                {index < user.profileFamily.length - 1 && <Divider style={styles.familyDivider} />}
+                {index < familyMembers.length - 1 && <Divider style={styles.familyDivider} />}
               </View>
             ))}
           </Card.Content>
@@ -336,7 +374,7 @@ const UserDetailScreen = ({ route, navigation }) => {
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Lương cơ bản</Text>
                   <Text style={styles.infoValue}>
-                    {contract.salary ? `${contract.salary.toLocaleString('vi-VN')} VNĐ` : 'N/A'}
+                    {contractSalaries[contract.id] ? `${contractSalaries[contract.id].toLocaleString('vi-VN')} VNĐ` : (contract.salary ? `${contract.salary.toLocaleString('vi-VN')} VNĐ` : 'Chưa có thông tin')}
                   </Text>
                 </View>
               </View>
@@ -358,9 +396,9 @@ const UserDetailScreen = ({ route, navigation }) => {
   return (
     <Surface style={styles.container}>
       <StatusBar style="dark" />
-      
+
       {/* Header with back button */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: Math.max(insets?.top || 0, 24) + 8 }]}>
         <IconButton
           icon="arrow-left"
           size={24}
@@ -421,7 +459,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 8,
-    paddingTop: (StatusBar.currentHeight || 0) + 8,
     paddingBottom: 8,
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,

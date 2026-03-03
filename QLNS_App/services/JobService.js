@@ -23,9 +23,9 @@ jobApi.interceptors.request.use(
     // Set base URL dynamically
     const baseUrl = getJobBaseUrl();
     config.baseURL = baseUrl;
-    
+
     console.log('📤 [JobService]', config.method?.toUpperCase(), config.url);
-    
+
     const token = await AuthTokenManager.getAccessToken();
     if (token) {
       console.log('🔑 [JobService] Token found');
@@ -33,7 +33,7 @@ jobApi.interceptors.request.use(
     } else {
       console.warn('⚠️ [JobService] No token found');
     }
-    
+
     return config;
   },
   (error) => Promise.reject(error)
@@ -47,7 +47,7 @@ jobApi.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
-    
+
     console.error('❌ [JobService] Error:', error.response?.status, error.response?.data?.message || error.message);
 
     // Nếu lỗi 401 và chưa retry
@@ -288,14 +288,14 @@ const statusLabels = {
 const taskStatusColors = {
   todo: '#faad14',
   in_progress: '#1890ff',
-  review: '#722ed1',
+  pending_approval: '#722ed1',
   done: '#52c41a'
 };
 
 const taskStatusLabels = {
   todo: 'Chờ làm',
   in_progress: 'Đang làm',
-  review: 'Đang review',
+  pending_approval: 'Chờ phê duyệt',
   done: 'Hoàn thành'
 };
 
