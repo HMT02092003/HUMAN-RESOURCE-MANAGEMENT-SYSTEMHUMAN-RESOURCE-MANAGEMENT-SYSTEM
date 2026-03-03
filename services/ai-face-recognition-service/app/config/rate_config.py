@@ -36,13 +36,13 @@ LIVENESS_V2_MODEL = "2.7_80x80_MiniFASNetV2.onnx"
 #   Ảnh GIẢ: V1_raw < 2.50%, V2_raw dao động 26%-71%
 #   Ảnh THẬT: V1_raw > 2.60%, V2_raw dao động 29%-72%
 # → V1 là chỉ số phân tách chính, V2 hỗ trợ lọc thêm
-# NOTE: Đặt ngưỡng V2 ở 40% và V1 ở 2.6% theo yêu cầu mới
+# NOTE: Đặt ngưỡng V2 ở 30% và V1 ở 2.6% theo yêu cầu mới
 LIVENESS_V1_THRESHOLD = 0.026   # 2.6% — dưới mức này = FAKE
-LIVENESS_V2_THRESHOLD = 0.40    # 40%
+LIVENESS_V2_THRESHOLD = 0.30    # 30%
 
 # Legacy alias — used by EnhancedInsightFaceService._check_liveness (old code path)
 # Giá trị này đại diện cho ngưỡng anti-spoof chung khi chỉ dùng V2
-LIVENESS_THRESHOLD = 0.40
+LIVENESS_THRESHOLD = 0.30
 
 # Recognition thresholds (cosine similarity của embedding — KHÔNG phải liveness)
 # ─── Phân biệt rõ ───────────────────────────────────────────────────────────────
