@@ -5,7 +5,7 @@ import DepartmentModel from './DepartmentModel';
 import ContractTypeModel from './ContractTypeModel';
 import ContractModel from './ContractModel';
 import connection from '../lib/Databases/Connection';
-import constantConfig from '@/src/config/constant';  
+import constantConfig from '@/src/config/constant';
 import { getDecodedToken } from '@/src/utils/decode-token';
 Model.knex(connection);
 
@@ -49,7 +49,7 @@ class UserModel extends Model {
         roleId: { type: 'integer' },
         fullName: { type: 'string' },
         email: { type: 'string' },
-        startDate: { 
+        startDate: {
           anyOf: [
             { type: 'string', format: 'date' },
             { type: 'string', format: 'date-time' },
@@ -60,16 +60,16 @@ class UserModel extends Model {
         profileFamily: { type: 'string' },
         chevronId: { type: 'integer' },
         departmentId: { type: 'integer' },
-        status: { 
+        status: {
           anyOf: [
             { type: 'string' },
             { type: 'integer' }
           ]
         },
-        
+
         createdBy: { type: 'integer' },
         updatedBy: { type: 'integer' },
-        birthday: { 
+        birthday: {
           anyOf: [
             { type: 'string', format: 'date' },
             { type: 'string', format: 'date-time' },
@@ -79,7 +79,7 @@ class UserModel extends Model {
         gender: { type: 'integer' },
         phone: { type: 'string' },
         identificationPhoto: { type: ['string', 'null'] },
-        
+
       },
     };
   }
@@ -153,7 +153,7 @@ class UserModel extends Model {
 
     // Lấy token từ cookie hoặc header Authorization
     let tokenFromCookie = req.cookies?.token;
-    
+
     // Nếu không có token trong cookie, thử lấy từ Authorization header
     if (!tokenFromCookie && req.headers.authorization) {
       const authHeader = req.headers.authorization;
@@ -161,7 +161,7 @@ class UserModel extends Model {
         tokenFromCookie = authHeader.substring(7); // Loại bỏ "Bearer "
       }
     }
-    
+
     let decodedAuth: any = null;
 
     if (tokenFromCookie) {
@@ -180,36 +180,37 @@ class UserModel extends Model {
 
     // Đảm bảo decodedAuth và user.scope tồn tại
     if (!decodedAuth || !decodedAuth.user || !decodedAuth.user.scope) {
-        console.error("Decoded token or scope information is missing.");
-        return [];
+      console.error("Decoded token or scope information is missing.");
+      return [];
     }
 
     // Lấy giá trị scope tương ứng với permissionKey từ token
-    const actualScopeValue = decodedAuth.user.scope[permissionKey];
+    const actualScopeValue = decodedAuth.user.scope?.[permissionKey];
     console.log(`Scope check - User: ${decodedAuth.user.id}, Permission: '${permissionKey}', Scope Value:`, actualScopeValue);
     console.log(`Available scopes in token:`, decodedAuth.user.scope);
 
 
     let ids: number[] = [];
 
-    if (actualScopeValue === permissionScope.personal) {
-      ids = [decodedAuth.user.id]; // Sử dụng id của user từ token
+    // Admin (roleId === 1) luôn có quyền global — kiểm tra trước tiên
+    // để đảm bảo Admin không bị block khi token thiếu permission key
+    if (decodedAuth.user.roleId === 1 || actualScopeValue === permissionScope.global) {
+      const users = await this.query().select('id');
+      ids = users.map(user => user.id);
     }
     else if (actualScopeValue === permissionScope.department) {
       const usersInDepartment = await this.query()
         .select('id')
-        .where('departmentId', decodedAuth.user.departmentId); // Sử dụng departmentId từ token
+        .where('departmentId', decodedAuth.user.departmentId);
 
       ids = usersInDepartment.map(user => user.id);
     }
-    else if (actualScopeValue === permissionScope.global || decodedAuth.user.roleId === 1 ) {
-      const users = await this.query().select('id');
-
-      ids = users.map(user => user.id);
-    } else {
-        console.warn(`Unknown scope value for '${permissionKey}': ${actualScopeValue}. Returning empty array.`);
-        // Xử lý trường hợp không tìm thấy scope hoặc giá trị không hợp lệ
-        return [];
+    else if (actualScopeValue === permissionScope.personal) {
+      ids = [decodedAuth.user.id];
+    }
+    else {
+      console.warn(`Unknown scope value for '${permissionKey}': ${actualScopeValue}. Returning empty array.`);
+      return [];
     }
 
     // console.log('ids:', ids);
