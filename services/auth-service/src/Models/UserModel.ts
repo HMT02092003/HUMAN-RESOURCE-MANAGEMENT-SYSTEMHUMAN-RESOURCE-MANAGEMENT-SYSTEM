@@ -185,31 +185,30 @@ class UserModel extends Model {
     }
 
     // Lấy giá trị scope tương ứng với permissionKey từ token
-    const actualScopeValue = decodedAuth.user.scope?.[permissionKey];
+    const actualScopeValue = decodedAuth.user.scope[permissionKey];
     console.log(`Scope check - User: ${decodedAuth.user.id}, Permission: '${permissionKey}', Scope Value:`, actualScopeValue);
     console.log(`Available scopes in token:`, decodedAuth.user.scope);
 
 
     let ids: number[] = [];
 
-    // Admin (roleId === 1) luôn có quyền global — kiểm tra trước tiên
-    // để đảm bảo Admin không bị block khi token thiếu permission key
-    if (decodedAuth.user.roleId === 1 || actualScopeValue === permissionScope.global) {
-      const users = await this.query().select('id');
-      ids = users.map(user => user.id);
+    if (actualScopeValue === permissionScope.personal) {
+      ids = [decodedAuth.user.id]; // Sử dụng id của user từ token
     }
     else if (actualScopeValue === permissionScope.department) {
       const usersInDepartment = await this.query()
         .select('id')
-        .where('departmentId', decodedAuth.user.departmentId);
+        .where('departmentId', decodedAuth.user.departmentId); // Sử dụng departmentId từ token
 
       ids = usersInDepartment.map(user => user.id);
     }
-    else if (actualScopeValue === permissionScope.personal) {
-      ids = [decodedAuth.user.id];
-    }
-    else {
+    else if (actualScopeValue === permissionScope.global || decodedAuth.user.roleId === 1) {
+      const users = await this.query().select('id');
+
+      ids = users.map(user => user.id);
+    } else {
       console.warn(`Unknown scope value for '${permissionKey}': ${actualScopeValue}. Returning empty array.`);
+      // Xử lý trường hợp không tìm thấy scope hoặc giá trị không hợp lệ
       return [];
     }
 
