@@ -706,8 +706,8 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                 collapsedWidth={0}
                 trigger={null}
             >
-                <div style={{ flexShrink: 0, width: "100%", display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "20px", marginBottom: "20px" }}>
-                    <img src="/logo/logo.png" alt="Logo NEXTHR" style={{ width: "80%", height: "auto", display: "block" }} />
+                <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "20px", marginBottom: "50px" }}>
+                    <img src="/logo/logo.png" alt="" style={{ width: "200px" }} />
                 </div>
                 <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
                     <Menu
