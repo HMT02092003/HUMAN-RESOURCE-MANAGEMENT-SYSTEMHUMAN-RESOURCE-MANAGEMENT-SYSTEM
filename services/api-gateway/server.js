@@ -97,6 +97,28 @@ app.use(cookieParser());
 // Gateway Authentication Middleware
 app.use(gatewayAuth);
 
+// LAN Only Middleware for Attendance check-in/out
+app.use((req, res, next) => {
+  const isAttendanceRoute = req.path.startsWith('/api/attendance/check-in') || req.path.startsWith('/api/attendance/check-out');
+
+  if (isAttendanceRoute) {
+    const host = req.headers.host || '';
+    const forwardedHost = req.headers['x-forwarded-host'] || '';
+    const origin = req.headers.origin || '';
+
+    // Check if the request is coming via ngrok
+    if (host.includes('ngrok') || forwardedHost.includes('ngrok') || origin.includes('ngrok')) {
+      console.warn(`🛑 LAN-ONLY SECURITY: Blocked external/ngrok access to attendance API from host: ${host}`);
+      return res.status(403).json({
+        success: false,
+        message: 'Truy cập bị từ chối. Tính năng chấm công chỉ khả dụng trong mạng nội bộ (LAN) của trường.',
+        error: 'LAN_ONLY_ACCESS_REQUIRED'
+      });
+    }
+  }
+  next();
+});
+
 // Dashboard aggregation routes (before proxy routes)
 app.use('/api/dashboard', dashboardRoutes);
 
@@ -104,24 +126,24 @@ app.use('/api/dashboard', dashboardRoutes);
 ROUTE_CONFIG.forEach(route => {
   const targetService = SERVICES[route.target];
   const fallbackService = SERVICES_FALLBACK[route.target];
-  
+
   if (!targetService) {
     console.error(`❌ Service '${route.target}' not found for route '${route.path}'`);
     return;
   }
-  
+
   // Always use createOptimizedProxy (now with fallback support built-in)
   app.use(
-    route.path, 
+    route.path,
     createOptimizedProxy(
       targetService,
       fallbackService,  // Pass fallback URL
-      route.pathRewrite, 
+      route.pathRewrite,
       route.handleMultipart,
       route.ws
     )
   );
-  
+
   const wsIndicator = route.ws ? ' [WS]' : '';
   const multipartIndicator = route.handleMultipart ? ' [Multipart]' : '';
   const fallbackIndicator = fallbackService ? ` (fallback: ${fallbackService})` : '';
@@ -159,7 +181,7 @@ const server = httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 API Gateway v2.0 running on port ${PORT}`);
   console.log(`🔌 WebSocket server ready at ws://localhost:${PORT}`);
   console.log(`🌐 Health check: http://localhost:${PORT}/gateway-health`);
-  
+
   // Hiển thị trạng thái services
   Object.entries(SERVICES).forEach(([name, url]) => {
     console.log(`📡 ${name.toUpperCase()}: ${url || '❌ NOT CONFIGURED'}`);
