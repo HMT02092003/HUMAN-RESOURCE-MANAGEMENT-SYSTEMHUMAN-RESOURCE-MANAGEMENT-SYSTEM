@@ -1182,7 +1182,7 @@ export class ApplicationController {
           console.log(`📝 [approve] Deactivating user ${application.userId} due to approved resignation application #${id}`);
 
           await axios.put(
-            `${API_GATEWAY_URL}/api/auth/users/${application.userId}`,
+            `${API_GATEWAY_URL}/api/auth/users/${application.userId}/status`,
             {
               status: 0 // 0 = ngưng hoạt động / đã nghỉ việc
             },
@@ -1296,7 +1296,7 @@ export class ApplicationController {
           try {
             console.log(`📝 [bulkApprove] Deactivating user ${app.userId} for resignation app #${app.id}`);
             await axios.put(
-              `${API_GATEWAY_URL}/api/auth/users/${app.userId}`,
+              `${API_GATEWAY_URL}/api/auth/users/${app.userId}/status`,
               { status: 0 },
               { headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' }, timeout: 10000 }
             );

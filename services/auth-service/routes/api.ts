@@ -43,6 +43,7 @@ import {
   getUserInfo,
   searchUsers,
   importUsers,
+  updateUserStatus,
 } from '@/src/controller/UserController';
 
 const router = Router();
@@ -141,6 +142,7 @@ const userRoutes = [
   { method: 'get', path: '/users/:id/number-of-days-off', handler: getNumberOfDaysOff, auth: false }, // Internal
   { method: 'post', path: '/users/import', handler: importUsers, auth: true },
   { method: 'post', path: '/users/check-scope', handler: checkUserScope, auth: true }, // Internal scope check
+  { method: 'put', path: '/users/:id/status', handler: updateUserStatus, auth: true },
 ];
 
 // Routes with file upload

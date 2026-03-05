@@ -2063,4 +2063,45 @@ export const searchUsers = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Partial update for user status (typically used for resignation)
+ */
+export const updateUserStatus = async (req: Request, res: Response) => {
+  try {
+    const userId = req.params.id || req.body.id;
+    const { status } = req.body;
 
+    if (!userId || status === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Cần cung cấp userId và status hợp lệ",
+        code: 400
+      });
+    }
+
+    const existingUser = await UserModel.query().findById(userId);
+    if (!existingUser) {
+      return res.status(404).json({
+        success: false,
+        message: "Người dùng không tồn tại!",
+        code: 6006
+      });
+    }
+
+    // Update status
+    await UserModel.query().patchAndFetchById(userId, { status: Number(status) });
+    console.log(`✅ [updateUserStatus] User ${userId} status updated to ${status}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Cập nhật trạng thái thành công"
+    });
+  } catch (error) {
+    console.error("Error updating user status:", error);
+    return res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : "Lỗi máy chủ nội bộ",
+      code: 500
+    });
+  }
+};

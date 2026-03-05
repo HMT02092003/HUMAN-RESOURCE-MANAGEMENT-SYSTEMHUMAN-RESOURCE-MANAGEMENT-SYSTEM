@@ -710,22 +710,35 @@ export const updateForgotCheck = async (req: Request, res: Response) => {
       req.headers.authorization?.replace('Bearer ', '') ||
       req.headers.authorization?.split(' ')[1];
 
+    // Format if forgotDate is DD/MM/YYYY
+    let formattedDate = forgotDate;
+    if (forgotDate.includes('/')) {
+      const parts = forgotDate.split('/');
+      if (parts.length === 3) {
+        if (parts[2].length === 4) {
+          formattedDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
+        } else if (parts[0].length === 4) {
+          formattedDate = `${parts[0]}-${parts[1]}-${parts[2]}`;
+        }
+      }
+    }
+
     // Kết hợp forgotDate và forgotTime thành timestamp đầy đủ
-    // forgotDate: "2025-11-29", forgotTime: "09:00" -> "2025-11-29T09:00:00"
-    const fullTimestamp = `${forgotDate}T${forgotTime}:00`;
+    // Make sure it includes the +07:00 for Vietnam
+    const fullTimestamp = new Date(`${formattedDate}T${forgotTime}:00+07:00`).getTime() ? new Date(`${formattedDate}T${forgotTime}:00+07:00`).toISOString() : dayjs(`${formattedDate} ${forgotTime}`).toISOString();
     console.log('📝 [updateForgotCheck] Full timestamp:', fullTimestamp);
 
     // Tìm bản ghi chấm công theo userId và date
     let attendanceRecord = await TimeAttendanceModel.query()
       .where('userId', userId)
-      .where('date', forgotDate)
+      .where('date', formattedDate)
       .first();
 
     let record: any;
 
     if (attendanceRecord) {
       // Cập nhật bản ghi hiện có
-      console.log(`📝 [updateForgotCheck] Updating existing record for user ${userId} on ${forgotDate}`);
+      console.log(`📝 [updateForgotCheck] Updating existing record for user ${userId} on ${formattedDate}`);
 
       const updateData: any = {
         updated_at: new Date().toISOString()
@@ -741,11 +754,11 @@ export const updateForgotCheck = async (req: Request, res: Response) => {
         .patchAndFetchById(attendanceRecord.id, updateData);
     } else {
       // Tạo bản ghi mới nếu chưa tồn tại
-      console.log(`📝 [updateForgotCheck] Creating new record for user ${userId} on ${forgotDate}`);
+      console.log(`📝 [updateForgotCheck] Creating new record for user ${userId} on ${formattedDate}`);
 
       const newRecordData: any = {
         userId,
-        date: forgotDate,
+        date: formattedDate,
         checkInTime: forgotType === 'check-in' ? fullTimestamp : null,
         checkOutTime: forgotType === 'check-out' ? fullTimestamp : null,
         dailyTotalWorkHours: 0,
@@ -766,19 +779,19 @@ export const updateForgotCheck = async (req: Request, res: Response) => {
     // ============================================
     // ✨ TÍNH TOÁN LẠI CÔNG CHO NGÀY
     // ============================================
-    console.log(`🔄 [updateForgotCheck] Recalculating attendance for user ${userId} on ${forgotDate}...`);
+    console.log(`🔄 [updateForgotCheck] Recalculating attendance for user ${userId} on ${formattedDate}...`);
 
     // Lấy shift cho user vào ngày này
-    const shift = await getShiftForUserAndDate(userId, forgotDate);
-    console.log(`📋 [updateForgotCheck] Shift cho user ${userId} ngày ${forgotDate}:`, shift);
+    const shift = await getShiftForUserAndDate(userId, formattedDate);
+    console.log(`📋 [updateForgotCheck] Shift cho user ${userId} ngày ${formattedDate}:`, shift);
 
     // Lấy thông tin OT đã duyệt
-    const overtimeApp = await AttendanceCalculationService.getApprovedOvertimeApplication(userId, forgotDate);
+    const overtimeApp = await AttendanceCalculationService.getApprovedOvertimeApplication(userId, formattedDate);
     let otEndTime: string | undefined;
     if (overtimeApp) {
       const appData = typeof overtimeApp.data === 'string' ? JSON.parse(overtimeApp.data) : overtimeApp.data;
       if (appData.endTime) {
-        otEndTime = dayjs(`${forgotDate} ${appData.endTime}`).toISOString();
+        otEndTime = dayjs(`${formattedDate} ${appData.endTime}`).toISOString();
       }
     }
 
@@ -786,7 +799,7 @@ export const updateForgotCheck = async (req: Request, res: Response) => {
     const calculation = await AttendanceCalculationService.calculateAttendance(
       record.checkInTime,
       record.checkOutTime,
-      forgotDate,
+      formattedDate,
       userId,
       token,
       otEndTime,
@@ -817,21 +830,21 @@ export const updateForgotCheck = async (req: Request, res: Response) => {
     const userData = getUserData(req);
     try {
       console.log(`🔄 [updateForgotCheck] Triggering monthly calculation...`);
-      const monthlyResult = await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, forgotDate, userData, token);
+      const monthlyResult = await MonthlyReportService.calculateAndSaveMonthlyAttendance(userId, formattedDate, userData, token);
       console.log(`✅ [updateForgotCheck] Monthly calculation result:`, monthlyResult);
     } catch (monthlyErr: any) {
       console.error(`❌ [updateForgotCheck] Failed to update monthly summary:`, monthlyErr);
       // Không throw error, vì việc cập nhật ngày đã thành công
     }
 
-    console.log(`✅ [updateForgotCheck] Successfully updated attendance for user ${userId} on ${forgotDate}`);
+    console.log(`✅ [updateForgotCheck] Successfully updated attendance for user ${userId} on ${formattedDate}`);
 
     return res.json({
       success: true,
       message: `Đã cập nhật ${forgotType === 'check-in' ? 'giờ check-in' : 'giờ check-out'} và tính toán lại công thành công`,
       data: {
         userId,
-        date: forgotDate,
+        date: formattedDate,
         [forgotType === 'check-in' ? 'checkInTime' : 'checkOutTime']: fullTimestamp,
         calculation: {
           workHours: calculation.workHours,
