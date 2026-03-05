@@ -152,8 +152,8 @@ services:
       # Hot reload support
       - ./services/auth-service:/app
       - /app/node_modules
-      # Shared volume for identification photos - mapped to host
-      - ./services/auth-service/public/identificationPhoto:/app/public/identificationPhoto
+      # Shared volume for identification photos - mapped to named volume
+      - identification-photos:/app/public/identificationPhoto
     environment:
       - PORT=4101
       - NODE_ENV=production
@@ -334,7 +334,7 @@ services:
       # Persistent uploads (attendance snapshots, etc.)
       - ai-uploads:/app/uploads
       # Shared volume for identification photos
-      - ./services/auth-service/public/identificationPhoto:/app/public/identificationPhoto
+      - identification-photos:/app/public/identificationPhoto
       # NOTE: Do NOT mount ai-models:/app/models - models are baked into image at /root/.insightface/models
       # NOTE: Do NOT mount app:/app/app for hot-reload — it overrides built code and causes stale imports
     depends_on:
@@ -550,7 +550,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./services/auth-service/public/identificationPhoto:/usr/share/nginx/html/identificationPhoto:ro
+      - identification-photos:/usr/share/nginx/html/identificationPhoto:ro
     ports:
       - "8080:80" # Local access: http://localhost:8080
     depends_on:
@@ -599,3 +599,5 @@ volumes:
     name: hrms-ai-models
   ai-uploads:
     name: hrms-ai-uploads
+  identification-photos:
+    name: hrms-identification-photos

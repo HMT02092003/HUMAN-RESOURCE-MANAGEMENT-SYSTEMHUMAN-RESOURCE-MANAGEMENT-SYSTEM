@@ -79,8 +79,16 @@ export default function ThreeBackground() {
   }, []);
 
   if (isMobile) {
-    // Return a simple elegant gradient background for mobile to save performance
-    return <div style={{ position: 'fixed', inset: 0, zIndex: 0, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }} />;
+    // Return a simple elegant background image for mobile to save performance
+    return <div style={{
+      position: 'fixed',
+      inset: 0,
+      zIndex: 0,
+      backgroundImage: 'url("/logo/backgroud_login_page.png")',
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat'
+    }} />;
   }
 
   return (
