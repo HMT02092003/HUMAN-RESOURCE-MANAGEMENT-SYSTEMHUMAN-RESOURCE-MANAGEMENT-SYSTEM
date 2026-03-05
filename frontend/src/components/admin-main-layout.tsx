@@ -704,8 +704,8 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                 collapsedWidth={0}
                 trigger={null}
             >
-                <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 0 40px 0" }}>
-                    <img src="/logo/logo.png" alt="Logo" style={{ width: "200px" }} />
+                <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 0 20px 0" }}>
+                    <img src="/logo/logo.png" alt="Logo" style={{ width: "160px", height: "auto" }} />
                 </div>
                 <Menu
                     theme="light"
