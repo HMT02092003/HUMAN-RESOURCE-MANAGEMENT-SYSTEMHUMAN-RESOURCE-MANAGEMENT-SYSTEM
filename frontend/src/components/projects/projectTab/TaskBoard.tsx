@@ -303,8 +303,8 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
     const explicitStart = task.startDate ? dayjs(task.startDate) : null;
     const explicitDue = task.dueDate ? dayjs(task.dueDate) : null;
     const estDays = typeof task.estimatedDays === 'number' ? task.estimatedDays : undefined;
-    const computedStart = (!explicitStart && explicitDue && estDays)
-      ? explicitDue.subtract(estDays, 'day')
+    const computedStart = (!explicitStart && explicitDue && estDays !== undefined)
+      ? explicitDue!.subtract(estDays!, 'day')
       : null;
 
     form.setFieldsValue({
