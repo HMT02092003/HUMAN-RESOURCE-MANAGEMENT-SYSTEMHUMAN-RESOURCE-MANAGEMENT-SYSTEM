@@ -46,7 +46,7 @@ const ContractTypeListScreen = ({ navigation }) => {
         total: response.pagination?.total || response.total || 0
       };
     } catch (error) {
-      console.error('❌ [ContractTypeList] Error:', error);
+      console.error(' [ContractTypeList] Error:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách loại hợp đồng');
       return { results: [], total: 0 };
     }
@@ -65,10 +65,10 @@ const ContractTypeListScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               await ContractTypeService.deleteContractType(id);
-              Alert.alert('✅ Thành công', 'Đã xóa loại hợp đồng');
+              Alert.alert(' Thành công', 'Đã xóa loại hợp đồng');
               if (listRef.current?.refresh) listRef.current.refresh();
             } catch (error) {
-              console.error('❌ Delete failed:', error);
+              console.error(' Delete failed:', error);
               Alert.alert('Lỗi', 'Không thể xóa loại hợp đồng');
             }
           }

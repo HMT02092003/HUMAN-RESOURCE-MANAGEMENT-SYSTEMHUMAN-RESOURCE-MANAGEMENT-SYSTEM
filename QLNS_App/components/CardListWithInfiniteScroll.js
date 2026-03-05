@@ -367,12 +367,8 @@ const CardListWithInfiniteScroll = forwardRef(({
     <View style={styles.container}>
       {/* Search Bar with Filter Icon */}
       <Surface style={styles.searchContainer} elevation={1}>
-        <Searchbar
-          placeholder={searchPlaceholder}
-          onChangeText={setSearchQuery}
-          value={searchQuery}
-          style={styles.searchbar}
-          iconColor={theme.colors.primary}
+        <SearchbariconColor={theme.colors.primary}
+          loading={loading}
         />
 
         {/* Filter Icon Button */}

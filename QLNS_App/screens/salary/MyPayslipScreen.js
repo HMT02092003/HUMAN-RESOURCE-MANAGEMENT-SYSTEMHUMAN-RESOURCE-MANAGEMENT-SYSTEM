@@ -69,12 +69,12 @@ const MyPayslipScreen = () => {
           return b.month - a.month;
         });
         setData(sorted);
-        console.log('✅ [App] Loaded', sorted.length, 'payslips');
+        console.log(' [App] Loaded', sorted.length, 'payslips');
       } else {
         setData([]);
       }
     } catch (error) {
-      console.error('❌ [App] Error fetching my payslips:', error);
+      console.error(' [App] Error fetching my payslips:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách bảng lương');
       setData([]);
     } finally {

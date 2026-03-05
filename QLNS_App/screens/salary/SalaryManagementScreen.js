@@ -98,12 +98,12 @@ const SalaryManagementScreen = ({ navigation }) => {
       const res = await SalaryService.listPayslips(selectedMonth.value);
       if (res.success) {
         setData(res.data || []);
-        console.log('✅ [App] Loaded', (res.data || []).length, 'payslips');
+        console.log(' [App] Loaded', (res.data || []).length, 'payslips');
       } else {
         setData([]);
       }
     } catch (error) {
-      console.error('❌ [App] Error fetching payslips:', error);
+      console.error(' [App] Error fetching payslips:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách bảng lương');
       setData([]);
     } finally {

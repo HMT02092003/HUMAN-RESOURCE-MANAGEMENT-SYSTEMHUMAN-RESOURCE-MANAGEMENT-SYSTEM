@@ -50,7 +50,7 @@ const ShiftApprovalScreen = ({ navigation }) => {
 
       return { results: mappedData, total };
     } catch (error) {
-      console.error('❌ [ShiftApproval] Error:', error);
+      console.error(' [ShiftApproval] Error:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách đơn đăng ký ca');
       return { results: [], total: 0 };
     }

@@ -123,6 +123,20 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
     return workingDays[dayKey] === true;
   };
 
+  // Count only working days between two dates (inclusive of both start and end)
+  const countWorkingDays = (start: any, end: any): number => {
+    let count = 0;
+    let current = dayjs(start);
+    const endDate = dayjs(end);
+    while (current.isBefore(endDate, 'day') || current.isSame(endDate, 'day')) {
+      if (isWorkingDay(current)) {
+        count++;
+      }
+      current = current.add(1, 'day');
+    }
+    return Math.max(1, count);
+  };
+
   const loadTasksAndMembers = async () => {
     try {
       setLoading(true);
@@ -228,7 +242,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
         const uid = decoded?.sub ? String(decoded.sub) : null;
         setCurrentUserId(uid);
 
-        console.log('🔐 [TaskBoard] token check:', { tokenKeyUsed, tokenPreview: token ? `${String(token).slice(0,10)}...` : null, decoded });
+        console.log('🔐 [TaskBoard] token check:', { tokenKeyUsed, tokenPreview: token ? `${String(token).slice(0, 10)}...` : null, decoded });
 
         if (!uid) {
           console.warn('⚠️ [TaskBoard] No user ID found in token (uid is null).');
@@ -242,18 +256,18 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
         // Check 2: Does user have manager role in project members?
         const memberMatch = mappedMembers.find(m => String(m.id) === String(uid));
         const roleStr = memberMatch ? String(memberMatch.role || '').toLowerCase() : '';
-        const hasManagerRole = roleStr.includes('manager') || 
-                               roleStr.includes('project') || 
-                               roleStr.includes('quản') || 
-                               roleStr.includes('ql') || 
-                               roleStr.includes('trưởng') || 
-                               roleStr.includes('admin') || 
-                               roleStr.includes('pm');
+        const hasManagerRole = roleStr.includes('manager') ||
+          roleStr.includes('project') ||
+          roleStr.includes('quản') ||
+          roleStr.includes('ql') ||
+          roleStr.includes('trưởng') ||
+          roleStr.includes('admin') ||
+          roleStr.includes('pm');
 
         const isManager = !!(isProjectOwner || hasManagerRole);
         setIsProjectManager(isManager);
         setProjectManagerIdState(projectManagerId ? String(projectManagerId) : null);
-        
+
         console.log('🔍 [TaskBoard] Manager check:', {
           currentUserId: uid,
           projectManagerId: projectManagerId,
@@ -279,21 +293,9 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
   };
 
   const handleTaskClick = (task: Task) => {
-    // Only project managers can update task info, and only when task is in 'todo'
-    const isManagerForUI = !!(
-      (projectManagerIdState && currentUserId && String(projectManagerIdState) === String(currentUserId)) ||
-      isProjectManager
-    );
-
-    if (!isManagerForUI) {
-      message.warning('Chỉ quản lý dự án mới có quyền cập nhật thông tin task');
-      return;
-    }
-
-    if (task.status !== 'todo') {
-      message.warning('Chỉ được cập nhật thông tin khi task ở trạng thái "Chưa bắt đầu"');
-      return;
-    }
+    // Tasks cannot be edited after creation - only status changes are allowed
+    message.info('Công việc đã tạo không được phép chỉnh sửa. Chỉ có thể thay đổi trạng thái.');
+    return;
 
     setSelectedTask(task);
     // If backend didn't provide a startDate, compute a reasonable estimate
@@ -334,7 +336,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
       if (values.start_date && values.due_date) {
         const start = dayjs(values.start_date);
         const due = dayjs(values.due_date);
-        estimatedDays = Math.max(1, due.diff(start, 'day'));
+        estimatedDays = countWorkingDays(start, due);
       }
 
       const payload = {
@@ -346,7 +348,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
         // Only include start_date if user explicitly set it, or if it's an existing explicit value.
         // If we populated the field with a computed estimate and the user didn't edit it,
         // omit start_date to avoid overwriting server data unintentionally.
-        ...(function() {
+        ...(function () {
           const s: any = {};
           if (values.start_date) {
             let include = true;
@@ -404,7 +406,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
       if (values.start_date && values.due_date) {
         const start = dayjs(values.start_date);
         const due = dayjs(values.due_date);
-        estimatedDays = Math.max(1, due.diff(start, 'day'));
+        estimatedDays = countWorkingDays(start, due);
       }
 
       const payload = {
@@ -464,7 +466,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
   const renderTaskCard = (task: Task) => {
     // Check if task is overdue
     const isOverdue = task.dueDate && dayjs(task.dueDate).isBefore(dayjs(), 'day') && task.status !== 'done';
-    
+
     const cardStyle = {
       marginBottom: 12,
       cursor: 'pointer',
@@ -477,272 +479,272 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
     };
 
     return (
-    <Card
-      key={task.id}
-      size="small"
-      hoverable
-      style={cardStyle}
-      onClick={() => handleTaskClick(task)}
-      bodyStyle={{ padding: 12 }}
-    >
-      {/* Delete Button - only visible to project managers for TODO tasks */}
-      {task.status === 'todo' && isProjectManager ? (
-        <Popconfirm
-          title="Xóa task này?"
-          description="Bạn có chắc chắn muốn xóa task này?"
-          onConfirm={(e) => handleDeleteTask(task.id, e)}
-          onCancel={(e) => e?.stopPropagation()}
-          okText="Xóa"
-          cancelText="Hủy"
-          okButtonProps={{ danger: true }}
-        >
-          <Button
-            type="text"
-            size="small"
-            danger
-            icon={<CloseOutlined />}
-            style={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              zIndex: 10
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
-        </Popconfirm>
-      ) : null}
+      <Card
+        key={task.id}
+        size="small"
+        hoverable
+        style={cardStyle}
+        onClick={() => handleTaskClick(task)}
+        bodyStyle={{ padding: 12 }}
+      >
+        {/* Delete Button - only visible to project managers for TODO tasks */}
+        {task.status === 'todo' && isProjectManager ? (
+          <Popconfirm
+            title="Xóa task này?"
+            description="Bạn có chắc chắn muốn xóa task này?"
+            onConfirm={(e) => handleDeleteTask(task.id, e)}
+            onCancel={(e) => e?.stopPropagation()}
+            okText="Xóa"
+            cancelText="Hủy"
+            okButtonProps={{ danger: true }}
+          >
+            <Button
+              type="text"
+              size="small"
+              danger
+              icon={<CloseOutlined />}
+              style={{
+                position: 'absolute',
+                top: 8,
+                right: 8,
+                zIndex: 10
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </Popconfirm>
+        ) : null}
 
-      <div style={{ marginBottom: 8 }}>
-        <Tag color={priorityColors[task.priority]} style={{ marginRight: 4 }}>
-          <FlagOutlined /> {priorityLabels[task.priority]}
-        </Tag>
-        <span style={{ fontSize: 12, color: '#999' }}>{task.id}</span>
-      </div>
-
-      <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
-        {task.title}
-      </div>
-
-      {task.description && (
-        <div
-          style={{
-            fontSize: 12,
-            color: '#666',
-            marginBottom: 8,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
-          }}
-        >
-          {task.description}
-        </div>
-      )}
-
-      {task.tags && task.tags.length > 0 && (
         <div style={{ marginBottom: 8 }}>
-          {task.tags
-            .filter(tag => {
-              const t = String(tag || '').toLowerCase();
-              // hide tags that are actually status markers we already show elsewhere
-              if (t.includes('phê duyệt') || t.includes('chờ phê duyệt') || t.includes('pending') || t.includes('pending_approval')) return false;
-              return true;
-            })
-            .map(tag => (
-              <Tag key={tag} style={{ fontSize: 11 }}>{tag}</Tag>
-            ))}
+          <Tag color={priorityColors[task.priority]} style={{ marginRight: 4 }}>
+            <FlagOutlined /> {priorityLabels[task.priority]}
+          </Tag>
+          <span style={{ fontSize: 12, color: '#999' }}>{task.id}</span>
         </div>
-      )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          {task.assignee && (
-            <>
-              <Avatar
-                size="small"
-                src={task.assignee.avatar}
-                icon={<UserOutlined />}
-                style={{ marginRight: 4 }}
-              />
-              <span style={{ fontSize: 12 }}>{task.assignee.name}</span>
-            </>
-          )}
+        <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 14 }}>
+          {task.title}
         </div>
-        {(task.startDate || task.dueDate) && (
-          <div style={{ fontSize: 11, color: '#999', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <ClockCircleOutlined style={{ marginRight: 4 }} />
-            {(() => {
-              // Compute a display start date: use explicit startDate if present, otherwise
-              // try to estimate from dueDate - estimatedDays (frontend-only display fallback).
-              const explicitStart = task.startDate ? dayjs(task.startDate) : null;
-              const explicitDue = task.dueDate ? dayjs(task.dueDate) : null;
-              const estDays = typeof task.estimatedDays === 'number' ? task.estimatedDays : undefined;
-              const computedStart = (!explicitStart && explicitDue && estDays)
-                ? explicitDue.subtract(estDays, 'day')
-                : null;
 
-              const displayStart = explicitStart || computedStart;
-              const isComputed = !!computedStart && !explicitStart;
-
-              return (
-                <>
-                  {displayStart && (
-                    <span title={displayStart.format('DD/MM/YYYY')}>
-                      {displayStart.format('DD/MM')}{isComputed ? ' (ước tính)' : ''}
-                    </span>
-                  )}
-
-                  {displayStart && task.dueDate && <span style={{ opacity: 0.6 }}>→</span>}
-
-                  {task.dueDate && (
-                    <span title={task.dueDate ? dayjs(task.dueDate).format('DD/MM/YYYY') : ''}>
-                      {dayjs(task.dueDate).format('DD/MM')}
-                    </span>
-                  )}
-                </>
-              );
-            })()}
+        {task.description && (
+          <div
+            style={{
+              fontSize: 12,
+              color: '#666',
+              marginBottom: 8,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {task.description}
           </div>
         )}
-      </div>
 
-      {/* Status Change Buttons */}
-      <div
-        style={{ marginTop: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {(() => {
-          const notStarted = task.startDate ? dayjs(task.startDate).isAfter(dayjs(), 'day') : false;
+        {task.tags && task.tags.length > 0 && (
+          <div style={{ marginBottom: 8 }}>
+            {task.tags
+              .filter(tag => {
+                const t = String(tag || '').toLowerCase();
+                // hide tags that are actually status markers we already show elsewhere
+                if (t.includes('phê duyệt') || t.includes('chờ phê duyệt') || t.includes('pending') || t.includes('pending_approval')) return false;
+                return true;
+              })
+              .map(tag => (
+                <Tag key={tag} style={{ fontSize: 11 }}>{tag}</Tag>
+              ))}
+          </div>
+        )}
 
-          const startDisabled = notStarted || (updatingTaskId !== null && updatingTaskId !== task.id);
-          const completeDisabled = notStarted || (updatingTaskId !== null && updatingTaskId !== task.id);
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            {task.assignee && (
+              <>
+                <Avatar
+                  size="small"
+                  src={task.assignee.avatar}
+                  icon={<UserOutlined />}
+                  style={{ marginRight: 4 }}
+                />
+                <span style={{ fontSize: 12 }}>{task.assignee.name}</span>
+              </>
+            )}
+          </div>
+          {(task.startDate || task.dueDate) && (
+            <div style={{ fontSize: 11, color: '#999', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <ClockCircleOutlined style={{ marginRight: 4 }} />
+              {(() => {
+                // Compute a display start date: use explicit startDate if present, otherwise
+                // try to estimate from dueDate - estimatedDays (frontend-only display fallback).
+                const explicitStart = task.startDate ? dayjs(task.startDate) : null;
+                const explicitDue = task.dueDate ? dayjs(task.dueDate) : null;
+                const estDays = typeof task.estimatedDays === 'number' ? task.estimatedDays : undefined;
+                const computedStart = (!explicitStart && explicitDue && estDays)
+                  ? explicitDue.subtract(estDays, 'day')
+                  : null;
 
-          // Check if current user has permission to update task status
-          const isAssignee = !!(task.assignee && currentUserId && String(task.assignee.id) === String(currentUserId));
-          // Only assignee can start/complete tasks (project manager cannot unless also assignee)
-          const canUpdateStatus = isAssignee;
-          const isProjectOwnerForUI = projectManagerIdState && currentUserId && String(projectManagerIdState) === String(currentUserId);
-          
-          // Always log for debugging
-          console.log(`🔍 [TaskBoard] Permission for "${task.title}":`, {
-            taskId: task.id,
-            assigneeId: task.assignee?.id,
-            assigneeName: task.assignee?.name,
-            currentUserId: currentUserId,
-            isAssignee: isAssignee,
-            isProjectManager: isProjectManager,
-            isProjectOwnerForUI: isProjectOwnerForUI,
-            canUpdateStatus: canUpdateStatus
-          });
+                const displayStart = explicitStart || computedStart;
+                const isComputed = !!computedStart && !explicitStart;
 
-          const startButton = (
-            <Button
-              type="primary"
-              size="small"
-              icon={<PlayCircleOutlined />}
-              loading={updatingTaskId === task.id}
-              disabled={startDisabled}
-              style={{ fontSize: 11 }}
-              onClick={(e) => { e.stopPropagation(); }}
-            >
-              Đang làm
-            </Button>
-          );
+                return (
+                  <>
+                    {displayStart && (
+                      <span title={displayStart.format('DD/MM/YYYY')}>
+                        {displayStart.format('DD/MM')}{isComputed ? ' (ước tính)' : ''}
+                      </span>
+                    )}
 
-          const completeButton = (
-            <Button
-              type="primary"
-              size="small"
-              icon={<CheckCircleOutlined />}
-              loading={updatingTaskId === task.id}
-              disabled={completeDisabled}
-              style={{ fontSize: 11, backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-              onClick={(e) => { e.stopPropagation(); }}
-            >
-              Hoàn thành
-            </Button>
-          );
+                    {displayStart && task.dueDate && <span style={{ opacity: 0.6 }}>→</span>}
 
-          return (
-            <>
-              {/* Start button - only show if user has permission */}
-              {canUpdateStatus && (task.status !== 'in_progress' && task.status !== 'done' && task.status !== 'pending_approval') ? (
-                notStarted ? (
-                  <Tooltip title={`Task bắt đầu vào ${dayjs(task.startDate).format('DD/MM/YYYY')}`}>
-                    {startButton}
-                  </Tooltip>
-                ) : (
-                  <Popconfirm
-                    title="Bắt đầu thực hiện?"
-                    onConfirm={() => handleStatusChange(task.id, 'in_progress')}
-                    okText="Có"
-                    cancelText="Không"
-                  >
-                    {startButton}
-                  </Popconfirm>
-                )
-              ) : null}
+                    {task.dueDate && (
+                      <span title={task.dueDate ? dayjs(task.dueDate).format('DD/MM/YYYY') : ''}>
+                        {dayjs(task.dueDate).format('DD/MM')}
+                      </span>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
+        </div>
 
-              {/* Complete button - only show if user has permission */}
-              {canUpdateStatus && (task.status !== 'done' && task.status !== 'todo' && task.status !== 'pending_approval') ? (
-                notStarted ? (
-                  <Tooltip title={`Task bắt đầu vào ${dayjs(task.startDate).format('DD/MM/YYYY')}`}>
-                    {completeButton}
-                  </Tooltip>
-                ) : (
-                  <Popconfirm
-                    title="Đánh dấu hoàn thành?"
-                    description="Task sẽ chuyển sang trạng thái chờ duyệt"
-                    onConfirm={() => handleStatusChange(task.id, 'pending_approval')}
-                    okText="Có"
-                    cancelText="Không"
-                  >
-                    {completeButton}
-                  </Popconfirm>
-                )
-              ) : null}
+        {/* Status Change Buttons */}
+        <div
+          style={{ marginTop: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {(() => {
+            const notStarted = task.startDate ? dayjs(task.startDate).isAfter(dayjs(), 'day') : false;
 
-              {/* Approve button - only show if user is project manager */}
-              {task.status === 'pending_approval' && isProjectOwnerForUI && (
-                <Tooltip title="Phê duyệt (Quản lý)">
-                  <Popconfirm
-                    title="Phê duyệt task này?"
-                    description="Task sẽ được đánh dấu là hoàn thành"
-                    onConfirm={() => handleStatusChange(task.id, 'done')}
-                    okText="Phê duyệt"
-                    cancelText="Hủy"
-                  >
-                    <Button
-                      type="primary"
-                      size="small"
-                      icon={<CheckCircleOutlined />}
-                      style={{
-                        marginLeft: 8,
-                        fontSize: 12,
-                        backgroundColor: '#52c41a',
-                        borderColor: '#52c41a',
-                        color: '#fff',
-                        borderRadius: 6,
-                        boxShadow: '0 2px 8px rgba(82,196,26,0.15)'
-                      }}
-                      onClick={(e) => e.stopPropagation()}
+            const startDisabled = notStarted || (updatingTaskId !== null && updatingTaskId !== task.id);
+            const completeDisabled = notStarted || (updatingTaskId !== null && updatingTaskId !== task.id);
+
+            // Check if current user has permission to update task status
+            const isAssignee = !!(task.assignee && currentUserId && String(task.assignee.id) === String(currentUserId));
+            // Only assignee can start/complete tasks (project manager cannot unless also assignee)
+            const canUpdateStatus = isAssignee;
+            const isProjectOwnerForUI = projectManagerIdState && currentUserId && String(projectManagerIdState) === String(currentUserId);
+
+            // Always log for debugging
+            console.log(`🔍 [TaskBoard] Permission for "${task.title}":`, {
+              taskId: task.id,
+              assigneeId: task.assignee?.id,
+              assigneeName: task.assignee?.name,
+              currentUserId: currentUserId,
+              isAssignee: isAssignee,
+              isProjectManager: isProjectManager,
+              isProjectOwnerForUI: isProjectOwnerForUI,
+              canUpdateStatus: canUpdateStatus
+            });
+
+            const startButton = (
+              <Button
+                type="primary"
+                size="small"
+                icon={<PlayCircleOutlined />}
+                loading={updatingTaskId === task.id}
+                disabled={startDisabled}
+                style={{ fontSize: 11 }}
+                onClick={(e) => { e.stopPropagation(); }}
+              >
+                Đang làm
+              </Button>
+            );
+
+            const completeButton = (
+              <Button
+                type="primary"
+                size="small"
+                icon={<CheckCircleOutlined />}
+                loading={updatingTaskId === task.id}
+                disabled={completeDisabled}
+                style={{ fontSize: 11, backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                onClick={(e) => { e.stopPropagation(); }}
+              >
+                Hoàn thành
+              </Button>
+            );
+
+            return (
+              <>
+                {/* Start button - only show if user has permission */}
+                {canUpdateStatus && (task.status !== 'in_progress' && task.status !== 'done' && task.status !== 'pending_approval') ? (
+                  notStarted ? (
+                    <Tooltip title={`Task bắt đầu vào ${dayjs(task.startDate).format('DD/MM/YYYY')}`}>
+                      {startButton}
+                    </Tooltip>
+                  ) : (
+                    <Popconfirm
+                      title="Bắt đầu thực hiện?"
+                      onConfirm={() => handleStatusChange(task.id, 'in_progress')}
+                      okText="Có"
+                      cancelText="Không"
                     >
-                      Phê duyệt
-                    </Button>
-                  </Popconfirm>
-                </Tooltip>
-              )}
+                      {startButton}
+                    </Popconfirm>
+                  )
+                ) : null}
 
-              {/* Status tag for completed tasks */}
-              {task.status === 'done' && (
-                <Tag color="success" icon={<CheckCircleOutlined />}>
-                  Đã hoàn thành
-                </Tag>
-              )}
-            </>
-          );
-        })()}
-      </div>
-    </Card>
+                {/* Complete button - only show if user has permission */}
+                {canUpdateStatus && (task.status !== 'done' && task.status !== 'todo' && task.status !== 'pending_approval') ? (
+                  notStarted ? (
+                    <Tooltip title={`Task bắt đầu vào ${dayjs(task.startDate).format('DD/MM/YYYY')}`}>
+                      {completeButton}
+                    </Tooltip>
+                  ) : (
+                    <Popconfirm
+                      title="Đánh dấu hoàn thành?"
+                      description="Task sẽ chuyển sang trạng thái chờ duyệt"
+                      onConfirm={() => handleStatusChange(task.id, 'pending_approval')}
+                      okText="Có"
+                      cancelText="Không"
+                    >
+                      {completeButton}
+                    </Popconfirm>
+                  )
+                ) : null}
+
+                {/* Approve button - only show if user is project manager */}
+                {task.status === 'pending_approval' && isProjectOwnerForUI && (
+                  <Tooltip title="Phê duyệt (Quản lý)">
+                    <Popconfirm
+                      title="Phê duyệt task này?"
+                      description="Task sẽ được đánh dấu là hoàn thành"
+                      onConfirm={() => handleStatusChange(task.id, 'done')}
+                      okText="Phê duyệt"
+                      cancelText="Hủy"
+                    >
+                      <Button
+                        type="primary"
+                        size="small"
+                        icon={<CheckCircleOutlined />}
+                        style={{
+                          marginLeft: 8,
+                          fontSize: 12,
+                          backgroundColor: '#52c41a',
+                          borderColor: '#52c41a',
+                          color: '#fff',
+                          borderRadius: 6,
+                          boxShadow: '0 2px 8px rgba(82,196,26,0.15)'
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Phê duyệt
+                      </Button>
+                    </Popconfirm>
+                  </Tooltip>
+                )}
+
+                {/* Status tag for completed tasks */}
+                {task.status === 'done' && (
+                  <Tag color="success" icon={<CheckCircleOutlined />}>
+                    Đã hoàn thành
+                  </Tag>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      </Card>
     );
   };
 
@@ -760,7 +762,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
           >
             Xem tất cả
           </Button>
-          
+
           <Button
             type={viewMode === 'me' ? 'primary' : 'default'}
             icon={<UserOutlined />}
@@ -774,11 +776,11 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
         </div>
 
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          { (projectManagerIdState && currentUserId && String(projectManagerIdState) === String(currentUserId)) ? (
+          {(projectManagerIdState && currentUserId && String(projectManagerIdState) === String(currentUserId)) ? (
             <>
               <Button
                 type="primary"
-                style={{backgroundColor:"#52c41a"}}
+                style={{ backgroundColor: "#52c41a" }}
                 onClick={() => setIsManualModalVisible(true)}
               >
                 <PlusOutlined /> Tạo thủ công
@@ -955,11 +957,11 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
                 return false;
               }}
               onChange={() => {
-                // Trigger auto-calculation when dates change
+                // Trigger auto-calculation when dates change (working days only)
                 const startDate = form.getFieldValue('start_date');
                 const dueDate = form.getFieldValue('due_date');
                 if (startDate && dueDate) {
-                  const days = Math.max(1, dueDate.diff(startDate, 'day'));
+                  const days = countWorkingDays(startDate, dueDate);
                   form.setFieldsValue({ estimatedDays: days });
                 }
               }}
@@ -977,18 +979,18 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
               allowClear
               disabledDate={(current) => {
                 const startDate = form.getFieldValue('start_date');
-                // Disable dates before or equal to start_date
-                if (current && startDate && current <= startDate) return true;
+                // Disable dates before start_date (allow same day)
+                if (current && startDate && current < dayjs(startDate).startOf('day')) return true;
                 // Disable non-working days based on settings
                 if (current && !isWorkingDay(current)) return true;
                 return false;
               }}
               onChange={() => {
-                // Trigger auto-calculation when dates change
+                // Trigger auto-calculation when dates change (working days only)
                 const startDate = form.getFieldValue('start_date');
                 const dueDate = form.getFieldValue('due_date');
                 if (startDate && dueDate) {
-                  const days = Math.max(1, dueDate.diff(startDate, 'day'));
+                  const days = countWorkingDays(startDate, dueDate);
                   form.setFieldsValue({ estimatedDays: days });
                 }
               }}
@@ -1109,11 +1111,11 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
                 return false;
               }}
               onChange={() => {
-                // Auto-calculate estimated days
+                // Auto-calculate estimated days (working days only)
                 const startDate = manualForm.getFieldValue('start_date');
                 const dueDate = manualForm.getFieldValue('due_date');
                 if (startDate && dueDate) {
-                  const days = Math.max(1, dueDate.diff(startDate, 'day'));
+                  const days = countWorkingDays(startDate, dueDate);
                   manualForm.setFieldsValue({ estimatedDays: days });
                 }
               }}
@@ -1128,7 +1130,7 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
               ({ getFieldValue }) => ({
                 validator(_, value) {
                   const startDate = getFieldValue('start_date');
-                  if (!value || !startDate || value.isAfter(startDate)) {
+                  if (!value || !startDate || value.isSame(startDate, 'day') || value.isAfter(startDate)) {
                     return Promise.resolve();
                   }
                   return Promise.reject(new Error('Hạn hoàn thành phải sau ngày bắt đầu!'));
@@ -1142,16 +1144,17 @@ const TaskBoard: React.FC<TaskBoardProps> = ({ projectId }) => {
               placeholder="Chọn hạn hoàn thành"
               disabledDate={(current) => {
                 const startDate = manualForm.getFieldValue('start_date');
-                if (current && startDate && current <= startDate) return true;
+                // Allow same day (task can be completed within 1 day)
+                if (current && startDate && current < dayjs(startDate).startOf('day')) return true;
                 if (current && !isWorkingDay(current)) return true;
                 return false;
               }}
               onChange={() => {
-                // Auto-calculate estimated days
+                // Auto-calculate estimated days (working days only)
                 const startDate = manualForm.getFieldValue('start_date');
                 const dueDate = manualForm.getFieldValue('due_date');
                 if (startDate && dueDate) {
-                  const days = Math.max(1, dueDate.diff(startDate, 'day'));
+                  const days = countWorkingDays(startDate, dueDate);
                   manualForm.setFieldsValue({ estimatedDays: days });
                 }
               }}

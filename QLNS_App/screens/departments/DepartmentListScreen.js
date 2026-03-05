@@ -46,7 +46,7 @@ const DepartmentListScreen = ({ navigation }) => {
         total: response.pagination?.total || response.total || 0
       };
     } catch (error) {
-      console.error('❌ [DepartmentList] Error fetching departments:', error);
+      console.error(' [DepartmentList] Error fetching departments:', error);
       Alert.alert('Lỗi', error.response?.data?.message || 'Không thể tải danh sách phòng ban');
       return { results: [], total: 0 };
     }
@@ -65,10 +65,10 @@ const DepartmentListScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               await DepartmentService.deleteDepartment(deptId);
-              Alert.alert('✅ Thành công', 'Đã xóa phòng ban');
+              Alert.alert(' Thành công', 'Đã xóa phòng ban');
               if (listRef.current?.refresh) listRef.current.refresh();
             } catch (error) {
-              console.error('❌ [DepartmentList] Delete failed:', error);
+              console.error(' [DepartmentList] Delete failed:', error);
               Alert.alert('Lỗi', error.response?.data?.message || 'Không thể xóa phòng ban');
             }
           }

@@ -62,7 +62,7 @@ const ChevronListScreen = ({ navigation }) => {
         total: response.pagination?.total || response.total || 0
       };
     } catch (error) {
-      console.error('❌ [ChevronList] Error fetching chevrons:', error);
+      console.error(' [ChevronList] Error fetching chevrons:', error);
       Alert.alert('Lỗi', error.response?.data?.message || 'Không thể tải danh sách chức vụ');
       return { results: [], total: 0 };
     }
@@ -81,10 +81,10 @@ const ChevronListScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               await ChevronService.deleteChevron(chevronId);
-              Alert.alert('✅ Thành công', 'Đã xóa chức vụ');
+              Alert.alert(' Thành công', 'Đã xóa chức vụ');
               if (listRef.current?.refresh) listRef.current.refresh();
             } catch (error) {
-              console.error('❌ [ChevronList] Delete failed:', error);
+              console.error(' [ChevronList] Delete failed:', error);
               Alert.alert('Lỗi', error.response?.data?.message || 'Không thể xóa chức vụ');
             }
           }

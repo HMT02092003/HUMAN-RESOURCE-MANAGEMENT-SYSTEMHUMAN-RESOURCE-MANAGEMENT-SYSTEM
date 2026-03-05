@@ -1,0 +1,3 @@
+Cập nhật và tinh chỉnh tính năng, UX/UI Hệ thống
+- Khi Duyệt đơn quên chấm công: Tự động call Attendance Service bổ sung giờ check-in/out.
+5. UX/UI Mobile:

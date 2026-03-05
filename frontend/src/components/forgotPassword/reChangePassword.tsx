@@ -126,7 +126,7 @@ const ReChangePassword = () => {
                                                 label="Mật khẩu mới"
                                                 name="newPassword"
                                                 labelCol={{ span: 24 }}
-                                                rules={[{ required: true, message: "Vui lòng nhập mật khẩu mới!" }, { min: 6, message: "Mật khẩu phải có ít nhất 6 ký tự!" }]}
+                                                rules={[{ required: true, message: "Vui lòng nhập mật khẩu mới!" }, { min: 8, message: "Mật khẩu phải có ít nhất 8 ký tự!" }, { pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/, message: "Mật khẩu phải chứa chữ hoa, chữ thường, số và ký tự đặc biệt" }]}
                                             >
                                                 <Input.Password prefix={<LockOutlined className="input-icon" />} placeholder="Nhập mật khẩu mới" className="input-field" autoFocus />
                                             </Form.Item>

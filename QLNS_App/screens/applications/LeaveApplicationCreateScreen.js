@@ -114,7 +114,7 @@ const LeaveApplicationCreateScreen = ({ navigation }) => {
                 ]
             );
         } catch (error) {
-            console.error('❌ Error creating leave application:', error);
+            console.error(' Error creating leave application:', error);
             const errorMessage = error.response?.data?.message || error.message || 'Không thể tạo đơn nghỉ phép';
             Alert.alert('Lỗi', errorMessage);
         } finally {

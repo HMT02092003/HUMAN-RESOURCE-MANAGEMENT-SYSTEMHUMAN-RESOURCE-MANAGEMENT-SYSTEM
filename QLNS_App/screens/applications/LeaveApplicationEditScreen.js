@@ -54,7 +54,7 @@ const LeaveApplicationEditScreen = ({ navigation, route }) => {
             const data = response?.data || response;
             const formData = data?.data || data;
             
-            console.log('✅ Loaded application data:', formData);
+            console.log(' Loaded application data:', formData);
             
             if (formData) {
                 setLeaveType(formData.leaveType || 'leave');
@@ -68,7 +68,7 @@ const LeaveApplicationEditScreen = ({ navigation, route }) => {
                 }
             }
         } catch (error) {
-            console.error('❌ Error loading application:', error);
+            console.error(' Error loading application:', error);
             Alert.alert('Lỗi', 'Không thể tải thông tin đơn từ', [
                 { text: 'OK', onPress: () => navigation.goBack() }
             ]);
@@ -143,7 +143,7 @@ const LeaveApplicationEditScreen = ({ navigation, route }) => {
                 ]
             );
         } catch (error) {
-            console.error('❌ Error updating leave application:', error);
+            console.error(' Error updating leave application:', error);
             const errorMessage = error.response?.data?.message || error.message || 'Không thể cập nhật đơn nghỉ phép';
             Alert.alert('Lỗi', errorMessage);
         } finally {

@@ -66,12 +66,12 @@ const DepartmentFormScreen = ({ navigation, route }) => {
     try {
       if (isEditMode) {
         await DepartmentService.updateDepartment(departmentId, values);
-        Alert.alert('✅ Thành công', 'Đã cập nhật phòng ban', [
+        Alert.alert(' Thành công', 'Đã cập nhật phòng ban', [
           { text: 'OK', onPress: () => navigation.goBack() }
         ]);
       } else {
         await DepartmentService.createDepartment(values);
-        Alert.alert('✅ Thành công', 'Đã tạo phòng ban mới', [
+        Alert.alert(' Thành công', 'Đã tạo phòng ban mới', [
           { text: 'OK', onPress: () => navigation.goBack() }
         ]);
       }

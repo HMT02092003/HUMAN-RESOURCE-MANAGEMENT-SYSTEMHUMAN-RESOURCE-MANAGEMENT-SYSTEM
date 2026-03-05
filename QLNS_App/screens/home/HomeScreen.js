@@ -73,7 +73,7 @@ const HomeScreen = () => {
         setDashboardData(resp.data);
       }
     } catch (err) {
-      console.error('❌ [HomeScreen] Error fetching dashboard stats:', err);
+      console.error(' [HomeScreen] Error fetching dashboard stats:', err);
     }
   };
 

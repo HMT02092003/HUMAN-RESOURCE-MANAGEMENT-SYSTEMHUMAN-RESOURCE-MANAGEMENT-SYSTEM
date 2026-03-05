@@ -1371,15 +1371,9 @@ export class ProjectController {
                             projectContext: projectContext || undefined
                         });
 
-                        // If risk is CRITICAL, block task creation
+                        // If risk is CRITICAL or can't schedule, log warning but still allow (don't block)
                         if (timelineAnalysis.risk_level === 'critical' || !timelineAnalysis.can_schedule) {
-                            await trx.rollback();
-                            res.status(400).json({
-                                error: 'TIMELINE_CONFLICT',
-                                message: 'Không thể giao task - quá tải nghiêm trọng hoặc xung đột thời gian',
-                                timeline_analysis: timelineAnalysis
-                            });
-                            return;
+                            console.warn(`[Project Controller] ⚠️ Task has CRITICAL timeline risk but allowing creation: ${timelineAnalysis.ai_reasoning}`);
                         }
 
                         // If HIGH risk, include warning in response (but still allow creation)

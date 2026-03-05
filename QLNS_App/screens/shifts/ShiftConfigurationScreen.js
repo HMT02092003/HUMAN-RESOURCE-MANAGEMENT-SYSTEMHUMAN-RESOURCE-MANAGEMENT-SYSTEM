@@ -26,7 +26,7 @@ const ShiftConfigurationScreen = ({ navigation }) => {
       const data = response?.data || [];
       return { results: Array.isArray(data) ? data : [], total: data.length };
     } catch (error) {
-      console.error('❌ [ShiftConfig] Error:', error);
+      console.error(' [ShiftConfig] Error:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách cấu hình ca');
       return { results: [], total: 0 };
     }

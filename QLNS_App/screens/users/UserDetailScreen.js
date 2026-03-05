@@ -48,14 +48,14 @@ const UserDetailScreen = ({ route, navigation }) => {
 
       const response = await UserService.getUserDetail(numericUserId);
       setUser(response);
-      console.log('✅ [UserDetail] Loaded:', response);
+      console.log(' [UserDetail] Loaded:', response);
 
       // Fetch salaries for contracts if present
       if (response && response.contracts && response.contracts.length > 0) {
         fetchContractSalaries(response.contracts);
       }
     } catch (error) {
-      console.error('❌ [UserDetail] Error loading:', error);
+      console.error(' [UserDetail] Error loading:', error);
       Alert.alert(
         'Lỗi',
         error.response?.data?.message || 'Không thể tải thông tin người dùng',

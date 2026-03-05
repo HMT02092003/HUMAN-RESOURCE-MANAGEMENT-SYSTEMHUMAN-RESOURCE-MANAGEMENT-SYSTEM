@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Button, Space, Modal, message, Row, Col, Tag, Input } from 'antd';
-import { DeleteOutlined, PlusOutlined, FileTextOutlined, SearchOutlined } from '@ant-design/icons';
+import { Button, Space, Modal, message, Row, Col, Tag, Input, Tooltip } from 'antd';
+import { DeleteOutlined, PlusOutlined, FileTextOutlined, SearchOutlined, DownloadOutlined, EyeOutlined } from '@ant-design/icons';
 import type { InputRef } from 'antd';
 import { ServerSideTable } from '@/components/common/ServerSideTable';
 import type { ServerSideColumnType } from '@/components/common/ServerSideTable/types';
@@ -42,6 +42,8 @@ const CvManager: React.FC = () => {
 	const [loading, setLoading] = useState(false);
 	const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
 	const [refreshTrigger, setRefreshTrigger] = useState(0);
+	const [skillsModalVisible, setSkillsModalVisible] = useState(false);
+	const [skillsModalData, setSkillsModalData] = useState<{ fullName: string; text: string }>({ fullName: '', text: '' });
 	const searchInput = useRef<InputRef>(null);
 	const router = useRouter();
 
@@ -146,12 +148,12 @@ const CvManager: React.FC = () => {
 			render: (v: string) => {
 				if (!v) return 'N/A';
 				const normalized = v.replace(/\\/g, '/').replace(/^\/+/, '');
-				const url = `${getJobServiceBase()}/${normalized}`;
 				const fileName = normalized.split('/').pop() || 'CV';
 				return (
-					<a href={url} target="_blank" rel="noreferrer" download={fileName}>
-						<FileTextOutlined /> {fileName}
-					</a>
+					<Space>
+						<FileTextOutlined style={{ color: '#1890ff' }} />
+						<span>{fileName}</span>
+					</Space>
 				);
 			},
 		},
@@ -169,19 +171,73 @@ const CvManager: React.FC = () => {
 			title: 'Thao tác',
 			key: 'actions',
 			fixed: 'right',
-			width: 100,
-			render: (_: any, record: CvWithUser) => (
-				<CheckPermission permissionKey="CV" requiredType="delete">
-					<Button
-						danger
-						size="small"
-						icon={<DeleteOutlined />}
-						onClick={() => handleDelete(record.cv_id)}
-					>
-						Xóa
-					</Button>
-				</CheckPermission>
-			)
+			width: 180,
+			render: (_: any, record: CvWithUser) => {
+				const normalized = record.file_path ? record.file_path.replace(/\\/g, '/').replace(/^\/+/, '') : '';
+				const fileUrl = normalized ? `${getJobServiceBase()}/${normalized}` : '';
+				const fileName = normalized ? normalized.split('/').pop() || 'CV' : 'CV';
+
+				return (
+					<Space size={4}>
+						{fileUrl && (
+							<>
+								<Tooltip title="Xem hồ sơ">
+									<Button
+										type="link"
+										size="small"
+										icon={<EyeOutlined />}
+										onClick={() => window.open(fileUrl, '_blank')}
+										style={{ color: '#1890ff' }}
+									/>
+								</Tooltip>
+								<Tooltip title="Tải hồ sơ">
+									<Button
+										type="link"
+										size="small"
+										icon={<DownloadOutlined />}
+										onClick={() => {
+											const a = document.createElement('a');
+											a.href = fileUrl;
+											a.download = fileName;
+											a.target = '_blank';
+											document.body.appendChild(a);
+											a.click();
+											document.body.removeChild(a);
+										}}
+										style={{ color: '#52c41a' }}
+									/>
+								</Tooltip>
+							</>
+						)}
+						<Tooltip title="Xem kỹ năng phân tích">
+							<Button
+								type="link"
+								size="small"
+								icon={<FileTextOutlined />}
+								onClick={() => {
+									setSkillsModalData({
+										fullName: record.fullName || 'Không rõ',
+										text: record.original_text || 'Chưa có dữ liệu phân tích kỹ năng.'
+									});
+									setSkillsModalVisible(true);
+								}}
+								style={{ color: '#722ed1' }}
+							/>
+						</Tooltip>
+						<CheckPermission permissionKey="CV" requiredType="delete">
+							<Tooltip title="Xóa">
+								<Button
+									danger
+									type="link"
+									size="small"
+									icon={<DeleteOutlined />}
+									onClick={() => handleDelete(record.cv_id)}
+								/>
+							</Tooltip>
+						</CheckPermission>
+					</Space>
+				);
+			}
 		}
 	];
 
@@ -278,6 +334,23 @@ const CvManager: React.FC = () => {
 				}, [])}
 				scroll={{ x: 800 }}
 			/>
+
+			{/* Modal xem kỹ năng phân tích từ CV */}
+			<Modal
+				title={`Kỹ năng phân tích - ${skillsModalData.fullName}`}
+				open={skillsModalVisible}
+				onCancel={() => setSkillsModalVisible(false)}
+				footer={[
+					<Button key="close" onClick={() => setSkillsModalVisible(false)}>
+						Đóng
+					</Button>
+				]}
+				width={700}
+			>
+				<div style={{ maxHeight: 400, overflowY: 'auto', whiteSpace: 'pre-wrap', padding: '12px 0', lineHeight: 1.8 }}>
+					{skillsModalData.text}
+				</div>
+			</Modal>
 		</div>
 	);
 };

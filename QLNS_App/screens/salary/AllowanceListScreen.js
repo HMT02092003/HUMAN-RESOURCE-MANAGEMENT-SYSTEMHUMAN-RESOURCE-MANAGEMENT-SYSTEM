@@ -54,9 +54,9 @@ const AllowanceListScreen = ({ navigation }) => {
       const res = await SalaryService.listAllowanceTypes({ page: 1, pageSize: 100 });
       const list = Array.isArray(res) ? res : (res && res.data) ? res.data : [];
       setData(list);
-      console.log('✅ [App] Loaded', list.length, 'allowance types');
+      console.log(' [App] Loaded', list.length, 'allowance types');
     } catch (error) {
-      console.error('❌ [App] Error fetching allowance types:', error);
+      console.error(' [App] Error fetching allowance types:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách phụ cấp');
       setData([]);
     } finally {

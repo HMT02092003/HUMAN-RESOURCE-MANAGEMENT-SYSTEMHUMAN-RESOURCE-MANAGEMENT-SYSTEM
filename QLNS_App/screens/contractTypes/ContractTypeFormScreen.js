@@ -120,12 +120,12 @@ const ContractTypeFormScreen = ({ navigation, route }) => {
 
       if (isEditMode) {
         await ContractTypeService.updateContractType(contractTypeId, payload);
-        Alert.alert('✅ Thành công', 'Đã cập nhật loại hợp đồng', [
+        Alert.alert(' Thành công', 'Đã cập nhật loại hợp đồng', [
           { text: 'OK', onPress: () => navigation.goBack() }
         ]);
       } else {
         await ContractTypeService.createContractType(payload);
-        Alert.alert('✅ Thành công', 'Đã tạo loại hợp đồng mới', [
+        Alert.alert(' Thành công', 'Đã tạo loại hợp đồng mới', [
           { text: 'OK', onPress: () => navigation.goBack() }
         ]);
       }

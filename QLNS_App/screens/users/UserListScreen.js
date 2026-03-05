@@ -55,7 +55,7 @@ const UserListScreen = ({ navigation }) => {
       setTotal(totalCount);
       setPage(pageNum);
     } catch (error) {
-      console.error('❌ [UserList] Error loading users:', error);
+      console.error(' [UserList] Error loading users:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách người dùng');
     } finally {
       setLoading(false);
@@ -92,10 +92,10 @@ const UserListScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               await UserService.deleteUser(userId);
-              Alert.alert('✅ Thành công', 'Đã xóa người dùng');
+              Alert.alert(' Thành công', 'Đã xóa người dùng');
               onRefresh();
             } catch (error) {
-              console.error('❌ [UserList] Delete failed:', error);
+              console.error(' [UserList] Delete failed:', error);
               Alert.alert('Lỗi', error.response?.data?.message || 'Không thể xóa người dùng');
             }
           }
@@ -204,13 +204,8 @@ const UserListScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <Surface style={styles.searchContainer} elevation={0}>
-        <Searchbar
-          placeholder="Tìm tên, email, username..."
-          onChangeText={handleSearch}
-          onSubmitEditing={submitSearch}
-          onIconPress={submitSearch}
-          value={searchQuery}
-          style={styles.searchbar}
+        <Searchbarstyle={styles.searchbar}
+          loading={loading}
           inputStyle={styles.searchInput}
         />
       </Surface>

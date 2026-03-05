@@ -68,7 +68,7 @@ const DepartmentCreateScreen = ({ navigation }) => {
           {
             text: 'OK',
             onPress: () => {
-              console.log('✅ [Navigation] Going back to list...');
+              console.log(' [Navigation] Going back to list...');
               // Try multiple navigation methods to ensure we go back
               if (navigation.canGoBack()) {
                 navigation.goBack();

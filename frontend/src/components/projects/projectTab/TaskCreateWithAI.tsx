@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Modal, 
-  Form, 
-  Input, 
-  Steps, 
-  Button, 
-  message, 
+import {
+  Modal,
+  Form,
+  Input,
+  Steps,
+  Button,
+  message,
   Alert,
   Card,
   Tag,
@@ -35,6 +35,8 @@ import { ProjectMember } from '@/types/project';
 import jobService from '@/service/jobService';
 import { attendanceService } from '@/service/attendanceService';
 import dayjs, { Dayjs } from 'dayjs';
+import isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
+dayjs.extend(isSameOrAfter);
 
 const { TextArea } = Input;
 const { Step } = Steps;
@@ -129,14 +131,14 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
   const [form] = Form.useForm();
   const [currentStep, setCurrentStep] = useState(0);
   const [loading, setLoading] = useState(false);
-  
+
   // Step 1: Input
   const [taskInput, setTaskInput] = useState({ title: '', description: '' });
-  
+
   // Step 2: AI Analysis Result
   const [aiAnalysis, setAiAnalysis] = useState<AIAnalysisResult | null>(null);
   const [editableSkills, setEditableSkills] = useState<AIAnalysisResult['required_skills']>([]);
-  
+
   // Step 3: Candidates
   const [suggestedCandidates, setSuggestedCandidates] = useState<CandidateMatch[]>([]);
   const [allProjectMembers, setAllProjectMembers] = useState<CandidateMatch[]>([]);
@@ -230,7 +232,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
     try {
       await form.validateFields(['title', 'description', 'start_date', 'due_date']);
       const values = form.getFieldsValue();
-      
+
       setLoading(true);
       message.loading({ content: 'AI đang phân tích công việc...', key: 'analyze', duration: 0 });
 
@@ -302,12 +304,12 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
         const data: CandidatesResponse = response.data;
         setSuggestedCandidates(data.suggested_candidates || []);
         setAllProjectMembers(data.all_project_members || []);
-        
+
         message.success({
           content: `Tìm thấy ${data.total_suggested} người được đề xuất và ${data.total_members} thành viên trong dự án!`,
           key: 'find'
         });
-        
+
         setCurrentStep(2);
       } else {
         throw new Error('Finding candidates failed');
@@ -368,10 +370,10 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
       }
     } catch (error: any) {
       console.error('Create task error:', error);
-      
+
       // Handle specific error codes from BE
       const errorData = error.response?.data;
-      
+
       if (errorData?.error === 'TIMELINE_CONFLICT') {
         // Timeline overlap - show detailed analysis
         Modal.error({
@@ -478,7 +480,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
     const newSkills = [...editableSkills];
     newSkills[index] = { ...newSkills[index], [field]: value };
     setEditableSkills(newSkills);
-    
+
     // Clear candidates to force re-search when user edits skills
     setSuggestedCandidates([]);
     setAllProjectMembers([]);
@@ -567,10 +569,10 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
               ({ getFieldValue }) => ({
                 validator(_, value) {
                   const startDate = getFieldValue('start_date');
-                  if (!value || !startDate || value.isAfter(startDate)) {
+                  if (!value || !startDate || value.isSameOrAfter(startDate, 'day')) {
                     return Promise.resolve();
                   }
-                  return Promise.reject(new Error('Deadline phải sau ngày bắt đầu!'));
+                  return Promise.reject(new Error('Deadline phải cùng hoặc sau ngày bắt đầu!'));
                 },
               }),
             ]}
@@ -583,7 +585,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
               disabledDate={(current) => {
                 const startDate = form.getFieldValue('start_date');
                 // Disable dates before or equal to start_date
-                if (current && startDate && current <= startDate) return true;
+                if (current && startDate && current < startDate.startOf('day')) return true;
                 // Disable non-working days based on settings
                 if (current && !isWorkingDay(current)) return true;
                 return false;
@@ -638,7 +640,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
           </ul>
         }
         type="info"
-  icon={<MdAutoAwesome style={{ color: '#1890ff', fontSize: 20 }} />}
+        icon={<MdAutoAwesome style={{ color: '#1890ff', fontSize: 20 }} />}
         style={{ marginBottom: 16 }}
       />
 
@@ -686,7 +688,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
                 {aiAnalysis.difficulty_level}/5 - {difficultyLabels[aiAnalysis.difficulty_level - 1]}
               </Tag>
             </div>
-            
+
             <div>
               <strong>Thời gian ước tính:</strong>{' '}
               {(() => {
@@ -868,7 +870,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
         key: 'workload_assessment',
         width: "40%",
         ellipsis: true,
-        render: (text:any) => ( 
+        render: (text: any) => (
           <Tooltip placement="topLeft" title={text}>
             {text}
           </Tooltip>
@@ -899,14 +901,14 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
     ];
 
     // Find selected candidate from both lists
-    const selectedCandidateData = 
-      suggestedCandidates.find((c: CandidateMatch) => c.user_id === selectedCandidate) || 
+    const selectedCandidateData =
+      suggestedCandidates.find((c: CandidateMatch) => c.user_id === selectedCandidate) ||
       allProjectMembers.find((c: CandidateMatch) => c.user_id === selectedCandidate);
 
     return (
       <div>
         {/* SECTION 1: Suggested Candidates (with matching skills) */}
-        <Card 
+        <Card
           title={
             <Space>
               <StarOutlined style={{ color: '#faad14' }} />
@@ -944,7 +946,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
         </Card>
 
         {/* SECTION 2: All Project Members */}
-        <Card 
+        <Card
           title={
             <Space>
               <UserOutlined style={{ color: '#1890ff' }} />
@@ -976,7 +978,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
               <div>
                 <strong>Tên:</strong> {selectedCandidateData.fullName || `User ${selectedCandidateData.user_id}`}
               </div>
-              
+
               {selectedCandidateData.workload_assessment && (
                 <Alert
                   message="Đánh giá Workload"
@@ -994,7 +996,7 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
                   </Tag>
                 </div>
               )}
-              
+
               {selectedCandidateData.matched_skills && selectedCandidateData.matched_skills.length > 0 && (
                 <div>
                   <strong>Kỹ năng khớp:</strong>
@@ -1056,9 +1058,9 @@ const TaskCreateWithAI: React.FC<TaskCreateWithAIProps> = ({
       destroyOnClose
     >
       <Steps current={currentStep} style={{ marginBottom: 24 }}>
-    <Step title="Nhập thông tin" icon={<BulbOutlined />} />
-    <Step title="Phân tích AI" icon={<FaBrain />} />
-    <Step title="Chọn ứng viên" icon={<UserOutlined />} />
+        <Step title="Nhập thông tin" icon={<BulbOutlined />} />
+        <Step title="Phân tích AI" icon={<FaBrain />} />
+        <Step title="Chọn ứng viên" icon={<UserOutlined />} />
       </Steps>
 
       <Spin spinning={loading}>

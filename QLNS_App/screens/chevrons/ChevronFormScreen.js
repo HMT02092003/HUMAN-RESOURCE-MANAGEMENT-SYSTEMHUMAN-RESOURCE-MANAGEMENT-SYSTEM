@@ -89,12 +89,12 @@ const ChevronFormScreen = ({ navigation, route }) => {
     try {
       if (isEditMode) {
         await ChevronService.updateChevron(chevronId, payload);
-        Alert.alert('✅ Thành công', 'Đã cập nhật chức vụ', [
+        Alert.alert(' Thành công', 'Đã cập nhật chức vụ', [
           { text: 'OK', onPress: () => navigation.goBack() }
         ]);
       } else {
         await ChevronService.createChevron(payload);
-        Alert.alert('✅ Thành công', 'Đã tạo chức vụ mới', [
+        Alert.alert(' Thành công', 'Đã tạo chức vụ mới', [
           { text: 'OK', onPress: () => navigation.goBack() }
         ]);
       }

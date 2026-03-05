@@ -1120,6 +1120,10 @@ export class ApplicationController {
   /**
    * Duyệt đơn từ - WITH TIMEOUT PROTECTION
    * POST /applications/:id/approve
+   * 
+   * Side effects:
+   * - forgot-check: Gọi attendance service để cập nhật chấm công cho ngày quên check
+   * - resignation: Gọi auth service để chuyển trạng thái nhân viên thành "đã nghỉ việc"
    */
   static async approve(req, res) {
     try {
@@ -1133,6 +1137,68 @@ export class ApplicationController {
       }
 
       const application = await ApplicationModel.approveApplication(parseInt(id), approvedBy);
+
+      // === SIDE EFFECTS AFTER APPROVAL ===
+      const token = req.cookies?.token ||
+        (req.headers.authorization && req.headers.authorization.split(' ')[1]);
+      const authHeader = token ? `Bearer ${token}` : (req.headers.authorization || '');
+
+      // 1) Đơn quên check in/out → Cập nhật chấm công
+      if (application.type === 'forgot-check' && application.data) {
+        try {
+          const { forgotDate, forgotTime, forgotType } = application.data;
+          if (forgotDate && forgotTime && forgotType) {
+            console.log(`📝 [approve] Updating attendance for forgot-check: user=${application.userId}, date=${forgotDate}, time=${forgotTime}, type=${forgotType}`);
+
+            await axios.post(
+              `${API_GATEWAY_URL}/api/attendance/update-forgot-check`,
+              {
+                userId: application.userId,
+                forgotDate,
+                forgotTime,
+                forgotType
+              },
+              {
+                headers: {
+                  'Authorization': authHeader,
+                  'Content-Type': 'application/json'
+                },
+                timeout: 15000 // 15 giây timeout
+              }
+            );
+            console.log(`✅ [approve] Attendance updated successfully for forgot-check application #${id}`);
+          } else {
+            console.warn(`⚠️ [approve] forgot-check application #${id} missing data fields:`, { forgotDate, forgotTime, forgotType });
+          }
+        } catch (attendanceError) {
+          // Log lỗi nhưng không fail toàn bộ approve
+          console.error(`⚠️ [approve] Failed to update attendance for forgot-check application #${id}:`, attendanceError.message);
+        }
+      }
+
+      // 2) Đơn thôi việc → Chuyển trạng thái nhân viên thành "đã nghỉ việc" (status = 0)
+      if (application.type === 'resignation') {
+        try {
+          console.log(`📝 [approve] Deactivating user ${application.userId} due to approved resignation application #${id}`);
+
+          await axios.put(
+            `${API_GATEWAY_URL}/api/auth/users/${application.userId}`,
+            {
+              status: 0 // 0 = ngưng hoạt động / đã nghỉ việc
+            },
+            {
+              headers: {
+                'Authorization': authHeader,
+                'Content-Type': 'application/json'
+              },
+              timeout: 10000
+            }
+          );
+          console.log(`✅ [approve] User ${application.userId} has been deactivated (resigned) successfully`);
+        } catch (userError) {
+          console.error(`⚠️ [approve] Failed to deactivate user ${application.userId} for resignation:`, userError.message);
+        }
+      }
 
       return res.json({
         success: true,
@@ -1176,6 +1242,11 @@ export class ApplicationController {
 
       console.log(`📝 Bulk approving ${ids.length} applications by user ${approvedBy}...`);
 
+      // Lấy danh sách đơn trước khi approve để biết type
+      const pendingApps = await ApplicationModel.query()
+        .whereIn('id', ids)
+        .where('status', 0);
+
       // Sử dụng Objection.js để update nhiều records cùng lúc
       const updatedCount = await ApplicationModel.query()
         .whereIn('id', ids)
@@ -1194,6 +1265,47 @@ export class ApplicationController {
       }
 
       console.log(`✅ Successfully approved ${updatedCount} applications`);
+
+      // === SIDE EFFECTS AFTER BULK APPROVAL ===
+      const token = req.cookies?.token ||
+        (req.headers.authorization && req.headers.authorization.split(' ')[1]);
+      const authHeader = token ? `Bearer ${token}` : (req.headers.authorization || '');
+
+      // Xử lý side effects cho từng đơn đã approve
+      for (const app of pendingApps) {
+        // 1) Đơn quên check in/out → Cập nhật chấm công
+        if (app.type === 'forgot-check' && app.data) {
+          try {
+            const { forgotDate, forgotTime, forgotType } = app.data;
+            if (forgotDate && forgotTime && forgotType) {
+              console.log(`📝 [bulkApprove] Updating attendance for forgot-check: user=${app.userId}, date=${forgotDate}`);
+              await axios.post(
+                `${API_GATEWAY_URL}/api/attendance/update-forgot-check`,
+                { userId: app.userId, forgotDate, forgotTime, forgotType },
+                { headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' }, timeout: 15000 }
+              );
+              console.log(`✅ [bulkApprove] Attendance updated for application #${app.id}`);
+            }
+          } catch (err) {
+            console.error(`⚠️ [bulkApprove] Failed attendance update for app #${app.id}:`, err.message);
+          }
+        }
+
+        // 2) Đơn thôi việc → Chuyển trạng thái nhân viên
+        if (app.type === 'resignation') {
+          try {
+            console.log(`📝 [bulkApprove] Deactivating user ${app.userId} for resignation app #${app.id}`);
+            await axios.put(
+              `${API_GATEWAY_URL}/api/auth/users/${app.userId}`,
+              { status: 0 },
+              { headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' }, timeout: 10000 }
+            );
+            console.log(`✅ [bulkApprove] User ${app.userId} deactivated`);
+          } catch (err) {
+            console.error(`⚠️ [bulkApprove] Failed to deactivate user ${app.userId}:`, err.message);
+          }
+        }
+      }
 
       res.json({
         success: true,

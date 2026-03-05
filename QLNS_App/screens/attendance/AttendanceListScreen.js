@@ -96,13 +96,13 @@ const AttendanceListScreen = ({ route }) => {
         const normalizedStats = AttendanceService.normalizeMonthlyStats(fullData.monthlyStats);
         setMonthlyStats(normalizedStats);
         setDailyDetails(fullData.dailyData?.dailyDetails || []);
-        console.log('✅ [App] Data loaded:', { stats: normalizedStats, days: fullData.dailyData?.dailyDetails?.length });
+        console.log(' [App] Data loaded:', { stats: normalizedStats, days: fullData.dailyData?.dailyDetails?.length });
       } else {
         setMonthlyStats(null);
         setDailyDetails([]);
       }
     } catch (error) {
-      console.error('❌ [App] Error fetching attendance:', error);
+      console.error(' [App] Error fetching attendance:', error);
       Alert.alert('Lỗi', 'Không thể tải dữ liệu chấm công');
     } finally {
       setLoading(false);

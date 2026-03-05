@@ -934,7 +934,8 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                         label="Mật khẩu mới"
                         rules={[
                             { required: true, message: 'Vui lòng nhập mật khẩu mới' },
-                            { min: 6, message: 'Mật khẩu phải có ít nhất 6 ký tự' }
+                            { min: 8, message: 'Mật khẩu phải có ít nhất 8 ký tự' },
+                            { pattern: /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{8,}$/, message: 'Mật khẩu phải chứa chữ hoa, chữ thường, số và ký tự đặc biệt' }
                         ]}
                     >
                         <Input.Password prefix={<LockOutlined />} placeholder="Nhập mật khẩu mới" />

@@ -66,7 +66,7 @@ const ContractListScreen = ({ navigation }) => {
         total: filtered.length
       };
     } catch (error) {
-      console.error('❌ [ContractList] Error fetching contracts:', error);
+      console.error(' [ContractList] Error fetching contracts:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách hợp đồng');
       return { results: [], total: 0 };
     }
@@ -85,9 +85,9 @@ const ContractListScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               await ContractService.deleteContract(contractId);
-              Alert.alert('✅ Thành công', 'Đã xóa hợp đồng');
+              Alert.alert(' Thành công', 'Đã xóa hợp đồng');
             } catch (error) {
-              console.error('❌ [ContractList] Delete failed:', error);
+              console.error(' [ContractList] Delete failed:', error);
               Alert.alert('Lỗi', 'Không thể xóa hợp đồng');
             }
           }

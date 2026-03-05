@@ -55,7 +55,7 @@ const ApplicationManagementScreen = ({ navigation }) => {
         total: response.total || 0
       };
     } catch (error) {
-      console.error('❌ [ApplicationManagement] Error:', error);
+      console.error(' [ApplicationManagement] Error:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách đơn từ');
       return { results: [], total: 0 };
     }
@@ -64,7 +64,7 @@ const ApplicationManagementScreen = ({ navigation }) => {
   // Approve handler
   const handleApprove = (id, type, userName) => {
     Alert.alert(
-      '✅ Xác nhận duyệt',
+      ' Xác nhận duyệt',
       `Duyệt đơn "${APPLICATION_TYPE_LABELS[type]}" của ${userName}?`,
       [
         { text: 'Hủy', style: 'cancel' },
@@ -73,12 +73,12 @@ const ApplicationManagementScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               await ApplicationService.approveApplication(id, { note: '' });
-              Alert.alert('✅ Thành công', 'Đã duyệt đơn từ');
+              Alert.alert(' Thành công', 'Đã duyệt đơn từ');
               if (listRef.current?.refresh) {
                 listRef.current.refresh();
               }
             } catch (error) {
-              console.error('❌ Approve failed:', error);
+              console.error(' Approve failed:', error);
               Alert.alert('Lỗi', 'Không thể duyệt đơn từ');
             }
           }
@@ -100,12 +100,12 @@ const ApplicationManagementScreen = ({ navigation }) => {
     setRejectDialogVisible(false);
     try {
       await ApplicationService.rejectApplication(rejectTarget.id, { reason });
-      Alert.alert('✅ Thành công', 'Đã từ chối đơn từ');
+      Alert.alert(' Thành công', 'Đã từ chối đơn từ');
       if (listRef.current?.refresh) {
         listRef.current.refresh();
       }
     } catch (error) {
-      console.error('❌ Reject failed:', error);
+      console.error(' Reject failed:', error);
       Alert.alert('Lỗi', 'Không thể từ chối đơn từ');
     } finally {
       setRejectTarget(null);
@@ -126,12 +126,12 @@ const ApplicationManagementScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               await ApplicationService.deleteApplication(id);
-              Alert.alert('✅ Thành công', 'Đã xóa đơn từ');
+              Alert.alert(' Thành công', 'Đã xóa đơn từ');
               if (listRef.current?.refresh) {
                 listRef.current.refresh();
               }
             } catch (error) {
-              console.error('❌ Delete failed:', error);
+              console.error(' Delete failed:', error);
               Alert.alert('Lỗi', 'Không thể xóa đơn từ');
             }
           }
@@ -436,7 +436,7 @@ const ApplicationManagementScreen = ({ navigation }) => {
       {/* Reject Dialog */}
       <Portal>
         <Dialog visible={rejectDialogVisible} onDismiss={() => setRejectDialogVisible(false)}>
-          <Dialog.Title>❌ Từ chối đơn</Dialog.Title>
+          <Dialog.Title> Từ chối đơn</Dialog.Title>
           <Dialog.Content>
             <Text style={{ marginBottom: 12 }}>
               Lý do từ chối đơn "{rejectTarget ? APPLICATION_TYPE_LABELS[rejectTarget.type] : ''}" của {rejectTarget?.userName || ''}:

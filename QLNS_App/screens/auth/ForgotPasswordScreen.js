@@ -77,8 +77,24 @@ function ForgotPasswordContent({ navigation }) {
       setError('Vui lòng nhập mã OTP!');
       return;
     }
-    if (!newPassword.trim() || newPassword.length < 6) {
-      setError('Mật khẩu mới phải có ít nhất 6 ký tự!');
+    if (!newPassword.trim() || newPassword.length < 8) {
+      setError('Mật khẩu mới phải có ít nhất 8 ký tự!');
+      return;
+    }
+    if (!/[a-z]/.test(newPassword)) {
+      setError('Mật khẩu phải chứa ít nhất 1 chữ thường!');
+      return;
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      setError('Mật khẩu phải chứa ít nhất 1 chữ hoa!');
+      return;
+    }
+    if (!/[0-9]/.test(newPassword)) {
+      setError('Mật khẩu phải chứa ít nhất 1 chữ số!');
+      return;
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword)) {
+      setError('Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt!');
       return;
     }
     if (newPassword !== confirmPassword) {

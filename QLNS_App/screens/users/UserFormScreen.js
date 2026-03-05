@@ -107,7 +107,7 @@ const UserFormScreen = ({ route, navigation }) => {
         console.log('📥 [UserForm] Loading user detail with ID:', numericUserId, 'Type:', typeof numericUserId);
 
         const userData = await UserService.getUserDetail(numericUserId);
-        console.log('✅ [UserForm] User data loaded:', JSON.stringify(userData, null, 2));
+        console.log(' [UserForm] User data loaded:', JSON.stringify(userData, null, 2));
 
         // Parse and set form data
         const formData = {
@@ -129,7 +129,7 @@ const UserFormScreen = ({ route, navigation }) => {
 
         console.log('📝 [UserForm] Form data to set:', JSON.stringify(formData, null, 2));
         setForm(formData);
-        console.log('✅ [UserForm] Form state updated');
+        console.log(' [UserForm] Form state updated');
 
         // Load filtered departments/chevrons for the user's current role
         if (formData.roleId) {
@@ -142,7 +142,7 @@ const UserFormScreen = ({ route, navigation }) => {
         }
       }
     } catch (error) {
-      console.error('❌ [UserForm] Error loading data:', error);
+      console.error(' [UserForm] Error loading data:', error);
       Alert.alert('Lỗi', 'Không thể tải dữ liệu form');
     } finally {
       setDataLoading(false);
@@ -181,8 +181,16 @@ const UserFormScreen = ({ route, navigation }) => {
     if (!isEdit) {
       if (!form.password?.trim()) {
         newErrors.password = 'Vui lòng nhập mật khẩu';
-      } else if (form.password.length < 6) {
-        newErrors.password = 'Mật khẩu phải có ít nhất 6 ký tự';
+      } else if (form.password.length < 8) {
+        newErrors.password = 'Mật khẩu phải có ít nhất 8 ký tự';
+      } else if (!/[a-z]/.test(form.password)) {
+        newErrors.password = 'Mật khẩu phải chứa ít nhất 1 chữ thường';
+      } else if (!/[A-Z]/.test(form.password)) {
+        newErrors.password = 'Mật khẩu phải chứa ít nhất 1 chữ hoa';
+      } else if (!/[0-9]/.test(form.password)) {
+        newErrors.password = 'Mật khẩu phải chứa ít nhất 1 chữ số';
+      } else if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(form.password)) {
+        newErrors.password = 'Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt';
       }
 
       if (!form.rePassword?.trim()) {
@@ -282,7 +290,7 @@ const UserFormScreen = ({ route, navigation }) => {
         ]);
       }
     } catch (error) {
-      console.error('❌ [UserForm] Error submitting:', error);
+      console.error(' [UserForm] Error submitting:', error);
       Alert.alert(
         'Lỗi',
         error.response?.data?.message || error.message || 'Có lỗi xảy ra'

@@ -45,38 +45,38 @@ const UserCreateScreen = ({ navigation }) => {
       if (results[0].status === 'fulfilled') {
         const arr = toArray(results[0].value);
         setRoles(arr);
-        console.log('✅ [UserCreateScreen] Roles loaded:', arr.length || 0);
+        console.log(' [UserCreateScreen] Roles loaded:', arr.length || 0);
       } else {
-        console.error('❌ [UserCreateScreen] Roles failed:', results[0].reason);
+        console.error(' [UserCreateScreen] Roles failed:', results[0].reason);
       }
       
       if (results[1].status === 'fulfilled') {
         const arr = toArray(results[1].value);
         setDepartments(arr);
-        console.log('✅ [UserCreateScreen] Departments loaded:', arr.length || 0);
+        console.log(' [UserCreateScreen] Departments loaded:', arr.length || 0);
       } else {
-        console.error('❌ [UserCreateScreen] Departments failed:', results[1].reason);
+        console.error(' [UserCreateScreen] Departments failed:', results[1].reason);
       }
       
       if (results[2].status === 'fulfilled') {
         const arr = toArray(results[2].value);
         setChevrons(arr);
-        console.log('✅ [UserCreateScreen] Chevrons loaded:', arr.length || 0);
+        console.log(' [UserCreateScreen] Chevrons loaded:', arr.length || 0);
       } else {
-        console.error('❌ [UserCreateScreen] Chevrons failed:', results[2].reason);
+        console.error(' [UserCreateScreen] Chevrons failed:', results[2].reason);
       }
       
       if (results[3].status === 'fulfilled') {
         const arr = toArray(results[3].value);
         setContractTypes(arr);
-        console.log('✅ [UserCreateScreen] ContractTypes loaded:', arr.length || 0);
+        console.log(' [UserCreateScreen] ContractTypes loaded:', arr.length || 0);
       } else {
-        console.error('❌ [UserCreateScreen] ContractTypes failed:', results[3].reason);
+        console.error(' [UserCreateScreen] ContractTypes failed:', results[3].reason);
         setContractTypes([]);
       }
       
     } catch (err) {
-      console.error('❌ [UserCreateScreen] load dropdowns error', err);
+      console.error(' [UserCreateScreen] load dropdowns error', err);
       Alert.alert('Lỗi', 'Không thể tải dữ liệu');
     } finally {
       setLoading(false);

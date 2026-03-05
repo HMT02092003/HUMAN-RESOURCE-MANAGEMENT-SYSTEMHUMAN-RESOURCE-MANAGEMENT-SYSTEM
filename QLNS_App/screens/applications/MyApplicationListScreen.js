@@ -47,7 +47,7 @@ const MyApplicationListScreen = ({ navigation }) => {
         total: response.total || 0
       };
     } catch (error) {
-      console.error('❌ [MyApplications] Error:', error);
+      console.error(' [MyApplications] Error:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách đơn từ');
       return { results: [], total: 0 };
     }
@@ -66,13 +66,13 @@ const MyApplicationListScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               await ApplicationService.deleteApplication(id);
-              Alert.alert('✅ Thành công', 'Đã xóa đơn từ');
+              Alert.alert(' Thành công', 'Đã xóa đơn từ');
               // Trigger refresh in CardList
               if (listRef.current?.refresh) {
                 listRef.current.refresh();
               }
             } catch (error) {
-              console.error('❌ Delete failed:', error);
+              console.error(' Delete failed:', error);
               Alert.alert('Lỗi', 'Không thể xóa đơn từ');
             }
           }

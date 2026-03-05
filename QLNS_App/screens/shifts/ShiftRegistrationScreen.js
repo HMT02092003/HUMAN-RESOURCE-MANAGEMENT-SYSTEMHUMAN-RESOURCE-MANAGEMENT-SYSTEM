@@ -90,7 +90,7 @@ const ShiftRegistrationScreen = ({ navigation }) => {
         total: (response.pagination && response.pagination.total) || response.total || 0
       };
     } catch (error) {
-      console.error('❌ [ShiftRegistrations] Error:', error);
+      console.error(' [ShiftRegistrations] Error:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách đăng ký ca');
       return { results: [], total: 0 };
     }

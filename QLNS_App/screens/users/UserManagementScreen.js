@@ -48,7 +48,7 @@ const UserManagementScreen = ({ navigation }) => {
 
       return response; // { results: [...], total: N }
     } catch (error) {
-      console.error('❌ [UserManagement] Error fetching users:', error);
+      console.error(' [UserManagement] Error fetching users:', error);
       Alert.alert('Lỗi', error.response?.data?.message || 'Không thể tải danh sách người dùng');
       return { results: [], total: 0 };
     }
@@ -67,10 +67,10 @@ const UserManagementScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               await UserService.deleteMultipleUsers([userId]);
-              Alert.alert('✅ Thành công', 'Đã xóa người dùng');
+              Alert.alert(' Thành công', 'Đã xóa người dùng');
               if (listRef.current?.refresh) listRef.current.refresh();
             } catch (error) {
-              console.error('❌ [UserManagement] Delete failed:', error);
+              console.error(' [UserManagement] Delete failed:', error);
               Alert.alert('Lỗi', error.response?.data?.message || 'Không thể xóa người dùng');
             }
           }
@@ -85,7 +85,7 @@ const UserManagementScreen = ({ navigation }) => {
     const statusText = newStatus === '1' ? 'kích hoạt' : 'vô hiệu hóa';
 
     Alert.alert(
-      `${newStatus === '1' ? '✅' : '🚫'} Xác nhận`,
+      `${newStatus === '1' ? '' : '🚫'} Xác nhận`,
       `Bạn có chắc chắn muốn ${statusText} người dùng "${userName}"?`,
       [
         { text: 'Hủy', style: 'cancel' },
@@ -94,10 +94,10 @@ const UserManagementScreen = ({ navigation }) => {
           onPress: async () => {
             try {
               await UserService.changeUserStatus(userId, newStatus);
-              Alert.alert('✅ Thành công', `Đã ${statusText} người dùng`);
+              Alert.alert(' Thành công', `Đã ${statusText} người dùng`);
               if (listRef.current?.refresh) listRef.current.refresh();
             } catch (error) {
-              console.error('❌ [UserManagement] Status change failed:', error);
+              console.error(' [UserManagement] Status change failed:', error);
               Alert.alert('Lỗi', error.response?.data?.message || `Không thể ${statusText} người dùng`);
             }
           }

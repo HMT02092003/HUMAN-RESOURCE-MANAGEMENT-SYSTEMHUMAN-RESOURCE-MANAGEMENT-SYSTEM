@@ -55,33 +55,33 @@ const UserEditScreen = ({ route, navigation }) => {
       if (results[0].status === 'fulfilled') {
         const arr = toArray(results[0].value);
         setRoles(arr);
-        console.log('✅ [UserEditScreen] Roles loaded:', arr.length || 0);
+        console.log(' [UserEditScreen] Roles loaded:', arr.length || 0);
       } else {
-        console.error('❌ [UserEditScreen] Roles failed:', results[0].reason);
+        console.error(' [UserEditScreen] Roles failed:', results[0].reason);
       }
       
       if (results[1].status === 'fulfilled') {
         const arr = toArray(results[1].value);
         setDepartments(arr);
-        console.log('✅ [UserEditScreen] Departments loaded:', arr.length || 0);
+        console.log(' [UserEditScreen] Departments loaded:', arr.length || 0);
       } else {
-        console.error('❌ [UserEditScreen] Departments failed:', results[1].reason);
+        console.error(' [UserEditScreen] Departments failed:', results[1].reason);
       }
       
       if (results[2].status === 'fulfilled') {
         const arr = toArray(results[2].value);
         setChevrons(arr);
-        console.log('✅ [UserEditScreen] Chevrons loaded:', arr.length || 0);
+        console.log(' [UserEditScreen] Chevrons loaded:', arr.length || 0);
       } else {
-        console.error('❌ [UserEditScreen] Chevrons failed:', results[2].reason);
+        console.error(' [UserEditScreen] Chevrons failed:', results[2].reason);
       }
       
       if (results[3].status === 'fulfilled') {
         const arr = toArray(results[3].value);
         setContractTypes(arr);
-        console.log('✅ [UserEditScreen] ContractTypes loaded:', arr.length || 0);
+        console.log(' [UserEditScreen] ContractTypes loaded:', arr.length || 0);
       } else {
-        console.error('❌ [UserEditScreen] ContractTypes failed:', results[3].reason);
+        console.error(' [UserEditScreen] ContractTypes failed:', results[3].reason);
         setContractTypes([]);
       }
       
@@ -89,14 +89,14 @@ const UserEditScreen = ({ route, navigation }) => {
         const user = results[4].value || {};
         // Some APIs return user data in data field
         setInitialValues(user.data || user);
-        console.log('✅ [UserEditScreen] User loaded:', (user.data || user).username);
+        console.log(' [UserEditScreen] User loaded:', (user.data || user).username);
       } else {
-        console.error('❌ [UserEditScreen] User failed:', results[4].reason);
+        console.error(' [UserEditScreen] User failed:', results[4].reason);
         Alert.alert('Lỗi', 'Không thể tải dữ liệu người dùng');
       }
       
     } catch (err) {
-      console.error('❌ [UserEditScreen] load data error', err);
+      console.error(' [UserEditScreen] load data error', err);
       Alert.alert('Lỗi', 'Không thể tải dữ liệu người dùng');
     } finally {
       setLoading(false);

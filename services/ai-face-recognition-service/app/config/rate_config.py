@@ -39,7 +39,7 @@ LIVENESS_V2_MODEL = "2.7_80x80_MiniFASNetV2.onnx"
 # NOTE: Đặt ngưỡng V2 ở 30% và V1 ở 2.6% theo yêu cầu mới
 LIVENESS_V1_THRESHOLD = 0.025   # 2.5% — dưới mức này = FAKE
 
-LIVENESS_V2_THRESHOLD = 0.30    # 30%
+LIVENESS_V2_THRESHOLD = 0.25    # 25%
 
 # Legacy alias — used by EnhancedInsightFaceService._check_liveness (old code path)
 # Giá trị này đại diện cho ngưỡng anti-spoof chung khi chỉ dùng V2

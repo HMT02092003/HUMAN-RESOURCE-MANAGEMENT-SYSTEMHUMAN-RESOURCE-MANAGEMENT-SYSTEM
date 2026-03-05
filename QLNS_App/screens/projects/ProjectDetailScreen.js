@@ -27,6 +27,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import JobService from '../../services/JobService';
+import { useAuth } from '../../services/AuthContext';
+import AuthTokenManager from '../../services/AuthTokenManager';
 
 const { width } = Dimensions.get('window');
 
@@ -78,6 +80,31 @@ const ProjectDetailScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { projectId } = route.params || {};
+  const { user } = useAuth();
+
+  // Determine if user is manager/admin (can create tasks)
+  const [isManager, setIsManager] = useState(false);
+  useEffect(() => {
+    const checkRole = async () => {
+      try {
+        const token = await AuthTokenManager.getAccessToken();
+        if (token) {
+          const decoded = AuthTokenManager.decodeJwt(token);
+          const userPayload = decoded?.user || {};
+          const roleId = userPayload.roleId;
+          const permissions = userPayload.permissions || {};
+          // roleId 2 = nhân viên (employee), anything else is admin/manager
+          // Also check if user has manage_projects permission
+          const canManage = (roleId && roleId !== 2) || permissions.manage_projects === true;
+          setIsManager(!!canManage);
+          console.log('[ProjectDetail] Role check:', { roleId, canManage });
+        }
+      } catch (e) {
+        console.log('[ProjectDetail] Could not decode role:', e);
+      }
+    };
+    checkRole();
+  }, []);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1511,14 +1538,14 @@ const ProjectDetailScreen = () => {
           label="Thêm chi phí"
           color="#fff"
         />
-      ) : (
+      ) : isManager ? (
         <FAB
           icon="plus"
           style={styles.fab}
           onPress={() => setCreateTaskModalVisible(true)}
           color="#fff"
         />
-      )}
+      ) : null}
 
       {renderTaskModal()}
       {renderCreateTaskModal()}

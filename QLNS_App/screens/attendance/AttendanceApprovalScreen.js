@@ -98,9 +98,9 @@ const AttendanceApprovalScreen = ({ navigation }) => {
       }
 
       setData(items || []);
-      console.log('✅ [App] Loaded', (items || []).length, 'records');
+      console.log(' [App] Loaded', (items || []).length, 'records');
     } catch (error) {
-      console.error('❌ [App] Error fetching monthly summaries:', error);
+      console.error(' [App] Error fetching monthly summaries:', error);
       Alert.alert('Lỗi', 'Không thể tải danh sách duyệt chấm công');
       setData([]);
     } finally {
