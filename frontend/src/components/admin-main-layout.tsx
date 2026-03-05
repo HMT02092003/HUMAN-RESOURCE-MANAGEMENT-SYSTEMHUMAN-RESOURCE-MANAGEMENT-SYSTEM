@@ -244,7 +244,7 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
 }) => {
     const [collapsed, setCollapsed] = useState(false);
     const screens = Grid.useBreakpoint();
-    const isMobile = !screens.lg;
+    const isMobile = Object.keys(screens).length === 0 ? false : !screens.lg;
     const [isUserModalVisible, setIsUserModalVisible] = useState(false);
     const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
     const [color, setColor] = useState(() => {
@@ -684,7 +684,9 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                     height: isMobile ? '100vh' : 'auto',
                     zIndex: 1000,
                     left: isMobile && collapsed ? -220 : 0,
-                    transition: 'left 0.2s'
+                    transition: 'left 0.2s',
+                    overflowY: 'auto',
+                    overflowX: 'hidden'
                 }}
                 collapsible={!isMobile}
                 collapsed={collapsed}
@@ -694,8 +696,8 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                 collapsedWidth={0}
                 trigger={null}
             >
-                <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "50px" }}>
-                    <img src="/logo/logo.png" alt="" style={{ width: "200px" }} />
+                <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "20px", marginBottom: "50px" }}>
+                    <img src="/logo/logo.png" alt="Logo NEXTHR" style={{ width: "180px", maxWidth: "80%", objectFit: "contain" }} />
                 </div>
                 <Menu
                     theme="light"

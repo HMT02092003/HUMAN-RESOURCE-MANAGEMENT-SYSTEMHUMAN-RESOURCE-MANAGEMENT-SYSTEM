@@ -241,9 +241,9 @@ const CvManager: React.FC = () => {
 						</Button>
 					</CheckPermission>
 				</Col>
-				<Col>
-					<CheckPermission permissionKey="CV" requiredType="delete">
-						{selectedRowKeys.length > 0 && (
+				{selectedRowKeys.length > 0 && (
+					<Col>
+						<CheckPermission permissionKey="CV" requiredType="delete">
 							<Button
 								danger
 								icon={<DeleteOutlined />}
@@ -251,9 +251,9 @@ const CvManager: React.FC = () => {
 							>
 								Xóa {selectedRowKeys.length} mục đã chọn
 							</Button>
-						)}
-					</CheckPermission>
-				</Col>
+						</CheckPermission>
+					</Col>
+				)}
 				<Col>
 					<ExcelExportButton
 						data={excelData}

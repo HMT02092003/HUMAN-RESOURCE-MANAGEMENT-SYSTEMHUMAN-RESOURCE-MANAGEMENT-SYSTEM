@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Float, MeshTransmissionMaterial, Environment, ContactShadows } from '@react-three/drei';
 import * as THREE from 'three';
@@ -27,7 +27,7 @@ function Geometrics() {
     // Xoay các khối theo thời gian
     torusRef.current.rotation.x += delta * 0.2;
     torusRef.current.rotation.y += delta * 0.1;
-    
+
     diamondRef.current.rotation.x -= delta * 0.2;
     diamondRef.current.rotation.y -= delta * 0.1;
 
@@ -69,13 +69,27 @@ function Geometrics() {
 }
 
 export default function ThreeBackground() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize(); // Initial check
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  if (isMobile) {
+    // Return a simple elegant gradient background for mobile to save performance
+    return <div style={{ position: 'fixed', inset: 0, zIndex: 0, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }} />;
+  }
+
   return (
     <div className="fixed inset-0 z-0 w-full h-full bg-slate-50"> {/* Nền xám rất nhạt để làm nổi bật kính */}
       <Canvas camera={{ position: [0, 0, 6], fov: 45 }}>
         {/* Ánh sáng quan trọng để kính đẹp */}
         <ambientLight intensity={0.5} />
         <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={2} castShadow />
-        
+
         {/* Môi trường phản chiếu (Environment): Tạo ra các vệt sáng trên kính */}
         <Environment preset="city" />
 
