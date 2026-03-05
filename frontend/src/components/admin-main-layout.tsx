@@ -689,14 +689,12 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                     backgroundColor: "white",
                     position: isMobile ? 'fixed' : 'sticky',
                     top: 0,
-                    bottom: 0,
                     height: '100vh',
                     zIndex: 1000,
                     left: isMobile && collapsed ? -220 : 0,
                     transition: 'left 0.2s',
-                    overflow: 'hidden',
-                    display: 'flex',
-                    flexDirection: 'column'
+                    overflowY: 'auto',
+                    overflowX: 'hidden'
                 }}
                 collapsible={!isMobile}
                 collapsed={collapsed}
@@ -706,20 +704,18 @@ const AdminMainLayout: React.FC<AdminMainLayoutProps> = ({
                 collapsedWidth={0}
                 trigger={null}
             >
-                <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", paddingTop: "20px", marginBottom: "50px" }}>
-                    <img src="/logo/logo.png" alt="" style={{ width: "200px" }} />
+                <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px 0 40px 0" }}>
+                    <img src="/logo/logo.png" alt="Logo" style={{ width: "200px" }} />
                 </div>
-                <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingBottom: '20px' }}>
-                    <Menu
-                        theme="light"
-                        mode="inline"
-                        items={convertToAntMenuItems(menuItems)}
-                        onClick={handleMenuClick}
-                        selectedKeys={getSelectedKeys()}
-                        // Ensure salary section is open on initial load in addition to other defaults
-                        defaultOpenKeys={['applications_parent', 'account_management_parent', 'attendance_parent', 'shifts_parent', 'salary_parent', 'job_management_parent', pathname && pathname.startsWith('/salary') ? 'salary_parent' : ''].filter(Boolean)}
-                    />
-                </div>
+                <Menu
+                    theme="light"
+                    mode="inline"
+                    items={convertToAntMenuItems(menuItems)}
+                    onClick={handleMenuClick}
+                    selectedKeys={getSelectedKeys()}
+                    // Ensure salary section is open on initial load in addition to other defaults
+                    defaultOpenKeys={['applications_parent', 'account_management_parent', 'attendance_parent', 'shifts_parent', 'salary_parent', 'job_management_parent', pathname && pathname.startsWith('/salary') ? 'salary_parent' : ''].filter(Boolean)}
+                />
             </Sider>
 
             <Layout>
