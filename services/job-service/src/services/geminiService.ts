@@ -200,7 +200,7 @@ export async function analyzeCvText(cvText: string): Promise<GeminiResponse> {
   }
 
   const prompt = `Bạn là AI assistant trích xuất kỹ năng từ CV ứng viên.
-Vui lòng trích xuất TỐI ĐA 10 kỹ năng cốt lõi và quan trọng nhất (Top 10 most important skills).
+Vui lòng trích xuất TỐI ĐA 20 kỹ năng cốt lõi và quan trọng nhất (Top 20 most important skills).
 Trả về ONLY valid JSON (không comment, không markdown):
 {
   "skills": [
