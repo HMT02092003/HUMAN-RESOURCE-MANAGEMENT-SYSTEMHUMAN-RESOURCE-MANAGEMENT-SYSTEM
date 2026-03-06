@@ -119,7 +119,7 @@ const ROUTE_CONFIG = [
   },
   {
     path: '/uploads',
-    target: 'auth',
+    target: 'job',
     pathRewrite: false
   },
   {

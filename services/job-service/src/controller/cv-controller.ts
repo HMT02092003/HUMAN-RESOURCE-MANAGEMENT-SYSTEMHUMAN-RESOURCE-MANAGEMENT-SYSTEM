@@ -323,13 +323,29 @@ export const CvController = {
             }
           ]));
 
+          // Fetch user skills from database
+          const userSkills = await UserSkillModel.query()
+            .select('user_skills.user_id', 'skills.skill_name', 'user_skills.proficiency_level')
+            .join('skills', 'skills.skill_id', 'user_skills.skill_id')
+            .whereIn('user_skills.user_id', userIds);
+
+          const skillsByUser = userSkills.reduce((acc: any, item: any) => {
+            if (!acc[item.user_id]) acc[item.user_id] = [];
+            acc[item.user_id].push({
+              skill_name: item.skill_name,
+              proficiency_level: item.proficiency_level
+            });
+            return acc;
+          }, {});
+
           rowsWithUsers = rows.map((r: any) => ({
             ...r,
-            userInfo: usersById.get(r.user_id) || null
+            userInfo: usersById.get(r.user_id) || null,
+            userSkills: skillsByUser[r.user_id] || []
           }));
         } catch (err) {
-          console.error('Failed to fetch users:', err);
-          rowsWithUsers = rows.map((r: any) => ({ ...r, userInfo: null }));
+          console.error('Failed to fetch users or skills:', err);
+          rowsWithUsers = rows.map((r: any) => ({ ...r, userInfo: null, userSkills: [] }));
         }
       }
 

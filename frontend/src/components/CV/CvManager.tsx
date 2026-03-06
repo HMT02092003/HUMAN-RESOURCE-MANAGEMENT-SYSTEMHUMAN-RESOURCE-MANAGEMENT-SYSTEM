@@ -43,7 +43,7 @@ const CvManager: React.FC = () => {
 	const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
 	const [refreshTrigger, setRefreshTrigger] = useState(0);
 	const [skillsModalVisible, setSkillsModalVisible] = useState(false);
-	const [skillsModalData, setSkillsModalData] = useState<{ fullName: string; text: string }>({ fullName: '', text: '' });
+	const [skillsModalData, setSkillsModalData] = useState<{ fullName: string; text: string; skills?: any[] }>({ fullName: '', text: '', skills: [] });
 	const searchInput = useRef<InputRef>(null);
 	const router = useRouter();
 
@@ -217,7 +217,8 @@ const CvManager: React.FC = () => {
 								onClick={() => {
 									setSkillsModalData({
 										fullName: record.fullName || 'Không rõ',
-										text: record.original_text || 'Chưa có dữ liệu phân tích kỹ năng.'
+										text: record.original_text || 'Chưa có dữ liệu phân tích kỹ năng.',
+										skills: (record as any).userSkills || []
 									});
 									setSkillsModalVisible(true);
 								}}
@@ -347,8 +348,18 @@ const CvManager: React.FC = () => {
 				]}
 				width={700}
 			>
-				<div style={{ maxHeight: 400, overflowY: 'auto', whiteSpace: 'pre-wrap', padding: '12px 0', lineHeight: 1.8 }}>
-					{skillsModalData.text}
+				<div style={{ maxHeight: 400, overflowY: 'auto', padding: '12px 0', lineHeight: 1.8 }}>
+					{skillsModalData.skills && skillsModalData.skills.length > 0 ? (
+						<div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+							{skillsModalData.skills.map((s, idx) => (
+								<Tag color="purple" key={idx} style={{ padding: '6px 12px', fontSize: '14px', borderRadius: '4px' }}>
+									{s.skill_name} {s.proficiency_level ? <span style={{ opacity: 0.7, marginLeft: 4 }}>({s.proficiency_level})</span> : ''}
+								</Tag>
+							))}
+						</div>
+					) : (
+						<div style={{ whiteSpace: 'pre-wrap' }}>{skillsModalData.text}</div>
+					)}
 				</div>
 			</Modal>
 		</div>
