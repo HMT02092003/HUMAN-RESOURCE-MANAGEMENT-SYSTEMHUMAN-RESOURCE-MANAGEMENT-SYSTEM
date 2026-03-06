@@ -113,6 +113,7 @@ const ProjectDetailScreen = () => {
   const [tasks, setTasks] = useState([]);
   const [statistics, setStatistics] = useState(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [activeTaskTab, setActiveTaskTab] = useState('todo');
   const [selectedTask, setSelectedTask] = useState(null);
   const [taskModalVisible, setTaskModalVisible] = useState(false);
 
@@ -646,77 +647,102 @@ const ProjectDetailScreen = () => {
     );
   };
 
-  const renderTasks = () => (
-    <View style={styles.tasksContainer}>
-      {tasks.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <MaterialCommunityIcons name="clipboard-text-outline" size={64} color="#d9d9d9" />
-          <Text style={styles.emptyText}>Chưa có công việc nào</Text>
-        </View>
-      ) : (
-        tasks.map((task) => {
-          const statusColor = taskStatusColors[task.status] || '#1890ff';
-          const statusLabel = taskStatusLabels[task.status] || task.status;
-          const priorityColor = taskPriorityColors[task.priority] || '#1890ff';
-          const priorityLabel = taskPriorityLabels[task.priority] || task.priority;
+  const renderTasks = () => {
+    const filteredTasks = tasks.filter(t => t.status === activeTaskTab);
 
-          return (
+    return (
+      <View style={styles.tasksContainer}>
+        {/* Task sub-tabs */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+          {Object.entries(taskStatusLabels).map(([key, label]) => (
             <TouchableOpacity
-              key={task.id || task.task_id}
-              onPress={() => {
-                setSelectedTask(task);
-                setTaskModalVisible(true);
-              }}
+              key={key}
+              style={[
+                styles.taskSubTab,
+                activeTaskTab === key && styles.taskSubTabActive,
+                activeTaskTab === key && { borderBottomColor: taskStatusColors[key] }
+              ]}
+              onPress={() => setActiveTaskTab(key)}
             >
-              <Surface style={styles.taskCard} elevation={1}>
-                {/* Title row */}
-                <Text style={styles.taskTitle} numberOfLines={2}>{task.title}</Text>
-
-                {/* Status and Priority chips */}
-                <View style={styles.taskChipsRow}>
-                  <Chip
-                    style={[styles.statusChipSmall, { backgroundColor: statusColor + '20' }]}
-                    textStyle={{ color: statusColor, fontSize: 11 }}
-                    compact
-                  >
-                    {statusLabel}
-                  </Chip>
-                  <Chip
-                    style={[styles.priorityChip, { backgroundColor: priorityColor + '20' }]}
-                    textStyle={{ color: priorityColor, fontSize: 11 }}
-                    compact
-                  >
-                    {priorityLabel}
-                  </Chip>
-                </View>
-
-                {/* Due date */}
-                {task.due_date && (
-                  <View style={styles.taskDueDate}>
-                    <MaterialCommunityIcons name="calendar" size={14} color="#8c8c8c" />
-                    <Text style={styles.dueDateText}>{formatDate(task.due_date)}</Text>
-                  </View>
-                )}
-
-                {task.assignee && (
-                  <View style={styles.taskAssignee}>
-                    <Avatar.Text
-                      size={20}
-                      label={getInitials(task.assignee?.name || task.assignee?.fullName || '')}
-                      style={styles.assigneeAvatar}
-                    />
-                    <Text style={styles.assigneeName} numberOfLines={1}>
-                      {task.assignee?.name || task.assignee?.fullName || ''}
-                    </Text>
-                  </View>
-                )}
-              </Surface>
+              <Text
+                style={[
+                  styles.taskSubTabText,
+                  activeTaskTab === key && { color: taskStatusColors[key], fontWeight: 'bold' }
+                ]}
+              >
+                {label} ({tasks.filter(t => t.status === key).length})
+              </Text>
             </TouchableOpacity>
-          );
-        })
-      )}
-    </View>
-  );
+          ))}
+        </ScrollView>
+
+        {filteredTasks.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <MaterialCommunityIcons name="clipboard-text-outline" size={64} color="#d9d9d9" />
+            <Text style={styles.emptyText}>Chưa có công việc nào ở trạng thái này</Text>
+          </View>
+        ) : (
+          filteredTasks.map((task) => {
+            const statusColor = taskStatusColors[task.status] || '#1890ff';
+            const statusLabel = taskStatusLabels[task.status] || task.status;
+            const priorityColor = taskPriorityColors[task.priority] || '#1890ff';
+            const priorityLabel = taskPriorityLabels[task.priority] || task.priority;
+
+            return (
+              <TouchableOpacity
+                key={task.id || task.task_id}
+                onPress={() => {
+                  setSelectedTask(task);
+                  setTaskModalVisible(true);
+                }}
+              >
+                <Surface style={styles.taskCard} elevation={1}>
+                  <Text style={styles.taskTitle} numberOfLines={2}>{task.title}</Text>
+
+                  <View style={styles.taskChipsRow}>
+                    <Chip
+                      style={[styles.statusChipSmall, { backgroundColor: statusColor + '20' }]}
+                      textStyle={{ color: statusColor, fontSize: 11 }}
+                      compact
+                    >
+                      {statusLabel}
+                    </Chip>
+                    <Chip
+                      style={[styles.priorityChip, { backgroundColor: priorityColor + '20' }]}
+                      textStyle={{ color: priorityColor, fontSize: 11 }}
+                      compact
+                    >
+                      {priorityLabel}
+                    </Chip>
+                  </View>
+
+                  {task.due_date && (
+                    <View style={styles.taskDueDate}>
+                      <MaterialCommunityIcons name="calendar" size={14} color="#8c8c8c" />
+                      <Text style={styles.dueDateText}>{formatDate(task.due_date)}</Text>
+                    </View>
+                  )}
+
+                  {task.assignee && (
+                    <View style={styles.taskAssignee}>
+                      <Avatar.Text
+                        size={20}
+                        label={getInitials(task.assignee?.name || task.assignee?.fullName || '')}
+                        style={styles.assigneeAvatar}
+                      />
+                      <Text style={styles.assigneeName} numberOfLines={1}>
+                        {task.assignee?.name || task.assignee?.fullName || ''}
+                      </Text>
+                    </View>
+                  )}
+                </Surface>
+              </TouchableOpacity>
+            );
+          })
+        )}
+      </View>
+    );
+  };
 
   const renderMembers = () => (
     <View style={styles.membersContainer}>
@@ -1097,19 +1123,48 @@ const ProjectDetailScreen = () => {
 
             <Text style={styles.updateStatusTitle}>Cập nhật trạng thái</Text>
             <View style={styles.statusButtons}>
-              {Object.entries(taskStatusLabels).map(([key, label]) => (
-                <Button
-                  key={key}
-                  mode={selectedTask.status === key ? 'contained' : 'outlined'}
-                  onPress={() => handleUpdateTaskStatus(selectedTask.id || selectedTask.task_id, key)}
-                  style={[styles.statusButton, { borderColor: taskStatusColors[key] }]}
-                  buttonColor={selectedTask.status === key ? taskStatusColors[key] : 'transparent'}
-                  textColor={selectedTask.status === key ? '#fff' : taskStatusColors[key]}
-                  compact
-                >
-                  {label}
-                </Button>
-              ))}
+              {(() => {
+                const isAssignee = String(user?.id) === String(selectedTask.assignee?.id || selectedTask.assigned_to_user_id);
+                const currentStatus = selectedTask.status;
+                const allowedTransitions = [];
+
+                if (currentStatus === 'todo' && (isAssignee || isManager)) {
+                  allowedTransitions.push('in_progress');
+                }
+                if (currentStatus === 'in_progress' && (isAssignee || isManager)) {
+                  allowedTransitions.push('pending_approval');
+                }
+                if (currentStatus === 'pending_approval' && isManager) {
+                  // A manager can optionally move it back to in_progress to reject it, but let's just add 'done' to match the website
+                  // Or let manager click 'done' and 'in_progress' to reject
+                  allowedTransitions.push('in_progress');
+                  allowedTransitions.push('done');
+                }
+
+                if (allowedTransitions.length === 0) {
+                  return (
+                    <Text style={{ fontStyle: 'italic', color: '#8c8c8c', paddingVertical: 8 }}>
+                      Chỉ người được giao việc và quản lý dự án mới cập nhật được trạng thái.
+                    </Text>
+                  );
+                }
+
+                return allowedTransitions.map((key) => {
+                  const label = taskStatusLabels[key];
+                  return (
+                    <Button
+                      key={key}
+                      mode="outlined"
+                      onPress={() => handleUpdateTaskStatus(selectedTask.id || selectedTask.task_id, key)}
+                      style={[styles.statusButton, { borderColor: taskStatusColors[key], flex: 1, marginHorizontal: 4 }]}
+                      textColor={taskStatusColors[key]}
+                      compact
+                    >
+                      {label}
+                    </Button>
+                  );
+                });
+              })()}
             </View>
 
             {/* Delete button - only for todo tasks */}
@@ -1727,6 +1782,22 @@ const styles = StyleSheet.create({
   },
   tasksContainer: {
     padding: 16,
+  },
+  taskSubTab: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginRight: 8,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  taskSubTabActive: {
+    backgroundColor: '#f0f5ff',
+  },
+  taskSubTabText: {
+    fontSize: 13,
+    color: '#8c8c8c',
   },
   taskCard: {
     padding: 12,

@@ -58,7 +58,7 @@ const CardListWithInfiniteScroll = forwardRef(({
   keyExtractor = (item) => item.id?.toString(),
 }, ref) => {
   const theme = useTheme();
-  
+
   // State
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -67,7 +67,7 @@ const CardListWithInfiniteScroll = forwardRef(({
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [totalRecords, setTotalRecords] = useState(0);
-  
+
   // Filter state
   const [activeFilters, setActiveFilters] = useState({});
   const [filterDialogVisible, setFilterDialogVisible] = useState(false);
@@ -133,31 +133,31 @@ const CardListWithInfiniteScroll = forwardRef(({
       let response;
       const q = searchQuery.trim();
       if (q) {
-            if (serverFieldSearchSupported) {
-              try {
-                // Only include search-related params that backend expects.
-                // Avoid sending a raw `searchFields` array (may contain dotted JSON paths)
-                // Instead, if user selected exactly one dotted field (e.g. 'userInfo.fullName'),
-                // send it as a query param with that key and value = q so controller can handle it.
-                const safeSearchFields = (searchFields || []).filter((k) => !['type', 'status'].includes(k));
-                const params = { ...baseParams, search: q };
+        if (serverFieldSearchSupported) {
+          try {
+            // Only include search-related params that backend expects.
+            // Avoid sending a raw `searchFields` array (may contain dotted JSON paths)
+            // Instead, if user selected exactly one dotted field (e.g. 'userInfo.fullName'),
+            // send it as a query param with that key and value = q so controller can handle it.
+            const safeSearchFields = (searchFields || []).filter((k) => !['type', 'status'].includes(k));
+            const params = { ...baseParams, search: q };
 
-                // If exactly one selected field and it's a dotted field, send it as param: { 'userInfo.fullName': q }
-                const dotted = safeSearchFields.filter((k) => k && k.includes('.'));
-                const flat = safeSearchFields.filter((k) => k && !k.includes('.'));
+            // If exactly one selected field and it's a dotted field, send it as param: { 'userInfo.fullName': q }
+            const dotted = safeSearchFields.filter((k) => k && k.includes('.'));
+            const flat = safeSearchFields.filter((k) => k && !k.includes('.'));
 
-                if (dotted.length === 1 && flat.length === 0) {
-                  params[dotted[0]] = q;
-                } else if (flat.length > 0 && dotted.length === 0) {
-                  // For plain fields (no dots), don't send array; let backend use `search` for its default searchable fields.
-                } else {
-                  // Mixed or multiple dotted selections - fallback to generic `search` only
-                }
+            if (dotted.length === 1 && flat.length === 0) {
+              params[dotted[0]] = q;
+            } else if (flat.length > 0 && dotted.length === 0) {
+              // For plain fields (no dots), don't send array; let backend use `search` for its default searchable fields.
+            } else {
+              // Mixed or multiple dotted selections - fallback to generic `search` only
+            }
 
-                console.log('🔎 [CardList] Server search params:', params);
-                response = await fetchData(params);
-                console.log('🔎 [CardList] Server search response:', response);
-              } catch (err) {
+            console.log('🔎 [CardList] Server search params:', params);
+            response = await fetchData(params);
+            console.log('🔎 [CardList] Server search response:', response);
+          } catch (err) {
             // Detect SQL column error from backend and fallback to client-side filtering
             const msg = err?.message || err?.toString() || JSON.stringify(err);
             if (/column .* does not exist|column .*does not exist|does not exist/i.test(msg)) {
@@ -171,7 +171,7 @@ const CardListWithInfiniteScroll = forwardRef(({
 
         // If server did not return response (either unsupported or error), try basic server search without searchFields
         if (!response && serverFieldSearchSupported === false) {
-            try {
+          try {
             console.log('🔎 [CardList] Retrying server search without searchFields');
             response = await fetchData({ ...baseParams, search: q });
             console.log('🔎 [CardList] Retry response:', response);
@@ -367,7 +367,7 @@ const CardListWithInfiniteScroll = forwardRef(({
     <View style={styles.container}>
       {/* Search Bar with Filter Icon */}
       <Surface style={styles.searchContainer} elevation={1}>
-        <SearchbariconColor={theme.colors.primary}
+        <Searchbar placeholder={searchPlaceholder} onChangeText={setSearchQuery} value={searchQuery} style={styles.searchbar} iconColor={theme.colors.primary}
           loading={loading}
         />
 
