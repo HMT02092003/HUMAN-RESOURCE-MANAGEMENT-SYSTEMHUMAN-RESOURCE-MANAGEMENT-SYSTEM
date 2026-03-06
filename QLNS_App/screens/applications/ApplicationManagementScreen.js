@@ -1,12 +1,12 @@
 import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert, TextInput } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { 
-  Card, 
-  Avatar, 
-  Text, 
-  IconButton, 
-  useTheme, 
+import {
+  Card,
+  Avatar,
+  Text,
+  IconButton,
+  useTheme,
   Menu,
   Divider,
   FAB,
@@ -28,7 +28,7 @@ const ApplicationManagementScreen = ({ navigation }) => {
   const theme = useTheme();
   const [visibleMenuId, setVisibleMenuId] = React.useState(null);
   const listRef = React.useRef(null);
-  
+
   // Reject dialog state
   const [rejectDialogVisible, setRejectDialogVisible] = React.useState(false);
   const [rejectReason, setRejectReason] = React.useState('');
@@ -87,58 +87,34 @@ const ApplicationManagementScreen = ({ navigation }) => {
     );
   };
 
-  // Reject handler — use custom Dialog (Alert.prompt is iOS-only)
+  // Reject handler — use simple Alert to skip reason input
   const handleReject = (id, type, userName) => {
-    setRejectTarget({ id, type, userName });
-    setRejectReason('');
-    setRejectDialogVisible(true);
-  };
-
-  const confirmReject = async () => {
-    if (!rejectTarget) return;
-    const reason = rejectReason.trim() || 'Không đạt yêu cầu';
-    setRejectDialogVisible(false);
-    try {
-      await ApplicationService.rejectApplication(rejectTarget.id, { reason });
-      Alert.alert(' Thành công', 'Đã từ chối đơn từ');
-      if (listRef.current?.refresh) {
-        listRef.current.refresh();
-      }
-    } catch (error) {
-      console.error(' Reject failed:', error);
-      Alert.alert('Lỗi', 'Không thể từ chối đơn từ');
-    } finally {
-      setRejectTarget(null);
-      setRejectReason('');
-    }
-  };
-
-  // Delete handler
-  const handleDelete = (id, type, userName) => {
     Alert.alert(
-      '🗑️ Xác nhận xóa',
-      `Xóa đơn "${APPLICATION_TYPE_LABELS[type]}" của ${userName}?`,
+      'Xác nhận từ chối',
+      `Từ chối đơn "${APPLICATION_TYPE_LABELS[type]}" của ${userName}?`,
       [
         { text: 'Hủy', style: 'cancel' },
         {
-          text: 'Xóa',
+          text: 'Từ chối',
           style: 'destructive',
           onPress: async () => {
             try {
-              await ApplicationService.deleteApplication(id);
-              Alert.alert(' Thành công', 'Đã xóa đơn từ');
+              await ApplicationService.rejectApplication(id, { reason: 'Không đạt yêu cầu' });
+              Alert.alert('Thành công', 'Đã từ chối đơn từ');
               if (listRef.current?.refresh) {
                 listRef.current.refresh();
               }
             } catch (error) {
-              console.error(' Delete failed:', error);
-              Alert.alert('Lỗi', 'Không thể xóa đơn từ');
+              console.error(' Reject failed:', error);
+              Alert.alert('Lỗi', 'Không thể từ chối đơn từ');
             }
           }
         }
       ]
     );
   };
+
+
 
   // Utility functions
   const formatDate = (dateString) => {
@@ -239,38 +215,38 @@ const ApplicationManagementScreen = ({ navigation }) => {
 
             {/* Type */}
             <View style={styles.infoRow}>
-              <MaterialCommunityIcons 
-                name={getTypeIcon(item.type)} 
-                size={14} 
-                color={getTypeColor(item.type)} 
+              <MaterialCommunityIcons
+                name={getTypeIcon(item.type)}
+                size={14}
+                color={getTypeColor(item.type)}
               />
               <Text style={styles.infoText}>
                 {APPLICATION_TYPE_LABELS[item.type] || item.type}
               </Text>
             </View>
-            
+
             {/* Date Range or Type-specific info */}
             {(item.data?.startDate || item.data?.forgotDate || item.data?.overtimeDate) && (
               <View style={styles.infoRow}>
                 <MaterialCommunityIcons name="calendar-range" size={14} color="#1890ff" />
                 <Text style={styles.infoText}>
-                  {item.data?.startDate && item.data?.endDate 
+                  {item.data?.startDate && item.data?.endDate
                     ? `${formatDate(item.data.startDate)} - ${formatDate(item.data.endDate)}`
-                    : item.data?.forgotDate 
-                    ? `${formatDate(item.data.forgotDate)} ${item.data?.forgotTime || ''}`
-                    : item.data?.overtimeDate 
-                    ? `${formatDate(item.data.overtimeDate)} (${item.data?.overtimeHours || 0}h)`
-                    : 'N/A'}
+                    : item.data?.forgotDate
+                      ? `${formatDate(item.data.forgotDate)} ${item.data?.forgotTime || ''}`
+                      : item.data?.overtimeDate
+                        ? `${formatDate(item.data.overtimeDate)} (${item.data?.overtimeHours || 0}h)`
+                        : 'N/A'}
                 </Text>
               </View>
             )}
 
             {/* Status */}
             <View style={styles.infoRow}>
-              <MaterialCommunityIcons 
-                name={item.status === 1 ? 'check-circle' : item.status === 2 ? 'close-circle' : 'clock'} 
-                size={14} 
-                color={APPLICATION_STATUS_COLORS[item.status]} 
+              <MaterialCommunityIcons
+                name={item.status === 1 ? 'check-circle' : item.status === 2 ? 'close-circle' : 'clock'}
+                size={14}
+                color={APPLICATION_STATUS_COLORS[item.status]}
               />
               <Text style={[styles.infoText, { color: APPLICATION_STATUS_COLORS[item.status] }]}>
                 {APPLICATION_STATUS_LABELS[item.status]}
@@ -336,18 +312,7 @@ const ApplicationManagementScreen = ({ navigation }) => {
                 </>
               )}
 
-              <Divider />
 
-              <TouchableOpacity
-                style={styles.menuItemRow}
-                onPress={() => {
-                  setVisibleMenuId(null);
-                  handleDelete(item.id, item.type, item.createdByInfo?.fullName);
-                }}
-              >
-                <MaterialCommunityIcons name="delete-outline" size={18} color="#ff4d4f" style={styles.menuIcon} />
-                <Text style={[styles.menuItemText, { color: '#ff4d4f' }]}>Xóa</Text>
-              </TouchableOpacity>
             </Menu>
           </View>
         </View>
@@ -408,8 +373,8 @@ const ApplicationManagementScreen = ({ navigation }) => {
         filters={[
           { key: 'userInfo.fullName', label: 'Tên nhân viên' },
           { key: 'reason', label: 'Lý do' },
-          { 
-            key: 'type', 
+          {
+            key: 'type',
             label: 'Loại đơn',
             options: [
               { value: 'leave', label: 'Xin nghỉ phép' },
@@ -421,8 +386,8 @@ const ApplicationManagementScreen = ({ navigation }) => {
               { value: 'sick-leave', label: 'Nghỉ ốm' },
             ]
           },
-          { 
-            key: 'status', 
+          {
+            key: 'status',
             label: 'Trạng thái',
             options: [
               { value: 0, label: 'Chờ duyệt' },
@@ -432,31 +397,8 @@ const ApplicationManagementScreen = ({ navigation }) => {
           }
         ]}
       />
-      
-      {/* Reject Dialog */}
-      <Portal>
-        <Dialog visible={rejectDialogVisible} onDismiss={() => setRejectDialogVisible(false)}>
-          <Dialog.Title> Từ chối đơn</Dialog.Title>
-          <Dialog.Content>
-            <Text style={{ marginBottom: 12 }}>
-              Lý do từ chối đơn "{rejectTarget ? APPLICATION_TYPE_LABELS[rejectTarget.type] : ''}" của {rejectTarget?.userName || ''}:
-            </Text>
-            <TextInput
-              style={styles.rejectInput}
-              placeholder="Nhập lý do từ chối..."
-              value={rejectReason}
-              onChangeText={setRejectReason}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setRejectDialogVisible(false)}>Hủy</Button>
-            <Button onPress={confirmReject} textColor="#ff4d4f">Từ chối</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+
+
     </View>
   );
 };

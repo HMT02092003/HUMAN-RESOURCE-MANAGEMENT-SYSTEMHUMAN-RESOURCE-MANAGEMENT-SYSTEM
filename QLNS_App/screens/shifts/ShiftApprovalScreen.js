@@ -63,43 +63,40 @@ const ShiftApprovalScreen = ({ navigation }) => {
     if (item.status !== 'pending') { Alert.alert('Thông báo', 'Đơn này đã được xử lý'); return; }
     Alert.alert('Xác nhận', 'Duyệt đơn đăng ký ca này?', [
       { text: 'Hủy', style: 'cancel' },
-      { text: 'Duyệt', onPress: async () => {
-        try {
-          setProcessing(true);
-          await ShiftService.approveShiftRegistration(item.id);
-          Alert.alert('Thành công', 'Đã duyệt đơn đăng ký ca');
-          if (listRef.current?.refresh) listRef.current.refresh();
-        } catch (error) {
-          console.error('Error approving:', error);
-          Alert.alert('Lỗi', error.response?.data?.message || 'Không thể duyệt đơn');
-        } finally { setProcessing(false); }
-      }}
+      {
+        text: 'Duyệt', onPress: async () => {
+          try {
+            setProcessing(true);
+            await ShiftService.approveShiftRegistration(item.id);
+            Alert.alert('Thành công', 'Đã duyệt đơn đăng ký ca');
+            if (listRef.current?.refresh) listRef.current.refresh();
+          } catch (error) {
+            console.error('Error approving:', error);
+            Alert.alert('Lỗi', error.response?.data?.message || 'Không thể duyệt đơn');
+          } finally { setProcessing(false); }
+        }
+      }
     ]);
   };
 
   const handleReject = (item) => {
     if (item.status !== 'pending') { Alert.alert('Thông báo', 'Đơn này đã được xử lý'); return; }
-    setSelectedSchedule(item);
-    setRejectNotes('');
-    setRejectDialogVisible(true);
-  };
-
-  const confirmReject = async () => {
-    if (!rejectNotes.trim()) { Alert.alert('Lỗi', 'Vui lòng nhập lý do từ chối'); return; }
-    setRejectDialogVisible(false);
-    try {
-      setProcessing(true);
-      await ShiftService.rejectShiftRegistration(selectedSchedule.id, rejectNotes.trim());
-      Alert.alert('Thành công', 'Đã từ chối đơn đăng ký ca');
-      if (listRef.current?.refresh) listRef.current.refresh();
-    } catch (error) {
-      console.error('Error rejecting:', error);
-      Alert.alert('Lỗi', error.response?.data?.message || 'Không thể từ chối đơn');
-    } finally {
-      setProcessing(false);
-      setSelectedSchedule(null);
-      setRejectNotes('');
-    }
+    Alert.alert('Xác nhận', 'Từ chối đơn đăng ký ca này?', [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Từ chối', style: 'destructive', onPress: async () => {
+          try {
+            setProcessing(true);
+            await ShiftService.rejectShiftRegistration(item.id, '');
+            Alert.alert('Thành công', 'Đã từ chối đơn đăng ký ca');
+            if (listRef.current?.refresh) listRef.current.refresh();
+          } catch (error) {
+            console.error('Error rejecting:', error);
+            Alert.alert('Lỗi', error.response?.data?.message || 'Không thể từ chối đơn');
+          } finally { setProcessing(false); }
+        }
+      }
+    ]);
   };
 
   const handleViewDetail = async (item) => {
@@ -239,18 +236,7 @@ const ShiftApprovalScreen = ({ navigation }) => {
         ]}
       />
       {renderDetailModal()}
-      <Portal>
-        <Dialog visible={rejectDialogVisible} onDismiss={() => setRejectDialogVisible(false)}>
-          <Dialog.Title>Lý do từ chối</Dialog.Title>
-          <Dialog.Content>
-            <TextInput style={styles.textArea} placeholder="Nhập lý do từ chối..." value={rejectNotes} onChangeText={setRejectNotes} multiline numberOfLines={3} textAlignVertical="top" />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setRejectDialogVisible(false)}>Hủy</Button>
-            <Button onPress={confirmReject} textColor="#ff4d4f">Từ chối</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+
     </View>
   );
 };

@@ -60,8 +60,24 @@ const ProfileScreen = () => {
       Alert.alert('Thông báo', 'Vui lòng nhập mật khẩu mới');
       return;
     }
-    if (newPassword.length < 6) {
-      Alert.alert('Thông báo', 'Mật khẩu mới phải có ít nhất 6 ký tự');
+    if (newPassword.length < 8) {
+      Alert.alert('Thông báo', 'Mật khẩu mới phải có ít nhất 8 ký tự');
+      return;
+    }
+    if (!/[a-z]/.test(newPassword)) {
+      Alert.alert('Thông báo', 'Mật khẩu phải chứa ít nhất 1 chữ thường');
+      return;
+    }
+    if (!/[A-Z]/.test(newPassword)) {
+      Alert.alert('Thông báo', 'Mật khẩu phải chứa ít nhất 1 chữ hoa');
+      return;
+    }
+    if (!/[0-9]/.test(newPassword)) {
+      Alert.alert('Thông báo', 'Mật khẩu phải chứa ít nhất 1 chữ số');
+      return;
+    }
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword)) {
+      Alert.alert('Thông báo', 'Mật khẩu phải chứa ít nhất 1 ký tự đặc biệt');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -104,42 +120,42 @@ const ProfileScreen = () => {
           <Text style={styles.headerTitle}>Thông tin tài khoản</Text>
           <Text style={styles.headerSubtitle}>Thông tin chi tiết về tài khoản của bạn</Text>
         </View>
-        
+
         <View style={styles.content}>
           <View style={styles.avatarContainer}>
-            <Avatar.Text 
-              size={80} 
-              label={getUserInitials(userData.username || userData.fullName)} 
+            <Avatar.Text
+              size={80}
+              label={getUserInitials(userData.username || userData.fullName)}
               style={styles.avatar}
             />
           </View>
-          
+
           <View style={styles.infoCard}>
             <View style={styles.infoRow}>
               <Text style={styles.label}>Tên đăng nhập:</Text>
               <Text style={styles.value}>{userData.username || 'N/A'}</Text>
             </View>
-            
+
             <View style={styles.infoRow}>
               <Text style={styles.label}>Họ và tên:</Text>
               <Text style={styles.value}>{userData.fullName || userData.name || 'N/A'}</Text>
             </View>
-            
+
             <View style={styles.infoRow}>
               <Text style={styles.label}>Email:</Text>
               <Text style={styles.value}>{userData.email || 'N/A'}</Text>
             </View>
-            
+
             <View style={styles.infoRow}>
               <Text style={styles.label}>Số điện thoại:</Text>
               <Text style={styles.value}>{userData.phone || 'N/A'}</Text>
             </View>
-            
+
             <View style={styles.infoRow}>
               <Text style={styles.label}>Vai trò:</Text>
               <Text style={styles.value}>{userData.role || 'N/A'}</Text>
             </View>
-            
+
             <View style={[styles.infoRow, { borderBottomWidth: 0 }]}>
               <Text style={styles.label}>Ngày tạo:</Text>
               <Text style={styles.value}>
@@ -147,7 +163,7 @@ const ProfileScreen = () => {
               </Text>
             </View>
           </View>
-          
+
           <Button
             mode="contained"
             style={styles.changePasswordButton}

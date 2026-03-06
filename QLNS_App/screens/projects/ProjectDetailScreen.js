@@ -1167,8 +1167,8 @@ const ProjectDetailScreen = () => {
               })()}
             </View>
 
-            {/* Delete button - only for todo tasks */}
-            {selectedTask.status === 'todo' && (
+            {/* Delete button - only for todo tasks and managers */}
+            {selectedTask.status === 'todo' && isManager && (
               <>
                 <Divider style={styles.divider} />
                 <Button

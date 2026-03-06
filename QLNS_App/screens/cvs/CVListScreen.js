@@ -17,17 +17,13 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import JobService from '../../services/JobService';
 import CardListWithInfiniteScroll from '../../components/CardListWithInfiniteScroll';
+import apiConfig from '../../services/apiConfig';
 
 // Job Service URL for file download
 const getJobServiceBase = () => {
-  if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:4008'; // Android emulator
-  }
-  if (Platform.OS === 'ios') {
-    return 'http://localhost:4008';
-  }
-  // Default to web
-  return 'http://localhost:4008';
+  // Lấy base URL từ api config (chứa url thật hoặc ngrok), loại bỏ '/api' ở đuôi
+  const baseUrl = apiConfig.getApiBaseUrl().replace(/\/api\/?$/, '');
+  return baseUrl;
 };
 
 const CVListScreen = () => {
@@ -80,7 +76,7 @@ const CVListScreen = () => {
     }
   };
 
-  const handleDownload = (cv) => {
+  const handleView = (cv) => {
     if (!cv.file_path) {
       Alert.alert('Lỗi', 'Không tìm thấy file CV');
       return;
@@ -120,9 +116,9 @@ const CVListScreen = () => {
       </View>
 
       <View style={styles.cardActions}>
-        <TouchableOpacity style={styles.actionButton} onPress={() => handleDownload(item)}>
-          <MaterialCommunityIcons name="download" size={18} color="#1890ff" />
-          <Text style={[styles.actionText, { color: '#1890ff' }]}>Tải xuống</Text>
+        <TouchableOpacity style={styles.actionButton} onPress={() => handleView(item)}>
+          <MaterialCommunityIcons name="eye-outline" size={18} color="#1890ff" />
+          <Text style={[styles.actionText, { color: '#1890ff' }]}>Xem</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionButton} onPress={() => handleDelete(item)}>
           <MaterialCommunityIcons name="delete" size={18} color="#ff4d4f" />
@@ -138,7 +134,7 @@ const CVListScreen = () => {
         fetchData={fetchData}
         renderCard={renderCard}
         searchPlaceholder="Tìm kiếm CV theo tên, email..."
-        onItemPress={(item) => handleDownload(item)}
+        onItemPress={(item) => handleView(item)}
         pageSize={20}
         emptyMessage="Chưa có CV nào"
       />

@@ -206,7 +206,7 @@ const NotificationBellButton = () => {
         style={styles.headerButton}
         activeOpacity={0.7}
       >
-        <MaterialCommunityIcons name="bell-outline" size={24} color="#1F2937" />
+        <MaterialCommunityIcons name="bell" size={24} color="#1F2937" />
         {unreadCount > 0 && (
           <Badge size={16} style={styles.bellBadge}>
             {unreadCount > 99 ? '99+' : unreadCount}

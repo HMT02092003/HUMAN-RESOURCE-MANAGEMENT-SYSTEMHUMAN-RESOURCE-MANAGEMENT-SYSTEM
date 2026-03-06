@@ -4,7 +4,7 @@ import { applySearch, applyFilters, applySorting, applyPagination } from '../uti
 
 export class ShiftService {
   // ========== SHIFT MANAGEMENT (Quản lý mẫu ca) ==========
-  
+
   /**
    * Lấy tất cả mẫu ca
    */
@@ -105,11 +105,11 @@ export class ShiftService {
    */
   static async getShiftById(id: number) {
     const shift = await ShiftModel.query().findById(id);
-    
+
     if (!shift) {
       throw new Error('Không tìm thấy ca làm việc');
     }
-    
+
     return shift;
   }
 
@@ -125,7 +125,7 @@ export class ShiftService {
    */
   static async updateShift(id: number, data: any) {
     await this.getShiftById(id); // Check exists
-    
+
     return await ShiftModel.query()
       .patchAndFetchById(id, data);
   }
@@ -135,12 +135,12 @@ export class ShiftService {
    */
   static async deleteShift(id: number) {
     await this.getShiftById(id); // Check exists
-    
+
     // Kiểm tra có lịch đăng ký nào đang sử dụng không
     const schedules = await EmployeeScheduleModel.query()
       .where('shift_id', id)
       .whereIn('status', ['pending', 'approved']);
-    
+
     if (schedules.length > 0) {
       throw new Error('Không thể xóa ca đang có lịch đăng ký');
     }
@@ -294,11 +294,11 @@ export class ShiftService {
       .leftJoin('shifts', 'employee_schedules.shift_id', 'shifts.id')
       .select('employee_schedules.*', 'shifts.name as shift_name', 'shifts.start_time', 'shifts.end_time', 'shifts.working_unit')
       .findById(id);
-    
+
     if (!schedule) {
       throw new Error('Không tìm thấy lịch đăng ký');
     }
-    
+
     return schedule;
   }
 
@@ -421,7 +421,7 @@ export class ShiftService {
     }
 
     const updateData: any = {};
-    
+
     // Nếu có thay đổi ngày hoặc ca, cần validate
     if (data.date !== undefined || data.shift_id !== undefined) {
       const newDate = data.date || schedule.date;
@@ -443,7 +443,6 @@ export class ShiftService {
         const duplicate = await EmployeeScheduleModel.query()
           .where('user_id', userId)
           .where('date', newDate)
-          .whereIn('status', ['pending', 'approved'])
           .whereNot('id', id).skipUndefined()
           .first();
 
@@ -480,7 +479,7 @@ export class ShiftService {
     }
 
     await EmployeeScheduleModel.query().deleteById(id);
-    
+
     return { success: true, message: 'Đã hủy lịch đăng ký' };
   }
 
@@ -618,7 +617,7 @@ export class ShiftService {
     // User-related fields (user_fullName, user_department_name, user_chevron_name) will be sorted in-memory by controller
     const userRelatedSortFields = ['user_fullName', 'user_department_name', 'user_chevron_name', 'employeeName', 'fullName', 'department_name', 'chevron_name', 'searchDepartment'];
     const shouldSortInDB = filters.sortField && !userRelatedSortFields.includes(filters.sortField);
-    
+
     if (shouldSortInDB) {
       query = applySorting(
         query,

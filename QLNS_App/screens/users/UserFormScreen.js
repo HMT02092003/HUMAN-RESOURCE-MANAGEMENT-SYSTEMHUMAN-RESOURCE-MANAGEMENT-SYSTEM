@@ -484,10 +484,14 @@ const UserFormScreen = ({ route, navigation }) => {
                   autoCapitalize="none"
                   style={styles.input}
                 />
-                {errors.password && (
+                {errors.password ? (
                   <HelperText type="error" visible={true}>
                     {errors.password}
                   </HelperText>
+                ) : (
+                  <Text style={{ fontSize: 12, color: '#8c8c8c', paddingHorizontal: 12, marginTop: -8, marginBottom: 8 }}>
+                    * Tối thiểu 8 ký tự, gồm chữ hoa, thường, số, ký tự đặc biệt
+                  </Text>
                 )}
 
                 <TextInput
@@ -504,11 +508,15 @@ const UserFormScreen = ({ route, navigation }) => {
                   autoCapitalize="none"
                   style={styles.input}
                 />
-                {errors.rePassword && (
+                {errors.rePassword ? (
                   <HelperText type="error" visible={true}>
                     {errors.rePassword}
                   </HelperText>
-                )}
+                ) : form.rePassword?.length > 0 ? (
+                  <Text style={{ fontSize: 12, color: form.password === form.rePassword ? '#52c41a' : '#ff4d4f', paddingHorizontal: 12, marginTop: -8, marginBottom: 8 }}>
+                    {form.password === form.rePassword ? '✓ Mật khẩu khớp' : '✗ Mật khẩu không khớp'}
+                  </Text>
+                ) : null}
               </Card.Content>
             </Card>
           )}
@@ -808,7 +816,7 @@ const UserFormScreen = ({ route, navigation }) => {
           {/* Date Pickers */}
           {showBirthdayPicker && (
             <DateTimePicker
-              value={form.birthday || new Date()}
+              value={form.birthday || new Date(new Date().setFullYear(new Date().getFullYear() - 18))}
               mode="date"
               display="spinner"
               onChange={(event, selectedDate) => {
@@ -817,7 +825,7 @@ const UserFormScreen = ({ route, navigation }) => {
                   setForm({ ...form, birthday: selectedDate });
                 }
               }}
-              maximumDate={new Date()}
+              maximumDate={new Date(new Date().setFullYear(new Date().getFullYear() - 18))}
             />
           )}
 
@@ -833,7 +841,7 @@ const UserFormScreen = ({ route, navigation }) => {
                   setErrors({ ...errors, startDate: null });
                 }
               }}
-              maximumDate={new Date()}
+              minimumDate={form.birthday || undefined}
             />
           )}
 

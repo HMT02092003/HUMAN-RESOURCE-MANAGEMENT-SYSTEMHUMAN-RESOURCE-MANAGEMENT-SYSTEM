@@ -361,9 +361,10 @@ const styles = StyleSheet.create({
     fullImage: {
         width: '100%',
         height: 300,
-        backgroundColor: '#f0f0f0',
+        backgroundColor: '#000',
         borderRadius: 8,
-        marginBottom: 15
+        marginBottom: 15,
+        resizeMode: 'contain'
     },
     detailRow: {
         flexDirection: 'row',

@@ -86,7 +86,6 @@ export class EmployeeScheduleModel extends Model {
     const existing = await this.query()
       .where('user_id', userId)
       .where('date', date)
-      .whereIn('status', ['pending', 'approved'])
       .first();
 
     return !!existing;

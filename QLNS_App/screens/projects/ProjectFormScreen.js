@@ -241,7 +241,7 @@ const ProjectFormScreen = () => {
         {/* Project Name */}
         <Surface style={styles.section} elevation={1}>
           <Text style={styles.sectionTitle}>Thông tin cơ bản</Text>
-          
+
           <TextInput
             label="Tên dự án *"
             value={name}
@@ -290,11 +290,11 @@ const ProjectFormScreen = () => {
         {/* Dates */}
         <Surface style={styles.section} elevation={1}>
           <Text style={styles.sectionTitle}>Thời gian</Text>
-          
+
           <View style={styles.dateRow}>
             <View style={styles.dateItem}>
               <Text style={styles.dateLabel}>Ngày bắt đầu</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.dateButton}
                 onPress={() => setShowStartDatePicker(true)}
               >
@@ -305,7 +305,7 @@ const ProjectFormScreen = () => {
 
             <View style={styles.dateItem}>
               <Text style={styles.dateLabel}>Ngày kết thúc</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.dateButton}
                 onPress={() => setShowEndDatePicker(true)}
               >
@@ -340,8 +340,8 @@ const ProjectFormScreen = () => {
             <View style={styles.selectorContainer}>
               {selectedManager ? (
                 <View style={styles.selectorContent}>
-                  <Avatar.Text 
-                    size={32} 
+                  <Avatar.Text
+                    size={32}
                     label={getInitials(selectedManager.name)}
                     style={styles.selectorAvatar}
                   />
@@ -369,9 +369,9 @@ const ProjectFormScreen = () => {
                 <View style={styles.membersPreview}>
                   <View style={styles.avatarGroup}>
                     {selectedMembers.slice(0, 4).map((m, index) => (
-                      <Avatar.Text 
+                      <Avatar.Text
                         key={m.id}
-                        size={28} 
+                        size={28}
                         label={getInitials(m.name)}
                         style={[styles.memberAvatar, { marginLeft: index > 0 ? -10 : 0 }]}
                       />
@@ -424,6 +424,7 @@ const ProjectFormScreen = () => {
           value={endDate}
           mode="date"
           display="spinner"
+          minimumDate={startDate}
           onChange={(event, date) => {
             setShowEndDatePicker(false);
             if (date) setEndDate(date);
@@ -484,8 +485,8 @@ const ProjectFormScreen = () => {
                   }}
                 >
                   <View style={styles.modalOptionLeft}>
-                    <Avatar.Text 
-                      size={36} 
+                    <Avatar.Text
+                      size={36}
                       label={getInitials(user.name)}
                       style={styles.modalAvatar}
                     />
@@ -537,8 +538,8 @@ const ProjectFormScreen = () => {
                       status={memberIds.includes(user.id) ? 'checked' : 'unchecked'}
                       color="#1890ff"
                     />
-                    <Avatar.Text 
-                      size={36} 
+                    <Avatar.Text
+                      size={36}
                       label={getInitials(user.name)}
                       style={styles.modalAvatar}
                     />

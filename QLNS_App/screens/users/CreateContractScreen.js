@@ -32,12 +32,8 @@ const CreateContractScreen = ({ route, navigation }) => {
   const [activeDay, setActiveDay] = useState(new Date());
   const [salary, setSalary] = useState('');
 
-  // Amount input dialog (replaces Alert.prompt which is iOS-only)
-  const [amountDialogVisible, setAmountDialogVisible] = useState(false);
-  const [amountDialogTarget, setAmountDialogTarget] = useState(null); // { id, name }
-  const [amountDialogValue, setAmountDialogValue] = useState('');
   const [showActivePicker, setShowActivePicker] = useState(false);
-  const [selectedAllowances, setSelectedAllowances] = useState([]); // [{id, name, amount}]
+  const [selectedAllowances, setSelectedAllowances] = useState([]); // [{id, name}]
   const [submitting, setSubmitting] = useState(false);
 
   // Modals
@@ -77,15 +73,9 @@ const CreateContractScreen = ({ route, navigation }) => {
       if (exists) {
         return prev.filter((a) => a.id !== allowanceType.id);
       } else {
-        return [...prev, { id: allowanceType.id, name: allowanceType.name, amount: 0 }];
+        return [...prev, { id: allowanceType.id, name: allowanceType.name }];
       }
     });
-  };
-
-  const updateAllowanceAmount = (id, value) => {
-    setSelectedAllowances((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, amount: value } : a))
-    );
   };
 
   const handleSubmit = async () => {
@@ -103,13 +93,13 @@ const CreateContractScreen = ({ route, navigation }) => {
       salary: salary ? Number(salary) : 0,
       allowances: selectedAllowances.map((a) => ({
         allowanceTypeId: a.id,
-        amount: parseFloat(a.amount) || 0,
+        amount: 0,
       })),
     };
 
     setSubmitting(true);
     try {
-      await api.post('/employee/contracts', payload);
+      await api.post(`/employee/users/${userId}/contracts`, payload);
       Alert.alert('Thành công', 'Tạo hợp đồng thành công!', [
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
@@ -258,26 +248,6 @@ const CreateContractScreen = ({ route, navigation }) => {
                     />
                     <Text style={styles.allowanceName}>{at.name}</Text>
                   </TouchableOpacity>
-                  {selected && (
-                    <View style={styles.allowanceAmountRow}>
-                      <Text style={styles.allowanceAmountLabel}>Số tiền (VNĐ):</Text>
-                      <View style={styles.allowanceAmountInput}>
-                        <MaterialCommunityIcons name="currency-usd" size={16} color="#8c8c8c" />
-                        <Text
-                          style={styles.amountText}
-                          onPress={() => {
-                            setAmountDialogTarget({ id: at.id, name: at.name });
-                            setAmountDialogValue(String(selected.amount || '0'));
-                            setAmountDialogVisible(true);
-                          }}
-                        >
-                          {selected.amount
-                            ? Number(selected.amount).toLocaleString('vi-VN')
-                            : '0'}
-                        </Text>
-                      </View>
-                    </View>
-                  )}
                 </View>
               );
             })}
@@ -287,31 +257,7 @@ const CreateContractScreen = ({ route, navigation }) => {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* Amount Input Dialog */}
-      <Portal>
-        <Dialog visible={amountDialogVisible} onDismiss={() => setAmountDialogVisible(false)}>
-          <Dialog.Title>Nhập số tiền</Dialog.Title>
-          <Dialog.Content>
-            <Text style={{ marginBottom: 12 }}>Phụ cấp: {amountDialogTarget?.name || ''}</Text>
-            <RNTextInput
-              style={{ backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#d9d9d9', paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 }}
-              placeholder="Nhập số tiền..."
-              value={amountDialogValue}
-              onChangeText={setAmountDialogValue}
-              keyboardType="numeric"
-            />
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setAmountDialogVisible(false)}>Hủy</Button>
-            <Button onPress={() => {
-              if (amountDialogTarget) {
-                updateAllowanceAmount(amountDialogTarget.id, amountDialogValue);
-              }
-              setAmountDialogVisible(false);
-            }}>Xác nhận</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+
 
       {/* Submit */}
       <View style={styles.footer}>
