@@ -350,6 +350,9 @@ export class AttendanceCalculationService {
       const daysInMonth = dayjs(`${month}-01`).daysInMonth();
       const enrichedAttendanceData: any[] = [];
 
+      // ✨ Import ShiftHelper for loading shift per day
+      const { getShiftForUserAndDate } = await import('./ShiftHelper');
+
       for (let day = 1; day <= daysInMonth; day++) {
         const currentDate = dayjs.tz(`${month}-${String(day).padStart(2, '0')}`, 'Asia/Ho_Chi_Minh');
         const dateKey = currentDate.format('YYYY-MM-DD');
@@ -384,6 +387,9 @@ export class AttendanceCalculationService {
         });
         const hasApprovedOT = !!otApp;
 
+        // ✨ Load shift info for this user/date to get correct working hours
+        const shiftForDay = await getShiftForUserAndDate(userId, dateKey);
+
         let dayRecord: any = {
           date: currentDate.format('YYYY-MM-DD'),
           userId,
@@ -396,7 +402,9 @@ export class AttendanceCalculationService {
           leaveType: leaveCheck.leaveType,
           isPaidLeave: (leaveCheck as any).isPaidLeave,
           hasBusinessTrip: businessTripCheck.hasBusinessTrip,
-          type: leaveCheck.hasLeave ? leaveCheck.leaveType : (businessTripCheck.hasBusinessTrip ? 'business-trip' : 'attendance')
+          type: leaveCheck.hasLeave ? leaveCheck.leaveType : (businessTripCheck.hasBusinessTrip ? 'business-trip' : 'attendance'),
+          shift: shiftForDay ? { name: shiftForDay.name, start_time: shiftForDay.start_time?.substring(0, 5), end_time: shiftForDay.end_time?.substring(0, 5), working_unit: shiftForDay.working_unit } : null,
+          shiftName: shiftForDay?.name || null
         };
 
         // ✨ ATTACH OVERTIME DATA for any day with approved OT
@@ -523,7 +531,7 @@ export class AttendanceCalculationService {
                 _token,
                 endTimeFormatted,
                 isHoliday,
-                undefined,
+                shiftForDay, // ✨ Pass actual shift info instead of undefined
                 startTimeFormatted
               );
 
@@ -584,6 +592,33 @@ export class AttendanceCalculationService {
             dayRecord.earlyDepartureMinutes = 0;
             dayRecord.lateArrivalPenalty = 0;
             dayRecord.earlyLeavePenalty = 0;
+          }
+        }
+        // ✨ Normal working day WITHOUT OT but WITH attendance record: re-calculate with shift info
+        else if (isWork && !hasApprovedOT && attendanceRecord && (attendanceRecord.checkInTime || attendanceRecord.checkOutTime)) {
+          try {
+            const calc = await AttendanceCalculationService.calculateAttendance(
+              attendanceRecord.checkInTime,
+              attendanceRecord.checkOutTime,
+              dateKey,
+              userId,
+              _token,
+              undefined, // no OT end time
+              false, // not holiday
+              shiftForDay, // ✨ Pass actual shift info
+              undefined // no OT start time
+            );
+            dayRecord.lateMinutes = calc.lateMinutes;
+            dayRecord.earlyDepartureMinutes = calc.earlyDepartureMinutes;
+            dayRecord.lateArrivalPenalty = calc.latePenaltyAmount;
+            dayRecord.earlyLeavePenalty = calc.earlyLeavePenaltyAmount;
+            dayRecord.dailyTotalWorkHours = calc.workHours;
+            dayRecord.totalWorkingUnit = calc.totalWorkingUnit;
+            dayRecord.otWorkingUnit = calc.otWorkingUnit;
+            dayRecord.dailyWorkingUnit = calc.dailyWorkingUnit;
+            dayRecord.overtimeHours = calc.overtimeHours;
+          } catch (e) {
+            console.error(`Error recalcing normal day ${dateKey} with shift:`, e);
           }
         }
 
