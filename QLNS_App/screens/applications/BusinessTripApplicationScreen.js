@@ -27,11 +27,11 @@ const BusinessTripApplicationScreen = ({ navigation, route }) => {
     const [destination, setDestination] = useState('');
     const [purpose, setPurpose] = useState('');
     const [estimatedCost, setEstimatedCost] = useState('');
-    
+
     // Picker state
     const [showStartPicker, setShowStartPicker] = useState(false);
     const [showEndPicker, setShowEndPicker] = useState(false);
-    
+
     // UI state
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -61,12 +61,12 @@ const BusinessTripApplicationScreen = ({ navigation, route }) => {
             const data = response?.data || response;
             setApplicationFullData(data);
             const formData = data?.data || data;
-            
+
             if (formData) {
                 setDestination(formData.destination || '');
                 setPurpose(formData.purpose || '');
                 setEstimatedCost(formData.estimatedCost?.toString() || '');
-                
+
                 if (formData.startDate) {
                     setStartDate(new Date(formData.startDate));
                 }
@@ -87,7 +87,14 @@ const BusinessTripApplicationScreen = ({ navigation, route }) => {
     const calculateDays = () => {
         const start = dayjs(startDate).startOf('day');
         const end = dayjs(endDate).startOf('day');
-        return end.diff(start, 'day') + 1;
+        let count = 0;
+        let current = start;
+        while (current.isBefore(end) || current.isSame(end, 'day')) {
+            const dow = current.day();
+            if (dow !== 0 && dow !== 6) count++;
+            current = current.add(1, 'day');
+        }
+        return count;
     };
 
     const handleStartDateChange = (event, selectedDate) => {
@@ -129,7 +136,7 @@ const BusinessTripApplicationScreen = ({ navigation, route }) => {
 
     const handleSubmit = async () => {
         if (!validateForm()) return;
-        
+
         setSubmitting(true);
         try {
             const payload = {
@@ -187,11 +194,11 @@ const BusinessTripApplicationScreen = ({ navigation, route }) => {
                     { label: 'Số ngày', value: `${calculateDays()} ngày`, icon: 'calendar-clock' },
                     { label: 'Địa điểm', value: appData.destination || 'N/A', icon: 'map-marker' },
                     { label: 'Mục đích', value: appData.purpose || 'N/A', icon: 'text' },
-                    { 
-                        label: 'Chi phí dự kiến', 
-                        value: appData.estimatedCost || 0, 
-                        type: 'currency', 
-                        icon: 'cash' 
+                    {
+                        label: 'Chi phí dự kiến',
+                        value: appData.estimatedCost || 0,
+                        type: 'currency',
+                        icon: 'cash'
                     }
                 ]
             },
@@ -329,7 +336,7 @@ const BusinessTripApplicationScreen = ({ navigation, route }) => {
                 <View style={styles.guideBox}>
                     <Ionicons name="information-circle-outline" size={20} color="#722ed1" />
                     <Text style={styles.guideText}>
-                        Đơn công tác cần được gửi trước ít nhất 3 ngày. 
+                        Đơn công tác cần được gửi trước ít nhất 3 ngày.
                         Chi phí thực tế sẽ được thanh toán sau khi hoàn thành công tác.
                     </Text>
                 </View>

@@ -204,13 +204,19 @@ const BusinessTripForm: React.FC<BusinessTripFormProps> = ({ onCancel }) => {
               <Form.Item dependencies={['dateRange']} noStyle>
                 {({ getFieldValue }) => {
                   const dateRange = getFieldValue('dateRange');
-                  const days =
-                    dateRange && dateRange[0] && dateRange[1]
-                      ? dateRange[1].diff(dateRange[0], 'day') + 1
-                      : 0;
+                  let days = 0;
+                  if (dateRange && dateRange[0] && dateRange[1]) {
+                    let cur = dateRange[0].startOf('day');
+                    const end = dateRange[1].startOf('day');
+                    while (cur.isBefore(end) || cur.isSame(end, 'day')) {
+                      const dow = cur.day(); // 0=CN, 6=T7
+                      if (dow !== 0 && dow !== 6) days++;
+                      cur = cur.add(1, 'day');
+                    }
+                  }
                   return (
                     <Input
-                      value={days > 0 ? `${days} ngày` : 'Chưa xác định'}
+                      value={days > 0 ? `${days} ngày (không tính T7, CN)` : 'Chưa xác định'}
                       readOnly
                       prefix={<CalendarOutlined />}
                     />

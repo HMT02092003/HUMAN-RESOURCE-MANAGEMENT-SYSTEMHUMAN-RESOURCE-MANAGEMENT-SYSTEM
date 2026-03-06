@@ -23,13 +23,13 @@ const LEAVE_TYPES = [
 
 const LeaveApplicationCreateScreen = ({ navigation }) => {
     console.log('🆕 [LeaveApplicationCreateScreen] Mounted - CREATE ONLY, NO DATA LOADING');
-    
+
     // Form state - chỉ khởi tạo giá trị mặc định, KHÔNG load data
     const [leaveType, setLeaveType] = useState('leave');
     const [startDate, setStartDate] = useState(new Date());
     const [endDate, setEndDate] = useState(new Date());
     const [reason, setReason] = useState('');
-    
+
     // Reset form khi component mount để đảm bảo không có dữ liệu cũ
     useEffect(() => {
         console.log('🔄 [LeaveApplicationCreateScreen] Resetting form to defaults');
@@ -38,11 +38,11 @@ const LeaveApplicationCreateScreen = ({ navigation }) => {
         setEndDate(new Date());
         setReason('');
     }, []);
-    
+
     // Date picker state
     const [showStartPicker, setShowStartPicker] = useState(false);
     const [showEndPicker, setShowEndPicker] = useState(false);
-    
+
     // UI state
     const [submitting, setSubmitting] = useState(false);
     const [showLeaveTypeModal, setShowLeaveTypeModal] = useState(false);
@@ -54,7 +54,14 @@ const LeaveApplicationCreateScreen = ({ navigation }) => {
     const calculateDays = () => {
         const start = dayjs(startDate).startOf('day');
         const end = dayjs(endDate).startOf('day');
-        return end.diff(start, 'day') + 1;
+        let count = 0;
+        let current = start;
+        while (current.isBefore(end) || current.isSame(end, 'day')) {
+            const dow = current.day(); // 0=CN, 6=T7
+            if (dow !== 0 && dow !== 6) count++;
+            current = current.add(1, 'day');
+        }
+        return count;
     };
 
     const handleStartDateChange = (event, selectedDate) => {

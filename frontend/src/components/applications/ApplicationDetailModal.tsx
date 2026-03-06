@@ -144,9 +144,18 @@ const ApplicationDetailModal: React.FC<ApplicationDetailModalProps> = ({
                 </Descriptions.Item>
                 <Descriptions.Item label={<Text>Số ngày nghỉ</Text>}>
                     <Text strong>
-                        {data.startDate && data.endDate
-                            ? dayjs(data.endDate).diff(dayjs(data.startDate), 'day') + 1
-                            : 0} ngày
+                        {(() => {
+                            if (!data.startDate || !data.endDate) return '0 ngày';
+                            let count = 0;
+                            let cur = dayjs(data.startDate).startOf('day');
+                            const end = dayjs(data.endDate).startOf('day');
+                            while (cur.isBefore(end) || cur.isSame(end, 'day')) {
+                                const dow = cur.day();
+                                if (dow !== 0 && dow !== 6) count++;
+                                cur = cur.add(1, 'day');
+                            }
+                            return `${count} ngày (không tính T7, CN)`;
+                        })()}
                     </Text>
                 </Descriptions.Item>
                 <Descriptions.Item label={<Text><FileTextOutlined /> Lý do</Text>}>

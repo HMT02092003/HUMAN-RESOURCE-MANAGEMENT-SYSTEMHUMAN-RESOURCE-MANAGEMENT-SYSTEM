@@ -32,11 +32,11 @@ const LeaveApplicationScreen = ({ navigation, route }) => {
     const [startDate, setStartDate] = useState(new Date());
     const [endDate, setEndDate] = useState(new Date());
     const [reason, setReason] = useState('');
-    
+
     // Date picker state
     const [showStartPicker, setShowStartPicker] = useState(false);
     const [showEndPicker, setShowEndPicker] = useState(false);
-    
+
     // UI state
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -57,13 +57,13 @@ const LeaveApplicationScreen = ({ navigation, route }) => {
             const data = response?.data || response;
             setApplicationFullData(data);
             const formData = data?.data || data;
-            
+
             console.log('📥 Loaded application data:', formData);
-            
+
             if (formData) {
                 setLeaveType(formData.leaveType || 'leave');
                 setReason(formData.reason || '');
-                
+
                 if (formData.startDate) {
                     setStartDate(new Date(formData.startDate));
                 }
@@ -86,7 +86,14 @@ const LeaveApplicationScreen = ({ navigation, route }) => {
     const calculateDays = () => {
         const start = dayjs(startDate).startOf('day');
         const end = dayjs(endDate).startOf('day');
-        return end.diff(start, 'day') + 1;
+        let count = 0;
+        let current = start;
+        while (current.isBefore(end) || current.isSame(end, 'day')) {
+            const dow = current.day();
+            if (dow !== 0 && dow !== 6) count++;
+            current = current.add(1, 'day');
+        }
+        return count;
     };
 
     const handleStartDateChange = (event, selectedDate) => {
@@ -125,7 +132,7 @@ const LeaveApplicationScreen = ({ navigation, route }) => {
 
     const handleSubmit = async () => {
         if (!validateForm()) return;
-        
+
         setSubmitting(true);
         try {
             const payload = {

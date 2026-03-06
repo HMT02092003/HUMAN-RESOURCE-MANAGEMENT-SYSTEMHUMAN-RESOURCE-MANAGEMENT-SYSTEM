@@ -49,10 +49,20 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Tính số ngày đã chọn
+  // Tính số ngày làm việc đã chọn (bỏ Thứ 7, Chủ nhật)
   const calculateDays = () => {
     if (startDate && endDate) {
-      return endDate.diff(startDate, "day") + 1;
+      let count = 0;
+      let current = startDate.startOf('day');
+      const end = endDate.startOf('day');
+      while (current.isBefore(end) || current.isSame(end, 'day')) {
+        const dow = current.day(); // 0=CN, 6=T7
+        if (dow !== 0 && dow !== 6) {
+          count++;
+        }
+        current = current.add(1, 'day');
+      }
+      return count;
     }
     return 0;
   };
@@ -142,7 +152,15 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
         return;
       }
 
-      const usedDays = endDate.diff(startDate, "day") + 1;
+      // Tính số ngày làm việc thực tế (bỏ T7, CN)
+      let usedDays = 0;
+      let cur = startDate.startOf('day');
+      const ed = endDate.startOf('day');
+      while (cur.isBefore(ed) || cur.isSame(ed, 'day')) {
+        const dow = cur.day();
+        if (dow !== 0 && dow !== 6) usedDays++;
+        cur = cur.add(1, 'day');
+      }
       const remaining = totalDaysOff - usedDays;
 
       if (remaining < 0 && values.applicationCategory === "leave") {
@@ -286,7 +304,7 @@ const LeaveForm: React.FC<LeaveApplicationFormProps> = ({ onCancel }) => {
             <Row style={{ marginBottom: "24px" }}>
               <Col span={24}>
                 <Alert
-                  message={`Tổng số ngày nghỉ đã chọn: ${usedDays} ngày`}
+                  message={`Tổng số ngày nghỉ đã chọn: ${usedDays} ngày (không tính T7, CN)`}
                   type="info"
                   showIcon
                   style={{ borderRadius: 8 }}
